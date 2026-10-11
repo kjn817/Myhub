@@ -1,0 +1,27 @@
+name = "myhub"
+main = "src/index.ts"
+compatibility_date = "2026-10-01"
+
+[assets]
+directory = "./public"
+binding = "ASSETS"
+run_worker_first = true
+
+[vars]
+APP_NAME = "MyHub"
+
+# D1 데이터베이스 바인딩
+# 배포 전 아래 database_id를 실제 값으로 교체:
+#   npx wrangler d1 create myhub-db  → 출력된 database_id를 여기에 입력
+[[d1_databases]]
+binding = "DB"
+database_name = "myhub-db"
+database_id = "0dd871c5-3d1c-4cea-bfbe-3e258f477106"
+
+# 파일 저장소: Cloudinary (무료 25GB, 카드 불필요)
+# 인증 정보는 Worker secret으로 등록 (wrangler secret put):
+#   CLOUDINARY_CLOUD_NAME / CLOUDINARY_API_KEY / CLOUDINARY_API_SECRET
+
+[[kv_namespaces]]
+binding = "KV"
+id = "83d3e9027c9145ae89c15df3bdee9999"
