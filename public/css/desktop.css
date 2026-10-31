@@ -1,0 +1,198 @@
+/* MyHub 모듈형 데스크톱 워크스페이스 셸 (desktop.html 전용) */
+/* 색: 흰/회/검 기반 + 파스텔 블루 강조. 아이콘은 Lucide만. */
+
+:root {
+  --dt-accent: #a5c8ff;
+  --dt-accent-soft: #eff6ff;
+  --dt-accent-strong: #3b82f6;
+  --dt-border: #d4d4d8;
+  --dt-border-soft: #e5e7eb;
+  --dt-text: #18181b;
+  --dt-text-dim: #6b7280;
+  --dt-taskbar-h: 48px;
+  --dt-titlebar-h: 36px;
+}
+
+html, body { height: 100%; }
+body {
+  overflow: hidden;
+  background: #f4f4f5;
+}
+
+/* ---- 창 컨테이너 ---- */
+#dt-root {
+  position: fixed;
+  left: 0; right: 0;
+  top: calc(var(--topnav-h, 44px) + max(env(safe-area-inset-top), 8px));
+  bottom: var(--dt-taskbar-h);
+  overflow: hidden;
+  background: #f4f4f5;
+}
+#dt-root.dt-dragging .dt-frame { pointer-events: none; }
+
+/* ---- 창 ---- */
+.dt-window {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  background: #ffffff;
+  border: 1px solid var(--dt-border);
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: none;
+}
+.dt-window.is-active {
+  border-color: var(--dt-accent-strong);
+  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.18);
+}
+.dt-window.dt-minimized { display: none; }
+
+.dt-titlebar {
+  flex: 0 0 var(--dt-titlebar-h);
+  height: var(--dt-titlebar-h);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 6px 0 12px;
+  background: #f4f4f5;
+  border-bottom: 1px solid var(--dt-border-soft);
+  color: var(--dt-text-dim);
+  cursor: move;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
+}
+.dt-window.is-active .dt-titlebar {
+  background: var(--dt-accent-soft);
+  color: var(--dt-text);
+}
+.dt-title-icon { display: inline-flex; align-items: center; color: inherit; }
+.dt-title-icon svg { width: 15px; height: 15px; }
+.dt-title-text {
+  flex: 1;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.dt-title-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 26px;
+  padding: 0;
+  background: none;
+  border: none;
+  border-radius: 4px;
+  color: inherit;
+  cursor: pointer;
+}
+.dt-title-btn:hover { background: rgba(0, 0, 0, 0.07); color: var(--dt-text); }
+.dt-title-btn svg { width: 15px; height: 15px; }
+.dt-btn-close:hover { background: #fee2e2; color: #b91c1c; }
+
+.dt-frame {
+  flex: 1 1 auto;
+  width: 100%;
+  min-height: 0;
+  border: none;
+  display: block;
+  background: #ffffff;
+}
+
+/* ---- 리사이즈 핸들 (8방향, 투명 히트영역) ---- */
+.dt-rz { position: absolute; z-index: 6; touch-action: none; }
+.dt-rz-n { top: 0; left: 14px; right: 14px; height: 6px; cursor: ns-resize; }
+.dt-rz-s { bottom: 0; left: 14px; right: 14px; height: 6px; cursor: ns-resize; }
+.dt-rz-e { right: 0; top: 14px; bottom: 14px; width: 6px; cursor: ew-resize; }
+.dt-rz-w { left: 0; top: 14px; bottom: 14px; width: 6px; cursor: ew-resize; }
+.dt-rz-ne { top: 0; right: 0; width: 14px; height: 14px; cursor: nesw-resize; }
+.dt-rz-sw { bottom: 0; left: 0; width: 14px; height: 14px; cursor: nesw-resize; }
+.dt-rz-nw { top: 0; left: 0; width: 14px; height: 14px; cursor: nwse-resize; }
+.dt-rz-se { bottom: 0; right: 0; width: 14px; height: 14px; cursor: nwse-resize; }
+
+/* ---- 작업 표시줄 ---- */
+#dt-taskbar {
+  position: fixed;
+  left: 0; right: 0; bottom: 0;
+  height: var(--dt-taskbar-h);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 12px;
+  background: #ffffff;
+  border-top: 1px solid var(--dt-border-soft);
+  z-index: 70;
+}
+.dt-launchers { display: flex; align-items: center; gap: 4px; flex: 0 0 auto; }
+.dt-task-sep { width: 1px; height: 24px; background: var(--dt-border-soft); flex: 0 0 auto; }
+.dt-task-windows {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.dt-task-windows::-webkit-scrollbar { display: none; }
+
+.dt-launcher, .dt-task-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 10px;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: #3f3f46;
+  font-size: 12.5px;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.dt-launcher svg, .dt-task-btn svg { width: 15px; height: 15px; }
+.dt-launcher:hover, .dt-task-btn:hover { background: #f4f4f5; }
+.dt-launcher.is-open { border-color: var(--dt-border-soft); background: #fafafa; }
+.dt-task-btn.is-active {
+  background: var(--dt-accent-soft);
+  border-color: var(--dt-accent);
+  color: var(--dt-text);
+}
+.dt-task-btn.is-minimized { color: var(--dt-text-dim); font-style: italic; opacity: 0.75; }
+
+/* ---- 상단바 데스크톱 링크 (nav.js가 마운트) ---- */
+.g-nav .desktop-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #4b5563;
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 7px 10px;
+  border-radius: var(--radius, 4px);
+  white-space: nowrap;
+}
+.g-nav .desktop-link:hover { color: #111; background: rgba(0, 0, 0, 0.05); }
+.g-nav .desktop-link svg { width: 16px; height: 16px; }
+
+/* ---- 모바일: 창 전체화면, 리사이즈 없음 ---- */
+@media (max-width: 767px) {
+  .dt-window {
+    left: 0 !important;
+    top: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+    border: none;
+    border-radius: 0;
+  }
+  .dt-rz { display: none; }
+  .dt-titlebar { cursor: default; }
+  .dt-launcher .dt-launcher-lbl { display: none; }
+  .g-nav .desktop-link { padding: 9px; }
+  .g-nav .desktop-link .desktop-lbl { display: none; }
+}

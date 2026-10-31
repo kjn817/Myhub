@@ -1,0 +1,2249 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="AI 스튜디오">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="manifest" href="/manifest.json">
+<title>AI 스튜디오 - MyHub</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="/shell.css">
+<style>
+:root { --topnav-h: 44px; }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #fff; color: #1a1a1a; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+.studio { display: flex; flex: 1; min-height: 0; padding-top: var(--topnav-h); }
+/* CodeMirror 높이 100% */
+.CodeMirror { height: 100% !important; }
+/* 메시지 시간 */
+.msg-time { font-size: 10px; color: #999; margin-top: 4px; }
+.msg-user .msg-time { text-align: right; }
+/* Codex 스타일 결과 카드 */
+.result-card { background: #f7f7f8; border: 1px solid #e5e5e5; border-radius: 10px; padding: 12px; margin: 4px 0; }
+.result-header { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.result-badge { background: #1a73e8; color: #fff; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 12px; }
+.result-title { font-size: 13px; font-weight: 600; }
+.result-file-count { font-size: 12px; color: #333; margin-bottom: 6px; font-weight: 500; }
+.result-file-list { display: flex; flex-direction: column; gap: 4px; }
+.result-file-item { display: flex; align-items: center; gap: 8px; padding: 6px 8px; background: #fff; border: 1px solid #e0e0e0; border-radius: 6px; cursor: pointer; font-size: 12px; }
+.result-file-item:hover { background: #f0f0f0; }
+.result-file-item .file-icon { font-size: 14px; }
+.result-file-item .file-path { flex: 1; font-family: monospace; }
+.result-file-item .file-size { color: #888; font-size: 11px; }
+.result-actions { display: flex; gap: 6px; margin-top: 10px; }
+
+/* ===== 좌측 사이드바 (코덱스 스타일) ===== */
+.sidebar { width: 260px; background: #f7f7f8; border-right: 1px solid #e5e5e5; display: flex; flex-direction: column; flex-shrink: 0; }
+.sb-header { display: flex; align-items: center; justify-content: space-between; padding: 14px 14px 6px; }
+.sb-title { font-size: 15px; font-weight: 600; }
+.sb-header-btns { display: flex; gap: 2px; }
+.sb-icon-btn { width: 30px; height: 30px; border: none; background: transparent; border-radius: 8px; cursor: pointer; font-size: 15px; color: #666; display: flex; align-items: center; justify-content: center; }
+.sb-icon-btn:hover { background: #e8e8e8; }
+.sb-top { padding: 6px 12px 4px; }
+.new-chat-btn { width: 100%; display: flex; align-items: center; gap: 8px; padding: 10px 12px; border: 1px solid #e0e0e0; border-radius: 10px; background: #fff; font-size: 13px; cursor: pointer; color: #333; }
+.new-chat-btn:hover { background: #f0f0f0; }
+.sb-section { font-size: 11px; color: #8a8a8a; font-weight: 500; padding: 14px 20px 6px; letter-spacing: .02em; }
+.sb-list { flex: 1; overflow-y: auto; padding: 0 0 8px; }
+.sb-item { padding: 9px 12px; margin: 0 8px; border-radius: 8px; cursor: pointer; font-size: 13px; display: flex; align-items: center; gap: 8px; margin-bottom: 1px; white-space: nowrap; overflow: hidden; }
+.sb-item:hover { background: #ececec; }
+.sb-item.active { background: #e3e3e3; }
+.sb-item .dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+.dot-draft { background: #e6a23c; }
+.dot-pub { background: #34c759; }
+.sb-item .nm { flex: 1; overflow: hidden; text-overflow: ellipsis; }
+.sb-empty { padding: 16px; font-size: 12px; color: #aaa; text-align: center; }
+.working-item { background: #e8f0fe; }
+.working-item .nm { color: #1a73e8; }
+
+/* ===== 중앙: 에이전트 채팅 ===== */
+.main { flex: 1; display: flex; flex-direction: column; min-width: 0; background: #fff; position: relative; }
+.chat-scroll { flex: 1; overflow-y: auto; padding: 24px; }
+.chat-inner { max-width: 760px; margin: 0 auto; width: 100%; }
+/* ===== 작업 단계 시각화 (Codex 스타일) ===== */
+.task-steps { background: #f7f7f8; border: 1px solid #e5e5e5; border-radius: 12px; padding: 12px 16px; margin: 12px 0; }
+.task-step { display: flex; align-items: center; gap: 10px; padding: 6px 0; font-size: 13px; }
+.task-step .step-icon { width: 20px; height: 20px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; flex-shrink: 0; }
+.step-pending .step-icon { background: #e5e5e5; color: #888; }
+.step-active .step-icon { background: #1a73e8; color: #fff; animation: pulse 1.5s infinite; }
+.step-done .step-icon { background: #34c759; color: #fff; }
+.step-error .step-icon { background: #ff3b30; color: #fff; }
+.step-pending { color: #888; }
+.step-active { color: #1a1a1a; font-weight: 500; }
+.step-done { color: #666; }
+.step-error { color: #ff3b30; }
+@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.5; } }
+.task-progress-bar { height: 4px; background: #e5e5e5; border-radius: 2px; margin-top: 8px; overflow: hidden; }
+.task-progress-fill { height: 100%; background: #1a73e8; border-radius: 2px; transition: width .3s ease; }
+
+/* 환영 화면 (코덱스 스타일) */
+.welcome { text-align: center; padding: 20px; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 60vh; }
+.welcome .w-icon { width: 64px; height: 64px; margin: 0 auto 20px; border-radius: 50%; overflow: hidden; background: #f0f0f0; }
+.welcome .w-icon img { width: 100%; height: 100%; object-fit: cover; }
+.welcome h2 { font-size: 22px; font-weight: 600; margin-bottom: 8px; }
+.welcome p { font-size: 14px; color: #888; }
+/* ===== 템플릿 갤러리 (Phase 3) ===== */
+.tpl-gallery { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 28px; max-width: 560px; }
+.tpl-card { background: #f7f7f8; border: 1px solid #e5e5e5; border-radius: 12px; padding: 16px; cursor: pointer; text-align: left; transition: all .15s; }
+.tpl-card:hover { background: #fff; border-color: #1a73e8; box-shadow: 0 2px 8px rgba(26,115,232,.15); transform: translateY(-1px); }
+.tpl-card .tpl-icon { font-size: 24px; margin-bottom: 8px; }
+.tpl-card .tpl-name { font-size: 13px; font-weight: 600; margin-bottom: 4px; }
+.tpl-card .tpl-desc { font-size: 11px; color: #888; line-height: 1.4; }
+
+/* 메시지 */
+.msg { margin-bottom: 20px; }
+.msg-user { display: flex; justify-content: flex-end; }
+.msg-user .bubble { background: #f0f0f0; border-radius: 18px; padding: 10px 16px; font-size: 14px; max-width: 80%; line-height: 1.6; }
+.msg-nova { display: flex; gap: 12px; }
+.msg-nova .avatar { width: 32px; height: 32px; border-radius: 50%; overflow: hidden; flex-shrink: 0; background: #f0f0f0; }
+.msg-nova .avatar img { width: 100%; height: 100%; object-fit: cover; }
+.msg-nova .body { flex: 1; font-size: 14px; line-height: 1.7; min-width: 0; }
+.msg-nova .body p { margin-bottom: 10px; }
+.msg-nova .body code { background: #f0f0f0; padding: 2px 6px; border-radius: 4px; font-size: 13px; font-family: 'SF Mono', Monaco, monospace; }
+
+/* 작업 중 */
+.working { display: flex; align-items: center; gap: 10px; padding: 12px 0; font-size: 13px; color: #888; }
+.spinner { width: 16px; height: 16px; border: 2px solid #e0e0e0; border-top-color: #333; border-radius: 50%; animation: spin .8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* 변경 카드 (코덱스 스타일) */
+.change-card { border: 1px solid #e5e5e5; border-radius: 12px; margin: 12px 0; overflow: hidden; }
+.cc-head { padding: 12px 14px; display: flex; align-items: center; gap: 10px; }
+.cc-icon { width: 32px; height: 32px; border-radius: 8px; background: #f0f0f0; display: flex; align-items: center; justify-content: center; font-size: 16px; flex-shrink: 0; }
+.cc-title { font-size: 13px; font-weight: 600; }
+.cc-stats { font-size: 12px; color: #888; margin-top: 2px; }
+.st-add { color: #1a7f37; font-weight: 600; }
+.st-del { color: #cf222e; font-weight: 600; }
+.cc-actions { margin-left: auto; }
+.btn { padding: 7px 14px; border-radius: 8px; font-size: 13px; cursor: pointer; border: 1px solid #e0e0e0; background: #fff; }
+.btn:hover { background: #f5f5f5; }
+.btn-primary { background: #1a1a1a; color: #fff; border-color: #1a1a1a; }
+.btn-primary:hover { background: #333; }
+.btn-sm { padding: 5px 10px; font-size: 12px; }
+.cc-files { border-top: 1px solid #f0f0f0; }
+.cc-file { padding: 8px 14px; font-size: 12px; font-family: 'SF Mono', Monaco, monospace; color: #555; display: flex; gap: 8px; align-items: center; }
+
+/* 입력 영역 (코덱스 스타일) */
+.composer-wrap { padding: 12px 24px 20px; }
+.composer-inner { max-width: 760px; margin: 0 auto; }
+.composer { border: 1px solid #e0e0e0; border-radius: 16px; background: #fff; box-shadow: 0 2px 12px rgba(0,0,0,.06); }
+.composer:focus-within { border-color: #999; }
+#chatInput { width: 100%; border: none; outline: none; padding: 14px 16px 8px; font-size: 14px; resize: none; background: transparent; font-family: inherit; line-height: 1.5; }
+.composer-bar { display: flex; align-items: center; padding: 8px 12px; gap: 4px; }
+.cbtn { width: 32px; height: 32px; border: none; background: transparent; border-radius: 8px; cursor: pointer; font-size: 16px; color: #888; display: flex; align-items: center; justify-content: center; }
+.cbtn:hover { background: #f0f0f0; color: #333; }
+.model-tag { font-size: 12px; color: #888; margin-left: auto; margin-right: 8px; }
+.send-btn { width: 32px; height: 32px; border-radius: 50%; border: none; background: #1a1a1a; color: #fff; cursor: pointer; font-size: 14px; display: flex; align-items: center; justify-content: center; }
+.send-btn:hover:not(:disabled) { background: #333; }
+.send-btn:disabled { background: #ddd; cursor: default; }
+.hint { text-align: center; font-size: 11px; color: #bbb; margin-top: 8px; }
+
+/* ===== 우측: diff 패널 (토글) ===== */
+.diff-panel { width: 0; background: #fff; border-left: 1px solid #e5e5e5; display: flex; flex-direction: column; flex-shrink: 0; overflow: hidden; transition: width .25s ease; }
+.diff-panel.open { width: 440px; }
+.dp-head { padding: 14px 16px; border-bottom: 1px solid #f0f0f0; display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; white-space: nowrap; }
+.dp-head h3 { font-size: 14px; font-weight: 600; }
+.dp-close { border: none; background: none; font-size: 20px; cursor: pointer; color: #999; line-height: 1; }
+.dp-stats { padding: 10px 16px; font-size: 12px; border-bottom: 1px solid #f0f0f0; flex-shrink: 0; white-space: nowrap; }
+.dp-body { flex: 1; overflow-y: auto; font-family: 'SF Mono', Monaco, monospace; font-size: 12px; line-height: 1.6; }
+.dp-file { padding: 8px 16px; background: #f6f8fa; font-weight: 600; font-size: 12px; border-bottom: 1px solid #e8e8e8; position: sticky; top: 0; white-space: nowrap; }
+.dl { padding: 1px 16px 1px 0; white-space: pre-wrap; word-break: break-all; display: flex; }
+.dl-num { width: 44px; flex-shrink: 0; color: #999; text-align: right; margin-right: 10px; user-select: none; padding-left: 8px; }
+.dl-add { background: #e6ffec; }
+.dl-add .dl-num { color: #1a7f37; }
+.dl-del { background: #ffebe9; }
+.dl-del .dl-num { color: #cf222e; }
+.dl-hunk { background: #ddf4ff; color: #0969da; padding: 3px 16px; font-size: 11px; }
+.dp-actions { padding: 12px 16px; border-top: 1px solid #eee; display: flex; gap: 8px; flex-shrink: 0; }
+.dp-versions { border-top: 1px solid #e5e5e5; max-height: 220px; display: flex; flex-direction: column; flex-shrink: 0; }
+.dp-vlist { overflow-y: auto; padding: 6px; }
+.dp-vrow { padding: 7px 10px; border-radius: 6px; font-size: 12px; display: flex; gap: 8px; align-items: center; cursor: pointer; white-space: nowrap; }
+.dp-vrow:hover { background: #f5f5f5; }
+.dp-vrow.active { background: #e8f0fe; }
+
+@media (max-width: 1100px) { .diff-panel.open { width: 360px; } }
+@media (max-width: 900px) {
+  .sidebar { width: 210px; }
+  .diff-panel.open { position: fixed; right: 0; top: var(--topnav-h); bottom: 0; width: 88vw; z-index: 100; box-shadow: -4px 0 16px rgba(0,0,0,.12); }
+}
+/* CodeMirror 커스텀 스타일 */
+.CodeMirror { height: 100%; font-size: 13px; font-family: 'SF Mono', Monaco, monospace; }
+</style>
+<!-- CodeMirror for syntax highlighting (Phase 1) -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/codemirror.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/theme/material.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/codemirror.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/mode/xml/xml.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/mode/javascript/javascript.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/mode/css/css.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/mode/htmlmixed/htmlmixed.min.js"></script>
+</head>
+<body>
+<header class="g-nav"><a href="/" class="brand-logo" aria-label="MyHub 홈"><img src="/icon-192.png" alt="JN" style="height:26px;width:auto;display:block;"></a><div class="spacer"></div><span class="ver" id="clock"></span></header>
+<div class="studio">
+  <!-- 좌측: 코덱스식 사이드바 -->
+  <aside class="sidebar">
+    <div class="sb-header">
+      <span class="sb-title">AI 스튜디오</span>
+      <div class="sb-header-btns">
+        <button class="sb-icon-btn" title="검색" onclick="focusSearch()"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg></button>
+      </div>
+    </div>
+    <div class="sb-top">
+      <button class="new-chat-btn" onclick="newChat()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg> 새 채팅</button>
+    </div>
+    <!-- 검색 모달 -->
+    <div class="sb-section">프로젝트</div>
+    <div class="sb-list" id="sbProjects"></div>
+    <div class="sb-section">최근</div>
+    <div class="sb-list" id="sbRecent" style="flex:0 1 auto;max-height:180px;"></div>
+  </aside>
+
+  <!-- 중앙: 에이전트 채팅 -->
+  <main class="main">
+    <div class="chat-scroll" id="chatScroll">
+      <div class="chat-inner" id="chatInner">
+        <div class="welcome" id="welcomePane">
+          <div class="w-icon"><img src="/avatars/nova.webp" alt="노바"></div>
+          <h2>무엇을 만들어볼까요?</h2>
+          <p>노바에게 앱을 만들어달라고 요청하세요</p>
+          <div class="tpl-gallery" id="tplGallery">
+            <div class="tpl-card" onclick="useTemplate('game')">
+              <div class="tpl-icon">🎮</div>
+              <div class="tpl-name">미니 게임</div>
+              <div class="tpl-desc">간단한 브라우저 게임 만들기</div>
+            </div>
+            <div class="tpl-card" onclick="useTemplate('calculator')">
+              <div class="tpl-icon">🧮</div>
+              <div class="tpl-name">계산기</div>
+              <div class="tpl-desc">사칙연산 계산기 앱</div>
+            </div>
+            <div class="tpl-card" onclick="useTemplate('todo')">
+              <div class="tpl-icon">✅</div>
+              <div class="tpl-name">할 일 관리</div>
+              <div class="tpl-desc">투두리스트 앱</div>
+            </div>
+            <div class="tpl-card" onclick="useTemplate('timer')">
+              <div class="tpl-icon">⏱️</div>
+              <div class="tpl-name">타이머</div>
+              <div class="tpl-desc">스톱워치/타이머 앱</div>
+            </div>
+            <div class="tpl-card" onclick="useTemplate('memo')">
+              <div class="tpl-icon">📝</div>
+              <div class="tpl-name">메모장</div>
+              <div class="tpl-desc">간단한 메모 앱</div>
+            </div>
+            <div class="tpl-card" onclick="useTemplate('dashboard')">
+              <div class="tpl-icon">📊</div>
+              <div class="tpl-name">대시보드</div>
+              <div class="tpl-desc">정보 표시 대시보드</div>
+            </div>
+          </div>
+          </div>
+      </div>
+    </div>
+    <div class="composer-wrap">
+      <div class="composer-inner">
+        <div class="composer">
+          <textarea id="chatInput" rows="2" placeholder="무엇이든 요청하세요" maxlength="10000"></textarea>
+          <div class="composer-bar">
+            <button class="cbtn" title="미리보기" onclick="togglePreview()"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg></button>
+            <button class="cbtn" title="변경사항" onclick="toggleDiff()"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M12 3v18"/></svg></button>
+            <select id="modelTag" style="border:1px solid #ddd;border-radius:6px;padding:4px 8px;font-size:12px;background:#fff;cursor:pointer;max-width:200px;">
+  <optgroup label="Gemini">
+    <option value="gemini-3.5-flash-lite">gemini-3.5-flash-lite</option>
+    <option value="gemini-3.1-flash-lite">gemini-3.1-flash-lite</option>
+    <option value="gemini-2.5-flash">gemini-2.5-flash</option>
+  </optgroup>
+  <optgroup label="Groq">
+    <option value="openai/gpt-oss-120b">gpt-oss-120b</option>
+    <option value="openai/gpt-oss-20b">gpt-oss-20b</option>
+  </optgroup>
+</select>
+            <button class="send-btn" id="sendBtn" onclick="sendChat()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 19V5"/><path d="m5 12 7-7 7 7"/></svg></button>
+          </div>
+        </div>
+        <div class="hint">Enter로 전송 · Shift+Enter로 줄바꿈</div>
+      </div>
+    </div>
+  </main>
+
+  <!-- 우측: diff 패널 (토글) -->
+  <aside class="diff-panel" id="diffPanel">
+    <div class="dp-head">
+      <div style="display:flex;gap:4px;">
+        <button class="btn btn-sm" id="tabPreview" onclick="userSwitchTab('preview')" style="border:none;font-weight:600;">미리보기</button>
+        <button class="btn btn-sm" id="tabCode" onclick="userSwitchTab('code')" style="border:none;color:#888;">코드</button>
+        <button class="btn btn-sm" id="tabFiles" onclick="userSwitchTab('files')" style="border:none;color:#888;">파일</button>
+        <button class="btn btn-sm" id="tabDiff" onclick="userSwitchTab('diff')" style="border:none;color:#888;">변경 사항</button>
+      </div>
+      <button class="dp-close" onclick="toggleDiff()">×</button>
+    </div>
+    <div id="rightTabContent" style="flex:1;position:relative;min-height:0;">
+    <div id="rightPreview" style="position:absolute;inset:0;display:flex;flex-direction:column;visibility:visible;z-index:1;">
+      <iframe id="rightPreviewFrame" sandbox="allow-scripts" style="flex:1;border:none;background:#fff;"></iframe>
+    </div>
+    <div id="rightCode" style="position:absolute;inset:0;display:flex;flex-direction:column;visibility:hidden;z-index:0;background:#fff;">
+      <div style="display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid #e5e5e5;background:#f7f7f8;">
+        <select id="codeFileSelect" onchange="openCodeFile(this.value)" style="font-size:12px;padding:4px 6px;border:1px solid #ddd;border-radius:6px;max-width:180px;"></select>
+        <span id="codeDirty" style="font-size:11px;color:#e6a23c;display:none;">● 수정됨</span>
+        <div style="flex:1;"></div>
+        <button class="btn btn-sm" onclick="saveEditedCode()" style="background:#1a73e8;color:#fff;border:none;">저장</button>
+      </div>
+      <div id="codeLockBanner" style="display:none;padding:8px 12px;background:#fff8e6;border-bottom:1px solid #f0dfae;font-size:12px;color:#8a6d1a;">🔒 노바가 작업 중입니다. 지금 저장하면 버전이 분기될 수 있어요.</div>
+      <div style="flex:1;min-height:0;overflow:auto;">
+        <textarea id="codeEditor" style="display:none;"></textarea>
+      </div>
+    </div>
+    <div id="rightFiles" style="position:absolute;inset:0;display:flex;flex-direction:column;visibility:hidden;z-index:0;background:#fff;overflow:auto;">
+      <div class="sb-section" style="padding:8px 12px;">프로젝트 파일</div>
+      <div id="fileTree" style="padding:0 8px 12px;"></div>
+    </div>
+    <div id="rightDiff" style="position:absolute;inset:0;display:flex;flex-direction:column;visibility:hidden;z-index:0;background:#fff;">
+      <div class="dp-stats" id="dpStats">프로젝트를 선택하세요</div>
+      <div class="dp-body" id="dpBody"></div>
+      <div class="dp-actions" id="dpActions" style="display:none;"></div>
+      <div class="dp-versions">
+        <div class="sb-section">버전 기록</div>
+        <div class="dp-vlist" id="dpVersions"></div>
+      </div>
+    </div>
+    </div>
+  </aside>
+</div>
+
+
+<!-- 검색 모달 (코덱스 스타일) -->
+<div id="searchModal" style="display:none;position:fixed;inset:0;z-index:200;align-items:flex-start;justify-content:center;padding-top:15vh;background:rgba(0,0,0,.3);" onclick="if(event.target===this)closeSearch()">
+  <div style="width:480px;max-width:90vw;background:#fff;border-radius:14px;box-shadow:0 12px 40px rgba(0,0,0,.18);overflow:hidden;">
+    <div style="display:flex;align-items:center;gap:10px;padding:14px 16px;border-bottom:1px solid #f0f0f0;">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#888" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+      <input id="modalSearch" placeholder="프로젝트 검색" oninput="renderSearchResults()" style="flex:1;border:none;outline:none;font-size:14px;">
+      <button onclick="closeSearch()" style="border:none;background:none;font-size:18px;color:#999;cursor:pointer;">×</button>
+    </div>
+    <div id="searchResults" style="max-height:320px;overflow-y:auto;padding:8px;"></div>
+  </div>
+</div>
+<script src="/nav.js"></script>
+<script>
+/* ===== 중앙 상태 저장소 (codex-webui active-session 패턴) =====
+ * 모든 데이터는 메모리에 유지. UI 액션은 DB 조회 없이 즉시 처리.
+ * DB는 영속성을 위한 백그라운드 동기화 대상으로만 사용.
+ */
+const Store = {
+  projects: [],
+  chats: new Map(),       // sessionKey -> [{who, content, created_at}]
+  versions: new Map(),    // projectId -> {list, draftVid, pubVid}
+  previews: new Map(),    // projectId -> html (합성 완료)
+  files: new Map(),       // `${projectId}:${versionNo}` -> [{file_path, content, file_size}]
+  loaded: false,
+
+  // ---- 동기 읽기 (즉시, DB 조회 없음) ----
+  getChat(key) { return this.chats.get(key) || []; },
+  getVersions(pid) { return this.versions.get(pid)?.list || []; },
+  getDraftVid(pid) { return this.versions.get(pid)?.draftVid || null; },
+  getPreview(pid) { return this.previews.get(pid) || null; },
+  getFiles(pid, vno) { return this.files.get(`${pid}:${vno}`) || null; },
+
+  // ---- 메모리 업데이트 (즉시) ----
+  setChat(key, msgs) { this.chats.set(key, msgs); },
+  addChatMsg(key, msg) {
+    const msgs = this.getChat(key);
+    msgs.push(msg);
+    this.chats.set(key, msgs);
+  },
+  setVersions(pid, list, draftVid, pubVid) {
+    this.versions.set(pid, { list, draftVid, pubVid });
+  },
+  setPreview(pid, html) { this.previews.set(pid, html); },
+  setFiles(pid, vno, files) { this.files.set(`${pid}:${vno}`, files); },
+
+  // ---- 백그라운드 DB 동기화 (await 하지 않음) ----
+  syncChatMsg(key, who, content, artifactId) {
+    // DB 저장은 백그라운드로, 실패해도 메모리 상태는 유지
+    api('/chats', {
+      method: 'POST',
+      body: JSON.stringify({
+        artifact_id: artifactId,
+        session_key: key,
+        who,
+        content: content.slice(0, 2000),
+      }),
+    }).catch(e => console.warn("Background sync failed:", e));
+  },
+};
+
+let curId = null, curRev = 1;
+let currentChatKey = null;
+let newSessionId = 'new-' + Date.now();
+function chatKey() { return curId ? 'p' + curId : newSessionId; }
+// 채팅 메시지 저장: 메모리 즉시 업데이트 + DB 백그라운드 동기화
+function saveChatMsg(who, text) {
+  const key = chatKey();
+  const msg = { who, content: text.slice(0, 2000), created_at: new Date().toISOString() };
+  // 1. 메모리 즉시 업데이트 (UI는 이미 렌더링됨)
+  Store.addChatMsg(key, msg);
+  // 2. DB 백그라운드 동기화 (기다리지 않음)
+  Store.syncChatMsg(key, who, text, curId);
+}
+let draftVid = null, pubVid = null, curHtml = '', chatMode = 'new';
+
+async function api(p, o = {}) {
+  const r = await fetch('/api/artifact' + p, { headers: { 'Content-Type': 'application/json' }, ...o });
+  const text = await r.text();
+  try {
+    return JSON.parse(text);
+  } catch (e) {
+    // 404는 조용히 (예: published 목록 없음)
+    if (!text.includes('404') && !text.includes('Not Found')) {
+      console.error('API JSON 파싱 실패:', p, text.slice(0, 200));
+    }
+    throw new Error('서버 응답 오류: ' + text.slice(0, 100));
+  }
+}
+function esc(s) { return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function scrollBottom() { const s = document.getElementById('chatScroll'); s.scrollTop = s.scrollHeight; }
+
+/* ===== 사이드바 ===== */
+async function loadProjects() {
+  try {
+    // '/'는 404일 수 있으므로 개별 처리 (조용히)
+    let pub = { data: [] }, drafts = { data: [] };
+    try { pub = await api('/'); } catch (e) { console.warn('published 목록 로드 실패:', e.message); }
+    try { drafts = await api('/drafts'); } catch (e) { console.warn('drafts 로드 실패:', e.message); }
+    const seen = new Set();
+    const list = [];
+    for (const p of [...(drafts.data || []), ...(pub.data || [])]) {
+      if (!seen.has(p.id)) { seen.add(p.id); list.push(p); }
+    }
+    // 전역과 Store에 모두 저장 (호환성)
+    projects = list;
+    Store.projects = list;
+  } catch (e) {
+    projects = [];
+    Store.projects = [];
+    console.error('loadProjects 실패:', e);
+    const el = document.getElementById('sbProjects');
+    if (el) el.innerHTML = '<div class="sb-empty" style="color:#c00;">로드 실패: ' + esc(e.message) + '</div>';
+    return;
+  }
+  renderSidebar();
+}
+let workingProject = null; // { title }
+let activeJobs = []; // 진행 중인 job 목록
+function renderSidebar() {
+  const items = projects;
+  const rowHtml = p => `
+    <div class="sb-item ${p.id === curId ? 'active' : ''}" onclick="selectProject(${p.id})" onmouseenter="preloadPreview(${p.id})" oncontextmenu="showProjectMenu(event, ${p.id})" title="${esc(p.title)}">
+      <span class="dot ${p.status === 'draft' ? 'dot-draft' : 'dot-pub'}"></span>
+      <span class="nm">${esc(p.title)}</span>
+    </div>`;
+  let workingHtml = '';
+  if (workingProject) {
+    workingHtml = `<div class="sb-item working-item"><span class="spinner" style="width:12px;height:12px;border-width:1.5px;"></span><span class="nm">${esc(workingProject.title)}</span></div>`;
+  }
+  document.getElementById('sbProjects').innerHTML = workingHtml + (items.map(rowHtml).join('') || (workingProject ? '' : '<div class="sb-empty">프로젝트 없음</div>'));
+  const recent = [...projects].slice(0, 5);
+  document.getElementById('sbRecent').innerHTML = recent.map(p => `
+    <div class="sb-item ${p.id === curId ? 'active' : ''}" onclick="selectProject(${p.id})" onmouseenter="preloadPreview(${p.id})" title="${esc(p.title)}">
+      <span class="nm">${esc(p.title)}</span>
+    </div>`).join('') || '<div class="sb-empty">없음</div>';
+}
+function focusSearch() {
+  const m = document.getElementById('searchModal');
+  m.style.display = 'flex';
+  document.getElementById('modalSearch').value = '';
+  renderSearchResults();
+  setTimeout(() => document.getElementById('modalSearch').focus(), 50);
+}
+function closeSearch() { document.getElementById('searchModal').style.display = 'none'; }
+async function renderSearchResults() {
+  const q = document.getElementById('modalSearch').value.trim();
+  if (!q) { document.getElementById('searchResults').innerHTML = ''; return; }
+  document.getElementById('searchResults').innerHTML = '<div class="sb-empty">검색 중...</div>';
+  try {
+    const r = await api('/search?q=' + encodeURIComponent(q));
+    if (!r.ok) throw new Error();
+    const { projects: pj, chats } = r.data;
+    let html = '';
+    if (pj.length) {
+      html += '<div class="sb-section">프로젝트</div>' + pj.map(p => `
+        <div class="sb-item" onclick="closeSearch();selectProject(${p.id})" style="margin:0 4px;">
+          <span class="dot ${p.status === 'draft' ? 'dot-draft' : 'dot-pub'}"></span>
+          <span class="nm">${esc(p.title)}</span>
+        </div>`).join('');
+    }
+    if (chats.length) {
+      html += '<div class="sb-section">대화 내용</div>' + chats.map(h => `
+        <div class="sb-item" onclick="closeSearch();jumpToChat('${esc(h.session_key)}', ${h.artifact_id || 'null'})" style="margin:0 4px;flex-direction:column;align-items:flex-start;gap:2px;">
+          <span style="font-size:11px;color:#888;">${esc(h.artifact_title || '새 채팅')} · ${h.who === 'user' ? '나' : '노바'}</span>
+          <span class="nm" style="font-size:12px;">${esc(h.snippet)}</span>
+        </div>`).join('');
+    }
+    document.getElementById('searchResults').innerHTML = html || '<div class="sb-empty">검색 결과 없음</div>';
+  } catch (e) {
+    document.getElementById('searchResults').innerHTML = '<div class="sb-empty">검색 실패</div>';
+  }
+}
+function jumpToChat(sessionKey, artifactId) {
+  if (artifactId) selectProject(artifactId);
+  else newChat();
+}
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeSearch(); });
+
+/* ===== 새 채팅 / 프로젝트 선택 ===== */
+function newChat() {
+  claimActiveStream(); // 이전 폴링 중단 (stream-controller)
+  curId = null; curHtml = ''; versions = []; chatMode = 'new';
+  newSessionId = 'new-' + Date.now(); // 새 고유 세션
+  currentChatKey = newSessionId; // 캐시 키 설정
+  previewCache = { key: null, html: null }; // 미리보기 캐시 초기화
+  renderSidebar();
+  document.getElementById('chatInner').innerHTML = `
+    <div class="welcome" id="welcomePane"><div class="w-icon"><img src="/avatars/nova.webp" alt="노바"></div>
+    <h2>무엇을 만들어볼까요?</h2><p>노바에게 앱을 만들어달라고 요청하세요</p>
+    </div>`;
+  closeDiff();
+  // 우측 패널 초기화
+  document.getElementById('rightPreviewFrame').srcdoc = '<p style="padding:20px;color:#888;">프로젝트를 선택하세요</p>';
+  document.getElementById('fileTree').innerHTML = '<div class="sb-empty">프로젝트를 선택하세요</div>';
+  if (codeMirrorInstance) codeMirrorInstance.setValue('');
+}
+function quickAsk(t) { document.getElementById('chatInput').value = t; sendChat(); }
+// Phase 3: 템플릿 갤러리 - 클릭하면 노바에게 해당 앱 생성을 요청
+function useTemplate(kind) {
+  const prompts = {
+    game: '숫자 맞추기 게임을 만들어줘. 1~100 사이 숫자를 맞추는 게임이야.',
+    calculator: '사칙연산이 가능한 계산기 앱을 만들어줘.',
+    todo: '할 일을 추가/삭제/완료할 수 있는 투두리스트 앱을 만들어줘.',
+    timer: '스톱워치와 타이머 기능이 있는 앱을 만들어줘.',
+    memo: '메모를 작성하고 저장할 수 있는 메모장 앱을 만들어줘.',
+    dashboard: '현재 시간과 날짜를 보여주는 심플한 대시보드를 만들어줘.',
+  };
+  const prompt = prompts[kind] || '앱을 만들어줘.';
+  document.getElementById('chatInput').value = prompt;
+  sendChat();
+}
+/* 채팅 복원: Store에서 즉시 렌더링 (DB 조회 없음) */
+function restoreChat(k) {
+  const inner = document.getElementById('chatInner');
+  const msgs = Store.getChat(k);
+  currentChatKey = k;
+  // 메시지가 있을 때만 초기화 (빈 경우 웰컴 유지)
+  if (msgs.length > 0) {
+    document.getElementById('welcomePane')?.remove();
+    inner.innerHTML = '';
+  } else {
+    // Store에 없으면 DB에서 백그라운드 로드 (최초 1회)
+    if (!Store.loaded) {
+      api('/chats?session_key=' + encodeURIComponent(k)).then(r => {
+        const data = (r.ok && r.data) ? r.data : [];
+        if (data.length) {
+          Store.setChat(k, data);
+          // 현재 보고 있는 세션이면 다시 렌더링
+          if (currentChatKey === k) restoreChat(k);
+        }
+      }).catch(e => console.warn("Background sync failed:", e));
+    }
+    return;
+  }
+  // Store 메시지 렌더링 (동기, 즉시)
+  msgs.forEach(m => {
+    renderChatMsg(m, inner);
+  });
+  scrollBottom();
+}
+
+/* 단일 채팅 메시지 렌더링 (Store 기반) */
+function renderChatMsg(m, inner) {
+  // 결과 카드 마커 감지 → 카드로 재렌더링
+  let isResultCard = false;
+  let cardVersionNo = null;
+  if (m.who === 'nova' && m.content && m.content.startsWith('{"__result_card__"')) {
+    try {
+      const marker = JSON.parse(m.content);
+      if (marker.__result_card__) {
+        isResultCard = true;
+        cardVersionNo = marker.version_no;
+      }
+    } catch (e) { console.warn("Ignored error:", e); }
+  }
+  if (isResultCard) {
+    renderResultCard(cardVersionNo, m.created_at, inner);
+    return;
+  }
+  const tmp = document.createElement('div');
+  const timeStr = m.created_at ? new Date(m.created_at + 'Z').toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }) : '';
+  const timeHtml = timeStr ? `<div class="msg-time">${timeStr}</div>` : '';
+  if (m.who === 'user') {
+    tmp.className = 'msg msg-user';
+    tmp.innerHTML = `<div class="bubble"></div>`;
+    tmp.querySelector('.bubble').textContent = m.content;
+    tmp.querySelector('.bubble').insertAdjacentHTML('beforeend', timeHtml);
+  } else {
+    tmp.className = 'msg msg-nova';
+    tmp.innerHTML = `<div class="avatar"><img src="/avatars/nova.webp" alt="노바"></div><div class="body"><p></p>${timeHtml}</div>`;
+    tmp.querySelector('p').textContent = m.content;
+  }
+  inner.appendChild(tmp);
+}
+
+/* 결과 카드 렌더링 */
+function renderResultCard(versionNo, createdAt, inner) {
+  const cardId = 'card-' + versionNo + '-' + Date.now();
+  const tmp = document.createElement('div');
+  tmp.className = 'msg msg-nova';
+  const timeStr = createdAt ? new Date(createdAt + 'Z').toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }) : '';
+  const timeHtml = timeStr ? `<div class="msg-time">${timeStr}</div>` : '';
+  tmp.innerHTML = `<div class="avatar"><img src="/avatars/nova.webp" alt="노바"></div><div class="body">
+    <div class="result-card" id="${cardId}">
+      <div class="result-header">
+        <span class="result-badge">v${versionNo}</span>
+        <span class="result-title">완료</span>
+      </div>
+      <div class="result-files" id="${cardId}-files">
+        <span style="color:#888;font-size:12px;">파일 목록 로딩 중...</span>
+      </div>
+      <div class="result-actions">
+        <button class="btn btn-sm" onclick="toggleDiff(true);userSwitchTab('preview')">미리보기</button>
+        <button class="btn btn-sm" onclick="toggleDiff(true);userSwitchTab('files')">파일</button>
+        <button class="btn btn-sm" onclick="toggleDiff(true);userSwitchTab('code')">코드</button>
+      </div>
+    </div>${timeHtml}</div>`;
+  tmp.setAttribute('data-version', versionNo);
+  inner.appendChild(tmp);
+  // 파일 목록 로드 (project ID를 캡처해서 전달)
+  const pid = curId;
+  if (pid) {
+    loadResultCardFiles(cardId, { version_no: versionNo }, pid);
+  }
+}
+async function selectProject(id, showCompletion = false) {
+  claimActiveStream();
+  curId = id; chatMode = 'project'; renderSidebar();
+  currentChatKey = 'p' + id;
+  curHtml = '';
+  lastPreviewHtml = ''; lastPreviewPid = null;
+  if (codeMirrorInstance) codeMirrorInstance.setValue('');
+
+  // Store에서 즉시 읽기 (DB 조회 없음)
+  const cachedVersions = Store.getVersions(id);
+
+  // 채팅은 Store에서 즉시 렌더링
+  restoreChat('p' + id);
+
+  if (cachedVersions.length) {
+    // 캐시 히트: 즉시 표시
+    const vinfo = Store.versions.get(id);
+    versions = vinfo.list; draftVid = vinfo.draftVid; pubVid = vinfo.pubVid;
+    renderVersions();
+    const draft = versions.find(x => x.id === draftVid) || versions[0];
+    // 미리보기는 Store에서 즉시
+    const previewHtml = Store.getPreview(id);
+    if (previewHtml) {
+      curHtml = previewHtml;
+      // 미리보기 패널 즉시 업데이트
+      if (rightTab === 'preview') {
+        document.getElementById('rightPreviewFrame').srcdoc = previewHtml;
+      }
+    }
+    if (draft) {
+      const hasCard = document.querySelector(`[data-version="${draft.version_no}"]`);
+      if (showCompletion) showChangeCard(draft, true);
+      else if (!hasCard) showChangeCard(draft, false);
+    }
+    refreshRightPanel();
+    return;
+  }
+
+  // 캐시 미스: API에서 로드 (최초 1회)
+  const [d, v] = await Promise.all([
+    api('/' + id),
+    api('/' + id + '/versions'),
+  ]);
+  if (!d.ok) return;
+  curRev = d.data.row_revision || 1;
+  if (v.ok) {
+    versions = v.data.versions; draftVid = v.data.draft_version_id; pubVid = v.data.published_version_id;
+    Store.setVersions(id, versions, draftVid, pubVid);
+    renderVersions();
+    const draft = versions.find(x => x.id === draftVid) || versions[0];
+    if (draft) {
+      try {
+        const vd = await api('/' + id + '/versions/' + draft.version_no);
+        if (vd.ok) {
+          curHtml = vd.data.html_content;
+          Store.setPreview(id, curHtml);
+        }
+      } catch (e) { console.warn("Ignored error:", e); }
+      const hasCard = document.querySelector(`[data-version="${draft.version_no}"]`);
+      if (showCompletion) showChangeCard(draft, true);
+      else if (!hasCard) showChangeCard(draft, false);
+    }
+  }
+  refreshRightPanel();
+}
+
+/* 우측 패널 새로고침 */
+function refreshRightPanel() {
+  // 현재 활성화된 탭에 따라 새로고침
+  if (rightTab === 'preview') {
+    loadPreview();
+  } else if (rightTab === 'files') {
+    loadFileTree();
+  } else if (rightTab === 'code') {
+    // 코드 에디터에 새 curHtml 설정
+    if (codeMirrorInstance && curHtml) {
+      // 무한 루프 방지: 값이 다를 때만 설정
+      if (codeMirrorInstance.getValue() !== curHtml) {
+        codeMirrorInstance.setValue(curHtml);
+      }
+    }
+  } else if (rightTab === 'diff') {
+    // 변경사항 탭: 버전 목록 새로고침
+    renderVersions();
+  }
+}
+
+// 호버 프리로딩: 마우스를 올리면 미리보기 미리 로드
+const preloadCache = new Set();
+async function preloadPreview(projectId) {
+  // 이미 로드 중이거나 캐시된 경우 스킵
+  const key = projectId + ':preload';
+  if (preloadCache.has(key)) return;
+  preloadCache.add(key);
+  // 300ms 후에 여전히 호버 중이면 로드 (불필요한 요청 방지)
+  await new Promise(r => setTimeout(r, 300));
+  try {
+    const v = await api('/' + projectId + '/versions');
+    if (!v.ok || !v.data.versions.length) return;
+    const draft = v.data.versions.find(x => x.id === v.data.draft_version_id) || v.data.versions[0];
+    const f = await api('/' + projectId + '/versions/' + draft.version_no + '/files');
+    if (!f.ok || !f.data.length) return;
+    const files = {};
+    for (const file of f.data) files[file.file_path] = file.content;
+    let html = files['index.html'] || '';
+    if (!html.trim()) return;
+    html = html.replace(/<link[^>]+href=["']([^"']+\.css)["'][^>]*>/gi, (m, href) => {
+      const k = href.replace(/^\.\//, '');
+      if (files[k]) return `<style>\n${files[k]}\n</style>`;
+      return m;
+    });
+    html = html.replace(/<script[^>]+src=["']([^"']+\.js)["'][^>]*><\/script>/gi, (m, src) => {
+      const k = src.replace(/^\.\//, '');
+      if (files[k]) return `<script>\n${files[k]}\n<\/script>`;
+      return m;
+    });
+    // 미리보기 캐시에 저장 (실제 선택 시 즉시 사용)
+    const cacheKey = projectId + ':' + (v.data.draft_version_id || 'draft');
+    // 전역 previewCache와 별도로 프로젝트별 캐시
+    if (!window.projectPreviewCache) window.projectPreviewCache = {};
+    window.projectPreviewCache[cacheKey] = html;
+  } catch (e) { console.warn('미리보기 캐시 저장 실패:', e); }
+}
+
+/* ===== 메시지 ===== */
+function addMsg(who, html, save = true) {
+  document.getElementById('welcomePane')?.remove();
+  const inner = document.getElementById('chatInner');
+  const div = document.createElement('div');
+  div.className = 'msg ' + (who === 'user' ? 'msg-user' : 'msg-nova');
+  const timeStr = new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
+  div.innerHTML = who === 'user'
+    ? `<div class="bubble">${html}<div class="msg-time">${timeStr}</div></div>`
+    : `<div class="avatar"><img src="/avatars/nova.webp" alt="노바"></div><div class="body">${html}<div class="msg-time">${timeStr}</div></div>`;
+  inner.appendChild(div); scrollBottom();
+  // 캐시 업데이트 (오픈소스 세션 상태 패턴)
+  if (currentChatKey) {
+  }
+  // 저장 시에는 타임스탬프 제외하고 원본 html만 저장
+  if (save) saveChatMsg(who, html.replace(/<[^>]*>/g, '').slice(0, 2000));
+  return div;
+}
+let workingDetails = [];
+let currentJobId = null;
+function showWorking(text, detail, jobId) {
+  if (jobId) currentJobId = jobId;
+  if (detail) workingDetails.push(detail);
+  let row = document.getElementById('workingRow');
+  if (!row) {
+    const inner = document.getElementById('chatInner');
+    row = document.createElement('div');
+    row.className = 'working'; row.id = 'workingRow';
+    row.style.cursor = 'pointer';
+    row.onclick = () => {
+      const d = document.getElementById('workingDetail');
+      if (d) d.style.display = d.style.display === 'none' ? 'block' : 'none';
+    };
+    inner.appendChild(row);
+    workingDetails = [];
+  }
+  const detailHtml = workingDetails.length
+    ? `<div id="workingDetail" style="display:none;margin-top:6px;padding:8px 12px;background:#f8f8f8;border-radius:8px;font-size:12px;color:#888;">${workingDetails.map(esc).join('<br>')}</div>`
+    : '';
+  const cancelBtn = currentJobId ? `<button onclick="event.stopPropagation();cancelJob(${currentJobId})" style="margin-left:8px;padding:4px 10px;border:1px solid #ddd;border-radius:6px;background:#fff;font-size:12px;cursor:pointer;">취소</button>` : '';
+  row.innerHTML = `<div class="spinner"></div><span>${esc(text)}</span>${workingDetails.length ? '<span style="color:#aaa;font-size:11px;margin-left:4px;">▸</span>' : ''}${cancelBtn}${detailHtml}`;
+  scrollBottom();}
+
+// 모델 변경
+document.getElementById('modelTag')?.addEventListener('change', async (e) => {
+  const modelId = e.target.value;
+  try {
+    const r = await api('/model', { method: 'POST', body: JSON.stringify({ model: modelId }) });
+    if (r.ok) alert('모델이 ' + modelId + '로 변경되었습니다.');
+    else alert('변경 실패');
+  } catch { alert('변경 실패'); }
+});
+
+async function cancelJob(jobId) {
+  // 확인 없이 즉시 취소 (Codex 스타일)
+  try {
+    const r = await api('/jobs/' + jobId + '/cancel', { method: 'POST' });
+    if (r.ok) {
+      hideWorking();
+      workingProject = null; renderSidebar();
+      currentJobId = null;
+      sending = false;
+      // 버튼 복원
+      const sendBtn = document.getElementById('sendBtn');
+      sendBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 19V5"/><path d="m5 12 7-7 7 7"/></svg>';
+      sendBtn.title = '전송';
+      addMsg('nova', '<p>작업이 취소되었습니다.</p>');
+    } else {
+      alert('취소 실패: ' + (r.error || ''));
+    }
+  } catch (e) {
+    alert('취소 실패');
+  }
+}
+function resetWorking() { workingDetails = []; }
+function hideWorking() { document.getElementById('workingRow')?.remove(); resetWorking(); currentJobId = null; }
+
+function showChangeCard(v, saveMarker = true) {
+  const inner = document.getElementById('chatInner');
+  // 중복 방지: 같은 버전 카드가 이미 있으면 제거 후 재생성 (캐시 불일치 방지)
+  const existing = inner.querySelectorAll(`[data-version="${v.version_no}"]`);
+  existing.forEach(el => el.remove());
+  // Codex 스타일 결과 카드 (파일 목록 포함)
+  const cardId = 'card-' + Date.now() + '-' + v.version_no;
+  const cardHtml = `
+    <div class="result-card" id="${cardId}">
+      <div class="result-header">
+        <span class="result-badge">v${v.version_no}</span>
+        <span class="result-title">완료</span>
+      </div>
+      <div class="result-files" id="${cardId}-files">
+        <span style="color:#888;font-size:12px;">파일 목록 로딩 중...</span>
+      </div>
+      <div class="result-actions">
+        <button class="btn btn-sm" onclick="toggleDiff(true);userSwitchTab('preview')">미리보기</button>
+        <button class="btn btn-sm" onclick="toggleDiff(true);userSwitchTab('files')">파일</button>
+        <button class="btn btn-sm" onclick="toggleDiff(true);userSwitchTab('code')">코드</button>
+      </div>
+    </div>`;
+  // DOM에는 HTML로 렌더링, DB에는 마커로 저장 (복원 시 재렌더링)
+  const div = addMsgHtml('nova', cardHtml);
+  div.setAttribute('data-version', v.version_no);
+  // DB에 마커 저장 (saveMarker=false면 건너뜀 - 복원 시 중복 방지)
+  if (saveMarker) {
+    saveChatMsg('nova', JSON.stringify({ __result_card__: true, version_no: v.version_no }));
+  }
+  // 파일 목록 로드 (현재 프로젝트 ID 전달)
+  loadResultCardFiles(cardId, v, curId);
+  // 우측 패널 자동 열기 (미리보기)
+  toggleDiff(true);
+  switchRightTabAuto('preview');
+}
+
+// HTML을 직접 렌더링하는 addMsg (저장하지 않음)
+function addMsgHtml(who, html) {
+  document.getElementById('welcomePane')?.remove();
+  const inner = document.getElementById('chatInner');
+  const div = document.createElement('div');
+  div.className = 'msg ' + (who === 'user' ? 'msg-user' : 'msg-nova');
+  const timeStr = new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
+  div.innerHTML = who === 'user'
+    ? `<div class="bubble">${html}<div class="msg-time">${timeStr}</div></div>`
+    : `<div class="avatar"><img src="/avatars/nova.webp" alt="노바"></div><div class="body">${html}<div class="msg-time">${timeStr}</div></div>`;
+  inner.appendChild(div); scrollBottom();
+  // 캐시 업데이트
+  if (currentChatKey) {
+  }
+  return div;
+}
+
+// 결과 카드의 파일 목록 로드 (Codex 스타일)
+async function loadResultCardFiles(cardId, v, pid) {
+  try {
+    const el = document.getElementById(cardId + '-files');
+    if (!el) return;
+    const projectId = pid || curId;
+    if (!projectId) {
+      el.innerHTML = '<span style="color:#888;font-size:12px;">파일 없음</span>';
+      return;
+    }
+    // v2 이상이면 이전 버전과 diff 표시
+    if (v.version_no > 1) {
+      const d = await api('/' + projectId + '/versions/' + (v.version_no - 1) + '/diff/' + v.version_no);
+      if (d.ok && d.data.changes.length > 0) {
+        el.innerHTML = `
+          <div class="result-file-count">${d.data.changes.length}개 파일 변경</div>
+          <div class="result-file-list">
+            ${d.data.changes.map(ch => {
+              // A5: diff 텍스트에서 +/- 줄 수 계산
+              let added = ch.lines_added || 0, removed = ch.lines_removed || 0;
+              if (ch.diff) {
+                for (const l of ch.diff.split('\n')) {
+                  if (l.startsWith('+') && !l.startsWith('+++')) added++;
+                  else if (l.startsWith('-') && !l.startsWith('---')) removed++;
+                }
+              }
+              return `
+              <div class="result-file-item" onclick="openDiffViewer('${esc(ch.path)}', ${v.version_no - 1}, ${v.version_no})" style="cursor:pointer;">
+                <span class="file-icon">${ch.type === 'added' ? '➕' : ch.type === 'deleted' ? '➖' : '✏️'}</span>
+                <span class="file-path">${esc(ch.path)}</span>
+                <span class="file-diff-stats">
+                  ${added ? `<span style="color:#1a7f37;">+${added}</span>` : ''}
+                  ${removed ? `<span style="color:#cf222e;">-${removed}</span>` : ''}
+                </span>
+              </div>`;
+            }).join('')}
+          </div>`;
+        return;
+      }
+    }
+    // v1 또는 diff 없음: 파일 목록 표시
+    const f = await api('/' + projectId + '/versions/' + v.version_no + '/files');
+    if (!f.ok || !f.data.length) {
+      el.innerHTML = '<span style="color:#888;font-size:12px;">파일 없음</span>';
+      return;
+    }
+    const totalSize = f.data.reduce((s, file) => s + (file.file_size || 0), 0);
+    el.innerHTML = `
+      <div class="result-file-count">${f.data.length}개 파일 생성 <span style="color:#888;">(${(totalSize/1024).toFixed(1)}KB)</span></div>
+      <div class="result-file-list">
+        ${f.data.map(file => `
+          <div class="result-file-item" onclick="userSwitchTab('files')">
+            <span class="file-icon">📄</span>
+            <span class="file-path">${esc(file.file_path)}</span>
+            <span class="file-size">${(file.file_size/1024).toFixed(1)}KB</span>
+          </div>
+        `).join('')}
+      </div>`;
+    // 캐시 업데이트 (파일 목록 로드 완료 후)
+    if (currentChatKey) {
+      const inner = document.getElementById('chatInner');
+    }
+  } catch (e) {
+    const el = document.getElementById(cardId + '-files');
+    if (el) el.innerHTML = '<span style="color:#888;font-size:12px;">로딩 실패</span>';
+  }
+}
+
+// 변경 카드의 파일 목록 로드
+async function loadChangeCardFiles(versionNo) {
+  if (!curId) return;
+  try {
+    const f = await api('/' + curId + '/versions/' + versionNo + '/files');
+    const el = document.getElementById('ccFiles' + versionNo);
+    if (!el) return;
+    if (!f.ok || !f.data.length) {
+      el.innerHTML = '<div class="cc-file"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg> index.html</div>';
+      return;
+    }
+    el.innerHTML = f.data.map((file, idx) => {
+      const icon = file.file_path.endsWith('.html') ? '📄' : file.file_path.endsWith('.css') ? '🎨' : file.file_path.endsWith('.js') ? '📜' : '📃';
+      return `<div class="cc-file" style="cursor:pointer;" data-file-idx="${idx}" title="${esc(file.file_path)}">${icon} ${esc(file.file_path)} <span style="color:#999;">${(file.file_size/1024).toFixed(1)}KB</span></div>`;
+    }).join('');
+    // 클릭 이벤트 바인딩 (인라인 onclick 대신)
+    el.querySelectorAll('.cc-file').forEach((div, idx) => {
+      div.onclick = () => viewFile(f.data[idx].file_path);
+    });
+  } catch (e) { console.warn("Ignored error:", e); }
+}
+
+/* ===== 채팅 전송 ===== */
+// 백그라운드 작업으로 AI 호출 (새로고침해도 서버에서 계속 실행)
+/* ===== Job Polling 단일화 (codex-webui stream-controller 패턴) ===== */
+const activePollers = new Set();
+const handledTerminalJobs = new Set();
+const askedJobs = new Set(); // A1: 질문 팝업을 이미 띄운 job
+// 전역 단일 스트림 소유권: 새 폴링이 시작되면 이전 것을 중단
+let activeStreamController = null;
+function claimActiveStream() {
+  if (activeStreamController) {
+    activeStreamController.aborted = true;
+  }
+  const controller = { aborted: false };
+  activeStreamController = controller;
+  return controller;
+}
+
+async function callAiJob(kind, prompt, baseHtml) {
+  // 멱등성 키: 같은 요청이 중복 전송되어도 하나의 작업만 생성
+  const clientRequestId = 'req-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
+  // 현재 선택된 모델을 Job에 저장 (Job별 모델 고정)
+  const selectedModel = document.getElementById('modelTag')?.value || null;
+  let provider = null;
+  if (selectedModel) {
+    if (selectedModel.startsWith('openai/') && selectedModel.includes('gpt-oss')) provider = 'groq';
+    else if (selectedModel.startsWith('nvidia/') || selectedModel.startsWith('meta/') || selectedModel.startsWith('google/')) provider = 'nvidia';
+    else provider = 'gemini';
+  }
+  const jr = await api('/jobs', { method: 'POST',
+    body: JSON.stringify({ kind, prompt, base_html: baseHtml || null, artifact_id: curId || null, client_request_id: clientRequestId, provider, model: selectedModel }) });
+  if (!jr.ok) throw new Error(jr.error || '작업 생성 실패');
+  // v2 'Failed to fetch' 수정: 백엔드는 항상 202 + jobId 즉시 반환 (Queue 비동기 처리).
+  // 직접 모드(await 전체 에이전트)는 HTTP 유휴 타임아웃으로 브라우저가 연결을 끊었음.
+  // 완료는 pollJob()이 2.5초 간격으로 확인 (이벤트 기반 진행 표시 포함).
+  if (!jr.data?.jobId) throw new Error('작업 ID 없음');
+  currentJobId = jr.data.jobId;
+  return { jobId: jr.data.jobId };
+}
+
+// ===== 작업 단계 시각화 (Codex 스타일) =====
+let taskStepsEl = null;
+function showTaskSteps(steps) {
+  // steps: [{label: '파일 생성 중', status: 'pending'|'active'|'done'|'error'}]
+  const chatInner = document.getElementById('chatInner');
+  if (!taskStepsEl) {
+    taskStepsEl = document.createElement('div');
+    taskStepsEl.className = 'task-steps';
+    taskStepsEl.id = 'taskSteps';
+    chatInner.appendChild(taskStepsEl);
+  }
+  const done = steps.filter(s => s.status === 'done').length;
+  const pct = Math.round((done / steps.length) * 100);
+  taskStepsEl.innerHTML = steps.map((s, i) => {
+    const icon = s.status === 'done' ? '✓' : s.status === 'active' ? '◐' : s.status === 'error' ? '✕' : '○';
+    return `<div class="task-step step-${s.status}"><div class="step-icon">${icon}</div><div>${s.label}</div></div>`;
+  }).join('') + `<div class="task-progress-bar"><div class="task-progress-fill" style="width:${pct}%"></div></div>`;
+  document.getElementById('chatScroll').scrollTop = document.getElementById('chatScroll').scrollHeight;
+}
+function updateTaskStep(index, status) {
+  if (!taskStepsEl) return;
+  const steps = taskStepsEl.querySelectorAll('.task-step');
+  if (steps[index]) {
+    steps[index].className = `task-step step-${status}`;
+    const icon = status === 'done' ? '✓' : status === 'active' ? '◐' : status === 'error' ? '✕' : '○';
+    steps[index].querySelector('.step-icon').textContent = icon;
+  }
+}
+function hideTaskSteps() {
+  if (taskStepsEl) {
+    taskStepsEl.remove();
+    taskStepsEl = null;
+  }
+}
+
+async function sendChat() {
+  if (sending) {
+    // 작업 중이면 중단 (Codex 스타일)
+    if (currentJobId) {
+      cancelJob(currentJobId);
+    }
+    return;
+  }
+  const input = document.getElementById('chatInput');
+  const text = input.value.trim();
+  if (!text) return;
+  sending = true;
+  resetWorking();
+  input.value = '';
+  // 전송 버튼을 중단 버튼으로 변경
+  const sendBtn = document.getElementById('sendBtn');
+  sendBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>';
+  sendBtn.title = '작업 중단';
+  addMsg('user', esc(text));
+
+  // GPT 자문: Intent 판별 - 대화와 빌드 분리
+  const lowerText = text.toLowerCase();
+  const buildKw = ['만들어줘', '만들어주세요', '구현해줘', '구현해주세요', '생성해줘', '만들어', '구현해'];
+  const modifyKw = ['바꿔줘', '바꿔주세요', '수정해줘', '수정해주세요', '변경해줘', '고쳐줘'];
+  const isBuildReq = buildKw.some(k => lowerText.includes(k));
+  const isModifyReq = modifyKw.some(k => lowerText.includes(k));
+  
+  if (!isBuildReq && !isModifyReq) {
+    // 대화 모드: Job 생성 없이 응답
+    const sendBtn2 = document.getElementById('sendBtn');
+    sendBtn2.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 19V5"/><path d="m5 12 7-7 7 7"/></svg>';
+    sendBtn2.title = '전송';
+    sending = false;
+    if (!curId) {
+      addMsg('nova', '<p>어떤 앱을 만들고 싶으신가요? 예를 들어 "계산기 앱 만들어줘"라고 말씀해보세요.</p>');
+    } else {
+      addMsg('nova', '<p>네, 말씀하세요. "버튼 색상을 빨간색으로 바꿔줘"처럼 구체적으로 말씀해주시면 수정해드릴게요.</p>');
+    }
+    return;
+  }
+  if (isModifyReq && !curId) {
+    const sendBtn2 = document.getElementById('sendBtn');
+    sendBtn2.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 19V5"/><path d="m5 12 7-7 7 7"/></svg>';
+    sendBtn2.title = '전송';
+    sending = false;
+    addMsg('nova', '<p>수정할 프로젝트를 먼저 선택해주세요. 좌측 목록에서 프로젝트를 클릭하세요.</p>');
+    return;
+  }
+
+  // 좌측에 작업 중 표시
+  const isNew = !curId;
+  if (isNew) { workingProject = { title: text.slice(0, 20) || '새 앱' }; renderSidebar(); }
+  else { showWorking('노바가 수정 중...'); }
+
+  let jobStarted = false; // v2 수정: Queue 작업 생성 성공 시 true → finally에서 버튼 복원 생략
+  try {
+    const isModify = !!curId;
+    resetUserSelectedTab(); // A6: 새 작업 시작 시 사용자 탭 선택 초기화
+    showWorking('노바가 작업 중...');
+    const d = await callAiJob(isModify ? 'modify' : 'create', text, curHtml);
+    // v2 'Failed to fetch' 수정: Queue 비동기 처리 — POST는 202로 즉시 반환되므로
+    // 브라우저 유휴 타임아웃이 없음. pollJob이 2.5초 간격으로 완료를 확인하고
+    // 이벤트 기반 진행 표시(파일 작성 중 등)를 렌더링. 완료/실패 시 아래 콜백 실행.
+    // 버튼은 중단 모드를 유지하므로 finally에서 복원하지 않음.
+    jobStarted = true;
+    pollJob(d.jobId,
+      async (job) => {
+        // 완료: 세션 채팅을 프로젝트로 이관 (대화 연속성)
+        if (job.artifact_id) {
+          try {
+            await api('/chats/migrate', { method: 'POST',
+              body: JSON.stringify({ from_session: newSessionId, to_artifact_id: job.artifact_id }) });
+          } catch (e) { console.warn('채팅 이관 실패:', e); }
+          selectProject(job.artifact_id, true); // 새로 생성됨 - 완료 메시지 표시
+        } else if (curId) {
+          selectProject(curId);
+        } else {
+          addMsg('nova', `<p>앱을 만들었습니다.</p>`);
+        }
+        resetSendButton();
+      },
+      async (job) => {
+        addMsg('nova', `<p style="color:#cf222e;">실패: ${esc(job.error || 'AI 작업 실패')}</p>`);
+        resetSendButton();
+      }
+    );
+  } catch (e) {
+    hideWorking();
+    workingProject = null; renderSidebar();
+    addMsg('nova', `<p style="color:#cf222e;">실패: ${esc(e.message)}</p>`);
+    resetSendButton();
+  } finally {
+    // 작업이 시작됐으면 버튼 복원은 완료/실패 콜백에 맡김 (중단 버튼 유지)
+    if (!jobStarted) resetSendButton();
+  }
+}
+
+// 전송 버튼을 원래대로 복원 (작업 완료/실패/취소 시)
+function resetSendButton() {
+  const sendBtn = document.getElementById('sendBtn');
+  sendBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 19V5"/><path d="m5 12 7-7 7 7"/></svg>';
+  sendBtn.title = '전송';
+  sending = false;
+  currentJobId = null;
+}
+
+// ===== 백그라운드 작업 복구 (페이지 로드 시) =====
+async function checkActiveJobs() {
+  try {
+    const r = await api('/jobs');
+    if (!r.ok || !r.data || !r.data.length) return false;
+    // 진행 중인 작업이 있으면 사이드바에 표시 + 폴링 이어받기
+    const running = r.data.find(j => j.status === 'pending' || j.status === 'running');
+    if (running) {
+      workingProject = { title: (running.prompt || '작업 중').slice(0, 20), jobId: running.id };
+      renderSidebar();
+      pollJob(running.id);
+    }
+    // 완료됐는데 못 본 작업이 있으면 알림
+    const unseen = r.data.filter(j => (j.status === 'done' || j.status === 'failed') && !j.seen);
+    if (unseen.length) showUnseenJobs(unseen);
+    return true;
+  } catch (e) { console.warn('미확인 작업 조회 실패:', e); }
+  return false;
+}
+
+async function pollJob(jobId, onDone, onFailed) {
+  // stream-controller: 이전 폴링 중단
+  const controller = claimActiveStream();
+  if (activePollers.has(jobId)) return; // 이미 폴링 중
+  activePollers.add(jobId);
+  document.getElementById('welcomePane')?.remove();
+  // 진행 중 작업의 채팅 기록 복원 (사용자 요청 메시지 표시)
+  try {
+    const jr = await api('/jobs/' + jobId);
+    if (jr.ok && jr.data) {
+      const k = jr.data.artifact_id ? 'p' + jr.data.artifact_id : 'new';
+      await restoreChat(k);
+    }
+  } catch (e) { console.warn("Ignored error:", e); }
+  showWorking('노바가 작업 중... (이어받기)');
+  // 이벤트 폴링을 위한 lastEventId
+  let lastEventId = 0;
+  while (true) {
+    if (controller.aborted) break; // 새 스트림이 소유권 획득
+    await new Promise(r => setTimeout(r, 2500));
+    try {
+      // Codex 스타일: 이벤트 먼저 조회
+      try {
+        const er = await api('/jobs/' + jobId + '/events?since=' + lastEventId);
+        if (er.ok && er.data.length) {
+          for (const ev of er.data) {
+            lastEventId = Math.max(lastEventId, ev.id);
+            renderJobEvent(ev);
+          }
+        }
+      } catch (e) { console.warn("Ignored error:", e); }
+      const s = await api('/jobs/' + jobId);
+      if (!s.ok) break;
+      const job = s.data;
+      const row = document.getElementById('workingRow');
+      if (row) {
+        const label = job.status === 'running' ? `노바가 작업 중... (시도 ${job.attempts}/5)` : '대기 중...';
+        const span = row.querySelector('span');
+        if (span) span.textContent = label;
+      }
+      if (job.status === 'done') {
+        hideWorking();
+        workingProject = null;
+        await markJobSeen(jobId);
+        await loadProjects();
+        renderSidebar();
+        activePollers.delete(jobId);
+        handledTerminalJobs.add(jobId);
+        if (onDone) {
+          // v2 수정: 새 작업 완료 시 호출자 콜백 (채팅 이관 + 완료 메시지)
+          await onDone(job);
+        } else if (job.artifact_id) {
+          // 조용히 프로젝트 선택 (메시지 추가 안 함 - 중복 방지)
+          selectProject(job.artifact_id, false);
+        }
+        // B6: 미리보기 검증 — 콘솔 에러 수집 후 자동 수정 제안 (조용히 실행)
+        if (job.artifact_id) validatePreview(job.artifact_id);
+        break;
+      }
+      if (job.status === 'failed') {
+        hideWorking();
+        workingProject = null; renderSidebar();
+        await markJobSeen(jobId);
+        activePollers.delete(jobId);
+        handledTerminalJobs.add(jobId);
+        if (onFailed) {
+          await onFailed(job);
+        } else {
+          addMsg('nova', `<p style="color:#cf222e;">실패: ${esc(job.error || 'AI 작업 실패')}</p>`);
+        }
+        break;
+      }
+      // A1: ask_question — 에이전트가 사용자 입력을 기다림 → 질문 팝업
+      if (job.status === 'awaiting_input' && !askedJobs.has(jobId)) {
+        askedJobs.add(jobId);
+        await showQuestionPopup(jobId, job);
+      }
+    } catch (e) { console.warn('폴링 중단:', e); break; }
+  }
+  activePollers.delete(jobId);
+}
+
+// B6: 미리보기 검증 (vibesdk 콘솔 로그 → 자동 repair 패턴의 클라이언트 버전)
+// BROWSER 바인딩 없이 브라우저 자체에서 검증 — 추가 비용 없음
+// 작업 완료 후 미리보기를 숨은 iframe에 로드하고 콘솔 에러를 4초간 수집
+async function validatePreview(artifactId) {
+  try {
+    const draft = versions.find(x => x.id === draftVid) || versions[0];
+    if (!draft || !artifactId) return;
+    // 다른 프로젝트로 이동했으면 검증하지 않음
+    if (curId !== artifactId) return;
+    const vd = await api('/' + artifactId + '/versions/' + draft.version_no);
+    if (!vd.ok || !vd.data.html_content || !vd.data.html_content.trim()) return;
+    let html = vd.data.html_content;
+    // 콘솔 캡처 스크립트 주입 (검증용 iframe 전용 — 저장된 아티팩트에는 포함되지 않음)
+    const capture = '<script>(function(){'
+      + 'function send(k,m){try{parent.postMessage({type:"myhub-validate",kind:k,message:String(m).slice(0,500)},"*")}catch(e){console.warn("myhub-validate postMessage 실패:",e)}}'
+      + 'window.addEventListener("error",function(e){send("error",(e.message||"Script error")+" @line "+(e.lineno||"?"))});'
+      + 'window.addEventListener("unhandledrejection",function(e){var r=e.reason;send("rejection",(r&&r.message)||String(r))});'
+      + 'var _e=console.error;console.error=function(){try{send("console",Array.prototype.slice.call(arguments).join(" "))}catch(x){console.warn("myhub-validate console 전달 실패:",x)}_e.apply(console,arguments)};'
+      + '})();<' + '/script>';
+    if (html.includes('</body>')) html = html.replace('</body>', capture + '</body>');
+    else html += capture;
+
+    const errors = [];
+    const onMsg = (e) => {
+      if (e.data && e.data.type === 'myhub-validate') errors.push(e.data);
+    };
+    window.addEventListener('message', onMsg);
+    const frame = document.createElement('iframe');
+    frame.setAttribute('sandbox', 'allow-scripts');
+    frame.style.cssText = 'position:fixed;width:2px;height:2px;left:-9999px;top:0;visibility:hidden;';
+    frame.setAttribute('aria-hidden', 'true');
+    document.body.appendChild(frame);
+    frame.srcdoc = html;
+    await new Promise(r => setTimeout(r, 4000));
+    window.removeEventListener('message', onMsg);
+    frame.remove();
+
+    if (errors.length > 0) {
+      showRepairBar(artifactId, errors);
+    }
+    // 오류 없으면 조용히 통과
+  } catch (e) { console.warn("Ignored error:", e); }
+}
+
+// B6: 오류 발견 시 자동 수정 바 표시
+function showRepairBar(artifactId, errors) {
+  document.getElementById('repairBar')?.remove();
+  const uniq = [...new Set(errors.map(e => e.kind + ': ' + e.message))].slice(0, 5);
+  const bar = document.createElement('div');
+  bar.id = 'repairBar';
+  bar.style.cssText = 'position:fixed;left:50%;transform:translateX(-50%);bottom:18px;z-index:900;'
+    + 'background:#2b2b2b;color:#fff;border-radius:12px;padding:12px 16px;max-width:520px;width:calc(100vw - 40px);'
+    + 'box-shadow:0 8px 30px rgba(0,0,0,0.25);font-size:13px;';
+  bar.innerHTML =
+    '<div style="font-weight:700;margin-bottom:6px;">⚠️ 미리보기에서 오류 ' + errors.length + '개 발견</div>'
+    + '<div style="color:#ccc;font-size:12px;margin-bottom:10px;max-height:80px;overflow-y:auto;">'
+    + uniq.map(e => '· ' + esc(e)).join('<br>') + '</div>'
+    + '<div style="display:flex;gap:8px;">'
+    + '<button id="repairGo" style="flex:1;background:#1a73e8;color:#fff;border:none;border-radius:8px;padding:8px;font-size:13px;cursor:pointer;">자동 수정</button>'
+    + '<button id="repairNo" style="background:transparent;color:#aaa;border:1px solid #555;border-radius:8px;padding:8px 14px;font-size:13px;cursor:pointer;">닫기</button>'
+    + '</div>';
+  document.body.appendChild(bar);
+  document.getElementById('repairNo').onclick = () => bar.remove();
+  document.getElementById('repairGo').onclick = async () => {
+    bar.remove();
+    if (curId !== artifactId) { alert('프로젝트를 다시 선택해주세요.'); return; }
+    const errText = uniq.join('\n');
+    const prompt = '미리보기 실행 중 다음 오류가 발생했습니다. 오류가 발생하지 않도록 수정해주세요:\n' + errText;
+    try {
+      showWorking('노바가 오류를 수정 중...');
+      const d = await callAiJob('modify', prompt, null);
+      pollJob(d.jobId);
+    } catch (e) {
+      alert('자동 수정 작업 생성 실패: ' + e.message);
+      hideWorking();
+    }
+  };
+  // 30초 후 자동 닫기
+  setTimeout(() => document.getElementById('repairBar')?.remove(), 30000);
+}
+
+// A1: ask_question 질문 팝업 — 에이전트가 사용자 입력을 기다릴 때 표시
+async function showQuestionPopup(jobId, job) {
+  let questions = [];
+  try {
+    const ps = JSON.parse(job.pending_state || '{}');
+    questions = ps.questions || [];
+  } catch (e) { console.warn('pending_state 파싱 실패:', e); }
+  if (!questions.length) return;
+
+  // 기존 팝업 제거
+  document.getElementById('askPopup')?.remove();
+
+  const overlay = document.createElement('div');
+  overlay.id = 'askPopup';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.35);z-index:1000;display:flex;align-items:center;justify-content:center;padding:20px;';
+
+  const box = document.createElement('div');
+  box.style.cssText = 'background:#fff;border-radius:14px;max-width:480px;width:100%;max-height:80vh;overflow-y:auto;padding:24px;box-shadow:0 12px 40px rgba(0,0,0,0.18);';
+
+  let html = `<div style="font-size:16px;font-weight:700;margin-bottom:4px;">노바의 질문</div>
+    <div style="font-size:13px;color:#666;margin-bottom:16px;">정확한 작업을 위해 답해주세요. 답변하면 작업이 이어집니다.</div>`;
+
+  questions.forEach((q, qi) => {
+    html += `<div style="margin-bottom:16px;" data-qid="${esc(q.id)}">
+      <div style="font-size:14px;font-weight:600;margin-bottom:8px;">${esc(q.question)}</div>`;
+    if (q.options && q.options.length) {
+      q.options.forEach(opt => {
+        html += `<label style="display:flex;gap:8px;align-items:flex-start;padding:8px 10px;border:1px solid #e5e5e5;border-radius:8px;margin-bottom:6px;cursor:pointer;font-size:13px;">
+          <input type="radio" name="q_${qi}" value="${esc(opt.id)}" style="margin-top:2px;">
+          <span><b>${esc(opt.label)}</b>${opt.description ? `<br><span style="color:#888;">${esc(opt.description)}</span>` : ''}</span>
+        </label>`;
+      });
+    }
+    const allowCustom = q.allow_custom !== false;
+    if (allowCustom) {
+      html += `<input type="text" data-custom="q_${qi}" placeholder="직접 입력 (선택)" style="width:100%;padding:8px 10px;border:1px solid #e5e5e5;border-radius:8px;font-size:13px;box-sizing:border-box;">`;
+    }
+    html += `</div>`;
+  });
+
+  html += `<button id="askSubmit" style="width:100%;padding:12px;background:#4a90d9;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:600;cursor:pointer;">답변 보내기</button>`;
+  box.innerHTML = html;
+  overlay.appendChild(box);
+  document.body.appendChild(overlay);
+
+  return new Promise((resolve) => {
+    box.querySelector('#askSubmit').onclick = async () => {
+      const answers = [];
+      questions.forEach((q, qi) => {
+        const checked = box.querySelector(`input[name="q_${qi}"]:checked`);
+        const custom = box.querySelector(`input[data-custom="q_${qi}"]`);
+        let answer = '';
+        if (custom && custom.value.trim()) {
+          answer = custom.value.trim();
+        } else if (checked) {
+          const opt = (q.options || []).find(o => o.id === checked.value);
+          answer = opt ? opt.label : checked.value;
+        }
+        if (answer) answers.push({ id: q.id, answer });
+      });
+      if (!answers.length) {
+        alert('하나 이상 답변해주세요.');
+        return;
+      }
+      try {
+        const r = await api('/jobs/' + jobId + '/answer', {
+          method: 'POST',
+          body: JSON.stringify({ answers }),
+        });
+        if (!r.ok) throw new Error(r.error || '답변 제출 실패');
+        overlay.remove();
+        const row = document.getElementById('workingRow');
+        const span = row?.querySelector('span');
+        if (span) span.textContent = '답변 전달됨 — 작업 재개 중...';
+        addMsg('nova', '<p>답변을 받았어요. 작업을 이어서 진행할게요.</p>');
+        resolve();
+      } catch (e) {
+        alert('답변 제출 실패: ' + e.message);
+      }
+    };
+  });
+}
+
+// B2: file.stream 처리 — 미리보기/편집기에 실시간 반영 (디바운스)
+let streamPreviewTimer = null;
+function handleFileStream(payload) {
+  const path = payload.file_path;
+  const content = payload.content;
+  if (!path || typeof content !== 'string') return;
+  // 1. 미리보기 실시간 업데이트 (html 파일, 디바운스 1.5초)
+  if (path.endsWith('.html')) {
+    clearTimeout(streamPreviewTimer);
+    streamPreviewTimer = setTimeout(() => {
+      const frame = document.getElementById('rightPreviewFrame');
+      if (frame && content.trim()) {
+        frame.srcdoc = content;
+        lastPreviewHtml = content;
+      }
+    }, 1500);
+  }
+  // 2. 코드 탭에서 같은 파일을 보고 있고, 사용자가 수정 중이 아니면 실시간 반영
+  if (codeMirrorInstance && curCodePath === path && !dirtyFiles[path] && !codeMirrorInstance.hasFocus()) {
+    codeMirrorInstance.setValue(content);
+    codeContents[path] = content;
+  }
+}
+
+// Codex 스타일: Job 이벤트 렌더링
+function renderJobEvent(ev) {
+  try {
+    const payload = ev.payload ? JSON.parse(ev.payload) : {};
+    const row = document.getElementById('workingRow');
+    if (!row) return;
+    const span = row.querySelector('span');
+    if (!span) return;
+
+    // 작업 상세 타임라인에 이벤트 추가
+    let detail = document.getElementById('workingDetail');
+    if (!detail) {
+      detail = document.createElement('div');
+      detail.id = 'workingDetail';
+      detail.style.cssText = 'margin-top:8px;padding:8px 12px;background:#f8f8f8;border-radius:8px;font-size:12px;color:#666;max-height:120px;overflow-y:auto;';
+      row.appendChild(detail);
+    }
+
+    const time = new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    let label = '';
+    let detailLine = '';
+
+    switch (ev.event_type) {
+      case 'job.started':
+        label = '노바가 작업 시작...';
+        detailLine = `▶ 작업 시작`;
+        break;
+      case 'file.changed':
+        label = `파일 작성 중: ${payload.file_path || ''}`;
+        detailLine = `📝 ${payload.file_path || '파일'} 수정`;
+        break;
+      case 'file.stream':
+        // B2: 파일 내용 라이브 스트리밍 — 에이전트가 쓰는 동안 실시간 표시
+        label = `파일 작성 중: ${payload.file_path || ''}`;
+        detailLine = `✍️ ${payload.file_path || '파일'} 작성 중...`;
+        handleFileStream(payload);
+        break;
+      case 'version.committed':
+        label = `v${payload.version_no || ''} 저장 중...`;
+        detailLine = `💾 v${payload.version_no || ''} 저장`;
+        break;
+      case 'job.completed':
+        label = '완료 처리 중...';
+        detailLine = `✅ 완료`;
+        break;
+      case 'job.failed':
+        label = '작업 실패';
+        detailLine = `❌ 실패: ${payload.error || ''}`;
+        break;
+      case 'agent.tool_calls':
+        // 관문 28: 도구 호출 히스토리 표시
+        label = '도구 호출 기록';
+        detailLine = `🔧 ${payload.calls ? payload.calls.length + '개 도구 호출' : '도구 호출'}`;
+        break;
+      case 'version.skipped':
+        label = '버전 스킵';
+        detailLine = `⏭️ 변경 없음으로 스킵`;
+        break;
+      case 'version.branch':
+        // B5: 충돌 시 버전 분기 — 타임라인에 명시
+        label = '버전 분기';
+        detailLine = `🌿 v${payload.version_no || ''} 분기 (충돌 파일: ${(payload.conflicts || []).join(', ') || '없음'})`;
+        break;
+      case 'job.no_change':
+        label = '변경 없음';
+        detailLine = `ℹ️ 에이전트가 파일을 변경하지 않음`;
+        break;
+      case 'model.fallback':
+        label = '모델 폴백';
+        detailLine = `🔄 ${payload.from || ''} → ${payload.to || ''}로 전환`;
+        break;
+      default:
+        return;
+    }
+
+    span.textContent = label;
+    if (detailLine) {
+      const line = document.createElement('div');
+      line.style.cssText = 'padding:2px 0;';
+      line.textContent = `${time} ${detailLine}`;
+      detail.appendChild(line);
+      detail.scrollTop = detail.scrollHeight;
+    }
+  } catch (e) { console.warn("Ignored error:", e); }
+}
+
+function showUnseenJobs(jobs) {
+  // 조용히 확인 처리 (채팅에 표시하지 않음)
+  jobs.forEach(j => markJobSeen(j.id));
+}
+
+async function markJobSeen(jobId) {
+  try { await api('/jobs/' + jobId + '/seen', { method: 'POST' }); } catch (e) { console.warn("Ignored error:", e); }
+}
+
+let sending = false;
+document.getElementById('chatInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); sendChat(); }
+});
+
+/* ===== Diff 패널 ===== */
+let rightTab = 'preview';
+let userSelectedTab = null; // A6: 사용자가 명시 선택한 탭 — 에이전트 자동 전환이 덮어쓰지 않음
+let codeMirrorInstance = null;
+async function switchRightTab(t) {
+  rightTab = t;
+  const previewDiv = document.getElementById('rightPreview');
+  const codeDiv = document.getElementById('rightCode');
+  const filesDiv = document.getElementById('rightFiles');
+  const diffDiv = document.getElementById('rightDiff');
+  // visibility 방식으로 전환: iframe이 display:none으로 언로드되지 않아 상태 유지됨
+  // (스톱워치 실행 중 탭 전환해도 리셋되지 않음)
+  const panels = [
+    [previewDiv, 'preview'],
+    [codeDiv, 'code'],
+    [filesDiv, 'files'],
+    [diffDiv, 'diff'],
+  ];
+  for (const [div, name] of panels) {
+    if (!div) continue;
+    const active = name === t;
+    div.style.visibility = active ? 'visible' : 'hidden';
+    div.style.zIndex = active ? '1' : '0';
+  }
+  document.getElementById('tabPreview').style.cssText = t === 'preview' ? 'border:none;font-weight:600;' : 'border:none;color:#888;';
+  document.getElementById('tabCode').style.cssText = t === 'code' ? 'border:none;font-weight:600;' : 'border:none;color:#888;';
+  document.getElementById('tabFiles').style.cssText = t === 'files' ? 'border:none;font-weight:600;' : 'border:none;color:#888;';
+  document.getElementById('tabDiff').style.cssText = t === 'diff' ? 'border:none;font-weight:600;' : 'border:none;color:#888;';
+  if (t === 'preview') loadPreview();
+  if (t === 'files') loadFileTree();
+  if (t === 'code') {
+    // B3: 파일 단위 편집기 — 버전의 파일 목록을 불러와 파일별로 편집
+    // B4: 에이전트 작업 중이면 소프트 잠금 배너 표시
+    checkEditLock();
+    await loadCodeFiles();
+    if (codeMirrorInstance) setTimeout(() => codeMirrorInstance.refresh(), 10);
+  }
+}
+
+// B3: 코드 탭 파일 상태
+let codeFiles = [];        // [{file_path}]
+let curCodePath = null;    // 현재 편집 중인 파일
+let codeContents = {};     // path -> content (원본)
+let editedContents = {};   // path -> content (편집 중, 미저장)
+let dirtyFiles = {};       // path -> true
+let codeFilesPid = null;   // 파일 목록을 로드한 프로젝트 ID
+
+function codeModeFor(path) {
+  if (path.endsWith('.js')) return 'javascript';
+  if (path.endsWith('.css')) return 'css';
+  if (path.endsWith('.json')) return 'application/json';
+  return 'htmlmixed';
+}
+
+// B4: 진행 중인 작업이 있으면 편집 잠금 배너 표시 (소프트 잠금 — 저장은 막지 않고 경고)
+async function checkEditLock() {
+  const banner = document.getElementById('codeLockBanner');
+  if (!banner || !curId) return;
+  banner.style.display = 'none';
+  try {
+    const r = await api('/' + curId + '/active-job');
+    if (r.ok && r.data) {
+      banner.style.display = 'block';
+    }
+  } catch (e) { console.warn("Ignored error:", e); }
+}
+
+async function loadCodeFiles() {
+  const sel = document.getElementById('codeFileSelect');
+  if (!curId) return;
+  // 프로젝트가 바뀌면 편집 상태 초기화
+  if (codeFilesPid !== curId) {
+    codeFilesPid = curId;
+    curCodePath = null;
+    codeContents = {};
+    editedContents = {};
+    dirtyFiles = {};
+  }
+  // 파일 목록 로드
+  let files = [];
+  try {
+    const draft = versions.find(x => x.id === draftVid) || versions[0];
+    if (draft) {
+      const fr = await api('/' + curId + '/versions/' + draft.version_no + '/files');
+      if (fr.ok && fr.data) files = fr.data;
+    }
+  } catch (e) { console.warn("Ignored error:", e); }
+  // 파일 행이 없으면 기존 단일 HTML 모드 (하위 호환)
+  if (!files.length) {
+    if (!curHtml && versions.length) {
+      const draft = versions.find(x => x.id === draftVid) || versions[0];
+      if (draft) {
+        try {
+          const vd = await api('/' + curId + '/versions/' + draft.version_no);
+          if (vd.ok) curHtml = vd.data.html_content;
+        } catch (e) { console.warn("Ignored error:", e); }
+      }
+    }
+    if (!curHtml) return;
+    files = [{ file_path: 'index.html' }];
+    codeContents = { 'index.html': curHtml };
+  } else {
+    codeContents = {};
+    for (const f of files) codeContents[f.file_path] = f.content || '';
+  }
+  codeFiles = files;
+  // 셀렉터 갱신
+  sel.innerHTML = files.map(f => `<option value="${esc(f.file_path)}">${esc(f.file_path)}${dirtyFiles[f.file_path] ? ' ●' : ''}</option>`).join('');
+  // 이전에 보던 파일 유지, 없으면 첫 파일
+  const target = (curCodePath && codeContents[curCodePath] !== undefined) ? curCodePath : files[0].file_path;
+  openCodeFile(target, true);
+}
+
+function openCodeFile(path, force) {
+  if (!path || codeContents[path] === undefined) return;
+  // 현재 편집 중인 내용을 메모리에 보관
+  if (codeMirrorInstance && curCodePath && !force) {
+    const cur = codeMirrorInstance.getValue();
+    if (cur !== codeContents[curCodePath]) {
+      dirtyFiles[curCodePath] = true;
+    }
+  }
+  curCodePath = path;
+  document.getElementById('codeFileSelect').value = path;
+  if (!codeMirrorInstance) {
+    document.getElementById('codeEditor').value = codeContents[path];
+    codeMirrorInstance = CodeMirror.fromTextArea(document.getElementById('codeEditor'), {
+      mode: codeModeFor(path),
+      theme: 'material',
+      lineNumbers: true,
+      readOnly: false,
+      viewportMargin: Infinity,
+      extraKeys: {
+        'Ctrl-S': function(cm) { saveEditedCode(); },
+        'Cmd-S': function(cm) { saveEditedCode(); },
+      },
+    });
+    codeMirrorInstance.on('change', () => {
+      if (!curCodePath) return;
+      const edited = codeMirrorInstance.getValue();
+      editedContents[curCodePath] = edited;
+      // 디바운스 미리보기 (html 파일만)
+      clearTimeout(codeMirrorInstance._pvTimer);
+      codeMirrorInstance._pvTimer = setTimeout(() => {
+        if (edited && edited.trim() && curCodePath.endsWith('.html')) {
+          document.getElementById('rightPreviewFrame').srcdoc = edited;
+        }
+      }, 800);
+      // dirty 추적
+      const dirty = edited !== codeContents[curCodePath];
+      if (dirty) dirtyFiles[curCodePath] = true;
+      else delete dirtyFiles[curCodePath];
+      updateCodeDirty();
+    });
+  } else {
+    codeMirrorInstance.setOption('mode', codeModeFor(path));
+    // 편집 중 덮어쓰기 방지: dirty면 편집본 유지, 아니면 새 내용으로
+    if (dirtyFiles[path]) {
+      if (editedContents[path] !== undefined && codeMirrorInstance.getValue() !== editedContents[path]) {
+        codeMirrorInstance.setValue(editedContents[path]);
+      }
+    } else if (!codeMirrorInstance.hasFocus()) {
+      codeMirrorInstance.setValue(codeContents[path]);
+    }
+  }
+  updateCodeDirty();
+  setTimeout(() => codeMirrorInstance.refresh(), 10);
+}
+
+function updateCodeDirty() {
+  const anyDirty = Object.keys(dirtyFiles).length > 0;
+  document.getElementById('codeDirty').style.display = anyDirty ? 'inline' : 'none';
+  // 셀렉터에 ● 표시 갱신
+  const sel = document.getElementById('codeFileSelect');
+  for (const opt of sel.options) {
+    const p = opt.value;
+    opt.text = dirtyFiles[p] ? p + ' ●' : p;
+  }
+}
+
+// A6: 사용자가 명시적으로 탭을 선택 (bolt.diy userSelectedView 패턴)
+function userSwitchTab(t) {
+  userSelectedTab = t;
+  switchRightTab(t);
+}
+
+// A6: 에이전트/시스템이 요청한 자동 전환 — 사용자가 고른 탭은 덮어쓰지 않음
+function switchRightTabAuto(t) {
+  if (userSelectedTab) return;
+  switchRightTab(t);
+}
+
+// 새 작업 시작 시 사용자 탭 선택 초기화
+function resetUserSelectedTab() {
+  userSelectedTab = null;
+}
+
+// 파일 트리 로드 (프로젝트별)
+let lastPreviewHtml = '';  // 마지막으로 렌더링한 HTML (중복 렌더링 방지)
+let lastPreviewPid = null; // 마지막으로 렌더링한 프로젝트 ID
+
+function loadPreview() {
+  const frame = document.getElementById('rightPreviewFrame');
+  if (!frame) return;
+  if (!curId) {
+    frame.srcdoc = '<p style="padding:20px;color:#888;">프로젝트를 선택하세요</p>';
+    return;
+  }
+  // CodeMirror에 편집된 내용이 있으면 그것을 우선 사용 (B3: 파일 단위)
+  if (codeMirrorInstance && curCodePath) {
+    try {
+      const edited = codeMirrorInstance.getValue();
+      if (edited && edited.trim() && dirtyFiles[curCodePath] && curCodePath.endsWith('.html')) {
+        if (edited !== lastPreviewHtml || curId !== lastPreviewPid) {
+          frame.srcdoc = edited;
+          lastPreviewHtml = edited;
+          lastPreviewPid = curId;
+        }
+        return;
+      }
+    } catch (e) { console.warn("Ignored error:", e); }
+  }
+  // Store에서 즉시 읽기 (DB 조회 없음!)
+  const html = Store.getPreview(curId) || curHtml;
+  if (html && html.trim()) {
+    // 내용이 바뀌었을 때만 srcdoc 업데이트 (iframe 상태 유지!)
+    // visibility 방식이라 display:none 언로드 문제가 없어서 교체 불필요
+    if (html !== lastPreviewHtml || curId !== lastPreviewPid) {
+      frame.srcdoc = html;
+      lastPreviewHtml = html;
+      lastPreviewPid = curId;
+    }
+    return;
+  }
+  // Store에 없으면 백그라운드에서 로드 (비동기)
+  frame.srcdoc = '<p style="padding:20px;color:#888;text-align:center;">로딩 중...</p>';
+  const pid = curId;
+  (async () => {
+    try {
+      const vinfo = Store.versions.get(pid);
+      let draft = null;
+      if (vinfo) {
+        draft = vinfo.list.find(x => x.id === vinfo.draftVid) || vinfo.list[0];
+      } else {
+        const v = await api('/' + pid + '/versions');
+        if (!v.ok) return;
+        draft = (v.data.versions || []).find(x => x.id === v.data.draft_version_id) || v.data.versions[0];
+      }
+      if (!draft) return;
+      const vd = await api('/' + pid + '/versions/' + draft.version_no);
+      if (vd.ok && vd.data.html_content && pid === curId) {
+        const h = vd.data.html_content;
+        Store.setPreview(pid, h);
+        curHtml = h;
+        // 여전히 같은 프로젝트를 보고 있을 때만 업데이트
+        if (rightTab === 'preview') {
+          frame.srcdoc = h;
+        }
+      }
+    } catch (e) { console.warn("Ignored error:", e); }
+  })();
+}
+
+async function loadFileTree() {
+  const treeEl = document.getElementById('fileTree');
+  if (!curId) {
+    treeEl.innerHTML = '<div class="sb-empty">프로젝트를 선택하세요</div>';
+    return;
+  }
+  // 캐시된 버전 정보 사용 (API 재호출 방지)
+  let versionList = versions;
+  let draftId = draftVid;
+  if (!versionList.length) {
+    treeEl.innerHTML = '<div class="sb-empty">로딩 중...</div>';
+    try {
+      const v = await api('/' + curId + '/versions');
+      if (!v.ok || !v.data.versions.length) {
+        treeEl.innerHTML = '<div class="sb-empty">파일 없음</div>';
+        return;
+      }
+      versionList = v.data.versions;
+      draftId = v.data.draft_version_id;
+    } catch (e) {
+      treeEl.innerHTML = '<div class="sb-empty">로딩 실패</div>';
+      return;
+    }
+  }
+  try {
+    const draft = versionList.find(x => x.id === draftId) || versionList[0];
+    const f = await api('/' + curId + '/versions/' + draft.version_no + '/files');
+    if (!f.ok || !f.data.length) {
+      // 파일이 없으면 index.html만 표시 (레거시)
+      treeEl.innerHTML = '<div class="file-item" style="padding:6px 8px;font-size:13px;cursor:pointer;" onclick="switchRightTab(\'code\')">📄 index.html</div>';
+      return;
+    }
+    // 파일 트리 렌더링 (폴더 구조)
+    const files = f.data;
+    const tree = {};
+    for (const file of files) {
+      const parts = file.file_path.split('/');
+      let node = tree;
+      for (let i = 0; i < parts.length - 1; i++) {
+        if (!node[parts[i]]) node[parts[i]] = {};
+        node = node[parts[i]];
+      }
+      node[parts[parts.length - 1]] = file;
+    }
+    // 파일 경로를 data 속성으로 저장 (인라인 onclick 대신)
+    window._fileTreePaths = {};
+    let _fidx = 0;
+    function renderNode(node) {
+      let html = '';
+      for (const [name, val] of Object.entries(node)) {
+        if (val.file_path) {
+          const icon = name.endsWith('.html') ? '📄' : name.endsWith('.css') ? '🎨' : name.endsWith('.js') ? '📜' : '📃';
+          const fid = 'f' + (_fidx++);
+          window._fileTreePaths[fid] = val.file_path;
+          html += `<div class="file-item" data-fid="${fid}" style="padding:6px 8px;font-size:13px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${esc(val.file_path)}">${icon} ${esc(name)} <span style="color:#999;font-size:11px;">${(val.file_size/1024).toFixed(1)}KB</span></div>`;
+        } else {
+          html += `<div style="padding:6px 8px;font-size:13px;font-weight:600;color:#666;">📁 ${esc(name)}</div><div style="margin-left:16px;">${renderNode(val)}</div>`;
+        }
+      }
+      return html;
+    }
+    treeEl.innerHTML = renderNode(tree);
+    treeEl.querySelectorAll('.file-item').forEach(div => {
+      div.onclick = () => viewFile(window._fileTreePaths[div.getAttribute('data-fid')]);
+    });
+  } catch (e) {
+    treeEl.innerHTML = '<div class="sb-empty">로드 실패</div>';
+  }
+}
+
+// 파일 내용 보기
+async function viewFile(filePath) {
+  if (!curId) return;
+  try {
+    const v = await api('/' + curId + '/versions');
+    if (!v.ok) return;
+    const draft = v.data.versions.find(x => x.id === v.data.draft_version_id) || v.data.versions[0];
+    if (!draft) return;
+    const f = await api('/' + curId + '/versions/' + draft.version_no + '/files');
+    if (!f.ok) return;
+    const file = f.data.find(x => x.file_path === filePath);
+    if (file) {
+      // 우측 패널 열기
+      toggleDiff(true);
+      // 코드 탭으로 전환
+      userSwitchTab('code');
+      // CodeMirror가 없으면 초기화 대기
+      setTimeout(() => {
+        if (codeMirrorInstance) {
+          codeMirrorInstance.setValue(file.content);
+        } else {
+          // CodeMirror 초기화 후 설정
+          const editor = document.getElementById('codeEditor');
+          if (editor) editor.value = file.content;
+        }
+        // 파일명 표시
+        const codeTab = document.getElementById('tabCode');
+        if (codeTab) codeTab.textContent = '코드: ' + filePath.split('/').pop();
+      }, 100);
+    }
+  } catch (e) { console.warn("Ignored error:", e); }
+}
+
+// 편집된 코드 저장
+async function saveEditedCode() {
+  if (!codeMirrorInstance || !curId) return;
+  // 현재 편집 중인 파일 내용을 dirty에 반영
+  if (curCodePath) {
+    const cur = codeMirrorInstance.getValue();
+    if (cur !== codeContents[curCodePath]) dirtyFiles[curCodePath] = true;
+    else delete dirtyFiles[curCodePath];
+  }
+  const paths = Object.keys(dirtyFiles);
+  if (!paths.length) return;
+  if (!confirm(`편집한 ${paths.length}개 파일을 새 버전으로 저장할까요?\n${paths.join(', ')}`)) return;
+  try {
+    const files = {};
+    for (const p of paths) {
+      files[p] = editedContents[p] !== undefined ? editedContents[p]
+        : (p === curCodePath) ? codeMirrorInstance.getValue()
+        : codeContents[p];
+    }
+    // B3: 파일 단위 저장 엔드포인트 (artifact_files 갱신 + 미리보기 재조합)
+    const r = await api('/' + curId + '/versions/files', {
+      method: 'POST',
+      body: JSON.stringify({ files, change_note: '사용자 직접 편집' }),
+    });
+    if (r.ok) {
+      for (const p of paths) {
+        codeContents[p] = files[p];
+        delete dirtyFiles[p];
+        delete editedContents[p];
+      }
+      if (curCodePath && files[curCodePath] !== undefined) curHtml = null; // 미리보기 새로고침 유도
+      updateCodeDirty();
+      await loadVersions();
+      await loadCodeFiles();
+      alert('저장됐습니다.');
+    } else {
+      alert('저장 실패: ' + (r.error || 'unknown'));
+    }
+  } catch (e) {
+    alert('저장 실패: ' + e.message);
+  }
+}
+function toggleDiff(force) {
+  const p = document.getElementById('diffPanel');
+  const open = force !== undefined ? force : !p.classList.contains('open');
+  p.classList.toggle('open', open);
+  if (open) switchRightTab(rightTab);
+}
+function closeDiff() { toggleDiff(false); }
+function openDiffFor(vno) { toggleDiff(true); userSwitchTab('diff'); showDiff(vno); }
+
+function computeDiff(a, b) {
+  const A = a.split('\n'), B = b.split('\n'), out = [];
+  const m = A.length, n = B.length;
+  if (m * n > 400000) {
+    A.forEach((l, i) => out.push({ t: 'del', n: i + 1, l }));
+    B.forEach((l, i) => out.push({ t: 'add', n: i + 1, l }));
+    return out;
+  }
+  const dp = Array.from({ length: m + 1 }, () => new Uint32Array(n + 1));
+  for (let i = m - 1; i >= 0; i--) for (let j = n - 1; j >= 0; j--)
+    dp[i][j] = A[i] === B[j] ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);
+  let i = 0, j = 0;
+  while (i < m && j < n) {
+    if (A[i] === B[j]) { out.push({ t: 'ctx', n: i + 1, l: A[i] }); i++; j++; }
+    else if (dp[i + 1][j] >= dp[i][j + 1]) { out.push({ t: 'del', n: i + 1, l: A[i] }); i++; }
+    else { out.push({ t: 'add', n: j + 1, l: B[j] }); j++; }
+  }
+  while (i < m) { out.push({ t: 'del', n: i + 1, l: A[i] }); i++; }
+  while (j < n) { out.push({ t: 'add', n: j + 1, l: B[j] }); j++; }
+  return out;
+}
+
+async function showDiff(vno) {
+  const v = versions.find(x => x.version_no === vno);
+  if (!v || !curId) return;
+  toggleDiff(true); userSwitchTab('diff');
+  document.getElementById('dpStats').innerHTML = `<b>v${vno}</b> · 불러오는 중...`;
+  document.getElementById('dpBody').innerHTML = '';
+  const vd = await api('/' + curId + '/versions/' + vno);
+  if (!vd.ok) return;
+  let oldHtml = '';
+  if (vd.data.parent_version_id) {
+    const parent = versions.find(x => x.id === vd.data.parent_version_id);
+    if (parent) {
+      const pd = await api('/' + curId + '/versions/' + parent.version_no);
+      if (pd.ok) oldHtml = pd.data.html_content;
+    }
+  }
+  const diff = computeDiff(oldHtml, vd.data.html_content);
+  const adds = diff.filter(d => d.t === 'add').length, dels = diff.filter(d => d.t === 'del').length;
+  document.getElementById('dpStats').innerHTML =
+    `<b>v${vno}</b> · <span class="st-add">+${adds}</span> <span class="st-del">-${dels}</span> · ${esc(v.change_note || '')}`;
+  let html = '<div class="dp-file">index.html</div>';
+  const show = new Set();
+  diff.forEach((d, idx) => { if (d.t !== 'ctx') for (let k = Math.max(0, idx - 3); k <= Math.min(diff.length - 1, idx + 3); k++) show.add(k); });
+  let last = -2;
+  [...show].sort((x, y) => x - y).forEach(idx => {
+    if (idx - last > 1) html += '<div class="dl-hunk">···</div>';
+    const d = diff[idx]; last = idx;
+    const cls = d.t === 'add' ? 'dl-add' : d.t === 'del' ? 'dl-del' : '';
+    const sign = d.t === 'add' ? '+' : d.t === 'del' ? '-' : ' ';
+    html += `<div class="dl ${cls}"><span class="dl-num">${d.n}</span><span>${sign} ${esc(d.l)}</span></div>`;
+  });
+  if (!show.size) html += '<div style="padding:20px;color:#999;font-size:12px;">첫 버전입니다</div>';
+  document.getElementById('dpBody').innerHTML = html;
+  const acts = [];
+  if (v.id !== pubVid) acts.push(`<button class="btn btn-sm btn-primary" onclick="publishV(${vno})">이 버전 게시</button>`);
+  if (v.id !== pubVid && pubVid) acts.push(`<button class="btn btn-sm" onclick="rollbackV(${vno})">롤백</button>`);
+  const ab = document.getElementById('dpActions');
+  ab.style.display = acts.length ? 'flex' : 'none'; ab.innerHTML = acts.join('');
+}
+
+function renderVersions() {
+  document.getElementById('dpVersions').innerHTML = versions.map(v => `
+    <div class="dp-vrow ${v.id === draftVid ? 'active' : ''}" onclick="showDiff(${v.version_no})">
+      <b>v${v.version_no}</b><span style="color:#999">${(v.created_at || '').slice(5, 16)}</span>
+      ${v.id === pubVid ? '<span style="color:#1a7f37;font-size:11px;">●게시</span>' : ''}
+      ${v.id === draftVid ? '<span style="color:#b8860b;font-size:11px;">●초안</span>' : ''}
+    </div>`).join('') || '<div class="sb-empty">버전 없음</div>';
+}
+async function publishV(no) {
+  if (!confirm('v' + no + '을 게시할까요?')) return;
+  const d = await api('/' + curId + '/versions/' + no + '/publish', { method: 'POST' });
+  if (d.ok) { await loadProjects(); selectProject(curId); } else alert('게시 실패');
+}
+async function rollbackV(no) {
+  if (!confirm('v' + no + '으로 롤백할까요?')) return;
+  const d = await api('/' + curId + '/rollback/' + no, { method: 'POST' });
+  if (d.ok) { await loadProjects(); selectProject(curId); } else alert('롤백 실패');
+}
+
+/* ===== 미리보기 (우측 패널 탭) ===== */
+function togglePreview() {
+  const p = document.getElementById('diffPanel');
+  const isOpen = p.classList.contains('open');
+  if (isOpen && rightTab === 'preview') { toggleDiff(false); return; }
+  toggleDiff(true); userSwitchTab('preview');
+}
+
+/* ===== 부트: 전체 데이터를 한 번에 로드 (근본적 성능 개선) ===== */
+async function boot() {
+  // 1. 프로젝트 목록 로드
+  await loadProjects();
+  // 2. 각 프로젝트의 채팅+버전+미리보기를 병렬로 프리로드
+  const preloadTasks = Store.projects.map(async (p) => {
+    const pid = p.id;
+    const skey = 'p' + pid;
+    try {
+      // 채팅, 버전, 미리보기를 병렬로
+      const [chatR, verR] = await Promise.all([
+        api('/chats?session_key=' + encodeURIComponent(skey)).catch(() => ({ ok: false })),
+        api('/' + pid + '/versions').catch(() => ({ ok: false })),
+      ]);
+      if (chatR.ok && chatR.data) {
+        Store.setChat(skey, chatR.data);
+      }
+      if (verR.ok && verR.data) {
+        const list = verR.data.versions || [];
+        Store.setVersions(pid, list, verR.data.draft_version_id, verR.data.published_version_id);
+        // 미리보기 HTML 프리로드 (최신 버전)
+        const draft = list.find(x => x.id === verR.data.draft_version_id) || list[0];
+        if (draft) {
+          const vd = await api('/' + pid + '/versions/' + draft.version_no).catch(() => ({ ok: false }));
+          if (vd.ok && vd.data.html_content) {
+            Store.setPreview(pid, vd.data.html_content);
+          }
+        }
+      }
+    } catch (e) { console.warn('미리보기 프리로드 실패:', e); }
+  });
+  // 백그라운드에서 프리로드 (UI 블로킹 없음)
+  Promise.all(preloadTasks).then(() => {
+    Store.loaded = true;
+  }).catch(e => console.warn("Background sync failed:", e));
+  // 3. 활성 작업 확인
+  const hasActive = await checkActiveJobs();
+  if (!hasActive) {
+    restoreChat('new');
+  }
+}
+
+(async () => {
+  await boot();
+})();
+
+/* ===== 프로젝트 우클릭 메뉴 ===== */
+function showProjectMenu(e, projectId) {
+  e.preventDefault();
+  e.stopPropagation();
+  const project = projects.find(p => p.id === projectId);
+  const projectTitle = project ? project.title : '프로젝트';
+  // 기존 메뉴 제거
+  document.getElementById('projectMenu')?.remove();
+  const menu = document.createElement('div');
+  menu.id = 'projectMenu';
+  menu.style.cssText = 'position:fixed;z-index:9999;background:#fff;border:1px solid #e1e4e8;border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,0.12);padding:4px;min-width:160px;';
+  menu.style.left = e.clientX + 'px';
+  menu.style.top = e.clientY + 'px';
+  menu.innerHTML = `
+    <div style="padding:8px 12px;font-size:12px;color:#666;border-bottom:1px solid #eee;margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:220px;">${esc(projectTitle)}</div>
+    <button onclick="publishProject(${projectId})" style="display:flex;align-items:center;gap:8px;width:100%;padding:8px 12px;border:none;background:none;font-size:13px;color:#1a7f37;cursor:pointer;border-radius:4px;" onmouseover="this.style.background='#e6f4ea'" onmouseout="this.style.background='none'">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z"/><path d="m12 15-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z"/><path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0"/><path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5"/></svg>
+      게시하기
+    </button>
+    <button onclick="deleteProject(${projectId})" style="display:flex;align-items:center;gap:8px;width:100%;padding:8px 12px;border:none;background:none;font-size:13px;color:#cf222e;cursor:pointer;border-radius:4px;" onmouseover="this.style.background='#fff1f1'" onmouseout="this.style.background='none'">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+      삭제
+    </button>
+  `;
+  document.body.appendChild(menu);
+  // 다른 곳 클릭하면 메뉴 닫기
+  const close = (ev) => {
+    if (!menu.contains(ev.target)) {
+      menu.remove();
+      document.removeEventListener('click', close);
+    }
+  };
+  setTimeout(() => document.addEventListener('click', close), 0);
+}
+
+async function deleteProject(projectId) {
+  document.getElementById('projectMenu')?.remove();
+  if (!confirm('이 프로젝트를 삭제할까요?\n모든 파일, 버전, 대화 기록이 삭제됩니다.')) return;
+  try {
+    const r = await api('/' + projectId, { method: 'DELETE' });
+    if (r.ok) {
+      if (curId === projectId) {
+        curId = null;
+        curHtml = '';
+        restoreChat('new');
+        toggleDiff(false);
+      }
+      await loadProjects();
+    } else {
+      alert('삭제 실패: ' + (r.error || ''));
+    }
+  } catch (e) {
+    alert('삭제 실패: ' + e.message);
+  }
+}
+
+async function publishProject(projectId) {
+  document.getElementById('projectMenu')?.remove();
+  if (!confirm('이 프로젝트를 게시할까요?\n게시된 앱은 홈 화면에서 볼 수 있습니다.')) return;
+  try {
+    const r = await api('/' + projectId + '/publish', { method: 'POST' });
+    if (r.ok) {
+      alert('게시되었습니다.');
+      await loadProjects();
+    } else {
+      alert('게시 실패: ' + (r.error || ''));
+    }
+  } catch (e) {
+    alert('게시 실패: ' + e.message);
+  }
+}
+
+/* ===== DiffViewer (Codex 스타일) ===== */
+function openDiffViewer(filePath, fromNo, toNo) {
+  const modal = document.createElement('div');
+  modal.id = 'diffModal';
+  modal.innerHTML = `
+    <div style="position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1000;display:flex;align-items:center;justify-content:center;" onclick="if(event.target===this)closeDiffViewer()">
+      <div style="background:#fff;border-radius:12px;width:90vw;max-width:900px;max-height:85vh;display:flex;flex-direction:column;overflow:hidden;">
+        <div style="padding:12px 16px;border-bottom:1px solid #e5e5e5;display:flex;align-items:center;gap:8px;">
+          <span style="font-weight:600;font-size:14px;">${esc(filePath)}</span>
+          <span style="font-size:12px;color:#888;">v${fromNo} → v${toNo}</span>
+          <div style="flex:1;"></div>
+          <button class="btn btn-sm" onclick="closeDiffViewer()">닫기</button>
+        </div>
+        <div id="diffContent" style="flex:1;overflow:auto;padding:12px;font-family:monospace;font-size:12px;line-height:1.5;">
+          <span style="color:#888;">로딩 중...</span>
+        </div>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+  loadDiffContent(filePath, fromNo, toNo);
+}
+function closeDiffViewer() {
+  document.getElementById('diffModal')?.remove();
+}
+async function loadDiffContent(filePath, fromNo, toNo) {
+  const el = document.getElementById('diffContent');
+  try {
+    // A5: 백엔드 unified diff API 사용 (단일 소스)
+    const d = await api('/' + curId + '/versions/' + fromNo + '/diff/' + toNo);
+    const ch = d.ok && d.data.changes.find(c => c.path === filePath);
+    if (!ch) { el.innerHTML = '<span style="color:#888;">변경 없음</span>'; return; }
+    if (ch.type === 'added') { el.innerHTML = '<span style="color:#1a7f37;">새 파일 (전체 추가)</span>'; return; }
+    if (ch.type === 'deleted') { el.innerHTML = '<span style="color:#cf222e;">삭제된 파일</span>'; return; }
+    el.innerHTML = renderUnifiedDiff(ch.diff || '');
+  } catch (e) {
+    el.innerHTML = '<span style="color:#cf222e;">로딩 실패</span>';
+  }
+}
+// A5: unified diff 텍스트를 색상 구분 HTML로 렌더링
+function renderUnifiedDiff(diffText) {
+  if (!diffText) return '<span style="color:#888;">변경 없음</span>';
+  let html = '';
+  for (const line of diffText.split('\n')) {
+    let style = 'color:#666;';
+    if (line.startsWith('+') && !line.startsWith('+++')) style = 'background:#dafbe1;color:#1a7f37;';
+    else if (line.startsWith('-') && !line.startsWith('---')) style = 'background:#ffebe9;color:#cf222e;';
+    else if (line.startsWith('@@')) style = 'color:#4a90d9;';
+    else if (line.startsWith('---') || line.startsWith('+++')) style = 'color:#888;font-weight:600;';
+    html += `<div style="${style}white-space:pre-wrap;word-break:break-all;padding:1px 8px;">${esc(line)}</div>`;
+  }
+  return html;
+}
+// 간단한 라인 diff (LCS 기반이 아닌 휴리스틱)
+function simpleLineDiff(oldStr, newStr) {
+  const oldLines = oldStr.split('\n');
+  const newLines = newStr.split('\n');
+  const oldSet = new Set(oldLines);
+  const newSet = new Set(newLines);
+  let html = '';
+  let oldNo = 0, newNo = 0;
+  // 변경된 라인만 표시 (간단 버전)
+  const maxLines = Math.max(oldLines.length, newLines.length);
+  for (let i = 0; i < maxLines; i++) {
+    const o = oldLines[i];
+    const n = newLines[i];
+    if (o === n) {
+      oldNo++; newNo++;
+      if (i < 3 || i > maxLines - 4) {
+        html += `<div style="display:flex;"><span style="width:40px;color:#888;text-align:right;padding-right:8px;">${oldNo}</span><span style="width:40px;color:#888;text-align:right;padding-right:8px;">${newNo}</span><span style="color:#666;">${esc(o || '')}</span></div>`;
+      } else if (i === 3) {
+        html += `<div style="color:#888;padding:4px;">···</div>`;
+      }
+    } else {
+      if (o !== undefined && !newSet.has(o)) {
+        oldNo++;
+        html += `<div style="display:flex;background:#ffebe9;"><span style="width:40px;color:#888;text-align:right;padding-right:8px;">${oldNo}</span><span style="width:40px;"></span><span style="color:#cf222e;">- ${esc(o)}</span></div>`;
+      }
+      if (n !== undefined && !oldSet.has(n)) {
+        newNo++;
+        html += `<div style="display:flex;background:#dafbe1;"><span style="width:40px;"></span><span style="width:40px;color:#888;text-align:right;padding-right:8px;">${newNo}</span><span style="color:#1a7f37;">+ ${esc(n)}</span></div>`;
+      }
+    }
+  }
+  return html;
+}
+</script>
+</body>
+</html>

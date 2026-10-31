@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<meta name="theme-color" content="#ffffff">
+<link rel="manifest" href="/manifest.json">
+<title>데스크톱</title>
+<link rel="stylesheet" href="/shell.css">
+<link rel="stylesheet" href="/css/desktop.css">
+<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+</head>
+<body>
+<header class="g-nav"><a href="/" class="brand-logo" aria-label="MyHub 홈"><img src="/icon-192.png" alt="JN" style="height:26px;width:auto;display:block;"></a><div class="spacer"></div><span class="ver" id="clock"></span></header>
+<main id="dt-root" aria-label="데스크톱 워크스페이스"></main>
+<footer id="dt-taskbar" aria-label="작업 표시줄">
+  <div class="dt-launchers" id="dt-launchers" aria-label="모듈 실행"></div>
+  <div class="dt-task-sep" aria-hidden="true"></div>
+  <div class="dt-task-windows" id="dt-task-windows" aria-label="열린 창"></div>
+</footer>
+<script src="/nav.js"></script>
+<script src="/js/desktop/state.js"></script>
+<script src="/js/desktop/windows.js"></script>
+<script src="/js/desktop/main.js"></script>
+</body>
+</html>

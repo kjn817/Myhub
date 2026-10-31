@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="mobile-web-app-capable" content="yes">
+<link rel="apple-touch-startup-image" href="/splash/splash-1170x2532.png" media="(device-width: 390px) and (device-height: 844px) and (-webkit-device-pixel-ratio: 3)">
+<link rel="apple-touch-startup-image" href="/splash/splash-1179x2556.png" media="(device-width: 393px) and (device-height: 852px) and (-webkit-device-pixel-ratio: 3)">
+<link rel="apple-touch-startup-image" href="/splash/splash-1290x2796.png" media="(device-width: 430px) and (device-height: 932px) and (-webkit-device-pixel-ratio: 3)">
+<link rel="apple-touch-startup-image" href="/splash/splash-1284x2778.png" media="(device-width: 428px) and (device-height: 926px) and (-webkit-device-pixel-ratio: 3)">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<meta name="theme-color" content="#ffffff">
+<link rel="manifest" href="/manifest.json">
+<title>AI 비서</title>
+<link rel="stylesheet" href="/shell.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.0/marked.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/dompurify/dist/purify.min.js"></script>
+<link rel="stylesheet" href="/css/chat.css">
+</head>
+<body>
+<header class="g-nav"><a href="/" class="brand-logo" aria-label="MyHub 홈"><img src="/icon-192.png" alt="JN" style="height:26px;width:auto;display:block;"></a><div class="spacer"></div><span class="ver" id="clock"></span></header>
+<div class="g-main">
+<div class="sidebar-overlay" id="sidebarOverlay"></div>
+<!-- 좌측: 대화 목록 (오버레이) -->
+<aside class="sidebar-left" id="sidebarLeft">
+  <div style="padding:12px;">
+    <button class="new-chat-btn" id="newChatBtn" style="width:100%;margin:0;">+ 새 대화</button>
+  </div>
+  <div class="conv-list" id="convList"></div>
+</aside>
+<div class="chat-layout">
+  <!-- 중앙: 채팅 -->
+  <div class="chat-main">
+    <div class="chat-wrap">
+      <!-- 랜딩 (대화 없을 때) -->
+      <div id="landing" class="landing">
+        <div class="assistant-cards">
+          <button class="assistant-card" data-persona="concierge">
+            <img src="/avatars/rumi.webp" alt="루미">
+            <div class="card-name">루미</div>
+            <div class="card-desc">대화 · 검색</div>
+          </button>
+          <button class="assistant-card" data-persona="keeper">
+            <img src="/avatars/echo.webp" alt="에코">
+            <div class="card-name">에코</div>
+            <div class="card-desc">기록 · 정리</div>
+          </button>
+          <button class="assistant-card" data-persona="builder">
+            <img src="/avatars/nova.webp" alt="노바">
+            <div class="card-name">노바</div>
+            <div class="card-desc">개발 · 코드</div>
+          </button>
+          <button class="assistant-card" data-persona="scheduler">
+            <img src="/avatars/cali.webp" alt="캘리">
+            <div class="card-name">캘리</div>
+            <div class="card-desc">일정 · 할일</div>
+          </button>
+        </div>
+        <div class="landing-title">무엇을 도와드릴까요?</div>
+        <div class="landing-input-wrap">
+          <textarea id="landingInput" rows="1" placeholder="Ask anything"></textarea>
+          <button id="landingVoiceBtn" type="button" class="icon-btn" title="음성으로 입력" aria-label="음성으로 입력"></button>
+          <button id="landingSend">↑</button>
+        </div>
+      </div>
+      <div id="msgs"></div>
+      <div class="mention-popup" id="mentionPopup"></div>
+      <div class="input-bar" id="inputBar" style="display:none;">
+        <div class="input-wrap">
+          <textarea id="input" rows="1" placeholder="메시지 입력… (@로 비서 지목)"></textarea>
+          <button id="voiceBtn" type="button" class="icon-btn" title="음성으로 입력" aria-label="음성으로 입력"></button>
+          <button id="send">↑</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <!-- 우측: 참가자 토스트 -->
+  <div class="participant-toast" id="participantToast">
+    <div id="participantList"></div>
+  </div>
+</div>
+</div>
+
+<div class="settings-overlay" id="settingsOverlay"></div>
+<div class="settings-panel" id="settingsPanel">
+  <button class="settings-close" id="settingsClose">×</button>
+  <h3>설정</h3>
+  <h4>모델</h4>
+  <div id="modelRows"></div>
+  <h4>오늘 사용량</h4>
+  <div id="quotaRows"></div>
+</div>
+
+<script src="/nav.js"></script>
+<script src="/js/chat.js"></script>
+<script src="/js/voice.js"></script>
+<script>
+// 모바일: #msgs 스크롤시 상단바 숨기기/보이기
+// .chat-layout의 margin-top만 변경 - #msgs 내부는 건드리지 않음
+(function() {
+  if (window.innerWidth > 768) return;
+  const nav = document.querySelector('.g-nav');
+  const msgs = document.getElementById('msgs');
+  if (!nav || !msgs) return;
+  let lastY = msgs.scrollTop;
+  let acc = 0;
+  let ticking = false;
+  msgs.addEventListener('scroll', () => {
+    if (ticking) return;
+    ticking = true;
+    requestAnimationFrame(() => {
+      const y = msgs.scrollTop;
+      const max = msgs.scrollHeight - msgs.clientHeight;
+      // 러버밴드 오버스크롤 무시
+      if (y >= 0 && y <= max) {
+        const dy = y - lastY;
+        // 방향 바뀌면 누적 리셋
+        if ((dy > 0 && acc < 0) || (dy < 0 && acc > 0)) acc = 0;
+        acc += dy;
+        if (acc > 24) {
+          nav.classList.add('nav-hidden');
+          document.body.classList.add('nav-hidden');
+          acc = 0;
+        } else if (acc < -24 || y < 8) {
+          nav.classList.remove('nav-hidden');
+          document.body.classList.remove('nav-hidden');
+          acc = 0;
+        }
+      }
+      lastY = y;
+      ticking = false;
+    });
+  }, { passive: true });
+})();
+</script>
+</body>
+</html>

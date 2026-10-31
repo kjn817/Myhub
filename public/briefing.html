@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>아침 브리핑 - MyHub</title>
+<link rel="stylesheet" href="/shell.css">
+<style>
+.briefing-container { max-width: 800px; margin: 0 auto; padding: 20px; }
+.briefing-header { margin-bottom: 24px; }
+.briefing-date { font-size: 24px; font-weight: 600; margin-bottom: 4px; }
+.briefing-tz { color: #666; font-size: 14px; }
+.briefing-section { margin-bottom: 24px; }
+.briefing-section h2 { font-size: 18px; margin-bottom: 12px; }
+.briefing-item { padding: 12px; border: 1px solid #e0e0e0; border-radius: 8px; margin-bottom: 8px; }
+.briefing-empty { color: #999; padding: 20px; text-align: center; }
+.briefing-loading { text-align: center; padding: 40px; color: #666; }
+.briefing-error { background: #fee; border: 1px solid #fcc; padding: 12px; border-radius: 8px; margin-bottom: 16px; }
+</style>
+</head>
+<body>
+<div class="g-nav"></div>
+<div class="briefing-container">
+  <div class="briefing-header">
+    <div class="briefing-date" id="briefing-date">로딩 중...</div>
+    <div class="briefing-tz" id="briefing-tz"></div>
+  </div>
+  <div id="briefing-error" class="briefing-error" style="display:none"></div>
+  <div id="briefing-content">
+    <div class="briefing-loading">브리핑을 불러오는 중...</div>
+  </div>
+  <button id="btn-retry" style="display:none" onclick="loadBriefing()">다시 불러오기</button>
+</div>
+<script>
+async function loadBriefing() {
+  const content = document.getElementById('briefing-content');
+  const errorDiv = document.getElementById('briefing-error');
+  const retryBtn = document.getElementById('btn-retry');
+
+  content.innerHTML = '<div class="briefing-loading">브리핑을 불러오는 중...</div>';
+  errorDiv.style.display = 'none';
+  retryBtn.style.display = 'none';
+
+  try {
+    const res = await fetch('/api/briefing/today');
+    if (res.status === 401) {
+      window.location.href = '/login.html';
+      return;
+    }
+    if (!res.ok) throw new Error('브리핑을 불러오지 못했습니다.');
+
+    const data = await res.json();
+    renderBriefing(data);
+  } catch (e) {
+    errorDiv.textContent = '브리핑을 불러오는 중 오류가 발생했습니다: ' + e.message;
+    errorDiv.style.display = 'block';
+    retryBtn.style.display = 'inline-block';
+    content.innerHTML = '';
+  }
+}
+
+function renderBriefing(data) {
+  document.getElementById('briefing-date').textContent = data.date + ' 브리핑';
+  document.getElementById('briefing-tz').textContent = '시간대: ' + (data.timezone || 'Asia/Seoul');
+
+  const content = document.getElementById('briefing-content');
+  let html = '';
+
+  // 일정
+  html += '<div class="briefing-section"><h2>오늘 일정</h2>';
+  if (data.schedules && data.schedules.length > 0) {
+    data.schedules.forEach(s => {
+      const div = document.createElement('div');
+      div.className = 'briefing-item';
+      div.textContent = s.title + (s.start_at ? ' (' + s.start_at + ')' : '');
+      html += div.outerHTML;
+    });
+  } else {
+    html += '<div class="briefing-empty">오늘 등록된 일정이 없습니다.</div>';
+  }
+  html += '</div>';
+
+  // 할 일
+  html += '<div class="briefing-section"><h2>할 일</h2>';
+  if (data.todos && data.todos.length > 0) {
+    data.todos.forEach(t => {
+      const div = document.createElement('div');
+      div.className = 'briefing-item';
+      div.textContent = t.title;
+      html += div.outerHTML;
+    });
+  } else {
+    html += '<div class="briefing-empty">미완료 할 일이 없습니다.</div>';
+  }
+  html += '</div>';
+
+  // 메모
+  if (data.memos && data.memos.length > 0) {
+    html += '<div class="briefing-section"><h2>중요 메모</h2>';
+    data.memos.forEach(m => {
+      const div = document.createElement('div');
+      div.className = 'briefing-item';
+      div.textContent = m.text;
+      html += div.outerHTML;
+    });
+    html += '</div>';
+  }
+
+  // AI 기억
+  if (data.memories && data.memories.length > 0) {
+    html += '<div class="briefing-section"><h2>기억</h2>';
+    data.memories.forEach(m => {
+      const div = document.createElement('div');
+      div.className = 'briefing-item';
+      div.textContent = m.content;
+      html += div.outerHTML;
+    });
+    html += '</div>';
+  }
+
+  content.innerHTML = html;
+}
+
+document.addEventListener('DOMContentLoaded', loadBriefing);
+</script>
+</body>
+</html>
