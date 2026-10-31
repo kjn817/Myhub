@@ -1,0 +1,302 @@
+[
+ {
+  "id": "PREP",
+  "name": "메모 생성",
+  "pass": true,
+  "detail": "status=200 id=4"
+ },
+ {
+  "id": "PREP",
+  "name": "일정 생성",
+  "pass": true,
+  "detail": "status=200 id=5"
+ },
+ {
+  "id": "API-MEMO-008",
+  "name": "블록 잠금",
+  "pass": true,
+  "detail": "status=200 blockId=blk_mv6a09mykrvesi"
+ },
+ {
+  "id": "API-MEMO-008",
+  "name": "DB locked_blocks 보존",
+  "pass": true,
+  "detail": "blocks=1"
+ },
+ {
+  "id": "API-MEMO-008",
+  "name": "없는 메모 404",
+  "pass": true,
+  "detail": "status=404"
+ },
+ {
+  "id": "API-MEMO-008",
+  "name": "빈 html 400",
+  "pass": true,
+  "detail": "status=400"
+ },
+ {
+  "id": "API-MEMO-008",
+  "name": "미인증 401",
+  "pass": true,
+  "detail": "status=401"
+ },
+ {
+  "id": "API-MEMO-009",
+  "name": "블록 해제",
+  "pass": true,
+  "detail": "status=200"
+ },
+ {
+  "id": "API-MEMO-009",
+  "name": "없는 블록 404",
+  "pass": true,
+  "detail": "status=404"
+ },
+ {
+  "id": "API-MEMO-009",
+  "name": "미인증 401",
+  "pass": true,
+  "detail": "status=401"
+ },
+ {
+  "id": "API-AI-015",
+  "name": "설정 저장",
+  "pass": true,
+  "detail": "status=200"
+ },
+ {
+  "id": "API-AI-015",
+  "name": "DB 반영",
+  "pass": true,
+  "detail": "rows=[{'value': 'qa-test-model'}]"
+ },
+ {
+  "id": "API-AI-015",
+  "name": "허용되지 않은 키 400",
+  "pass": true,
+  "detail": "status=400"
+ },
+ {
+  "id": "API-AI-015",
+  "name": "value 누락 400",
+  "pass": true,
+  "detail": "status=400"
+ },
+ {
+  "id": "API-AI-015",
+  "name": "미인증 401",
+  "pass": true,
+  "detail": "status=401"
+ },
+ {
+  "id": "API-SCHEDULE-006",
+  "name": "리마인더 생성",
+  "pass": true,
+  "detail": "status=200 body=b'{\"ok\":true,\"id\":4}'"
+ },
+ {
+  "id": "API-SCHEDULE-006",
+  "name": "DB 반영",
+  "pass": true,
+  "detail": "rows=[{'n': 1}]"
+ },
+ {
+  "id": "API-SCHEDULE-006",
+  "name": "중복 dedupe_key 처리",
+  "pass": true,
+  "detail": "status=409"
+ },
+ {
+  "id": "API-SCHEDULE-006",
+  "name": "미인증 401",
+  "pass": true,
+  "detail": "status=401"
+ },
+ {
+  "id": "API-AUTH-001",
+  "name": "OTP 요청",
+  "pass": true,
+  "detail": "status=200"
+ },
+ {
+  "id": "API-AUTH-001",
+  "name": "D1 OTP 생성",
+  "pass": true,
+  "detail": "code_len=6"
+ },
+ {
+  "id": "API-AUTH-002",
+  "name": "잘못된 코드 400",
+  "pass": true,
+  "detail": "status=400"
+ },
+ {
+  "id": "API-AUTH-002",
+  "name": "올바른 코드 200+세션",
+  "pass": true,
+  "detail": "status=200 cookie=True"
+ },
+ {
+  "id": "API-AUTH-002",
+  "name": "재사용 400 (단일사용)",
+  "pass": true,
+  "detail": "status=400"
+ },
+ {
+  "id": "API-MEMO-015",
+  "name": "미인증 401",
+  "pass": true,
+  "detail": "status=401"
+ },
+ {
+  "id": "API-MEMO-015",
+  "name": "빈 업로드 400",
+  "pass": true,
+  "detail": "status=400 body=b'{\"error\":\"empty\"}'"
+ },
+ {
+  "id": "API-MEMO-015",
+  "name": "10MB 초과 400",
+  "pass": true,
+  "detail": "status=400"
+ },
+ {
+  "id": "API-MEMO-015",
+  "name": "정상 업로드 (Cloudinary 없어 500 예상=외부검증필요)",
+  "pass": true,
+  "detail": "status=500"
+ },
+ {
+  "id": "PREP",
+  "name": "파일 행 삽입",
+  "pass": true,
+  "detail": "file_id=5"
+ },
+ {
+  "id": "API-MEMO-016",
+  "name": "파일 조회 302 리다이렉트",
+  "pass": true,
+  "detail": "status=302 loc=https://example.com/qa.txt"
+ },
+ {
+  "id": "API-MEMO-016",
+  "name": "없는 파일 404",
+  "pass": true,
+  "detail": "status=404"
+ },
+ {
+  "id": "API-MEMO-016",
+  "name": "미인증 401",
+  "pass": true,
+  "detail": "status=401"
+ },
+ {
+  "id": "API-MEMO-011",
+  "name": "콘텐츠 302 리다이렉트",
+  "pass": true,
+  "detail": "status=302"
+ },
+ {
+  "id": "API-MEMO-011",
+  "name": "없는 파일 404",
+  "pass": true,
+  "detail": "status=404"
+ },
+ {
+  "id": "API-MEMO-011",
+  "name": "미인증 401",
+  "pass": true,
+  "detail": "status=401"
+ },
+ {
+  "id": "API-MEMO-010",
+  "name": "없는 파일 404",
+  "pass": true,
+  "detail": "status=404"
+ },
+ {
+  "id": "API-MEMO-010",
+  "name": "no-op 잠금해제 200",
+  "pass": true,
+  "detail": "status=200"
+ },
+ {
+  "id": "API-MEMO-010",
+  "name": "실제 잠금 (Cloudinary 없어 500 예상=외부검증필요)",
+  "pass": true,
+  "detail": "status=500"
+ },
+ {
+  "id": "API-MEMO-010",
+  "name": "미인증 401",
+  "pass": true,
+  "detail": "status=401"
+ },
+ {
+  "id": "API-MEMO-017",
+  "name": "없는 파일 404",
+  "pass": true,
+  "detail": "status=404"
+ },
+ {
+  "id": "API-MEMO-017",
+  "name": "미인증 401",
+  "pass": true,
+  "detail": "status=401"
+ },
+ {
+  "id": "API-MEMO-017",
+  "name": "파일 삭제 200",
+  "pass": true,
+  "detail": "status=200"
+ },
+ {
+  "id": "API-MEMO-017",
+  "name": "DB 삭제 확인",
+  "pass": true,
+  "detail": "rows=[{'n': 0}]"
+ },
+ {
+  "id": "API-AI-002",
+  "name": "미인증 401",
+  "pass": true,
+  "detail": "status=401"
+ },
+ {
+  "id": "API-AI-002",
+  "name": "없는 대화 404",
+  "pass": true,
+  "detail": "status=404"
+ },
+ {
+  "id": "API-AI-002",
+  "name": "외부 키 없어 502 (실패처리)",
+  "pass": true,
+  "detail": "status=502 err=AI 호출 실패. 잠시 후 다시 시도해주세요."
+ },
+ {
+  "id": "API-AI-003",
+  "name": "미인증 401",
+  "pass": true,
+  "detail": "status=401"
+ },
+ {
+  "id": "API-AI-018",
+  "name": "미인증 401",
+  "pass": true,
+  "detail": "status=401"
+ },
+ {
+  "id": "API-AI-018",
+  "name": "q 누락 400",
+  "pass": true,
+  "detail": "status=400"
+ },
+ {
+  "id": "API-AI-019",
+  "name": "미인증 401",
+  "pass": true,
+  "detail": "status=401"
+ }
+]
