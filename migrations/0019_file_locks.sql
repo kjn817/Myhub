@@ -1,0 +1,4 @@
+-- 첨부파일 잠금을 위한 컬럼
+-- DB-MIG-001: 0013_memo_lock.sql에서 이미 files.is_locked 추가됨
+-- 이 마이그레이션은 중복이므로 no-op 처리
+-- (원본: ALTER TABLE memo_files ADD COLUMN is_locked - 잘못된 테이블명)
