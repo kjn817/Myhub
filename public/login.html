@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="theme-color" content="#ffffff">
+<link rel="manifest" href="/manifest.json">
+<title>로그인 - MyHub</title>
+<!-- CSP: 로그인 페이지는 정적 콘텐츠만 있다. 외부 스크립트는 고정 버전+SRI의 lucide만 허용.
+     스크립트·스타일은 외부 파일(/js/login.js·/css/login.css)로 분리했고 핸들러는
+     addEventListener로 연결했으므로 (run-002 low auth/login-csp-unsafe-inline 수정),
+     script-src·style-src에 'unsafe-inline'이 없다. 배포본에서는 같은 정책을
+     HTTP 응답 헤더로도 발급한다 (frame-ancestors는 메타 태그로 강제되지 않기 때문). -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' https://unpkg.com; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self'; manifest-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'">
+<!-- lucide 고정 버전 + SRI (run-001 medium auth/login-page-cdn-no-sri 수정).
+     @latest는 CDN이 임의 버전을 내려줄 수 있어 고정 버전으로 묶고 해시를 검증한다.
+     버전 변경 시 파일 해시를 다시 계산해 integrity를 갱신할 것. -->
+<script src="https://unpkg.com/lucide@0.469.0/dist/umd/lucide.min.js" integrity="sha384-hJnF5AwidE18GSWTAGHv3ByzzvfNZ1Tcx5y1UUV3WkauuMCEzBJBMSwSt/PUPXnM" crossorigin="anonymous"></script>
+<link rel="stylesheet" href="/css/login.css">
+</head>
+<body>
+<div class="topbar">
+  <i data-lucide="box"></i>
+  MyHub
+</div>
+<div class="wrap">
+  <div class="card">
+    <!-- PIN 로그인 (기본) -->
+    <div class="step active" id="stepPin">
+      <h1><i data-lucide="lock"></i> 로그인</h1>
+      <p class="desc">PIN 6자리를 입력하세요.</p>
+      <div class="field">
+        <label for="pinInput">PIN</label>
+        <input type="password" id="pinInput" class="code" maxlength="6" inputmode="numeric" autocomplete="current-password" placeholder="••••••">
+      </div>
+      <button class="btn" id="btnPinLogin">로그인</button>
+      <div class="error" id="errPin"></div>
+      <button class="btn secondary" id="btnToOtp">PIN 발급 · 재설정 (이메일 인증)</button>
+    </div>
+    <!-- OTP 1단계: 코드 받기 (PIN 발급/재설정용 본인확인) -->
+    <div class="step" id="step1">
+      <h1><i data-lucide="mail"></i> 이메일 인증</h1>
+      <p class="desc">버튼을 누르면 인증코드가 메일로 발송됩니다. 본인 확인 후 새 PIN을 발급합니다. 새 PIN을 발급하면 기존 PIN은 사용할 수 없습니다.</p>
+      <button class="btn" id="btnSend">인증코드 받기</button>
+      <button class="btn secondary" id="btnToPin">PIN으로 로그인</button>
+      <div class="error" id="err1"></div>
+    </div>
+    <!-- OTP 2단계: 코드 입력 -->
+    <div class="step" id="step2">
+      <h1><i data-lucide="key-round"></i> 인증코드 입력</h1>
+      <p class="desc" id="sentTo"></p>
+      <div class="field">
+        <label for="code">6자리 인증코드</label>
+        <input type="text" id="code" class="code" maxlength="6" inputmode="numeric" autocomplete="one-time-code" placeholder="000000">
+      </div>
+      <button class="btn" id="btnVerify">확인</button>
+      <button class="btn secondary" id="btnBackToStart">다시 받기</button>
+      <div class="error" id="err2"></div>
+      <div class="timer" id="timer"></div>
+    </div>
+    <!-- PIN 설정 (OTP 본인확인 직후) -->
+    <div class="step" id="stepSetPin">
+      <h1><i data-lucide="key-round"></i> PIN 설정</h1>
+      <p class="desc">앞으로는 이 PIN 6자리만으로 로그인할 수 있습니다.</p>
+      <div class="field">
+        <label for="newPin">새 PIN</label>
+        <input type="password" id="newPin" class="code" maxlength="6" inputmode="numeric" autocomplete="new-password" placeholder="••••••">
+      </div>
+      <div class="field">
+        <label for="newPin2">새 PIN 확인</label>
+        <input type="password" id="newPin2" class="code" maxlength="6" inputmode="numeric" autocomplete="new-password" placeholder="••••••">
+      </div>
+      <button class="btn" id="btnSetPin">PIN 설정하고 시작하기</button>
+      <button class="btn secondary" id="btnLater">나중에 설정하기</button>
+      <div class="error" id="errSetPin"></div>
+    </div>
+  </div>
+</div>
+<script src="/js/login.js"></script>
+</body>
+</html>

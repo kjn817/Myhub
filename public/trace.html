@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#ffffff">
+<title>추적 — MyHub</title>
+<link rel="stylesheet" href="/shell.css">
+<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+<style>
+.wrap { max-width: 900px; margin: 0 auto; padding: 20px; }
+.header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+.header h1 { font-size: 22px; margin: 0; }
+.sub { color: #888; font-size: 13px; margin-bottom: 16px; }
+.btn { padding: 8px 14px; background: #f0f0f0; color: #333; border: none; border-radius: 8px; cursor: pointer; font-size: 13px; }
+.btn-primary { background: #007aff; color: #fff; }
+.trace-item { padding: 14px 16px; border: 1px solid #eee; border-radius: 10px; margin-bottom: 10px; cursor: pointer; }
+.trace-item:hover { border-color: #007aff; }
+.trace-item .top { display: flex; gap: 8px; align-items: center; }
+.trace-item .id { font-family: ui-monospace, monospace; font-size: 13px; }
+.trace-item .meta { font-size: 12px; color: #999; margin-top: 4px; }
+.dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; flex: none; }
+.dot.ok { background: #34c759; }
+.dot.error { background: #ff3b30; }
+.dot.cached { background: #8e8e93; }
+.dot.blocked, .dot.denied { background: #ff9500; }
+.empty { text-align: center; padding: 40px; color: #999; }
+.timeline { border: 1px solid #eee; border-radius: 10px; padding: 12px; overflow-x: auto; }
+.span-row { display: flex; align-items: center; gap: 8px; padding: 5px 0; min-width: 560px; }
+.span-label { width: 260px; flex: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
+.span-label .kind { color: #999; font-size: 11px; margin-right: 4px; }
+.span-label .tok { color: #999; font-size: 11px; }
+.span-track { flex: 1; position: relative; height: 18px; background: #f7f7f7; border-radius: 4px; }
+.span-bar { position: absolute; top: 2px; height: 14px; border-radius: 3px; min-width: 3px; }
+.span-bar.ok { background: #34c759; }
+.span-bar.error { background: #ff3b30; }
+.span-bar.cached { background: #8e8e93; }
+.span-bar.blocked, .span-bar.denied { background: #ff9500; }
+.span-dur { width: 74px; flex: none; text-align: right; font-size: 12px; color: #666; font-variant-numeric: tabular-nums; }
+.back { margin-bottom: 12px; }
+.detail-head { font-family: ui-monospace, monospace; font-size: 13px; word-break: break-all; margin-bottom: 4px; }
+.detail-meta { font-size: 12px; color: #999; margin-bottom: 14px; }
+</style>
+</head>
+<body>
+<header class="g-nav"><a href="/" class="brand-logo" aria-label="MyHub 홈"><img src="/icon-192.png" alt="JN" style="height:26px;width:auto;display:block;"></a><div class="spacer"></div><span class="ver" id="clock"></span></header>
+<div class="wrap">
+  <div id="list-view">
+    <div class="header">
+      <h1>추적</h1>
+      <button class="btn" onclick="loadTraces()">새로고침</button>
+    </div>
+    <div class="sub">LLM 호출과 도구 실행을 트레이스로 묶어 보여줍니다. 프롬프트 버전·모델·토큰·소요시간이 스팬으로 남습니다. 메모 본문은 저장하지 않습니다.</div>
+    <div id="trace-list"></div>
+  </div>
+  <div id="detail-view" style="display:none">
+    <button class="btn back" onclick="showList()">← 목록으로</button>
+    <div class="detail-head" id="detail-id"></div>
+    <div class="detail-meta" id="detail-meta"></div>
+    <div class="timeline" id="timeline"></div>
+  </div>
+</div>
+<script src="/nav.js"></script>
+<script src="/js/trace.js"></script>
+</body>
+</html>

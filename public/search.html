@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#ffffff">
+<link rel="manifest" href="/manifest.json">
+<title>통합 검색</title>
+<link rel="stylesheet" href="/shell.css">
+<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+<style>
+.wrap { max-width: 800px; margin: 0 auto; padding: 20px; }
+.search-box { display: flex; gap: 8px; margin-bottom: 16px; }
+.search-box input { flex: 1; padding: 12px; border: 1px solid #ddd; border-radius: 8px; font-size: 16px; }
+.search-box button { padding: 12px 24px; background: #007aff; color: white; border: none; border-radius: 8px; cursor: pointer; }
+.filters { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+.filters button { padding: 8px 16px; border: 1px solid #ddd; border-radius: 20px; background: white; cursor: pointer; }
+.filters button.active { background: #007aff; color: white; border-color: #007aff; }
+.result { padding: 16px; border: 1px solid #eee; border-radius: 8px; margin-bottom: 12px; cursor: pointer; }
+.result:hover { background: #f8f8f8; }
+.result .type { font-size: 12px; color: #666; margin-bottom: 4px; }
+.result .title { font-weight: 600; margin-bottom: 4px; }
+.result .snippet { font-size: 14px; color: #666; }
+.empty { text-align: center; padding: 40px; color: #999; }
+</style>
+</head>
+<body>
+<header class="g-nav"><a href="/" class="brand-logo" aria-label="MyHub 홈"><img src="/icon-192.png" alt="JN" style="height:26px;width:auto;display:block;"></a><div class="spacer"></div></header>
+<div class="wrap">
+  <h1>통합 검색</h1>
+  <div class="search-box">
+    <input id="q" type="search" placeholder="메모·대화·일정·할 일 검색" autocomplete="off">
+    <button id="searchBtn">검색</button>
+  </div>
+  <div class="filters" id="filters">
+    <button data-type="all" class="active">전체</button>
+    <button data-type="memo">메모</button>
+    <button data-type="chat">대화</button>
+    <button data-type="schedule">일정</button>
+    <button data-type="todo">할 일</button>
+  </div>
+  <div id="results"></div>
+</div>
+<script src="/nav.js"></script>
+<script>
+let activeFilter = 'all';
+const typeNames = { memo: '메모', chat: '대화', schedule: '일정', todo: '할 일' };
+const typeLinks = { memo: '/memo.html', chat: '/chat.html', schedule: '/schedule.html', todo: '/todo.html' };
+
+document.querySelectorAll('#filters button').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('#filters button').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    activeFilter = btn.dataset.type;
+    doSearch();
+  });
+});
+
+async function doSearch() {
+  const q = document.getElementById('q').value.trim();
+  if (!q) return;
+  const types = activeFilter === 'all' ? '' : `&types=${activeFilter}`;
+  try {
+    const res = await fetch(`/api/search?q=${encodeURIComponent(q)}${types}&limit=50`);
+    const data = await res.json();
+    renderResults(data.results || []);
+  } catch (e) {
+    document.getElementById('results').innerHTML = '<div class="empty">검색 중 오류가 발생했습니다.</div>';
+  }
+}
+
+function escapeHtml(s) {
+  const div = document.createElement('div');
+  div.textContent = s;
+  return div.innerHTML;
+}
+
+function renderResults(results) {
+  const el = document.getElementById('results');
+  if (!results.length) {
+    el.innerHTML = '<div class="empty">검색 결과가 없습니다.</div>';
+    return;
+  }
+  el.innerHTML = results.map(r => `
+    <div class="result" onclick="location.href='${typeLinks[r.source_type]}'">
+      <div class="type">${typeNames[r.source_type]} · ${escapeHtml(r.created_at?.slice(0, 10) || '')}</div>
+      <div class="title">${escapeHtml(r.title)}</div>
+      <div class="snippet">${escapeHtml(r.snippet?.slice(0, 100) || '')}</div>
+    </div>
+  `).join('');
+}
+
+document.getElementById('searchBtn').addEventListener('click', doSearch);
+document.getElementById('q').addEventListener('keypress', e => {
+  if (e.key === 'Enter') doSearch();
+});
+lucide.createIcons();
+</script>
+</body>
+</html>

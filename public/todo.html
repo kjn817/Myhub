@@ -1,0 +1,619 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<meta name="theme-color" content="#ffffff">
+<link rel="manifest" href="/manifest.json">
+<title>할일</title>
+<link rel="stylesheet" href="/shell.css">
+<link rel="stylesheet" href="/assistant-widget.css">
+<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js">  window.refreshAfterAI = function() { if (typeof loadTodos === "function") loadTodos(); else location.reload(); };
+</script>
+<style>
+  /* 2026 미니멀 — Linear/Notion 스타일 */
+  :root {
+    --ink: #171717;
+    --gray: #636363;
+    --faint: #a3a3a3;
+    --line: #ededed;
+    --bg: #ffffff;
+    --bg-hover: #f7f7f7;
+    --accent: #006ce0;
+    --danger: #d13239;
+    --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  body { font-family: var(--font); background: var(--bg); color: var(--ink); font-size: 14px; line-height: 1.5; -webkit-font-smoothing: antialiased; }
+  .lucide { width: 16px; height: 16px; stroke-width: 2; flex-shrink: 0; }
+  button .lucide { pointer-events: none; }
+
+  .wrap { max-width: 640px; margin: 0 auto; padding: 0 24px 80px; }
+
+  /* 헤더 — 작고 조용하게 */
+  .page-head { display: flex; align-items: baseline; padding: 28px 0 16px; }
+  .page-head h1 { font-size: 20px; font-weight: 650; letter-spacing: -0.3px; }
+  .page-head .count { margin-left: 8px; font-size: 13px; color: var(--faint); font-weight: 500; }
+  .page-head .spacer { flex: 1; }
+  .icon-btn {
+    background: none; border: none; color: var(--faint); cursor: pointer;
+    width: 32px; height: 32px; display: inline-flex; align-items: center; justify-content: center;
+    border-radius: 8px; transition: all 0.15s;
+  }
+  .icon-btn:hover { background: var(--bg-hover); color: var(--ink); }
+  .icon-btn .lucide { width: 18px; height: 18px; }
+
+  /* 빠른 추가 — 테두리 없는 미니멀 입력 */
+  .quick-add { position: relative; margin-bottom: 8px; }
+  .quick-add input {
+    width: 100%; border: none; border-bottom: 1px solid var(--line);
+    padding: 12px 4px; font-size: 15px; font-family: inherit; color: var(--ink);
+    background: transparent; transition: border-color 0.15s;
+  }
+  .quick-add input::placeholder { color: var(--faint); }
+  .quick-add input:focus { outline: none; border-bottom-color: var(--ink); }
+
+  /* 필터 — 텍스트 탭 */
+  .tabs { display: flex; gap: 2px; padding: 12px 0; align-items: center; }
+  .tab {
+    background: none; border: none; padding: 6px 10px; font-size: 13px; font-weight: 500;
+    color: var(--gray); cursor: pointer; border-radius: 6px; font-family: inherit; transition: all 0.15s;
+  }
+  .tab:hover { color: var(--ink); background: var(--bg-hover); }
+  .tab.active { color: var(--ink); font-weight: 650; background: var(--bg-hover); }
+  .tab .n { font-size: 11px; color: var(--faint); margin-left: 4px; font-weight: 500; }
+  .tabs .spacer { flex: 1; }
+
+  /* 검색 — 미니멀 */
+  .search { display: flex; align-items: center; gap: 6px; color: var(--faint); }
+  .search .lucide { width: 14px; height: 14px; }
+  .search input {
+    border: none; border-bottom: 1px solid transparent; background: transparent;
+    font-size: 13px; font-family: inherit; color: var(--ink);
+    width: 84px; padding: 6px 2px; transition: width 0.2s, border-color 0.2s;
+  }
+  .search input::placeholder { color: var(--faint); }
+  .search input:focus { outline: none; width: 148px; border-bottom-color: var(--ink); }
+
+  /* 검색 하이라이트 */
+  mark { background: #fff1b8; color: inherit; border-radius: 2px; padding: 0 1px; }
+
+  /* 드래그 정렬 */
+  .drag-handle {
+    display: inline-flex; align-items: center; justify-content: center; flex: none;
+    color: var(--faint); cursor: grab; opacity: 0; padding: 4px 0; margin-left: -2px;
+    touch-action: none; transition: opacity 0.15s;
+  }
+  .drag-handle .lucide { width: 14px; height: 14px; }
+  .drag-handle:active { cursor: grabbing; }
+  .todo-row:hover .drag-handle { opacity: 1; }
+  @media (hover: none) { .drag-handle { opacity: 0.55; } }
+  .todo-row.no-drag .drag-handle { display: none; }
+  .todo-row.dragging { opacity: 0.35; }
+  .todo-row.drop-before { box-shadow: 0 -2px 0 var(--accent); }
+  .todo-row.drop-after { box-shadow: 0 2px 0 var(--accent); }
+  .drag-float {
+    position: fixed; z-index: 200; pointer-events: none; background: #fff;
+    box-shadow: 0 10px 28px rgba(0,0,0,0.14); border-radius: 8px; opacity: 0.96; margin: 0;
+  }
+
+  /* 할일 목록 — 박스 없이 줄만 */
+  #todoList { margin-top: 4px; }
+  .todo-row {
+    display: flex; align-items: flex-start; gap: 12px;
+    padding: 11px 4px; border-bottom: 1px solid var(--line);
+    cursor: pointer; transition: background 0.15s;
+  }
+  .todo-row:hover { background: var(--bg-hover); }
+  .todo-row.done .t-title { text-decoration: line-through; color: var(--faint); }
+
+  .check {
+    width: 20px; height: 20px; border: 1.5px solid #d4d4d4; border-radius: 50%;
+    background: none; cursor: pointer; flex: none; margin-top: 1px;
+    display: inline-flex; align-items: center; justify-content: center;
+    color: #fff; transition: all 0.15s;
+  }
+  .check:hover { border-color: var(--ink); }
+  .check.on { background: var(--ink); border-color: var(--ink); }
+  .check .lucide { width: 12px; height: 12px; stroke-width: 3; }
+
+  .t-body { flex: 1; min-width: 0; }
+  .t-title { font-size: 14px; font-weight: 500; line-height: 1.5; word-break: break-word; }
+  .t-meta { display: flex; gap: 8px; align-items: center; margin-top: 3px; font-size: 12px; color: var(--faint); }
+  .t-meta .lucide { width: 12px; height: 12px; }
+  .pri { font-size: 11px; font-weight: 650; padding: 1px 6px; border-radius: 4px; letter-spacing: 0.2px; }
+  .pri.p2 { color: var(--danger); background: #fef2f2; }
+  .pri.p1 { color: #92400e; background: #fffbeb; }
+  .pri.p0 { color: var(--gray); background: var(--bg-hover); }
+  .due.over { color: var(--danger); font-weight: 600; }
+
+  .t-act { display: flex; gap: 0; opacity: 0; transition: opacity 0.15s; }
+  .todo-row:hover .t-act { opacity: 1; }
+  .t-act button {
+    background: none; border: none; color: var(--faint); font-size: 12px; font-weight: 500;
+    padding: 4px 8px; cursor: pointer; border-radius: 6px; font-family: inherit;
+  }
+  .t-act button:hover { background: #ececec; color: var(--ink); }
+  @media (hover: none) { .t-act { opacity: 1; } }
+
+  .empty { text-align: center; padding: 64px 0; color: var(--faint); font-size: 14px; }
+  .empty .lucide { width: 28px; height: 28px; margin-bottom: 12px; opacity: 0.5; }
+
+  /* 모달 — 플로팅 카드 */
+  .modal-back { position: fixed; inset: 0; background: rgba(0,0,0,0.25); backdrop-filter: blur(2px); display: none; align-items: center; justify-content: center; z-index: 100; padding: 20px; }
+  .modal-back.open { display: flex; }
+  .modal {
+    background: #fff; border-radius: 12px; width: 100%; max-width: 440px;
+    max-height: 90dvh; overflow-y: auto; padding: 24px;
+    box-shadow: 0 8px 40px rgba(0,0,0,0.12);
+    animation: pop 0.18s ease;
+  }
+  @keyframes pop { from { transform: scale(0.97) translateY(4px); opacity: 0; } }
+  .modal h3 { font-size: 16px; font-weight: 650; margin-bottom: 20px; letter-spacing: -0.2px; }
+  .fld { margin-bottom: 16px; }
+  .fld label { display: block; font-size: 12px; font-weight: 600; color: var(--gray); margin-bottom: 6px; }
+  .fld input, .fld textarea, .fld select {
+    width: 100%; border: 1px solid var(--line); border-radius: 8px;
+    padding: 10px 12px; font-size: 14px; font-family: inherit; background: #fff; color: var(--ink);
+    transition: border-color 0.15s;
+  }
+  .fld input:focus, .fld textarea:focus, .fld select:focus { outline: none; border-color: var(--ink); }
+  .fld textarea { min-height: 72px; resize: vertical; }
+  .fld-row { display: flex; gap: 12px; }
+  .fld-row .fld { flex: 1; }
+  .modal-acts { display: flex; gap: 8px; justify-content: flex-end; margin-top: 24px; }
+  .m-btn {
+    border: none; border-radius: 8px; padding: 9px 16px; font-size: 13px; font-weight: 600;
+    cursor: pointer; font-family: inherit; transition: all 0.15s;
+  }
+  .m-btn.ghost { background: none; color: var(--gray); }
+  .m-btn.ghost:hover { background: var(--bg-hover); color: var(--ink); }
+  .m-btn.solid { background: var(--ink); color: #fff; }
+  .m-btn.solid:hover { background: #333; }
+
+  @media (max-width: 640px) {
+    .wrap { padding: 0 16px 80px; }
+    .page-head { padding: 20px 0 12px; }
+    .modal { border-radius: 16px 16px 0 0; max-width: none; }
+    .modal-back { align-items: flex-end; padding: 0; }
+  }
+</style>
+</head>
+<body>
+<header class="g-nav">
+  <a href="/" class="brand-logo" aria-label="MyHub 홈"><img src="/icon-192.png" alt="JN" style="height:26px;width:auto;display:block;"></a>
+  <div class="spacer"></div>
+  <button class="icon-btn" id="addBtn" aria-label="상세 추가"><i data-lucide="plus"></i></button>
+  <span class="ver" id="clock"></span>
+</header>
+
+<div class="g-main">
+<div class="wrap">
+  <div class="page-head">
+    <h1>할일</h1>
+    <span class="count" id="headCount"></span>
+    <span class="spacer"></span>
+  </div>
+
+  <div class="quick-add">
+    <input id="quickInput" type="text" placeholder="할일을 입력하고 Enter" maxlength="200" autocomplete="off">
+  </div>
+
+  <div class="tabs" id="tabs">
+    <button class="tab active" data-status="pending">진행중<span class="n" id="cntPending"></span></button>
+    <button class="tab" data-status="done">완료<span class="n" id="cntDone"></span></button>
+    <button class="tab" data-status="all">전체</button>
+    <span class="spacer"></span>
+    <div class="search">
+      <i data-lucide="search"></i>
+      <input id="searchInput" type="search" placeholder="검색" autocomplete="off" aria-label="할일 검색">
+    </div>
+  </div>
+
+  <div id="todoList"></div>
+</div>
+</div>
+
+<div class="modal-back" id="modalBack">
+  <div class="modal">
+    <h3 id="modalTitle">할일 추가</h3>
+    <div class="fld"><label>제목</label><input id="fTitle" type="text" maxlength="200" placeholder="무엇을 해야 하나요?"></div>
+    <div class="fld"><label>설명</label><textarea id="fDesc" placeholder="상세 내용 (선택)"></textarea></div>
+    <div class="fld-row">
+      <div class="fld"><label>마감일</label><input id="fDue" type="datetime-local"></div>
+      <div class="fld"><label>우선순위</label>
+        <select id="fPri">
+          <option value="2">높음</option>
+          <option value="1" selected>보통</option>
+          <option value="0">낮음</option>
+        </select>
+      </div>
+    </div>
+    <div class="modal-acts">
+      <button class="m-btn ghost" id="cancelBtn">취소</button>
+      <button class="m-btn solid" id="saveBtn">저장</button>
+    </div>
+  </div>
+</div>
+
+<script src="/nav.js">  window.refreshAfterAI = function() { if (typeof loadTodos === "function") loadTodos(); else location.reload(); };
+</script>
+<script src="/assistant-widget.js">  window.refreshAfterAI = function() { if (typeof loadTodos === "function") loadTodos(); else location.reload(); };
+</script>
+<script>AssistantWidget.init({ personaId: "scheduler", personaName: "캘리", avatar: "/avatars/cali.webp" });  window.refreshAfterAI = function() { if (typeof loadTodos === "function") loadTodos(); else location.reload(); };
+</script>
+<script>
+(function () {
+  'use strict';
+  var $ = function (id) { return document.getElementById(id); };
+  var curStatus = 'pending';
+  var editingId = null;
+  var cache = { pending: [], done: [] };
+  var searchQuery = '';
+  var PRI_LABEL = { 2: '높음', 1: '보통', 0: '낮음' };
+
+  function refreshIcons() { if (window.lucide) lucide.createIcons(); }
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (m) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m];
+    });
+  }
+  function fmtDue(due) {
+    if (!due) return '';
+    var d = new Date(due.length === 16 ? due + ':00' : due);
+    if (isNaN(d.getTime())) return esc(due);
+    var now = new Date();
+    var sameDay = d.toDateString() === now.toDateString();
+    var s = d.toLocaleString('ko-KR', sameDay
+      ? { hour: '2-digit', minute: '2-digit' }
+      : { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+    var overdue = d < now;
+    return '<span class="due' + (overdue ? ' over' : '') + '">' + esc(s) + '</span>';
+  }
+
+  async function api(path, method, body) {
+    var res = await fetch('/api/todo' + path, {
+      method: method || 'GET',
+      headers: { 'Content-Type': 'application/json' },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    if (res.status === 401) { location.href = '/login.html'; throw new Error('unauth'); }
+    return res.json();
+  }
+
+  async function loadAll() {
+    var p = await api('/list?status=pending');
+    var d = await api('/list?status=done');
+    cache.pending = (p.todos || []);
+    cache.done = (d.todos || []);
+    $('cntPending').textContent = cache.pending.length || '';
+    $('cntDone').textContent = cache.done.length || '';
+    var total = cache.pending.length + cache.done.length;
+    $('headCount').textContent = total ? total + '개' : '';
+    render();
+  }
+
+  function items() {
+    var base = curStatus === 'pending' ? cache.pending
+      : curStatus === 'done' ? cache.done
+      : cache.pending.concat(cache.done);
+    if (!searchQuery) return base;
+    return base.filter(function (t) {
+      return ((t.title || '') + '\n' + (t.description || '')).toLowerCase().indexOf(searchQuery) !== -1;
+    });
+  }
+
+  // 드래그 정렬 가능 조건: 검색 중이 아니고, 단일 상태 탭일 때
+  function canReorder() {
+    return !searchQuery && (curStatus === 'pending' || curStatus === 'done');
+  }
+
+  // 검색어 하이라이트 (XSS 안전: 이스케이프 후 마킹)
+  function hi(text) {
+    var e = esc(text);
+    if (!searchQuery) return e;
+    var q = esc(searchQuery).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return e.replace(new RegExp('(' + q + ')', 'gi'), '<mark>$1</mark>');
+  }
+
+  function render() {
+    var list = items();
+    var el = $('todoList');
+    if (!list.length) {
+      var msg = searchQuery ? '검색 결과가 없어요'
+        : curStatus === 'done' ? '완료된 할일이 없어요' : '할일을 입력해 보세요';
+      el.innerHTML = '<div class="empty"><i data-lucide="check"></i><br>' + msg + '</div>';
+      refreshIcons();
+      return;
+    }
+    var reorder = canReorder();
+    el.innerHTML = list.map(function (t) {
+      var done = t.status === 'done';
+      return '<div class="todo-row' + (done ? ' done' : '') + (reorder ? '' : ' no-drag') + '" data-id="' + t.id + '"' +
+        (reorder ? ' draggable="true"' : '') + '>' +
+        '<span class="drag-handle" data-act="drag" aria-label="순서 변경"><i data-lucide="grip-vertical"></i></span>' +
+        '<button class="check' + (done ? ' on' : '') + '" data-act="toggle" aria-label="완료 토글">' +
+          (done ? '<i data-lucide="check"></i>' : '') + '</button>' +
+        '<div class="t-body">' +
+          '<div class="t-title">' + hi(t.title) + '</div>' +
+          ((t.due_at || t.priority !== 1) ?
+            '<div class="t-meta">' +
+              (t.priority !== 1 ? '<span class="pri p' + t.priority + '">' + PRI_LABEL[t.priority] + '</span>' : '') +
+              (t.due_at ? fmtDue(t.due_at) : '') +
+            '</div>' : '') +
+        '</div>' +
+        '<div class="t-act">' +
+          '<button data-act="edit">편집</button>' +
+          '<button data-act="del">삭제</button>' +
+        '</div>' +
+      '</div>';
+    }).join('');
+    refreshIcons();
+  }
+
+  function openModal(id) {
+    editingId = id || null;
+    $('modalTitle').textContent = id ? '할일 편집' : '할일 추가';
+    if (id) {
+      var t = cache.pending.concat(cache.done).find(function (x) { return x.id === id; });
+      $('fTitle').value = t ? t.title : '';
+      $('fDesc').value = t ? (t.description || '') : '';
+      $('fDue').value = t && t.due_at ? t.due_at.slice(0, 16) : '';
+      $('fPri').value = t ? String(t.priority) : '1';
+    } else {
+      $('fTitle').value = ''; $('fDesc').value = ''; $('fDue').value = ''; $('fPri').value = '1';
+    }
+    $('modalBack').classList.add('open');
+    setTimeout(function () { $('fTitle').focus(); }, 50);
+  }
+  function closeModal() { $('modalBack').classList.remove('open'); editingId = null; }
+
+  async function saveModal() {
+    var title = $('fTitle').value.trim();
+    if (!title) { return; }
+    var body = {
+      title: title,
+      description: $('fDesc').value.trim(),
+      due_at: $('fDue').value || null,
+      priority: Number($('fPri').value),
+    };
+    if (editingId) { await api('/' + editingId, 'PUT', body); }
+    else { await api('/create', 'POST', body); }
+    closeModal();
+    await loadAll();
+  }
+
+  async function quickAdd() {
+    var v = $('quickInput').value.trim();
+    if (!v) return;
+    await api('/create', 'POST', { title: v });
+    $('quickInput').value = '';
+    await loadAll();
+  }
+
+  // ---------- 드래그 정렬 ----------
+  var dragId = null;        // HTML5 DnD 중인 id
+  var dragJustEnded = false; // 터치 드래그 직후 클릭 무시 플래그
+
+  function clearDropHints() {
+    document.querySelectorAll('.todo-row.drop-before, .todo-row.drop-after').forEach(function (r) {
+      r.classList.remove('drop-before', 'drop-after');
+    });
+  }
+
+  function dropPos(row, clientY) {
+    var rect = row.getBoundingClientRect();
+    return clientY < rect.top + rect.height / 2 ? 'before' : 'after';
+  }
+
+  // 낙관적 재정렬 + 서버 저장
+  function commitReorder(draggedId, targetId, pos) {
+    var list = items();
+    var ids = list.map(function (t) { return t.id; });
+    var from = ids.indexOf(draggedId);
+    if (from < 0) return;
+    ids.splice(from, 1);
+    var to = ids.indexOf(targetId);
+    if (to < 0) return;
+    if (pos === 'after') to += 1;
+    ids.splice(to, 0, draggedId);
+    var arr = curStatus === 'pending' ? cache.pending : cache.done;
+    var order = {};
+    ids.forEach(function (id, i) { order[id] = i; });
+    arr.sort(function (a, b) { return (order[a.id] == null ? 9999 : order[a.id]) - (order[b.id] == null ? 9999 : order[b.id]); });
+    render();
+    api('/reorder', 'PUT', { ids: ids }).catch(function () { loadAll(); });
+  }
+
+  // --- 데스크톱: HTML5 DnD ---
+  $('todoList').addEventListener('dragstart', function (e) {
+    if (!canReorder()) { e.preventDefault(); return; }
+    if (e.target.closest('.t-act, .check')) { e.preventDefault(); return; }
+    var row = e.target.closest('.todo-row');
+    if (!row) { e.preventDefault(); return; }
+    dragId = Number(row.dataset.id);
+    e.dataTransfer.effectAllowed = 'move';
+    try { e.dataTransfer.setData('text/plain', String(dragId)); } catch (err) { console.warn('드래그 데이터 설정 실패:', err); }
+    setTimeout(function () { row.classList.add('dragging'); }, 0);
+  });
+
+  $('todoList').addEventListener('dragover', function (e) {
+    if (dragId == null || !canReorder()) return;
+    var row = e.target.closest('.todo-row');
+    if (!row || row.classList.contains('dragging')) { clearDropHints(); return; }
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    clearDropHints();
+    row.classList.add('drop-' + dropPos(row, e.clientY));
+  });
+
+  $('todoList').addEventListener('dragleave', function (e) {
+    var row = e.target.closest('.todo-row');
+    if (row && !(e.relatedTarget && row.contains(e.relatedTarget))) {
+      row.classList.remove('drop-before', 'drop-after');
+    }
+  });
+
+  $('todoList').addEventListener('drop', function (e) {
+    if (dragId == null || !canReorder()) return;
+    var row = e.target.closest('.todo-row');
+    e.preventDefault();
+    clearDropHints();
+    if (!row) return;
+    var targetId = Number(row.dataset.id);
+    var pos = dropPos(row, e.clientY);
+    var id = dragId;
+    dragId = null;
+    if (id !== targetId) commitReorder(id, targetId, pos);
+  });
+
+  $('todoList').addEventListener('dragend', function () {
+    dragId = null;
+    clearDropHints();
+    document.querySelectorAll('.todo-row.dragging').forEach(function (r) { r.classList.remove('dragging'); });
+  });
+
+  // --- 모바일: 핸들 길게 누르기 → 터치 드래그 ---
+  var lpTimer = null;
+  var lpStart = null;
+  var touchDrag = null;
+
+  $('todoList').addEventListener('touchstart', function (e) {
+    if (!canReorder()) return;
+    var handle = e.target.closest('.drag-handle');
+    if (!handle) return;
+    var row = handle.closest('.todo-row');
+    var t = e.touches[0];
+    lpStart = { x: t.clientX, y: t.clientY };
+    var id = Number(row.dataset.id);
+    lpTimer = setTimeout(function () {
+      lpTimer = null;
+      startTouchDrag(id, row, t.clientX, t.clientY);
+    }, 450);
+  }, { passive: true });
+
+  function cancelLongPress() {
+    if (lpTimer) { clearTimeout(lpTimer); lpTimer = null; }
+    lpStart = null;
+  }
+
+  function startTouchDrag(id, row, x, y) {
+    if (navigator.vibrate) { try { navigator.vibrate(12); } catch (e) { console.warn('진동 실패:', e); } }
+    var rect = row.getBoundingClientRect();
+    var floatEl = row.cloneNode(true);
+    floatEl.classList.add('drag-float');
+    floatEl.classList.remove('drop-before', 'drop-after', 'dragging');
+    floatEl.style.width = rect.width + 'px';
+    floatEl.style.left = rect.left + 'px';
+    floatEl.style.top = rect.top + 'px';
+    document.body.appendChild(floatEl);
+    row.classList.add('dragging');
+    touchDrag = { id: id, row: row, floatEl: floatEl, dx: x - rect.left, dy: y - rect.top, targetId: null, pos: null };
+  }
+
+  function endTouchDrag(commit) {
+    if (lpTimer) { clearTimeout(lpTimer); lpTimer = null; }
+    lpStart = null;
+    if (!touchDrag) return;
+    var td = touchDrag;
+    touchDrag = null;
+    td.floatEl.remove();
+    td.row.classList.remove('dragging');
+    clearDropHints();
+    // 드래그 직후 합성 클릭 무시
+    dragJustEnded = true;
+    setTimeout(function () { dragJustEnded = false; }, 150);
+    if (commit && td.targetId != null && td.targetId !== td.id) {
+      commitReorder(td.id, td.targetId, td.pos);
+    }
+  }
+
+  document.addEventListener('touchmove', function (e) {
+    if (lpTimer && lpStart) {
+      var s = e.touches[0];
+      if (Math.hypot(s.clientX - lpStart.x, s.clientY - lpStart.y) > 10) cancelLongPress();
+      return;
+    }
+    if (!touchDrag) return;
+    e.preventDefault(); // 드래그 중 스크롤 방지
+    var t = e.touches[0];
+    touchDrag.floatEl.style.left = (t.clientX - touchDrag.dx) + 'px';
+    touchDrag.floatEl.style.top = (t.clientY - touchDrag.dy) + 'px';
+    clearDropHints();
+    var el = document.elementFromPoint(t.clientX, t.clientY);
+    var row = el && el.closest ? el.closest('.todo-row') : null;
+    if (row && !row.classList.contains('dragging')) {
+      var pos = dropPos(row, t.clientY);
+      row.classList.add('drop-' + pos);
+      touchDrag.targetId = Number(row.dataset.id);
+      touchDrag.pos = pos;
+    } else {
+      touchDrag.targetId = null;
+      touchDrag.pos = null;
+    }
+  }, { passive: false });
+
+  document.addEventListener('touchend', function () { endTouchDrag(true); });
+  document.addEventListener('touchcancel', function () { endTouchDrag(false); });
+
+  $('tabs').addEventListener('click', function (e) {
+    var b = e.target.closest('.tab');
+    if (!b) return;
+    curStatus = b.dataset.status;
+    document.querySelectorAll('.tab').forEach(function (t) { t.classList.toggle('active', t === b); });
+    render();
+  });
+
+  $('todoList').addEventListener('click', async function (e) {
+    if (dragJustEnded) return;
+    var btn = e.target.closest('[data-act]');
+    var row = e.target.closest('.todo-row');
+    if (!row) return;
+    var id = Number(row.dataset.id);
+    // 행 클릭 = 토글 (버튼이 아닌 경우)
+    if (!btn) {
+      await api('/' + id + '/toggle', 'POST');
+      await loadAll();
+      return;
+    }
+    var act = btn.dataset.act;
+    e.stopPropagation();
+    if (act === 'toggle') {
+      await api('/' + id + '/toggle', 'POST');
+      await loadAll();
+    } else if (act === 'edit') {
+      openModal(id);
+    } else if (act === 'del') {
+      if (confirm('삭제할까요?')) {
+        await api('/' + id, 'DELETE');
+        await loadAll();
+      }
+    }
+  });
+
+  $('addBtn').addEventListener('click', function () { openModal(null); });
+  $('cancelBtn').addEventListener('click', closeModal);
+  $('saveBtn').addEventListener('click', saveModal);
+  $('modalBack').addEventListener('click', function (e) { if (e.target === this) closeModal(); });
+  $('quickInput').addEventListener('keydown', function (e) { if (e.key === 'Enter') quickAdd(); });
+  $('searchInput').addEventListener('input', function (e) {
+    searchQuery = e.target.value.trim().toLowerCase();
+    render();
+  });
+  // 네이티브 검색 취소(x) 버튼 대응
+  $('searchInput').addEventListener('search', function (e) {
+    if (!e.target.value) { searchQuery = ''; render(); }
+  });
+  $('fTitle').addEventListener('keydown', function (e) { if (e.key === 'Enter') saveModal(); });
+
+  refreshIcons();
+  loadAll().catch(function (e) { if (e.message !== 'unauth') console.error(e); });
+})();
+  window.refreshAfterAI = function() { if (typeof loadTodos === "function") loadTodos(); else location.reload(); };
+</script>
+</body>
+</html>
