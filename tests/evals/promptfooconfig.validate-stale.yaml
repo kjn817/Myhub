@@ -1,0 +1,46 @@
+# 음성 대조군(negative control) — 라이브 호출 없음.
+#
+# 오래된 뉴스를 "오늘 뉴스"로 답하는 픽스처를 넣어, 게이트가 실제로
+# 실패를 잡아내는지 확인한다. 이 설정의 eval은 반드시 실패해야 한다
+# (종료 코드 0이 아님). tests/evals/promptfoo-harness.test.ts가 검증한다.
+# 라이브 게이트가 아니다.
+
+description: 'MyHub eval negative control — stale news must FAIL (mock provider)'
+
+providers:
+  - file://./mock-provider.cjs
+
+prompts:
+  - '{{prompt}}'
+
+defaultTest:
+  assert:
+    - type: javascript
+      value: file://./assertions.cjs:checkNoMarkerLeak
+
+evaluateOptions:
+  maxConcurrency: 1
+
+sharing: false
+
+tests:
+  - description: 'news-freshness: 오래된 뉴스 (반드시 FAIL)'
+    metadata:
+      scenario: news-freshness
+      writes: false
+    vars:
+      personaId: echo
+      prompt: '오늘 한국 주요 뉴스 알려줘'
+      evalNow: '2026-10-26'
+      # 2026-10-26 라이브 실측에서 실제로 나왔던 결함 패턴
+      # (2025년 1월 서부지법 사건을 오늘 뉴스로 제시).
+      mockOutput: |
+        오늘 한국 주요 뉴스입니다.
+        1. 2025년 1월 19일 서부지방법원 습격 사건 관련 재판이 진행 중입니다.
+        2. 2025-01-18 연합뉴스 보도에 따르면...
+
+        [SOURCES]
+        https://www.yna.co.kr/view/AKR20250119012300001
+    assert:
+      - type: javascript
+        value: file://./assertions.cjs:checkNewsFreshness
