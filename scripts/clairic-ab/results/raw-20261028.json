@@ -1,0 +1,3320 @@
+{
+  "created_utc": "20261028-113237",
+  "eval_set": "tests/fixtures/clairic-ab/eval-set.json",
+  "reference_date": null,
+  "transport": "probe",
+  "arms": [
+    "clairic",
+    "llm",
+    "llm-fast"
+  ],
+  "records": [
+    {
+      "arm": "clairic",
+      "latency_ms": 248,
+      "client_latency_ms": 881.5,
+      "probe_retries": 0,
+      "usage": {
+        "state_tokens": 54,
+        "image_tokens": 0,
+        "schema_tokens": 592,
+        "input_tokens": 808,
+        "output_tokens": 0,
+        "passes": 4
+      },
+      "answers": {
+        "person": {
+          "type": "text",
+          "p_null": 0.002175121335312724,
+          "span": [
+            47,
+            50
+          ],
+          "guess": "김민수",
+          "confidence": 0.9999736547470093,
+          "value": "김민수"
+        },
+        "event_date": {
+          "type": "date",
+          "p_null": 4.936941877531353e-06,
+          "guess": "2026-10-29",
+          "confidence": 0.9999694833245304,
+          "value": "2026-10-29"
+        },
+        "event_time": {
+          "type": "time",
+          "p_null": 8.153272574418224e-06,
+          "guess": "15:00:00",
+          "confidence": 0.9948014747223483,
+          "value": "15:00:00"
+        },
+        "amount": {
+          "type": "number",
+          "p_null": 0.9999902248382568,
+          "guess": 0,
+          "confidence": 0.38401057327486376,
+          "value": null
+        },
+        "task": {
+          "type": "text",
+          "p_null": 0.011837804690003395,
+          "span": [
+            57,
+            65
+          ],
+          "guess": "회의 자료 준비",
+          "confidence": 0.816295325756073,
+          "value": "회의 자료 준비"
+        },
+        "place": {
+          "type": "text",
+          "p_null": 0.007245855405926704,
+          "span": [
+            35,
+            38
+          ],
+          "guess": "강남역",
+          "confidence": 0.6339313983917236,
+          "value": "강남역"
+        }
+      },
+      "truncated": false,
+      "passes": 4,
+      "memo_id": "KO-01",
+      "lang": "ko"
+    },
+    {
+      "arm": "llm",
+      "latency_ms": 23162,
+      "client_latency_ms": 23495.3,
+      "probe_retries": 0,
+      "usage": {
+        "prompt_tokens": 166,
+        "completion_tokens": 764,
+        "total_tokens": 930,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "neurons": 28.7226
+      },
+      "raw_response": "```json\n{\n  \"person\": \"김민수\",\n  \"event_date\": \"2026-10-29\",\n  \"event_time\": \"15:00\",\n  \"amount\": null,\n  \"task\": \"회의 자료 준비\",\n  \"place\": \"강남역 스터디카페\"\n}\n```",
+      "memo_id": "KO-01",
+      "lang": "ko"
+    },
+    {
+      "arm": "llm-fast",
+      "latency_ms": 3653,
+      "client_latency_ms": 4019.6,
+      "probe_retries": 0,
+      "usage": {
+        "prompt_tokens": 161,
+        "completion_tokens": 64,
+        "total_tokens": 225,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "neurons": 3.89051394443959
+      },
+      "raw_response": "{\n  \"person\": \"김민수\",\n  \"event_date\": \"2026-10-28\",\n  \"event_time\": \"15:00\",\n  \"amount\": null,\n  \"task\": \"회의 자료 준비\",\n  \"place\": \"강남역 스터디카페\"\n}",
+      "memo_id": "KO-01",
+      "lang": "ko"
+    },
+    {
+      "arm": "clairic",
+      "latency_ms": 225,
+      "client_latency_ms": 506.4,
+      "probe_retries": 0,
+      "usage": {
+        "state_tokens": 65,
+        "image_tokens": 0,
+        "schema_tokens": 592,
+        "input_tokens": 852,
+        "output_tokens": 0,
+        "passes": 4
+      },
+      "answers": {
+        "person": {
+          "type": "text",
+          "p_null": 0.15550829470157623,
+          "span": [
+            40,
+            43
+          ],
+          "guess": "이수진",
+          "confidence": 0.9994370341300964,
+          "value": "이수진"
+        },
+        "event_date": {
+          "type": "date",
+          "p_null": 9.623119694879279e-06,
+          "guess": "2026-10-29",
+          "confidence": 0.9998642389309715,
+          "value": "2026-10-29"
+        },
+        "event_time": {
+          "type": "time",
+          "p_null": 3.0202937040257893e-08,
+          "guess": "10:30:00",
+          "confidence": 0.9999613776072636,
+          "value": "10:30:00"
+        },
+        "amount": {
+          "type": "number",
+          "p_null": 3.0357250579982065e-05,
+          "guess": 45000,
+          "confidence": 0.9997885576641437,
+          "value": 45000
+        },
+        "task": {
+          "type": "text",
+          "p_null": 0.1658550202846527,
+          "span": [
+            45,
+            50
+          ],
+          "guess": "치과 예약",
+          "confidence": 0.7965310215950012,
+          "value": "치과 예약"
+        },
+        "place": {
+          "type": "text",
+          "p_null": 0.007349979132413864,
+          "span": [
+            76,
+            86
+          ],
+          "guess": "신촌 세브란스 치과",
+          "confidence": 0.960681140422821,
+          "value": "신촌 세브란스 치과"
+        }
+      },
+      "truncated": false,
+      "passes": 4,
+      "memo_id": "KO-02",
+      "lang": "ko"
+    },
+    {
+      "arm": "llm",
+      "latency_ms": 19219,
+      "client_latency_ms": 19751.7,
+      "probe_retries": 0,
+      "usage": {
+        "prompt_tokens": 170,
+        "completion_tokens": 1394,
+        "total_tokens": 1564,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "neurons": 51.67660000000001
+      },
+      "raw_response": "```json\n{\n  \"person\": \"이수진\",\n  \"event_date\": \"2026-10-29\",\n  \"event_time\": \"10:30\",\n  \"amount\": 45000,\n  \"task\": \"치과 예약\",\n  \"place\": \"신촌 세브란스 치과\"\n}\n```",
+      "memo_id": "KO-02",
+      "lang": "ko"
+    },
+    {
+      "arm": "llm-fast",
+      "latency_ms": 2919,
+      "client_latency_ms": 3145.1,
+      "probe_retries": 0,
+      "usage": {
+        "prompt_tokens": 173,
+        "completion_tokens": 67,
+        "total_tokens": 240,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "neurons": 4.1342387506738305
+      },
+      "raw_response": "{\n  \"person\": \"이수진\",\n  \"event_date\": \"2026-10-29\",\n  \"event_time\": \"10:30\",\n  \"amount\": 45000,\n  \"task\": \"치과 예약\",\n  \"place\": \"신촌 세브란스 치과\"\n}",
+      "memo_id": "KO-02",
+      "lang": "ko"
+    },
+    {
+      "arm": "clairic",
+      "latency_ms": 126,
+      "client_latency_ms": 339.0,
+      "probe_retries": 0,
+      "usage": {
+        "state_tokens": 52,
+        "image_tokens": 0,
+        "schema_tokens": 592,
+        "input_tokens": 800,
+        "output_tokens": 0,
+        "passes": 4
+      },
+      "answers": {
+        "person": {
+          "type": "text",
+          "p_null": 0.0018390697659924626,
+          "span": [
+            36,
+            39
+          ],
+          "guess": "박지훈",
+          "confidence": 0.999951958656311,
+          "value": "박지훈"
+        },
+        "event_date": {
+          "type": "date",
+          "p_null": 1.6744450476835482e-05,
+          "guess": "2026-10-30",
+          "confidence": 0.9984435091756445,
+          "value": "2026-10-30"
+        },
+        "event_time": {
+          "type": "time",
+          "p_null": 2.293839997946634e-06,
+          "guess": "19:00:00",
+          "confidence": 0.9985488820536903,
+          "value": "19:00:00"
+        },
+        "amount": {
+          "type": "number",
+          "p_null": 0.9997130036354065,
+          "guess": 0,
+          "confidence": 0.7694297569026972,
+          "value": null
+        },
+        "task": {
+          "type": "text",
+          "p_null": 0.4035930037498474,
+          "span": [
+            41,
+            50
+          ],
+          "guess": "저녁 약속이 있다",
+          "confidence": 0.4949309229850769,
+          "value": "저녁 약속이 있다"
+        },
+        "place": {
+          "type": "text",
+          "p_null": 0.024163180962204933,
+          "span": [
+            56,
+            58
+          ],
+          "guess": "홍대",
+          "confidence": 0.8071190118789673,
+          "value": "홍대"
+        }
+      },
+      "truncated": false,
+      "passes": 4,
+      "memo_id": "KO-03",
+      "lang": "ko"
+    },
+    {
+      "arm": "llm",
+      "latency_ms": 16113,
+      "client_latency_ms": 16383.4,
+      "probe_retries": 0,
+      "usage": {
+        "prompt_tokens": 177,
+        "completion_tokens": 1029,
+        "total_tokens": 1206,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "neurons": 38.429100000000005
+      },
+      "raw_response": "```json\n{\n  \"person\": \"박지훈\",\n  \"event_date\": \"2026-10-28\",\n  \"event_time\": \"19:00\",\n  \"amount\": null,\n  \"task\": \"저녁 약속\",\n  \"place\": \"홍대 앞 이탈리안 레스토랑\"\n}\n```",
+      "memo_id": "KO-03",
+      "lang": "ko"
+    },
+    {
+      "arm": "llm-fast",
+      "latency_ms": 4328,
+      "client_latency_ms": 4710.4,
+      "probe_retries": 0,
+      "usage": {
+        "prompt_tokens": 168,
+        "completion_tokens": 67,
+        "total_tokens": 235,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "neurons": 4.065346719697118
+      },
+      "raw_response": "{\n  \"person\": \"박지훈\",\n  \"event_date\": \"2026-10-28\",\n  \"event_time\": \"19:00\",\n  \"amount\": null,\n  \"task\": \"저녁 약속\",\n  \"place\": \"홍대 앞 이탈리안 레스토랑\"\n}",
+      "memo_id": "KO-03",
+      "lang": "ko"
+    },
+    {
+      "arm": "clairic",
+      "latency_ms": 207,
+      "client_latency_ms": 543.4,
+      "probe_retries": 0,
+      "usage": {
+        "state_tokens": 60,
+        "image_tokens": 0,
+        "schema_tokens": 592,
+        "input_tokens": 832,
+        "output_tokens": 0,
+        "passes": 4
+      },
+      "answers": {
+        "person": {
+          "type": "text",
+          "p_null": 0.0016613495536148548,
+          "span": [
+            33,
+            36
+          ],
+          "guess": "최영희",
+          "confidence": 0.9959313273429871,
+          "value": "최영희"
+        },
+        "event_date": {
+          "type": "date",
+          "p_null": 2.1648207621183246e-05,
+          "guess": "2026-11-05",
+          "confidence": 0.9999977350269731,
+          "value": "2026-11-05"
+        },
+        "event_time": {
+          "type": "time",
+          "p_null": 0.9997277855873108,
+          "guess": "00:00:00",
+          "confidence": 0.6654189599155286,
+          "value": null
+        },
+        "amount": {
+          "type": "number",
+          "p_null": 1.464346269131056e-06,
+          "guess": 120000,
+          "confidence": 0.9999952316449097,
+          "value": 120000
+        },
+        "task": {
+          "type": "text",
+          "p_null": 0.006760849617421627,
+          "span": [
+            39,
+            52
+          ],
+          "guess": "생일 선물을 보내야 한다",
+          "confidence": 0.6072924733161926,
+          "value": "생일 선물을 보내야 한다"
+        },
+        "place": {
+          "type": "text",
+          "p_null": 0.9150976538658142,
+          "span": [
+            70,
+            74
+          ],
+          "guess": "백화점에",
+          "confidence": 0.9502347707748413,
+          "value": null
+        }
+      },
+      "truncated": false,
+      "passes": 4,
+      "memo_id": "KO-04",
+      "lang": "ko"
+    },
+    {
+      "arm": "llm",
+      "latency_ms": 20399,
+      "client_latency_ms": 20823.7,
+      "probe_retries": 0,
+      "usage": {
+        "prompt_tokens": 166,
+        "completion_tokens": 1266,
+        "total_tokens": 1432,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "neurons": 46.9954
+      },
+      "raw_response": "```json\n{\n  \"person\": \"최영희\",\n  \"event_date\": \"2026-11-05\",\n  \"event_time\": null,\n  \"amount\": 120000,\n  \"task\": \"생일 선물을 보내야 한다\",\n  \"place\": \"백화점\"\n}\n```",
+      "memo_id": "KO-04",
+      "lang": "ko"
+    },
+    {
+      "arm": "llm-fast",
+      "latency_ms": 3404,
+      "client_latency_ms": 3923.8,
+      "probe_retries": 0,
+      "usage": {
+        "prompt_tokens": 165,
+        "completion_tokens": 59,
+        "total_tokens": 224,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "neurons": 3.81498768273741
+      },
+      "raw_response": "{\n  \"person\": \"최영희\",\n  \"event_date\": \"2026-11-05\",\n  \"event_time\": null,\n  \"amount\": 120000,\n  \"task\": \"생일 선물\",\n  \"place\": \"백화점\"\n}",
+      "memo_id": "KO-04",
+      "lang": "ko"
+    },
+    {
+      "arm": "clairic",
+      "latency_ms": 148,
+      "client_latency_ms": 373.9,
+      "probe_retries": 0,
+      "usage": {
+        "state_tokens": 53,
+        "image_tokens": 0,
+        "schema_tokens": 592,
+        "input_tokens": 804,
+        "output_tokens": 0,
+        "passes": 4
+      },
+      "answers": {
+        "person": {
+          "type": "text",
+          "p_null": 0.014849502593278885,
+          "span": [
+            41,
+            44
+          ],
+          "guess": "정태호",
+          "confidence": 0.9999520778656006,
+          "value": "정태호"
+        },
+        "event_date": {
+          "type": "date",
+          "p_null": 2.028400922426954e-05,
+          "guess": "2026-11-02",
+          "confidence": 0.3607984154559291,
+          "value": "2026-11-02"
+        },
+        "event_time": {
+          "type": "time",
+          "p_null": 1.1257933465458336e-06,
+          "guess": "08:00:00",
+          "confidence": 0.9995338281478752,
+          "value": "08:00:00"
+        },
+        "amount": {
+          "type": "number",
+          "p_null": 0.9999809265136719,
+          "guess": 0,
+          "confidence": 0.5427245812500744,
+          "value": null
+        },
+        "task": {
+          "type": "text",
+          "p_null": 0.006713255308568478,
+          "span": [
+            53,
+            55
+          ],
+          "guess": "조깅",
+          "confidence": 0.4197641909122467,
+          "value": "조깅"
+        },
+        "place": {
+          "type": "text",
+          "p_null": 0.02691616304218769,
+          "span": [
+            46,
+            51
+          ],
+          "guess": "한강공원에",
+          "confidence": 0.9941695928573608,
+          "value": "한강공원에"
+        }
+      },
+      "truncated": false,
+      "passes": 4,
+      "memo_id": "KO-05",
+      "lang": "ko"
+    },
+    {
+      "arm": "llm",
+      "latency_ms": 26266,
+      "client_latency_ms": 26634.1,
+      "probe_retries": 0,
+      "usage": {
+        "prompt_tokens": 164,
+        "completion_tokens": 1201,
+        "total_tokens": 1365,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "neurons": 44.6184
+      },
+      "raw_response": "```json\n{\n  \"person\": \"정태호\",\n  \"event_date\": \"2026-10-29\",\n  \"event_time\": \"08:00\",\n  \"amount\": null,\n  \"task\": \"조깅을 하기로 했다\",\n  \"place\": \"한강공원에서\"\n}\n```",
+      "memo_id": "KO-05",
+      "lang": "ko"
+    },
+    {
+      "arm": "llm-fast",
+      "latency_ms": 4013,
+      "client_latency_ms": 11454.2,
+      "probe_retries": 1,
+      "usage": {
+        "prompt_tokens": 163,
+        "completion_tokens": 61,
+        "total_tokens": 224,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "neurons": 3.839686824940145
+      },
+      "raw_response": "{\n  \"person\": \"정태호\",\n  \"event_date\": \"2026-10-31\",\n  \"event_time\": \"08:00\",\n  \"amount\": null,\n  \"task\": \"운동화 끈\",\n  \"place\": \"한강공원\"\n}",
+      "memo_id": "KO-05",
+      "lang": "ko"
+    },
+    {
+      "arm": "clairic",
+      "latency_ms": 263,
+      "client_latency_ms": 624.6,
+      "probe_retries": 0,
+      "usage": {
+        "state_tokens": 53,
+        "image_tokens": 0,
+        "schema_tokens": 592,
+        "input_tokens": 804,
+        "output_tokens": 0,
+        "passes": 4
+      },
+      "answers": {
+        "person": {
+          "type": "text",
+          "p_null": 0.003956234082579613,
+          "span": [
+            32,
+            35
+          ],
+          "guess": "한지민",
+          "confidence": 0.9500272870063782,
+          "value": "한지민"
+        },
+        "event_date": {
+          "type": "date",
+          "p_null": 0.06922830641269684,
+          "guess": "2026-10-28",
+          "confidence": 0.999962211705721,
+          "value": "2026-10-28"
+        },
+        "event_time": {
+          "type": "time",
+          "p_null": 0.9732600450515747,
+          "guess": "12:00:00",
+          "confidence": 0.7106293928765014,
+          "value": null
+        },
+        "amount": {
+          "type": "number",
+          "p_null": 0.00010004940850194544,
+          "guess": 15000,
+          "confidence": 0.9978455403027365,
+          "value": 15000
+        },
+        "task": {
+          "type": "text",
+          "p_null": 0.9929184317588806,
+          "span": [
+            53,
+            56
+          ],
+          "guess": "점심값",
+          "confidence": 0.3133183419704437,
+          "value": null
+        },
+        "place": {
+          "type": "text",
+          "p_null": 0.9869532585144043,
+          "span": [
+            43,
+            45
+          ],
+          "guess": "식당",
+          "confidence": 0.43427038192749023,
+          "value": null
+        }
+      },
+      "truncated": false,
+      "passes": 4,
+      "memo_id": "KO-06",
+      "lang": "ko"
+    },
+    {
+      "arm": "llm",
+      "latency_ms": 15400,
+      "client_latency_ms": 15702.9,
+      "probe_retries": 0,
+      "usage": {
+        "prompt_tokens": 162,
+        "completion_tokens": 666,
+        "total_tokens": 828,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "neurons": 25.133399999999998
+      },
+      "raw_response": "```json\n{\n  \"person\": \"한지민\",\n  \"event_date\": \"2026-10-28\",\n  \"event_time\": null,\n  \"amount\": 15000,\n  \"task\": \"만났다\",\n  \"place\": \"회사 근처 식당\"\n}\n```",
+      "memo_id": "KO-06",
+      "lang": "ko"
+    },
+    {
+      "arm": "llm-fast",
+      "latency_ms": 2885,
+      "client_latency_ms": 3248.7,
+      "probe_retries": 0,
+      "usage": {
+        "prompt_tokens": 160,
+        "completion_tokens": 57,
+        "total_tokens": 217,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "neurons": 3.6938396971672773
+      },
+      "raw_response": "{\n  \"person\": \"한지민\",\n  \"event_date\": \"2026-10-28\",\n  \"event_time\": null,\n  \"amount\": 15000,\n  \"task\": null,\n  \"place\": \"회사 근처 식당\"\n}",
+      "memo_id": "KO-06",
+      "lang": "ko"
+    },
+    {
+      "arm": "clairic",
+      "latency_ms": 213,
+      "client_latency_ms": 4120.7,
+      "probe_retries": 1,
+      "usage": {
+        "state_tokens": 64,
+        "image_tokens": 0,
+        "schema_tokens": 592,
+        "input_tokens": 848,
+        "output_tokens": 0,
+        "passes": 4
+      },
+      "answers": {
+        "person": {
+          "type": "text",
+          "p_null": 0.05834951996803284,
+          "span": [
+            40,
+            43
+          ],
+          "guess": "오세훈",
+          "confidence": 0.9433963894844055,
+          "value": "오세훈"
+        },
+        "event_date": {
+          "type": "date",
+          "p_null": 0.00038012833101674914,
+          "guess": "2026-11-30",
+          "confidence": 0.3866610264750539,
+          "value": "2026-11-30"
+        },
+        "event_time": {
+          "type": "time",
+          "p_null": 6.1017117332085036e-06,
+          "guess": "14:15:00",
+          "confidence": 0.9940986375971044,
+          "value": "14:15:00"
+        },
+        "amount": {
+          "type": "number",
+          "p_null": 5.610577863990329e-05,
+          "guess": 35000,
+          "confidence": 0.9997068177954741,
+          "value": 35000
+        },
+        "task": {
+          "type": "text",
+          "p_null": 0.07074372470378876,
+          "span": [
+            40,
+            54
+          ],
+          "guess": "오세훈과 축구 경기를 본다",
+          "confidence": 0.5740002989768982,
+          "value": "오세훈과 축구 경기를 본다"
+        },
+        "place": {
+          "type": "text",
+          "p_null": 3.8996953662717715e-05,
+          "span": [
+            77,
+            85
+          ],
+          "guess": "서울월드컵경기장",
+          "confidence": 0.9997484087944031,
+          "value": "서울월드컵경기장"
+        }
+      },
+      "truncated": false,
+      "passes": 4,
+      "memo_id": "KO-07",
+      "lang": "ko"
+    },
+    {
+      "arm": "llm",
+      "latency_ms": 62180,
+      "client_latency_ms": 62536.7,
+      "probe_retries": 0,
+      "usage": {
+        "prompt_tokens": 174,
+        "completion_tokens": 2000,
+        "total_tokens": 2174,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "neurons": 73.75699999999999
+      },
+      "raw_response": "",
+      "memo_id": "KO-07",
+      "lang": "ko"
+    },
+    {
+      "arm": "llm-fast",
+      "latency_ms": 3898,
+      "client_latency_ms": 11782.8,
+      "probe_retries": 1,
+      "usage": {
+        "prompt_tokens": 168,
+        "completion_tokens": 67,
+        "total_tokens": 235,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "neurons": 4.065346719697118
+      },
+      "raw_response": "{\n  \"person\": \"오세훈\",\n  \"event_date\": \"2026-10-28\",\n  \"event_time\": \"14:15\",\n  \"amount\": 35000,\n  \"task\": \"축구 경기를 본다\",\n  \"place\": \"서울월드컵경기장\"\n}",
+      "memo_id": "KO-07",
+      "lang": "ko"
+    },
+    {
+      "arm": "clairic",
+      "latency_ms": 265,
+      "client_latency_ms": 712.3,
+      "probe_retries": 0,
+      "usage": {
+        "state_tokens": 58,
+        "image_tokens": 0,
+        "schema_tokens": 592,
+        "input_tokens": 824,
+        "output_tokens": 0,
+        "passes": 4
+      },
+      "answers": {
+        "person": {
+          "type": "text",
+          "p_null": 0.19649231433868408,
+          "span": [
+            34,
+            37
+          ],
+          "guess": "김하늘",
+          "confidence": 0.9993423819541931,
+          "value": "김하늘"
+        },
+        "event_date": {
+          "type": "date",
+          "p_null": 0.0030387509614229202,
+          "guess": "2026-12-24",
+          "confidence": 0.999658557723415,
+          "value": "2026-12-24"
+        },
+        "event_time": {
+          "type": "time",
+          "p_null": 0.9998201727867126,
+          "guess": "20:00:00",
+          "confidence": 0.45226253914350395,
+          "value": null
+        },
+        "amount": {
+          "type": "number",
+          "p_null": 2.4466778995702043e-05,
+          "guess": 80000,
+          "confidence": 0.999848381366462,
+          "value": 80000
+        },
+        "task": {
+          "type": "text",
+          "p_null": 0.00883175153285265,
+          "span": [
+            53,
+            65
+          ],
+          "guess": "케이크를 주문해야 한다",
+          "confidence": 0.7975313067436218,
+          "value": "케이크를 주문해야 한다"
+        },
+        "place": {
+          "type": "text",
+          "p_null": 0.996828019618988,
+          "span": [
+            34,
+            37
+          ],
+          "guess": "김하늘",
+          "confidence": 0.5125277042388916,
+          "value": null
+        }
+      },
+      "truncated": false,
+      "passes": 4,
+      "memo_id": "KO-08",
+      "lang": "ko"
+    },
+    {
+      "arm": "llm",
+      "latency_ms": 26133,
+      "client_latency_ms": 112468.1,
+      "probe_retries": 2,
+      "usage": {
+        "prompt_tokens": 164,
+        "completion_tokens": 1334,
+        "total_tokens": 1498,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "neurons": 49.4596
+      },
+      "raw_response": "```json\n{\n  \"person\": \"김하늘\",\n  \"event_date\": \"2026-12-24\",\n  \"event_time\": null,\n  \"amount\": 80000,\n  \"task\": \"케이크를 주문해야 한다\",\n  \"place\": null\n}\n```",
+      "memo_id": "KO-08",
+      "lang": "ko"
+    },
+    {
+      "arm": "llm-fast",
+      "latency_ms": 2853,
+      "client_latency_ms": 3241.6,
+      "probe_retries": 0,
+      "usage": {
+        "prompt_tokens": 164,
+        "completion_tokens": 55,
+        "total_tokens": 219,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "neurons": 3.6966973673552275
+      },
+      "raw_response": "{\n  \"person\": \"김하늘\",\n  \"event_date\": \"2026-12-24\",\n  \"event_time\": null,\n  \"amount\": 80000,\n  \"task\": \"케이크 주문\",\n  \"place\": null\n}",
+      "memo_id": "KO-08",
+      "lang": "ko"
+    },
+    {
+      "arm": "clairic",
+      "latency_ms": 313,
+      "client_latency_ms": 807.0,
+      "probe_retries": 0,
+      "usage": {
+        "state_tokens": 52,
+        "image_tokens": 0,
+        "schema_tokens": 592,
+        "input_tokens": 800,
+        "output_tokens": 0,
+        "passes": 4
+      },
+      "answers": {
+        "person": {
+          "type": "text",
+          "p_null": 0.036120057106018066,
+          "span": [
+            35,
+            38
+          ],
+          "guess": "이도현",
+          "confidence": 0.9743055701255798,
+          "value": "이도현"
+        },
+        "event_date": {
+          "type": "date",
+          "p_null": 0.9990912675857544,
+          "guess": "2026-10-29",
+          "confidence": 0.8197621083735415,
+          "value": null
+        },
+        "event_time": {
+          "type": "time",
+          "p_null": 4.433637877809815e-05,
+          "guess": "09:00:00",
+          "confidence": 0.9999103607458184,
+          "value": "09:00:00"
+        },
+        "amount": {
+          "type": "number",
+          "p_null": 0.999987006187439,
+          "guess": 100,
+          "confidence": 0.019951246983669683,
+          "value": null
+        },
+        "task": {
+          "type": "text",
+          "p_null": 0.02970869094133377,
+          "span": [
+            35,
+            48
+          ],
+          "guess": "이도현에게 전화해야 한다",
+          "confidence": 0.4086079001426697,
+          "value": "이도현에게 전화해야 한다"
+        },
+        "place": {
+          "type": "text",
+          "p_null": 0.9423395991325378,
+          "span": [
+            35,
+            38
+          ],
+          "guess": "이도현",
+          "confidence": 0.7224740982055664,
+          "value": null
+        }
+      },
+      "truncated": false,
+      "passes": 4,
+      "memo_id": "KO-09",
+      "lang": "ko"
+    },
+    {
+      "arm": "llm",
+      "latency_ms": 26081,
+      "client_latency_ms": 26496.5,
+      "probe_retries": 0,
+      "usage": {
+        "prompt_tokens": 168,
+        "completion_tokens": 1170,
+        "total_tokens": 1338,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "neurons": 43.512
+      },
+      "raw_response": "```json\n{\n  \"person\": \"이도현\",\n  \"event_date\": \"2026-10-29\",\n  \"event_time\": \"09:00\",\n  \"amount\": null,\n  \"task\": \"전화해야 한다\",\n  \"place\": null\n}\n```",
+      "memo_id": "KO-09",
+      "lang": "ko"
+    },
+    {
+      "arm": "llm-fast",
+      "latency_ms": 2729,
+      "client_latency_ms": 9860.3,
+      "probe_retries": 1,
+      "usage": {
+        "prompt_tokens": 163,
+        "completion_tokens": 55,
+        "total_tokens": 218,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "neurons": 3.682918961159885
+      },
+      "raw_response": "{\n  \"person\": \"이도현\",\n  \"event_date\": \"2026-11-01\",\n  \"event_time\": \"09:00\",\n  \"amount\": null,\n  \"task\": \"전화\",\n  \"place\": null\n}",
+      "memo_id": "KO-09",
+      "lang": "ko"
+    },
+    {
+      "arm": "clairic",
+      "latency_ms": 209,
+      "client_latency_ms": 755.0,
+      "probe_retries": 0,
+      "usage": {
+        "state_tokens": 58,
+        "image_tokens": 0,
+        "schema_tokens": 592,
+        "input_tokens": 824,
+        "output_tokens": 0,
+        "passes": 4
+      },
+      "answers": {
+        "person": {
+          "type": "text",
+          "p_null": 0.7801960706710815,
+          "span": [
+            33,
+            36
+          ],
+          "guess": "장미란",
+          "confidence": 0.9710332751274109,
+          "value": null
+        },
+        "event_date": {
+          "type": "date",
+          "p_null": 0.0003080095921177417,
+          "guess": "2026-10-29",
+          "confidence": 0.9962206742901388,
+          "value": "2026-10-29"
+        },
+        "event_time": {
+          "type": "time",
+          "p_null": 0.06082259863615036,
+          "guess": "20:00:00",
+          "confidence": 0.3284450093566732,
+          "value": "20:00:00"
+        },
+        "amount": {
+          "type": "number",
+          "p_null": 3.167198156006634e-05,
+          "guess": 90000,
+          "confidence": 0.9998383708262855,
+          "value": 90000
+        },
+        "task": {
+          "type": "text",
+          "p_null": 0.002066615503281355,
+          "span": [
+            33,
+            48
+          ],
+          "guess": "장미란과 요가 수업을 듣는다",
+          "confidence": 0.4594838321208954,
+          "value": "장미란과 요가 수업을 듣는다"
+        },
+        "place": {
+          "type": "text",
+          "p_null": 0.00078511395258829,
+          "span": [
+            72,
+            78
+          ],
+          "guess": "강남 요가원",
+          "confidence": 0.9994346499443054,
+          "value": "강남 요가원"
+        }
+      },
+      "truncated": false,
+      "passes": 4,
+      "memo_id": "KO-10",
+      "lang": "ko"
+    },
+    {
+      "arm": "llm",
+      "latency_ms": 20715,
+      "client_latency_ms": 21021.9,
+      "probe_retries": 0,
+      "usage": {
+        "prompt_tokens": 163,
+        "completion_tokens": 1453,
+        "total_tokens": 1616,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "neurons": 53.785700000000006
+      },
+      "raw_response": "```json\n{\n  \"person\": \"장미란\",\n  \"event_date\": \"2026-10-28\",\n  \"event_time\": null,\n  \"amount\": 90000,\n  \"task\": \"요가 수업을 듣는다\",\n  \"place\": \"강남 요가원\"\n}\n```",
+      "memo_id": "KO-10",
+      "lang": "ko"
+    },
+    {
+      "arm": "llm-fast",
+      "latency_ms": 3125,
+      "client_latency_ms": 3783.6,
+      "probe_retries": 0,
+      "usage": {
+        "prompt_tokens": 165,
+        "completion_tokens": 61,
+        "total_tokens": 226,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "neurons": 3.86724363733083
+      },
+      "raw_response": "{\n  \"person\": \"장미란\",\n  \"event_date\": \"2026-10-28\",\n  \"event_time\": null,\n  \"amount\": 90000,\n  \"task\": \"요가 수업\",\n  \"place\": \"강남 요가원\"\n}",
+      "memo_id": "KO-10",
+      "lang": "ko"
+    },
+    {
+      "arm": "clairic",
+      "latency_ms": 240,
+      "client_latency_ms": 4471.2,
+      "probe_retries": 1,
+      "usage": {
+        "state_tokens": 52,
+        "image_tokens": 0,
+        "schema_tokens": 592,
+        "input_tokens": 800,
+        "output_tokens": 0,
+        "passes": 4
+      },
+      "answers": {
+        "person": {
+          "type": "text",
+          "p_null": 0.007289995439350605,
+          "span": [
+            34,
+            37
+          ],
+          "guess": "송재호",
+          "confidence": 0.9998972415924072,
+          "value": "송재호"
+        },
+        "event_date": {
+          "type": "date",
+          "p_null": 2.4827051674947143e-05,
+          "guess": "2026-11-03",
+          "confidence": 0.9955548733988129,
+          "value": "2026-11-03"
+        },
+        "event_time": {
+          "type": "time",
+          "p_null": 3.647533276307513e-06,
+          "guess": "06:00:00",
+          "confidence": 0.9991184995262522,
+          "value": "06:00:00"
+        },
+        "amount": {
+          "type": "number",
+          "p_null": 0.9999879598617554,
+          "guess": 300,
+          "confidence": 0.0197438807112551,
+          "value": null
+        },
+        "task": {
+          "type": "text",
+          "p_null": 0.014957684092223644,
+          "span": [
+            68,
+            80
+          ],
+          "guess": "도시락을 준비해야 한다",
+          "confidence": 0.3127993643283844,
+          "value": "도시락을 준비해야 한다"
+        },
+        "place": {
+          "type": "text",
+          "p_null": 0.001285625621676445,
+          "span": [
+            54,
+            60
+          ],
+          "guess": "북한산 입구",
+          "confidence": 0.49644118547439575,
+          "value": "북한산 입구"
+        }
+      },
+      "truncated": false,
+      "passes": 4,
+      "memo_id": "KO-11",
+      "lang": "ko"
+    },
+    {
+      "arm": "llm",
+      "latency_ms": 18028,
+      "client_latency_ms": 18926.1,
+      "probe_retries": 0,
+      "usage": {
+        "prompt_tokens": 168,
+        "completion_tokens": 1397,
+        "total_tokens": 1565,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "neurons": 51.7748
+      },
+      "raw_response": "```json\n{\n  \"person\": \"송재호와\",\n  \"event_date\": \"2026-11-03\",\n  \"event_time\": \"06:00\",\n  \"amount\": null,\n  \"task\": \"도시락을 준비해야 한다\",\n  \"place\": \"북한산 입구\"\n}\n```",
+      "memo_id": "KO-11",
+      "lang": "ko"
+    },
+    {
+      "arm": "llm-fast",
+      "latency_ms": 3238,
+      "client_latency_ms": 3602.4,
+      "probe_retries": 0,
+      "usage": {
+        "prompt_tokens": 164,
+        "completion_tokens": 60,
+        "total_tokens": 224,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "neurons": 3.8273372538387775
+      },
+      "raw_response": "{\n  \"person\": \"송재호\",\n  \"event_date\": \"2026-11-03\",\n  \"event_time\": \"06:00\",\n  \"amount\": null,\n  \"task\": \"등산\",\n  \"place\": \"북한산 입구\"\n}",
+      "memo_id": "KO-11",
+      "lang": "ko"
+    },
+    {
+      "arm": "clairic",
+      "latency_ms": 199,
+      "client_latency_ms": 8073.2,
+      "probe_retries": 2,
+      "usage": {
+        "state_tokens": 48,
+        "image_tokens": 0,
+        "schema_tokens": 592,
+        "input_tokens": 784,
+        "output_tokens": 0,
+        "passes": 4
+      },
+      "answers": {
+        "person": {
+          "type": "text",
+          "p_null": 0.0005233981646597385,
+          "span": [
+            28,
+            31
+          ],
+          "guess": "박서연",
+          "confidence": 0.9748795032501221,
+          "value": "박서연"
+        },
+        "event_date": {
+          "type": "date",
+          "p_null": 0.5944151878356934,
+          "guess": "2026-10-28",
+          "confidence": 0.6077486278813579,
+          "value": null
+        },
+        "event_time": {
+          "type": "time",
+          "p_null": 0.9997147917747498,
+          "guess": "00:00:00",
+          "confidence": 0.6255662724170701,
+          "value": null
+        },
+        "amount": {
+          "type": "number",
+          "p_null": 1.735312798700761e-05,
+          "guess": 25000,
+          "confidence": 0.9999330075178571,
+          "value": 25000
+        },
+        "task": {
+          "type": "text",
+          "p_null": 0.18009208142757416,
+          "span": [
+            43,
+            47
+          ],
+          "guess": "빌려줬다",
+          "confidence": 0.357740193605423,
+          "value": "빌려줬다"
+        },
+        "place": {
+          "type": "text",
+          "p_null": 0.9997578263282776,
+          "span": [
+            18,
+            21
+          ],
+          "guess": "수요일",
+          "confidence": 0.5035619735717773,
+          "value": null
+        }
+      },
+      "truncated": false,
+      "passes": 4,
+      "memo_id": "KO-12",
+      "lang": "ko"
+    },
+    {
+      "arm": "llm",
+      "latency_ms": 18099,
+      "client_latency_ms": 18626.2,
+      "probe_retries": 0,
+      "usage": {
+        "prompt_tokens": 150,
+        "completion_tokens": 815,
+        "total_tokens": 965,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "neurons": 30.491
+      },
+      "raw_response": "```json\n{\n  \"person\": \"박서연\",\n  \"event_date\": \"2026-10-27\",\n  \"event_time\": null,\n  \"amount\": 25000,\n  \"task\": \"빌려줬다\",\n  \"place\": null\n}\n```",
+      "memo_id": "KO-12",
+      "lang": "ko"
+    },
+    {
+      "arm": "llm-fast",
+      "latency_ms": 2623,
+      "client_latency_ms": 3309.9,
+      "probe_retries": 0,
+      "usage": {
+        "prompt_tokens": 152,
+        "completion_tokens": 56,
+        "total_tokens": 208,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "neurons": 3.557484470307827
+      },
+      "raw_response": "{\n  \"person\": \"박서연\",\n  \"event_date\": \"2026-10-28\",\n  \"event_time\": null,\n  \"amount\": 25000,\n  \"task\": \"빌려주기\",\n  \"place\": null\n}",
+      "memo_id": "KO-12",
+      "lang": "ko"
+    },
+    {
+      "arm": "clairic",
+      "latency_ms": 174,
+      "client_latency_ms": 4180.5,
+      "probe_retries": 1,
+      "usage": {
+        "state_tokens": 68,
+        "image_tokens": 0,
+        "schema_tokens": 592,
+        "input_tokens": 864,
+        "output_tokens": 0,
+        "passes": 4
+      },
+      "answers": {
+        "person": {
+          "type": "text",
+          "p_null": 0.0118614062666893,
+          "span": [
+            40,
+            43
+          ],
+          "guess": "최민준",
+          "confidence": 0.9984825253486633,
+          "value": "최민준"
+        },
+        "event_date": {
+          "type": "date",
+          "p_null": 7.868014108680654e-06,
+          "guess": "2026-11-10",
+          "confidence": 0.9999772314727133,
+          "value": "2026-11-10"
+        },
+        "event_time": {
+          "type": "time",
+          "p_null": 1.277005367228412e-06,
+          "guess": "16:00:00",
+          "confidence": 0.9996414035402142,
+          "value": "16:00:00"
+        },
+        "amount": {
+          "type": "number",
+          "p_null": 6.802624284318881e-06,
+          "guess": 500000,
+          "confidence": 0.9999529140169352,
+          "value": 500000
+        },
+        "task": {
+          "type": "text",
+          "p_null": 0.02629510685801506,
+          "span": [
+            45,
+            57
+          ],
+          "guess": "부동산 중개인을 만난다",
+          "confidence": 0.7416696548461914,
+          "value": "부동산 중개인을 만난다"
+        },
+        "place": {
+          "type": "text",
+          "p_null": 0.005608733277767897,
+          "span": [
+            80,
+            91
+          ],
+          "guess": "대치동 부동산 사무실",
+          "confidence": 0.9388819336891174,
+          "value": "대치동 부동산 사무실"
+        }
+      },
+      "truncated": false,
+      "passes": 4,
+      "memo_id": "KO-13",
+      "lang": "ko"
+    },
+    {
+      "arm": "llm",
+      "latency_ms": 14808,
+      "client_latency_ms": 15225.5,
+      "probe_retries": 0,
+      "usage": {
+        "prompt_tokens": 172,
+        "completion_tokens": 1263,
+        "total_tokens": 1435,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "neurons": 46.919200000000004
+      },
+      "raw_response": "```json\n{\n  \"person\": \"최민준\",\n  \"event_date\": \"2026-11-10\",\n  \"event_time\": \"16:00\",\n  \"amount\": 500000,\n  \"task\": \"부동산 중개인\",\n  \"place\": \"대치동 부동산 사무실\"\n}\n```",
+      "memo_id": "KO-13",
+      "lang": "ko"
+    },
+    {
+      "arm": "llm-fast",
+      "latency_ms": 3744,
+      "client_latency_ms": 4144.7,
+      "probe_retries": 0,
+      "usage": {
+        "prompt_tokens": 174,
+        "completion_tokens": 72,
+        "total_tokens": 246,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "neurons": 4.278657043352723
+      },
+      "raw_response": "{\n  \"person\": \"최민준\",\n  \"event_date\": \"2026-11-10\",\n  \"event_time\": \"16:00\",\n  \"amount\": 500000,\n  \"task\": \"부동산 중개인과 만남\",\n  \"place\": \"대치동 부동산 사무실\"\n}",
+      "memo_id": "KO-13",
+      "lang": "ko"
+    },
+    {
+      "arm": "clairic",
+      "latency_ms": 211,
+      "client_latency_ms": 733.0,
+      "probe_retries": 0,
+      "usage": {
+        "state_tokens": 47,
+        "image_tokens": 0,
+        "schema_tokens": 592,
+        "input_tokens": 780,
+        "output_tokens": 0,
+        "passes": 4
+      },
+      "answers": {
+        "person": {
+          "type": "text",
+          "p_null": 0.0029101145919412374,
+          "span": [
+            28,
+            31
+          ],
+          "guess": "김도윤",
+          "confidence": 0.9974422454833984,
+          "value": "김도윤"
+        },
+        "event_date": {
+          "type": "date",
+          "p_null": 0.005634744185954332,
+          "guess": "2026-10-29",
+          "confidence": 0.999486470831104,
+          "value": "2026-10-29"
+        },
+        "event_time": {
+          "type": "time",
+          "p_null": 0.9969960451126099,
+          "guess": "12:00:00",
+          "confidence": 0.7672267589245969,
+          "value": null
+        },
+        "amount": {
+          "type": "number",
+          "p_null": 0.9999887943267822,
+          "guess": 100,
+          "confidence": 0.05641474667611919,
+          "value": null
+        },
+        "task": {
+          "type": "text",
+          "p_null": 0.0432761013507843,
+          "span": [
+            33,
+            40
+          ],
+          "guess": "점심을 먹는다",
+          "confidence": 0.6731389164924622,
+          "value": "점심을 먹는다"
+        },
+        "place": {
+          "type": "text",
+          "p_null": 0.5688945055007935,
+          "span": [
+            65,
+            72
+          ],
+          "guess": "회사 앞 식당",
+          "confidence": 0.6187769174575806,
+          "value": null
+        }
+      },
+      "truncated": false,
+      "passes": 4,
+      "memo_id": "KO-14",
+      "lang": "ko"
+    },
+    {
+      "arm": "llm",
+      "latency_ms": 22804,
+      "client_latency_ms": 23380.4,
+      "probe_retries": 0,
+      "usage": {
+        "prompt_tokens": 162,
+        "completion_tokens": 952,
+        "total_tokens": 1114,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "neurons": 35.5438
+      },
+      "raw_response": "```json\n{\n  \"person\": \"김도윤\",\n  \"event_date\": \"2026-10-29\",\n  \"event_time\": null,\n  \"amount\": null,\n  \"task\": \"점심을 먹는다\",\n  \"place\": \"회사 앞 식당\"\n}\n```",
+      "memo_id": "KO-14",
+      "lang": "ko"
+    },
+    {
+      "arm": "llm-fast",
+      "latency_ms": 3603,
+      "client_latency_ms": 3836.5,
+      "probe_retries": 0,
+      "usage": {
+        "prompt_tokens": 158,
+        "completion_tokens": 56,
+        "total_tokens": 214,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "neurons": 3.6401549074798822
+      },
+      "raw_response": "{\n  \"person\": \"김도윤\",\n  \"event_date\": \"2026-10-28\",\n  \"event_time\": null,\n  \"amount\": null,\n  \"task\": \"점심\",\n  \"place\": \"회사 앞 식당\"\n}",
+      "memo_id": "KO-14",
+      "lang": "ko"
+    },
+    {
+      "arm": "clairic",
+      "latency_ms": 339,
+      "client_latency_ms": 739.7,
+      "probe_retries": 0,
+      "usage": {
+        "state_tokens": 58,
+        "image_tokens": 0,
+        "schema_tokens": 592,
+        "input_tokens": 824,
+        "output_tokens": 0,
+        "passes": 4
+      },
+      "answers": {
+        "person": {
+          "type": "text",
+          "p_null": 0.054312266409397125,
+          "span": [
+            37,
+            40
+          ],
+          "guess": "윤서아",
+          "confidence": 0.9716800451278687,
+          "value": "윤서아"
+        },
+        "event_date": {
+          "type": "date",
+          "p_null": 2.0172739823465236e-05,
+          "guess": "2026-10-30",
+          "confidence": 0.998462115478032,
+          "value": "2026-10-30"
+        },
+        "event_time": {
+          "type": "time",
+          "p_null": 1.718181920296047e-05,
+          "guess": "11:00:00",
+          "confidence": 0.9939005111369698,
+          "value": "11:00:00"
+        },
+        "amount": {
+          "type": "number",
+          "p_null": 5.376996796258027e-06,
+          "guess": 3500,
+          "confidence": 0.9995760207663531,
+          "value": 3500
+        },
+        "task": {
+          "type": "text",
+          "p_null": 0.006693475414067507,
+          "span": [
+            54,
+            67
+          ],
+          "guess": "빌린 책을 반납해야 한다",
+          "confidence": 0.4839126765727997,
+          "value": "빌린 책을 반납해야 한다"
+        },
+        "place": {
+          "type": "text",
+          "p_null": 0.937576949596405,
+          "span": [
+            42,
+            45
+          ],
+          "guess": "도서관",
+          "confidence": 0.9930103421211243,
+          "value": null
+        }
+      },
+      "truncated": false,
+      "passes": 4,
+      "memo_id": "KO-15",
+      "lang": "ko"
+    },
+    {
+      "arm": "llm",
+      "latency_ms": 43716,
+      "client_latency_ms": 44099.1,
+      "probe_retries": 0,
+      "usage": {
+        "prompt_tokens": 166,
+        "completion_tokens": 2000,
+        "total_tokens": 2166,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "neurons": 73.713
+      },
+      "raw_response": "",
+      "memo_id": "KO-15",
+      "lang": "ko"
+    },
+    {
+      "arm": "llm-fast",
+      "latency_ms": 3278,
+      "client_latency_ms": 3722.5,
+      "probe_retries": 0,
+      "usage": {
+        "prompt_tokens": 165,
+        "completion_tokens": 61,
+        "total_tokens": 226,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "neurons": 3.86724363733083
+      },
+      "raw_response": "{\n  \"person\": \"윤서아\",\n  \"event_date\": \"2026-10-28\",\n  \"event_time\": \"11:00\",\n  \"amount\": 3500,\n  \"task\": \"책 반납\",\n  \"place\": \"도서관\"\n}",
+      "memo_id": "KO-15",
+      "lang": "ko"
+    },
+    {
+      "arm": "clairic",
+      "latency_ms": 290,
+      "client_latency_ms": 475.9,
+      "probe_retries": 0,
+      "usage": {
+        "state_tokens": 41,
+        "image_tokens": 0,
+        "schema_tokens": 592,
+        "input_tokens": 756,
+        "output_tokens": 0,
+        "passes": 4
+      },
+      "answers": {
+        "person": {
+          "type": "text",
+          "p_null": 4.119821096537635e-05,
+          "span": [
+            61,
+            69
+          ],
+          "guess": "Alex Kim",
+          "confidence": 0.9999998807907104,
+          "value": "Alex Kim"
+        },
+        "event_date": {
+          "type": "date",
+          "p_null": 1.0838591606443515e-06,
+          "guess": "2026-10-29",
+          "confidence": 0.9999915362057049,
+          "value": "2026-10-29"
+        },
+        "event_time": {
+          "type": "time",
+          "p_null": 1.96108680938778e-06,
+          "guess": "15:00:00",
+          "confidence": 0.9998750824082223,
+          "value": "15:00:00"
+        },
+        "amount": {
+          "type": "number",
+          "p_null": 0.9999986886978149,
+          "guess": 300,
+          "confidence": 0.1100114134146183,
+          "value": null
+        },
+        "task": {
+          "type": "text",
+          "p_null": 0.002149521838873625,
+          "span": [
+            107,
+            132
+          ],
+          "guess": "finish the meeting slides",
+          "confidence": 0.959464967250824,
+          "value": "finish the meeting slides"
+        },
+        "place": {
+          "type": "text",
+          "p_null": 0.015795571729540825,
+          "span": [
+            73,
+            95
+          ],
+          "guess": "the Gangnam study cafe",
+          "confidence": 0.9712451100349426,
+          "value": "the Gangnam study cafe"
+        }
+      },
+      "truncated": false,
+      "passes": 4,
+      "memo_id": "EN-01",
+      "lang": "en"
+    },
+    {
+      "arm": "llm",
+      "latency_ms": 13397,
+      "client_latency_ms": 13642.0,
+      "probe_retries": 0,
+      "usage": {
+        "prompt_tokens": 137,
+        "completion_tokens": 800,
+        "total_tokens": 937,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "neurons": 29.8735
+      },
+      "raw_response": "```json\n{\n  \"person\": \"Alex Kim\",\n  \"event_date\": \"2026-10-29\",\n  \"event_time\": \"15:00\",\n  \"amount\": null,\n  \"task\": \"finish the meeting slides\",\n  \"place\": \"Gangnam study cafe\"\n}\n```",
+      "memo_id": "EN-01",
+      "lang": "en"
+    },
+    {
+      "arm": "llm-fast",
+      "latency_ms": 3136,
+      "client_latency_ms": 3497.4,
+      "probe_retries": 0,
+      "usage": {
+        "prompt_tokens": 147,
+        "completion_tokens": 61,
+        "total_tokens": 208,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "neurons": 3.6192323258146644
+      },
+      "raw_response": "{\n  \"person\": \"Alex Kim\",\n  \"event_date\": \"2026-10-29\",\n  \"event_time\": \"15:00\",\n  \"amount\": null,\n  \"task\": \"finish the meeting slides\",\n  \"place\": \"Gangnam study cafe\"\n}",
+      "memo_id": "EN-01",
+      "lang": "en"
+    },
+    {
+      "arm": "clairic",
+      "latency_ms": 198,
+      "client_latency_ms": 769.4,
+      "probe_retries": 0,
+      "usage": {
+        "state_tokens": 40,
+        "image_tokens": 0,
+        "schema_tokens": 592,
+        "input_tokens": 752,
+        "output_tokens": 0,
+        "passes": 4
+      },
+      "answers": {
+        "person": {
+          "type": "text",
+          "p_null": 9.552698611514643e-05,
+          "span": [
+            74,
+            83
+          ],
+          "guess": "Sarah Lee",
+          "confidence": 0.9999991655349731,
+          "value": "Sarah Lee"
+        },
+        "event_date": {
+          "type": "date",
+          "p_null": 1.6793785107438453e-05,
+          "guess": "2026-10-30",
+          "confidence": 0.9994003379936164,
+          "value": "2026-10-30"
+        },
+        "event_time": {
+          "type": "time",
+          "p_null": 1.8921526816484402e-06,
+          "guess": "19:00:00",
+          "confidence": 0.9995333900449446,
+          "value": "19:00:00"
+        },
+        "amount": {
+          "type": "number",
+          "p_null": 0.9999910593032837,
+          "guess": 0,
+          "confidence": 0.8795770407551717,
+          "value": null
+        },
+        "task": {
+          "type": "text",
+          "p_null": 0.0393846333026886,
+          "span": [
+            62,
+            108
+          ],
+          "guess": "dinner with Sarah Lee at an Italian restaurant",
+          "confidence": 0.3578203618526459,
+          "value": "dinner with Sarah Lee at an Italian restaurant"
+        },
+        "place": {
+          "type": "text",
+          "p_null": 0.00043763843132182956,
+          "span": [
+            112,
+            119
+          ],
+          "guess": "Hongdae",
+          "confidence": 0.9994276165962219,
+          "value": "Hongdae"
+        }
+      },
+      "truncated": false,
+      "passes": 4,
+      "memo_id": "EN-02",
+      "lang": "en"
+    },
+    {
+      "arm": "llm",
+      "latency_ms": 11805,
+      "client_latency_ms": 12297.7,
+      "probe_retries": 0,
+      "usage": {
+        "prompt_tokens": 136,
+        "completion_tokens": 779,
+        "total_tokens": 915,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "neurons": 29.103600000000004
+      },
+      "raw_response": "```json\n{\n  \"person\": \"Sarah Lee\",\n  \"event_date\": \"2026-10-30\",\n  \"event_time\": \"19:00\",\n  \"amount\": null,\n  \"task\": \"I have dinner\",\n  \"place\": \"Italian restaurant in Hongdae\"\n}\n```",
+      "memo_id": "EN-02",
+      "lang": "en"
+    },
+    {
+      "arm": "llm-fast",
+      "latency_ms": 2869,
+      "client_latency_ms": 3464.1,
+      "probe_retries": 0,
+      "usage": {
+        "prompt_tokens": 146,
+        "completion_tokens": 57,
+        "total_tokens": 203,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "neurons": 3.5009420104324818
+      },
+      "raw_response": "{\n  \"person\": \"Sarah Lee\",\n  \"event_date\": \"2026-10-29\",\n  \"event_time\": \"19:00\",\n  \"amount\": null,\n  \"task\": null,\n  \"place\": \"Italian restaurant in Hongdae\"\n}",
+      "memo_id": "EN-02",
+      "lang": "en"
+    },
+    {
+      "arm": "clairic",
+      "latency_ms": 209,
+      "client_latency_ms": 4521.6,
+      "probe_retries": 1,
+      "usage": {
+        "state_tokens": 35,
+        "image_tokens": 0,
+        "schema_tokens": 592,
+        "input_tokens": 732,
+        "output_tokens": 0,
+        "passes": 4
+      },
+      "answers": {
+        "person": {
+          "type": "text",
+          "p_null": 7.822686893632635e-05,
+          "span": [
+            53,
+            63
+          ],
+          "guess": "David Park",
+          "confidence": 0.9999996423721313,
+          "value": "David Park"
+        },
+        "event_date": {
+          "type": "date",
+          "p_null": 0.9912579655647278,
+          "guess": "2026-11-04",
+          "confidence": 0.9137219768631416,
+          "value": null
+        },
+        "event_time": {
+          "type": "time",
+          "p_null": 0.9999656677246094,
+          "guess": "00:00:00",
+          "confidence": 0.7015399813906703,
+          "value": null
+        },
+        "amount": {
+          "type": "number",
+          "p_null": 1.05804911498808e-08,
+          "guess": 120,
+          "confidence": 0.9999990463265931,
+          "value": 120
+        },
+        "task": {
+          "type": "text",
+          "p_null": 0.6937921643257141,
+          "span": [
+            40,
+            63
+          ],
+          "guess": "lent $120 to David Park",
+          "confidence": 0.18890132009983063,
+          "value": null
+        },
+        "place": {
+          "type": "text",
+          "p_null": 0.9999710321426392,
+          "span": [
+            53,
+            63
+          ],
+          "guess": "David Park",
+          "confidence": 0.636321485042572,
+          "value": null
+        }
+      },
+      "truncated": false,
+      "passes": 4,
+      "memo_id": "EN-03",
+      "lang": "en"
+    },
+    {
+      "arm": "llm",
+      "latency_ms": 11082,
+      "client_latency_ms": 11483.8,
+      "probe_retries": 0,
+      "usage": {
+        "prompt_tokens": 129,
+        "completion_tokens": 672,
+        "total_tokens": 801,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "neurons": 25.1703
+      },
+      "raw_response": "{\n  \"person\": \"David Park\",\n  \"event_date\": \"2026-10-27\",\n  \"event_time\": null,\n  \"amount\": 120,\n  \"task\": \"lent\",\n  \"place\": null\n}",
+      "memo_id": "EN-03",
+      "lang": "en"
+    },
+    {
+      "arm": "llm-fast",
+      "latency_ms": 2422,
+      "client_latency_ms": 2851.3,
+      "probe_retries": 0,
+      "usage": {
+        "prompt_tokens": 139,
+        "completion_tokens": 52,
+        "total_tokens": 191,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "neurons": 3.273853280581534
+      },
+      "raw_response": "{\n  \"person\": \"David Park\",\n  \"event_date\": \"2026-10-27\",\n  \"event_time\": null,\n  \"amount\": 120,\n  \"task\": \"pay back\",\n  \"place\": null\n}",
+      "memo_id": "EN-03",
+      "lang": "en"
+    },
+    {
+      "arm": "clairic",
+      "latency_ms": 253,
+      "client_latency_ms": 588.9,
+      "probe_retries": 0,
+      "usage": {
+        "state_tokens": 42,
+        "image_tokens": 0,
+        "schema_tokens": 592,
+        "input_tokens": 760,
+        "output_tokens": 0,
+        "passes": 4
+      },
+      "answers": {
+        "person": {
+          "type": "text",
+          "p_null": 2.8100334020564333e-05,
+          "span": [
+            75,
+            84
+          ],
+          "guess": "Emma Choi",
+          "confidence": 0.9999996423721313,
+          "value": "Emma Choi"
+        },
+        "event_date": {
+          "type": "date",
+          "p_null": 1.5118807823455427e-05,
+          "guess": "2026-11-02",
+          "confidence": 0.6326596869032722,
+          "value": "2026-11-02"
+        },
+        "event_time": {
+          "type": "time",
+          "p_null": 6.623530168781144e-08,
+          "guess": "08:00:00",
+          "confidence": 0.9999693641000144,
+          "value": "08:00:00"
+        },
+        "amount": {
+          "type": "number",
+          "p_null": 0.9999988079071045,
+          "guess": 300,
+          "confidence": 0.027264875808558024,
+          "value": null
+        },
+        "task": {
+          "type": "text",
+          "p_null": 0.006379216909408569,
+          "span": [
+            114,
+            131
+          ],
+          "guess": "buy new shoelaces",
+          "confidence": 0.9580603837966919,
+          "value": "buy new shoelaces"
+        },
+        "place": {
+          "type": "text",
+          "p_null": 3.629760612966493e-05,
+          "span": [
+            88,
+            102
+          ],
+          "guess": "Han River Park",
+          "confidence": 0.9999853372573853,
+          "value": "Han River Park"
+        }
+      },
+      "truncated": false,
+      "passes": 4,
+      "memo_id": "EN-04",
+      "lang": "en"
+    },
+    {
+      "arm": "llm",
+      "latency_ms": 14832,
+      "client_latency_ms": 59128.4,
+      "probe_retries": 1,
+      "usage": {
+        "prompt_tokens": 138,
+        "completion_tokens": 814,
+        "total_tokens": 952,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "neurons": 30.3886
+      },
+      "raw_response": "```json\n{\n  \"person\": \"Emma Choi\",\n  \"event_date\": \"2026-11-02\",\n  \"event_time\": \"08:00\",\n  \"amount\": null,\n  \"task\": \"go jogging\",\n  \"place\": \"Han River Park\"\n}\n```",
+      "memo_id": "EN-04",
+      "lang": "en"
+    },
+    {
+      "arm": "llm-fast",
+      "latency_ms": 2789,
+      "client_latency_ms": 3157.4,
+      "probe_retries": 0,
+      "usage": {
+        "prompt_tokens": 148,
+        "completion_tokens": 51,
+        "total_tokens": 199,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "neurons": 3.3717309590429068
+      },
+      "raw_response": "{\n  \"person\": \"Emma Choi\",\n  \"event_date\": \"2026-11-01\",\n  \"event_time\": \"08:00\",\n  \"amount\": null,\n  \"task\": \"buy new shoelaces\"\n}",
+      "memo_id": "EN-04",
+      "lang": "en"
+    },
+    {
+      "arm": "clairic",
+      "latency_ms": 270,
+      "client_latency_ms": 662.6,
+      "probe_retries": 0,
+      "usage": {
+        "state_tokens": 49,
+        "image_tokens": 0,
+        "schema_tokens": 592,
+        "input_tokens": 788,
+        "output_tokens": 0,
+        "passes": 4
+      },
+      "answers": {
+        "person": {
+          "type": "text",
+          "p_null": 1.661928035900928e-05,
+          "span": [
+            88,
+            100
+          ],
+          "guess": "Michael Jung",
+          "confidence": 0.9999995231628418,
+          "value": "Michael Jung"
+        },
+        "event_date": {
+          "type": "date",
+          "p_null": 8.584427632740699e-06,
+          "guess": "2026-11-05",
+          "confidence": 0.9999990463265931,
+          "value": "2026-11-05"
+        },
+        "event_time": {
+          "type": "time",
+          "p_null": 0.9999170303344727,
+          "guess": "00:00:00",
+          "confidence": 0.6912366246573507,
+          "value": null
+        },
+        "amount": {
+          "type": "number",
+          "p_null": 3.106886126147401e-08,
+          "guess": 150,
+          "confidence": 0.9999998807907247,
+          "value": 150
+        },
+        "task": {
+          "type": "text",
+          "p_null": 0.005968195851892233,
+          "span": [
+            64,
+            100
+          ],
+          "guess": "send a birthday gift to Michael Jung",
+          "confidence": 0.911475419998169,
+          "value": "send a birthday gift to Michael Jung"
+        },
+        "place": {
+          "type": "text",
+          "p_null": 0.9927660226821899,
+          "span": [
+            144,
+            164
+          ],
+          "guess": "the department store",
+          "confidence": 0.8965795636177063,
+          "value": null
+        }
+      },
+      "truncated": false,
+      "passes": 4,
+      "memo_id": "EN-05",
+      "lang": "en"
+    },
+    {
+      "arm": "llm",
+      "latency_ms": 10611,
+      "client_latency_ms": 10895.6,
+      "probe_retries": 0,
+      "usage": {
+        "prompt_tokens": 143,
+        "completion_tokens": 721,
+        "total_tokens": 864,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "neurons": 27.030900000000003
+      },
+      "raw_response": "```json\n{\n  \"person\": \"Michael Jung\",\n  \"event_date\": \"2026-11-05\",\n  \"event_time\": null,\n  \"amount\": 150,\n  \"task\": \"send a birthday gift\",\n  \"place\": \"department store\"\n}\n```",
+      "memo_id": "EN-05",
+      "lang": "en"
+    },
+    {
+      "arm": "llm-fast",
+      "latency_ms": 2912,
+      "client_latency_ms": 9657.6,
+      "probe_retries": 1,
+      "usage": {
+        "prompt_tokens": 153,
+        "completion_tokens": 56,
+        "total_tokens": 209,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "neurons": 3.5712628765031695
+      },
+      "raw_response": "{\n  \"person\": \"Michael Jung\",\n  \"event_date\": \"2026-11-05\",\n  \"event_time\": null,\n  \"amount\": 150,\n  \"task\": \"send a birthday gift\",\n  \"place\": \"department store\"\n}",
+      "memo_id": "EN-05",
+      "lang": "en"
+    },
+    {
+      "arm": "clairic",
+      "latency_ms": 153,
+      "client_latency_ms": 543.9,
+      "probe_retries": 0,
+      "usage": {
+        "state_tokens": 39,
+        "image_tokens": 0,
+        "schema_tokens": 592,
+        "input_tokens": 748,
+        "output_tokens": 0,
+        "passes": 4
+      },
+      "answers": {
+        "person": {
+          "type": "text",
+          "p_null": 0.0011106985621154308,
+          "span": [
+            59,
+            69
+          ],
+          "guess": "Olivia Han",
+          "confidence": 0.999889612197876,
+          "value": "Olivia Han"
+        },
+        "event_date": {
+          "type": "date",
+          "p_null": 0.219666987657547,
+          "guess": "2026-10-28",
+          "confidence": 0.9996356940161465,
+          "value": "2026-10-28"
+        },
+        "event_time": {
+          "type": "time",
+          "p_null": 0.29592204093933105,
+          "guess": "12:00:00",
+          "confidence": 0.8619664273914356,
+          "value": "12:00:00"
+        },
+        "amount": {
+          "type": "number",
+          "p_null": 6.405129937547827e-08,
+          "guess": 18,
+          "confidence": 0.9999978542363408,
+          "value": 18
+        },
+        "task": {
+          "type": "text",
+          "p_null": 0.9989449381828308,
+          "span": [
+            38,
+            52
+          ],
+          "guess": "Today at lunch",
+          "confidence": 0.2276603728532791,
+          "value": null
+        },
+        "place": {
+          "type": "text",
+          "p_null": 0.9683308005332947,
+          "span": [
+            73,
+            81
+          ],
+          "guess": "the cafe",
+          "confidence": 0.6377334594726562,
+          "value": null
+        }
+      },
+      "truncated": false,
+      "passes": 4,
+      "memo_id": "EN-06",
+      "lang": "en"
+    },
+    {
+      "arm": "llm",
+      "latency_ms": 15129,
+      "client_latency_ms": 15901.6,
+      "probe_retries": 0,
+      "usage": {
+        "prompt_tokens": 134,
+        "completion_tokens": 676,
+        "total_tokens": 810,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "neurons": 25.3434
+      },
+      "raw_response": "```json\n{\n  \"person\": \"Olivia Han\",\n  \"event_date\": \"2026-10-28\",\n  \"event_time\": null,\n  \"amount\": 18,\n  \"task\": \"Lunch\",\n  \"place\": \"cafe near the office\"\n}\n```",
+      "memo_id": "EN-06",
+      "lang": "en"
+    },
+    {
+      "arm": "llm-fast",
+      "latency_ms": 3143,
+      "client_latency_ms": 3608.9,
+      "probe_retries": 0,
+      "usage": {
+        "prompt_tokens": 144,
+        "completion_tokens": 61,
+        "total_tokens": 205,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "neurons": 3.5778971072286367
+      },
+      "raw_response": "{\n  \"person\": \"Olivia Han\",\n  \"event_date\": \"2026-10-28\",\n  \"event_time\": \"12:00\",\n  \"amount\": 18,\n  \"task\": \"lunch\",\n  \"place\": \"cafe near the office\"\n}",
+      "memo_id": "EN-06",
+      "lang": "en"
+    },
+    {
+      "arm": "clairic",
+      "latency_ms": 209,
+      "client_latency_ms": 626.2,
+      "probe_retries": 0,
+      "usage": {
+        "state_tokens": 48,
+        "image_tokens": 0,
+        "schema_tokens": 592,
+        "input_tokens": 784,
+        "output_tokens": 0,
+        "passes": 4
+      },
+      "answers": {
+        "person": {
+          "type": "text",
+          "p_null": 6.499592564068735e-05,
+          "span": [
+            87,
+            96
+          ],
+          "guess": "James Woo",
+          "confidence": 0.9999041557312012,
+          "value": "James Woo"
+        },
+        "event_date": {
+          "type": "date",
+          "p_null": 0.0005481541738845408,
+          "guess": "2026-10-31",
+          "confidence": 0.616101645608337,
+          "value": "2026-10-31"
+        },
+        "event_time": {
+          "type": "time",
+          "p_null": 9.632309883045309e-08,
+          "guess": "14:15:00",
+          "confidence": 0.999962927282107,
+          "value": "14:15:00"
+        },
+        "amount": {
+          "type": "number",
+          "p_null": 9.909093279247827e-08,
+          "guess": 45,
+          "confidence": 0.999995470065933,
+          "value": 45
+        },
+        "task": {
+          "type": "text",
+          "p_null": 0.04457363858819008,
+          "span": [
+            62,
+            96
+          ],
+          "guess": "watch a soccer game with James Woo",
+          "confidence": 0.49794578552246094,
+          "value": "watch a soccer game with James Woo"
+        },
+        "place": {
+          "type": "text",
+          "p_null": 1.0165634193981532e-05,
+          "span": [
+            131,
+            154
+          ],
+          "guess": "Seoul World Cup Stadium",
+          "confidence": 0.9999912977218628,
+          "value": "Seoul World Cup Stadium"
+        }
+      },
+      "truncated": false,
+      "passes": 4,
+      "memo_id": "EN-07",
+      "lang": "en"
+    },
+    {
+      "arm": "llm",
+      "latency_ms": 12388,
+      "client_latency_ms": 12761.3,
+      "probe_retries": 0,
+      "usage": {
+        "prompt_tokens": 142,
+        "completion_tokens": 866,
+        "total_tokens": 1008,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "neurons": 32.3034
+      },
+      "raw_response": "```json\n{\n  \"person\": \"James Woo\",\n  \"event_date\": \"2026-10-31\",\n  \"event_time\": \"14:15\",\n  \"amount\": 45,\n  \"task\": \"watch a soccer game\",\n  \"place\": \"Seoul World Cup Stadium\"\n}\n```",
+      "memo_id": "EN-07",
+      "lang": "en"
+    },
+    {
+      "arm": "llm-fast",
+      "latency_ms": 3763,
+      "client_latency_ms": 4251.6,
+      "probe_retries": 0,
+      "usage": {
+        "prompt_tokens": 152,
+        "completion_tokens": 62,
+        "total_tokens": 214,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "neurons": 3.714252334088087
+      },
+      "raw_response": "{\n  \"person\": \"James Woo\",\n  \"event_date\": \"2026-10-30\",\n  \"event_time\": \"14:15\",\n  \"amount\": 45,\n  \"task\": \"watch a soccer game\",\n  \"place\": \"Seoul World Cup Stadium\"\n}",
+      "memo_id": "EN-07",
+      "lang": "en"
+    },
+    {
+      "arm": "clairic",
+      "latency_ms": 227,
+      "client_latency_ms": 546.9,
+      "probe_retries": 0,
+      "usage": {
+        "state_tokens": 46,
+        "image_tokens": 0,
+        "schema_tokens": 592,
+        "input_tokens": 776,
+        "output_tokens": 0,
+        "passes": 4
+      },
+      "answers": {
+        "person": {
+          "type": "text",
+          "p_null": 0.00010320165893062949,
+          "span": [
+            85,
+            95
+          ],
+          "guess": "Grace Shin",
+          "confidence": 0.9999345541000366,
+          "value": "Grace Shin"
+        },
+        "event_date": {
+          "type": "date",
+          "p_null": 0.00037876644637435675,
+          "guess": "2026-12-24",
+          "confidence": 0.9999955892696519,
+          "value": "2026-12-24"
+        },
+        "event_time": {
+          "type": "time",
+          "p_null": 0.9999905824661255,
+          "guess": "20:00:00",
+          "confidence": 0.5868420878829362,
+          "value": null
+        },
+        "amount": {
+          "type": "number",
+          "p_null": 1.2341637933843685e-08,
+          "guess": 100,
+          "confidence": 0.9999982118638471,
+          "value": 100
+        },
+        "task": {
+          "type": "text",
+          "p_null": 0.016650456935167313,
+          "span": [
+            107,
+            119
+          ],
+          "guess": "order a cake",
+          "confidence": 0.9481859803199768,
+          "value": "order a cake"
+        },
+        "place": {
+          "type": "text",
+          "p_null": 0.9999728202819824,
+          "span": [
+            85,
+            90
+          ],
+          "guess": "Grace",
+          "confidence": 0.4287336766719818,
+          "value": null
+        }
+      },
+      "truncated": false,
+      "passes": 4,
+      "memo_id": "EN-08",
+      "lang": "en"
+    },
+    {
+      "arm": "llm",
+      "latency_ms": 16024,
+      "client_latency_ms": 16356.9,
+      "probe_retries": 0,
+      "usage": {
+        "prompt_tokens": 139,
+        "completion_tokens": 895,
+        "total_tokens": 1034,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "neurons": 33.3425
+      },
+      "raw_response": "```json\n{\n  \"person\": \"Grace Shin\",\n  \"event_date\": \"2026-12-24\",\n  \"event_time\": null,\n  \"amount\": 100,\n  \"task\": \"order a cake\",\n  \"place\": null\n}\n```",
+      "memo_id": "EN-08",
+      "lang": "en"
+    },
+    {
+      "arm": "llm-fast",
+      "latency_ms": 2093,
+      "client_latency_ms": 2420.9,
+      "probe_retries": 0,
+      "usage": {
+        "prompt_tokens": 149,
+        "completion_tokens": 47,
+        "total_tokens": 196,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "neurons": 3.2809974560514092
+      },
+      "raw_response": "{\n  \"person\": \"Grace Shin\",\n  \"event_date\": \"2026-12-24\",\n  \"event_time\": null,\n  \"amount\": 100,\n  \"task\": \"order a cake\"\n}",
+      "memo_id": "EN-08",
+      "lang": "en"
+    },
+    {
+      "arm": "clairic",
+      "latency_ms": 268,
+      "client_latency_ms": 543.9,
+      "probe_retries": 0,
+      "usage": {
+        "state_tokens": 42,
+        "image_tokens": 0,
+        "schema_tokens": 592,
+        "input_tokens": 760,
+        "output_tokens": 0,
+        "passes": 4
+      },
+      "answers": {
+        "person": {
+          "type": "text",
+          "p_null": 6.178490730235353e-05,
+          "span": [
+            69,
+            80
+          ],
+          "guess": "Daniel Moon",
+          "confidence": 0.9999998807907104,
+          "value": "Daniel Moon"
+        },
+        "event_date": {
+          "type": "date",
+          "p_null": 0.556398332118988,
+          "guess": "2026-10-29",
+          "confidence": 0.9281194397686564,
+          "value": null
+        },
+        "event_time": {
+          "type": "time",
+          "p_null": 3.4277920235581405e-07,
+          "guess": "09:00:00",
+          "confidence": 0.9999927282791032,
+          "value": "09:00:00"
+        },
+        "amount": {
+          "type": "number",
+          "p_null": 0.9999982118606567,
+          "guess": 300,
+          "confidence": 0.05051559105363716,
+          "value": null
+        },
+        "task": {
+          "type": "text",
+          "p_null": 0.0029306153301149607,
+          "span": [
+            64,
+            115
+          ],
+          "guess": "call Daniel Moon about next month's moving schedule",
+          "confidence": 0.7702027559280396,
+          "value": "call Daniel Moon about next month's moving schedule"
+        },
+        "place": {
+          "type": "text",
+          "p_null": 0.9999759197235107,
+          "span": [
+            69,
+            80
+          ],
+          "guess": "Daniel Moon",
+          "confidence": 0.2645186185836792,
+          "value": null
+        }
+      },
+      "truncated": false,
+      "passes": 4,
+      "memo_id": "EN-09",
+      "lang": "en"
+    },
+    {
+      "arm": "llm",
+      "latency_ms": 20313,
+      "client_latency_ms": 20638.6,
+      "probe_retries": 0,
+      "usage": {
+        "prompt_tokens": 138,
+        "completion_tokens": 831,
+        "total_tokens": 969,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "neurons": 31.0074
+      },
+      "raw_response": "```json\n{\n  \"person\": \"Daniel Moon\",\n  \"event_date\": \"2026-10-29\",\n  \"event_time\": \"09:00\",\n  \"amount\": null,\n  \"task\": \"call Daniel Moon\",\n  \"place\": null\n}\n```",
+      "memo_id": "EN-09",
+      "lang": "en"
+    },
+    {
+      "arm": "llm-fast",
+      "latency_ms": 2338,
+      "client_latency_ms": 2713.8,
+      "probe_retries": 0,
+      "usage": {
+        "prompt_tokens": 148,
+        "completion_tokens": 53,
+        "total_tokens": 201,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "neurons": 3.423986913636327
+      },
+      "raw_response": "{\n  \"person\": \"Daniel Moon\",\n  \"event_date\": \"2026-11-01\",\n  \"event_time\": \"09:00\",\n  \"amount\": null,\n  \"task\": \"call\",\n  \"place\": null\n}",
+      "memo_id": "EN-09",
+      "lang": "en"
+    },
+    {
+      "arm": "clairic",
+      "latency_ms": 244,
+      "client_latency_ms": 567.8,
+      "probe_retries": 0,
+      "usage": {
+        "state_tokens": 44,
+        "image_tokens": 0,
+        "schema_tokens": 592,
+        "input_tokens": 768,
+        "output_tokens": 0,
+        "passes": 4
+      },
+      "answers": {
+        "person": {
+          "type": "text",
+          "p_null": 0.00017569964984431863,
+          "span": [
+            83,
+            93
+          ],
+          "guess": "Sophia Lim",
+          "confidence": 0.9998656511306763,
+          "value": "Sophia Lim"
+        },
+        "event_date": {
+          "type": "date",
+          "p_null": 5.292199057294056e-05,
+          "guess": "2026-10-29",
+          "confidence": 0.9980760916271426,
+          "value": "2026-10-29"
+        },
+        "event_time": {
+          "type": "time",
+          "p_null": 0.5538451671600342,
+          "guess": "20:00:00",
+          "confidence": 0.39925763802123093,
+          "value": null
+        },
+        "amount": {
+          "type": "number",
+          "p_null": 6.733240098810711e-08,
+          "guess": 90,
+          "confidence": 0.9999963045230587,
+          "value": 90
+        },
+        "task": {
+          "type": "text",
+          "p_null": 0.006020527798682451,
+          "span": [
+            60,
+            77
+          ],
+          "guess": "take a yoga class",
+          "confidence": 0.59505295753479,
+          "value": "take a yoga class"
+        },
+        "place": {
+          "type": "text",
+          "p_null": 0.010845910757780075,
+          "span": [
+            133,
+            152
+          ],
+          "guess": "Gangnam Yoga Studio",
+          "confidence": 0.9999634027481079,
+          "value": "Gangnam Yoga Studio"
+        }
+      },
+      "truncated": false,
+      "passes": 4,
+      "memo_id": "EN-10",
+      "lang": "en"
+    },
+    {
+      "arm": "llm",
+      "latency_ms": 17358,
+      "client_latency_ms": 17604.5,
+      "probe_retries": 0,
+      "usage": {
+        "prompt_tokens": 139,
+        "completion_tokens": 900,
+        "total_tokens": 1039,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "neurons": 33.5245
+      },
+      "raw_response": "```json\n{\n  \"person\": \"Sophia Lim\",\n  \"event_date\": \"2026-10-29\",\n  \"event_time\": null,\n  \"amount\": 90,\n  \"task\": \"take a yoga class\",\n  \"place\": \"Gangnam Yoga Studio\"\n}\n```",
+      "memo_id": "EN-10",
+      "lang": "en"
+    },
+    {
+      "arm": "llm-fast",
+      "latency_ms": 3700,
+      "client_latency_ms": 4022.1,
+      "probe_retries": 0,
+      "usage": {
+        "prompt_tokens": 149,
+        "completion_tokens": 62,
+        "total_tokens": 211,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "neurons": 3.6729171155020595
+      },
+      "raw_response": "{\n  \"person\": \"Sophia Lim\",\n  \"event_date\": \"2026-10-29\",\n  \"event_time\": \"18:00\",\n  \"amount\": 90,\n  \"task\": \"yoga class\",\n  \"place\": \"Gangnam Yoga Studio\"\n}",
+      "memo_id": "EN-10",
+      "lang": "en"
+    },
+    {
+      "arm": "clairic",
+      "latency_ms": 201,
+      "client_latency_ms": 4008.6,
+      "probe_retries": 1,
+      "usage": {
+        "state_tokens": 51,
+        "image_tokens": 0,
+        "schema_tokens": 592,
+        "input_tokens": 796,
+        "output_tokens": 0,
+        "passes": 4
+      },
+      "answers": {
+        "person": {
+          "type": "text",
+          "p_null": 9.849589696386829e-05,
+          "span": [
+            78,
+            87
+          ],
+          "guess": "Kevin Bae",
+          "confidence": 0.9968945980072021,
+          "value": "Kevin Bae"
+        },
+        "event_date": {
+          "type": "date",
+          "p_null": 3.9153331954366877e-07,
+          "guess": "2026-11-03",
+          "confidence": 0.9999990463265931,
+          "value": "2026-11-03"
+        },
+        "event_time": {
+          "type": "time",
+          "p_null": 1.122418691323901e-08,
+          "guess": "06:00:00",
+          "confidence": 0.9999952316456984,
+          "value": "06:00:00"
+        },
+        "amount": {
+          "type": "number",
+          "p_null": 0.9999988079071045,
+          "guess": 300,
+          "confidence": 0.06027370616334846,
+          "value": null
+        },
+        "task": {
+          "type": "text",
+          "p_null": 0.008498375304043293,
+          "span": [
+            140,
+            159
+          ],
+          "guess": "prepare lunch boxes",
+          "confidence": 0.9797462821006775,
+          "value": "prepare lunch boxes"
+        },
+        "place": {
+          "type": "text",
+          "p_null": 0.0011474475031718612,
+          "span": [
+            100,
+            128
+          ],
+          "guess": "the Bukhansan trail entrance",
+          "confidence": 0.7660209536552429,
+          "value": "the Bukhansan trail entrance"
+        }
+      },
+      "truncated": false,
+      "passes": 4,
+      "memo_id": "EN-11",
+      "lang": "en"
+    },
+    {
+      "arm": "llm",
+      "latency_ms": 37573,
+      "client_latency_ms": 51998.6,
+      "probe_retries": 1,
+      "usage": {
+        "prompt_tokens": 147,
+        "completion_tokens": 684,
+        "total_tokens": 831,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "neurons": 25.7061
+      },
+      "raw_response": "```json\n{\n  \"person\": \"Kevin Bae\",\n  \"event_date\": \"2026-11-03\",\n  \"event_time\": \"06:00\",\n  \"amount\": null,\n  \"task\": \"prepare lunch boxes\",\n  \"place\": \"Bukhansan trail entrance\"\n}\n```",
+      "memo_id": "EN-11",
+      "lang": "en"
+    },
+    {
+      "arm": "llm-fast",
+      "latency_ms": 3184,
+      "client_latency_ms": 3524.4,
+      "probe_retries": 0,
+      "usage": {
+        "prompt_tokens": 157,
+        "completion_tokens": 63,
+        "total_tokens": 220,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "neurons": 3.80927234236151
+      },
+      "raw_response": "{\n  \"person\": \"Kevin Bae\",\n  \"event_date\": \"2026-11-03\",\n  \"event_time\": \"06:00\",\n  \"amount\": null,\n  \"task\": \"prepare lunch boxes\",\n  \"place\": \"Bukhansan trail entrance\"\n}",
+      "memo_id": "EN-11",
+      "lang": "en"
+    },
+    {
+      "arm": "clairic",
+      "latency_ms": 158,
+      "client_latency_ms": 581.9,
+      "probe_retries": 0,
+      "usage": {
+        "state_tokens": 48,
+        "image_tokens": 0,
+        "schema_tokens": 592,
+        "input_tokens": 784,
+        "output_tokens": 0,
+        "passes": 4
+      },
+      "answers": {
+        "person": {
+          "type": "text",
+          "p_null": 0.00011024314881069586,
+          "span": [
+            69,
+            77
+          ],
+          "guess": "Mia Yoon",
+          "confidence": 0.9999990463256836,
+          "value": "Mia Yoon"
+        },
+        "event_date": {
+          "type": "date",
+          "p_null": 1.0251725143461954e-05,
+          "guess": "2026-10-30",
+          "confidence": 0.9997331433655127,
+          "value": "2026-10-30"
+        },
+        "event_time": {
+          "type": "time",
+          "p_null": 3.273722541052848e-06,
+          "guess": "11:00:00",
+          "confidence": 0.9995459761264102,
+          "value": "11:00:00"
+        },
+        "amount": {
+          "type": "number",
+          "p_null": 2.9264533907280565e-08,
+          "guess": 4,
+          "confidence": 0.9999997615814777,
+          "value": 4
+        },
+        "task": {
+          "type": "text",
+          "p_null": 0.010377931408584118,
+          "span": [
+            104,
+            126
+          ],
+          "guess": "return a borrowed book",
+          "confidence": 0.939265251159668,
+          "value": "return a borrowed book"
+        },
+        "place": {
+          "type": "text",
+          "p_null": 0.9883318543434143,
+          "span": [
+            81,
+            92
+          ],
+          "guess": "the library",
+          "confidence": 0.988959550857544,
+          "value": null
+        }
+      },
+      "truncated": false,
+      "passes": 4,
+      "memo_id": "EN-12",
+      "lang": "en"
+    },
+    {
+      "arm": "llm",
+      "latency_ms": 31087,
+      "client_latency_ms": 31529.9,
+      "probe_retries": 0,
+      "usage": {
+        "prompt_tokens": 143,
+        "completion_tokens": 2000,
+        "total_tokens": 2143,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "neurons": 73.5865
+      },
+      "raw_response": "",
+      "memo_id": "EN-12",
+      "lang": "en"
+    },
+    {
+      "arm": "llm-fast",
+      "latency_ms": 3412,
+      "client_latency_ms": 3777.8,
+      "probe_retries": 0,
+      "usage": {
+        "prompt_tokens": 153,
+        "completion_tokens": 57,
+        "total_tokens": 210,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "neurons": 3.5973908537998796
+      },
+      "raw_response": "{\n  \"person\": \"Mia Yoon\",\n  \"event_date\": \"2026-10-29\",\n  \"event_time\": \"11:00\",\n  \"amount\": 4,\n  \"task\": \"study\",\n  \"place\": \"library\"\n}",
+      "memo_id": "EN-12",
+      "lang": "en"
+    },
+    {
+      "arm": "clairic",
+      "latency_ms": 272,
+      "client_latency_ms": 502.6,
+      "probe_retries": 0,
+      "usage": {
+        "state_tokens": 56,
+        "image_tokens": 0,
+        "schema_tokens": 592,
+        "input_tokens": 816,
+        "output_tokens": 0,
+        "passes": 4
+      },
+      "answers": {
+        "person": {
+          "type": "text",
+          "p_null": 2.4666267563588917e-05,
+          "span": [
+            69,
+            78
+          ],
+          "guess": "Henry Cho",
+          "confidence": 1,
+          "value": "Henry Cho"
+        },
+        "event_date": {
+          "type": "date",
+          "p_null": 3.349824453380279e-07,
+          "guess": "2026-11-10",
+          "confidence": 0.9999922514553102,
+          "value": "2026-11-10"
+        },
+        "event_time": {
+          "type": "time",
+          "p_null": 9.692370639413639e-08,
+          "guess": "16:00:00",
+          "confidence": 0.9999870063425704,
+          "value": "16:00:00"
+        },
+        "amount": {
+          "type": "number",
+          "p_null": 5.8624838317200556e-08,
+          "guess": 5000,
+          "confidence": 0.9999974966098222,
+          "value": 5000
+        },
+        "task": {
+          "type": "text",
+          "p_null": 0.1245061531662941,
+          "span": [
+            64,
+            102
+          ],
+          "guess": "meet Henry Cho and a real estate agent",
+          "confidence": 0.6182196140289307,
+          "value": "meet Henry Cho and a real estate agent"
+        },
+        "place": {
+          "type": "text",
+          "p_null": 2.8154865503893234e-05,
+          "span": [
+            144,
+            155
+          ],
+          "guess": "Daechi-dong",
+          "confidence": 0.9999992847442627,
+          "value": "Daechi-dong"
+        }
+      },
+      "truncated": false,
+      "passes": 4,
+      "memo_id": "EN-13",
+      "lang": "en"
+    },
+    {
+      "arm": "llm",
+      "latency_ms": 14718,
+      "client_latency_ms": 14933.1,
+      "probe_retries": 0,
+      "usage": {
+        "prompt_tokens": 149,
+        "completion_tokens": 811,
+        "total_tokens": 960,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "neurons": 30.339900000000004
+      },
+      "raw_response": "```json\n{\n  \"person\": \"Henry Cho and a real estate agent\",\n  \"event_date\": \"2026-11-10\",\n  \"event_time\": \"16:00\",\n  \"amount\": 5000,\n  \"task\": \"meet\",\n  \"place\": \"Daechi-dong\"\n}\n```",
+      "memo_id": "EN-13",
+      "lang": "en"
+    },
+    {
+      "arm": "llm-fast",
+      "latency_ms": 3592,
+      "client_latency_ms": 10705.9,
+      "probe_retries": 1,
+      "usage": {
+        "prompt_tokens": 159,
+        "completion_tokens": 60,
+        "total_tokens": 219,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "neurons": 3.758445222862065
+      },
+      "raw_response": "{\n  \"person\": \"Henry Cho\",\n  \"event_date\": \"2026-11-10\",\n  \"event_time\": \"16:00\",\n  \"amount\": 5000,\n  \"task\": \"meet\",\n  \"place\": \"Daechi-dong\"\n}",
+      "memo_id": "EN-13",
+      "lang": "en"
+    },
+    {
+      "arm": "clairic",
+      "latency_ms": 239,
+      "client_latency_ms": 531.3,
+      "probe_retries": 0,
+      "usage": {
+        "state_tokens": 39,
+        "image_tokens": 0,
+        "schema_tokens": 592,
+        "input_tokens": 748,
+        "output_tokens": 0,
+        "passes": 4
+      },
+      "answers": {
+        "person": {
+          "type": "text",
+          "p_null": 3.965178257203661e-05,
+          "span": [
+            65,
+            74
+          ],
+          "guess": "Noah Jung",
+          "confidence": 0.999991774559021,
+          "value": "Noah Jung"
+        },
+        "event_date": {
+          "type": "date",
+          "p_null": 2.0880318061244907e-06,
+          "guess": "2026-10-29",
+          "confidence": 0.9999986886991863,
+          "value": "2026-10-29"
+        },
+        "event_time": {
+          "type": "time",
+          "p_null": 0.9987043142318726,
+          "guess": "12:00:00",
+          "confidence": 0.3784166305941398,
+          "value": null
+        },
+        "amount": {
+          "type": "number",
+          "p_null": 0.9999991655349731,
+          "guess": 300,
+          "confidence": 0.08269270893477428,
+          "value": null
+        },
+        "task": {
+          "type": "text",
+          "p_null": 0.39043736457824707,
+          "span": [
+            54,
+            74
+          ],
+          "guess": "lunch with Noah Jung",
+          "confidence": 0.7633151412010193,
+          "value": "lunch with Noah Jung"
+        },
+        "place": {
+          "type": "text",
+          "p_null": 0.8548166155815125,
+          "span": [
+            119,
+            141
+          ],
+          "guess": "in front of the office",
+          "confidence": 0.8380295634269714,
+          "value": null
+        }
+      },
+      "truncated": false,
+      "passes": 4,
+      "memo_id": "EN-14",
+      "lang": "en"
+    },
+    {
+      "arm": "llm",
+      "latency_ms": 12065,
+      "client_latency_ms": 12593.7,
+      "probe_retries": 0,
+      "usage": {
+        "prompt_tokens": 135,
+        "completion_tokens": 777,
+        "total_tokens": 912,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "neurons": 29.0253
+      },
+      "raw_response": "```json\n{\n  \"person\": \"Noah Jung\",\n  \"event_date\": \"2026-10-29\",\n  \"event_time\": null,\n  \"amount\": null,\n  \"task\": \"lunch\",\n  \"place\": \"in front of the office\"\n}\n```",
+      "memo_id": "EN-14",
+      "lang": "en"
+    },
+    {
+      "arm": "llm-fast",
+      "latency_ms": 2766,
+      "client_latency_ms": 3034.5,
+      "probe_retries": 0,
+      "usage": {
+        "prompt_tokens": 145,
+        "completion_tokens": 55,
+        "total_tokens": 200,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "neurons": 3.434907649643719
+      },
+      "raw_response": "{\n  \"person\": \"Noah Jung\",\n  \"event_date\": \"2026-10-29\",\n  \"event_time\": null,\n  \"amount\": null,\n  \"task\": null,\n  \"place\": \"in front of the office\"\n}",
+      "memo_id": "EN-14",
+      "lang": "en"
+    },
+    {
+      "arm": "clairic",
+      "latency_ms": 322,
+      "client_latency_ms": 723.1,
+      "probe_retries": 0,
+      "usage": {
+        "state_tokens": 52,
+        "image_tokens": 0,
+        "schema_tokens": 592,
+        "input_tokens": 800,
+        "output_tokens": 0,
+        "passes": 4
+      },
+      "answers": {
+        "person": {
+          "type": "text",
+          "p_null": 0.00011147085024276748,
+          "span": [
+            149,
+            158
+          ],
+          "guess": "Lily Kang",
+          "confidence": 0.9999924898147583,
+          "value": "Lily Kang"
+        },
+        "event_date": {
+          "type": "date",
+          "p_null": 1.6210471187605435e-07,
+          "guess": "2026-11-07",
+          "confidence": 0.9999990463265931,
+          "value": "2026-11-07"
+        },
+        "event_time": {
+          "type": "time",
+          "p_null": 9.91046356091374e-10,
+          "guess": "10:30:00",
+          "confidence": 0.9999971389852362,
+          "value": "10:30:00"
+        },
+        "amount": {
+          "type": "number",
+          "p_null": 4.4657650022372763e-08,
+          "guess": 85,
+          "confidence": 0.9999948740243169,
+          "value": 85
+        },
+        "task": {
+          "type": "text",
+          "p_null": 0.9345315098762512,
+          "span": [
+            38,
+            61
+          ],
+          "guess": "I bought a train ticket",
+          "confidence": 0.43970295786857605,
+          "value": null
+        },
+        "place": {
+          "type": "text",
+          "p_null": 0.00013870792463421822,
+          "span": [
+            120,
+            133
+          ],
+          "guess": "Seoul Station",
+          "confidence": 0.9993284940719604,
+          "value": "Seoul Station"
+        }
+      },
+      "truncated": false,
+      "passes": 4,
+      "memo_id": "EN-15",
+      "lang": "en"
+    },
+    {
+      "arm": "llm",
+      "latency_ms": 20490,
+      "client_latency_ms": 20949.3,
+      "probe_retries": 0,
+      "usage": {
+        "prompt_tokens": 145,
+        "completion_tokens": 722,
+        "total_tokens": 867,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "neurons": 27.078300000000002
+      },
+      "raw_response": "```json\n{\n  \"person\": \"Lily Kang\",\n  \"event_date\": \"2026-11-07\",\n  \"event_time\": \"10:30\",\n  \"amount\": 85,\n  \"task\": \"bought a train ticket\",\n  \"place\": \"Seoul Station\"\n}\n```",
+      "memo_id": "EN-15",
+      "lang": "en"
+    },
+    {
+      "arm": "llm-fast",
+      "latency_ms": 3798,
+      "client_latency_ms": 4176.6,
+      "probe_retries": 0,
+      "usage": {
+        "prompt_tokens": 155,
+        "completion_tokens": 62,
+        "total_tokens": 217,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "neurons": 3.7555875526741147
+      },
+      "raw_response": "{\n  \"person\": \"Lily Kang\",\n  \"event_date\": \"2026-11-07\",\n  \"event_time\": \"10:30\",\n  \"amount\": 85,\n  \"task\": \"bought a train ticket\",\n  \"place\": \"Seoul Station\"\n}",
+      "memo_id": "EN-15",
+      "lang": "en"
+    }
+  ],
+  "errors": [
+    {
+      "memo_id": "EN-06",
+      "arm": "clairic",
+      "error": "[Errno 32] Broken pipe"
+    }
+  ]
+}
