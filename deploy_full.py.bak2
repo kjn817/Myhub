@@ -1,0 +1,359 @@
+#!/usr/bin/env python3
+"""MyHub 전체 배포: 정적 파일 인라인 + 캐시 무효화(?v=) + esbuild 번들 + Worker 업로드 (바인딩 포함)."""
+import sys, json, subprocess, urllib.request
+from pathlib import Path
+
+sys.path.insert(0, '/opt/hatch/skills/skill-creator/bin')
+from dynamic_credentials import add_surrogate_to_request, read_json_response
+
+CREDENTIAL = 'custom.cloudflare'
+ALLOWED_HOSTS = ['api.cloudflare.com']
+BASE = 'https://api.cloudflare.com/client/v4'
+ACCOUNT_ID = '59e749ed2e9cdb8b0bf70d47227968a1'
+
+# 배포 대상 설정 (명시적 선택 필수, 기본값 없음)
+TARGETS = {
+    'staging': {
+        'SCRIPT_NAME': 'myhub-staging',
+        'BASE_URL': 'https://myhub-staging.myhub-app.workers.dev',
+        'DB_ID': '995184a9-b291-402c-adf5-0d8d80a59e1c',
+        'KV_ID': '45e164df619847f5bd0a829340d3b71d',
+        'ENVIRONMENT': 'staging',
+        'APP_NAME': 'MyHub-Staging',
+    },
+    'production': {
+        'SCRIPT_NAME': 'myhub',
+        'BASE_URL': 'https://myhub.myhub-app.workers.dev',
+        'DB_ID': '0dd871c5-3d1c-4cea-bfbe-3e258f477106',
+        'KV_ID': '83d3e9027c9145ae89c15df3bdee9999',
+        'ENVIRONMENT': 'production',
+        'APP_NAME': 'MyHub',
+    },
+}
+
+# 명령줄 인자로 대상 지정 (필수)
+if len(sys.argv) < 2 or sys.argv[1] not in TARGETS:
+    print(f"사용법: {sys.argv[0]} <staging|production>", file=sys.stderr)
+    print("대상 지정을 생략하면 배포를 거부합니다.", file=sys.stderr)
+    sys.exit(1)
+
+TARGET = sys.argv[1]
+CONFIG = TARGETS[TARGET]
+SCRIPT_NAME = CONFIG['SCRIPT_NAME']
+
+project = Path('/home/hatch/workspace/myhub')
+
+NODE_GEN = r'''
+const fs = require("fs");
+const crypto = require("crypto");
+let ts = fs.readFileSync("./src/index.ts", "utf-8");
+const marker = "// [STATIC_INJECT]";
+if (!ts.includes(marker)) { console.error("MARKER NOT FOUND"); process.exit(1); }
+const pub = "./public";
+const read = (p) => fs.readFileSync(pub + p, "utf-8");
+// 캐시 무효화용 콘텐츠 기반 버전: 정적 파일 중 하나라도 바뀌면 버전이 바뀜
+const staticBufs = ["/shell.css", "/nav.js", "/assistant-widget.js", "/assistant-widget.css", "/sw.js", "/index.html", "/memo.html", "/chat.html", "/schedule.html", "/todo.html", "/search.html", "/memory.html", "/login.html", "/backup.html", "/briefing.html", "/manifest.json", "/css/chat.css", "/js/chat.js", "/css/memo.css", "/js/memo-bundle.js"]
+  .map((p) => fs.readFileSync(pub + p));
+const AV = crypto.createHash("sha1").update(Buffer.concat(staticBufs)).digest("hex").slice(0, 8);
+// HTML/manifest 안의 로컬 정적 에셋 참조에 ?v= 버전을 붙여 구버전 캐시 무효화
+const ver = (s) => s.replace(/(["'(]|url\()(['"]?)\/(shell\.css|nav\.js|manifest\.json|wallpaper\.webp|icon-192\.png|icon-512\.png|avatars\/[\w-]+\.webp|js\/chat\.js|css\/chat\.css|js\/memo-bundle\.js|css\/memo\.css)/g,
+  "$1$2/$3?v=" + AV);
+const files = {
+  "/": ver(read("/index.html")),
+  "/index.html": ver(read("/index.html")),
+  "/memo.html": ver(read("/memo.html")),
+  "/chat.html": ver(read("/chat.html")),
+  "/schedule.html": ver(read("/schedule.html")),
+  "/todo.html": ver(read("/todo.html")),
+  "/search.html": ver(read("/search.html")),
+  "/memory.html": ver(read("/memory.html")),
+  "/login.html": ver(read("/login.html")),
+  "/backup.html": ver(read("/backup.html")),
+  "/briefing.html": ver(read("/briefing.html")),
+  "/manifest.json": ver(read("/manifest.json")),
+  "/nav.js": read("/nav.js"),
+  "/assistant-widget.js": read("/assistant-widget.js"),
+  "/assistant-widget.css": read("/assistant-widget.css"),
+  "/shell.css": read("/shell.css"),
+  "/sw.js": read("/sw.js"),
+  "/css/chat.css": read("/css/chat.css"),
+  "/css/memo.css": read("/css/memo.css"),
+  "/js/memo-bundle.js": read("/js/memo-bundle.js"),
+        "/js/chat.js": read("/js/chat.js"),
+};
+// Base64 인코딩으로 esbuild 문자열 처리 문제 회피
+let sc = "const STATIC_FILES_B64={\n";
+for (const [p,c] of Object.entries(files)) {
+  const b64 = Buffer.from(c, 'utf-8').toString('base64');
+  sc += " "+JSON.stringify(p)+":"+JSON.stringify(b64)+",\n";
+}
+sc += "};\n";
+sc += "const STATIC_FILES={};\n";
+sc += "for(const [p,b] of Object.entries(STATIC_FILES_B64)){const bin=atob(b);const bytes=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)bytes[i]=bin.charCodeAt(i);STATIC_FILES[p]=new TextDecoder().decode(bytes);}\n";
+sc += "const ICON192_B64=" + JSON.stringify(fs.readFileSync(pub + "/icon-192.png").toString("base64")) + ";\n";
+sc += "const ICON512_B64=" + JSON.stringify(fs.readFileSync(pub + "/icon-512.png").toString("base64")) + ";\n";
+sc += "const WALLPAPER_B64=" + JSON.stringify(fs.readFileSync(pub + "/wallpaper.webp").toString("base64")) + ";\n";
+sc += "const AV_RUMI_B64=" + JSON.stringify(fs.readFileSync(pub + "/avatars/rumi.webp").toString("base64")) + ";\n";
+sc += "const AV_ECHO_B64=" + JSON.stringify(fs.readFileSync(pub + "/avatars/echo.webp").toString("base64")) + ";\n";
+sc += "const AV_NOVA_B64=" + JSON.stringify(fs.readFileSync(pub + "/avatars/nova.webp").toString("base64")) + ";\n";
+sc += "const AV_CALI_B64=" + JSON.stringify(fs.readFileSync(pub + "/avatars/cali.webp").toString("base64")) + ";\n";
+const routes = "// Inline static (asset ver "+AV+")\n"+sc+
+  "const CT={\"/\":\"text/html\",\"/index.html\":\"text/html\",\"/memo.html\":\"text/html\",\"/chat.html\":\"text/html\",\"/schedule.html\":\"text/html\",\"/todo.html\":\"text/html\",\"/search.html\":\"text/html\",\"/memory.html\":\"text/html\",\"/login.html\":\"text/html\",\"/manifest.json\":\"application/json\",\"/nav.js\":\"application/javascript\",\"/shell.css\":\"text/css\",\"/sw.js\":\"application/javascript\",\"/css/chat.css\":\"text/css\",\"/js/chat.js\":\"application/javascript\"};\n"+
+  "const HTML_PAGES=new Set([\"/\",\"/index.html\",\"/memo.html\",\"/chat.html\",\"/schedule.html\",\"/todo.html\",\"/search.html\",\"/memory.html\",\"/login.html\"]);\n"+
+  "const IMG_CC={\"Cache-Control\":\"public, max-age=31536000, immutable\"};\n"+
+  "for(const [p,c] of Object.entries(STATIC_FILES)){const t=CT[p]+\"; charset=utf-8\";const cc=HTML_PAGES.has(p)?\"no-cache\":\"public, max-age=31536000, immutable\";app.get(p,(ctx)=>ctx.text(c,200,{\"Content-Type\":t,\"Cache-Control\":cc}));}\n"+
+  "app.get(\"/icon-192.png\",(ctx)=>{const b=Uint8Array.from(atob(ICON192_B64),c=>c.charCodeAt(0));return new Response(b,{headers:{\"Content-Type\":\"image/png\",...IMG_CC}})});\n"+
+  "app.get(\"/icon-512.png\",(ctx)=>{const b=Uint8Array.from(atob(ICON512_B64),c=>c.charCodeAt(0));return new Response(b,{headers:{\"Content-Type\":\"image/png\",...IMG_CC}})});\n"+
+  "app.get(\"/wallpaper.webp\",(ctx)=>{const b=Uint8Array.from(atob(WALLPAPER_B64),c=>c.charCodeAt(0));return new Response(b,{headers:{\"Content-Type\":\"image/webp\",...IMG_CC}})});\n"+
+  "app.get(\"/avatars/rumi.webp\",(ctx)=>{const b=Uint8Array.from(atob(AV_RUMI_B64),c=>c.charCodeAt(0));return new Response(b,{headers:{\"Content-Type\":\"image/webp\",...IMG_CC}})});\n"+
+  "app.get(\"/avatars/echo.webp\",(ctx)=>{const b=Uint8Array.from(atob(AV_ECHO_B64),c=>c.charCodeAt(0));return new Response(b,{headers:{\"Content-Type\":\"image/webp\",...IMG_CC}})});\n"+
+  "app.get(\"/avatars/nova.webp\",(ctx)=>{const b=Uint8Array.from(atob(AV_NOVA_B64),c=>c.charCodeAt(0));return new Response(b,{headers:{\"Content-Type\":\"image/webp\",...IMG_CC}})});\n"+
+  "app.get(\"/avatars/cali.webp\",(ctx)=>{const b=Uint8Array.from(atob(AV_CALI_B64),c=>c.charCodeAt(0));return new Response(b,{headers:{\"Content-Type\":\"image/webp\",...IMG_CC}})});\n\n"+marker;
+ts = ts.replace(marker, routes);
+fs.writeFileSync("./src/index-inline.ts", ts);
+console.log("written");
+console.log("ASSET_VER=" + AV);
+'''
+
+def main():
+    # DEPLOY-003: 즉시 배포 경로 차단
+    # 기존 Workers Script Upload API(PUT /workers/scripts)는 업로드와 동시에 활성화됨.
+    # 검증되지 않은 코드가 트래픽을 받는 것을 방지하기 위해 명시적 확인 필요.
+    import os
+    if os.environ.get('MYHUB_ALLOW_IMMEDIATE_DEPLOY') != '1':
+        print("DEPLOY-003 BLOCKED: 즉시 배포 경로가 차단됨", file=sys.stderr)
+        print("이유: PUT /workers/scripts API는 업로드 즉시 활성화되어 검증 전 배포 위험이 있음", file=sys.stderr)
+        print("해결: wrangler versions upload → 검증 → wrangler versions deploy 흐름 사용", file=sys.stderr)
+        print("우회: MYHUB_ALLOW_IMMEDIATE_DEPLOY=1 환경변수로 명시적 허용 (권장하지 않음)", file=sys.stderr)
+        sys.exit(1)
+    # DEPLOY-002: memo-bundle.js 자동 재생성 (원본 수정 시 번들 갱신 보장)
+    print("Building memo-bundle.js...", file=sys.stderr)
+    result = subprocess.run(['bash', 'scripts/build-memo-bundle.sh'],
+                            cwd=str(project), capture_output=True, text=True)
+    if result.returncode != 0:
+        print(f"MEMO BUNDLE BUILD FAIL: {result.stderr}", file=sys.stderr)
+        sys.exit(1)
+    print("MEMO BUNDLE BUILD PASS", file=sys.stderr)
+
+    result = subprocess.run(['node', '-e', NODE_GEN],
+                            cwd=str(project), capture_output=True, text=True)
+    if result.returncode != 0:
+        print(f"Generate failed: {result.stderr}", file=sys.stderr)
+        sys.exit(1)
+    # 생성된 파일 검증: STATIC_FILES_B64가 있는지 확인 (base64 방식)
+    with open(str(project / 'src' / 'index-inline.ts'), encoding='utf-8', errors='ignore') as f:
+        generated = f.read()
+    if 'STATIC_FILES_B64' not in generated:
+        print("ERROR: Generated file missing STATIC_FILES_B64!", file=sys.stderr)
+        sys.exit(1)
+    asset_ver = None
+    for line in result.stdout.splitlines():
+        if line.startswith('ASSET_VER='):
+            asset_ver = line.split('=', 1)[1].strip()
+    print(f"Asset version: {asset_ver}", file=sys.stderr)
+
+    import os
+    try:
+        os.remove('/tmp/myhub-inline.js')
+    except:
+        pass
+    result = subprocess.run(
+        ['npx', 'esbuild', 'src/index-inline.ts', '--bundle', '--format=esm',
+         '--platform=neutral', '--outfile=/tmp/myhub-inline.js'],
+        cwd=str(project), capture_output=True, text=True, errors='replace')
+    if result.returncode != 0:
+        print(f"BUILD FAIL: {result.stderr}", file=sys.stderr)
+        sys.exit(1)
+    print("BUILD PASS", file=sys.stderr)
+
+    # 번들에 STATIC_FILES_B64가 있는지 검증 (base64 방식)
+    with open('/tmp/myhub-inline.js', 'rb') as f:
+        bundle_check = f.read()
+        if b'STATIC_FILES_B64' not in bundle_check:
+            print("BUILD FAIL: Bundle missing STATIC_FILES_B64!", file=sys.stderr)
+            sys.exit(1)
+        print("BUILD VERIFY PASS: STATIC_FILES_B64 present", file=sys.stderr)
+    with open('/tmp/myhub-inline.js', 'rb') as f:
+        worker_js = f.read()
+    print(f"Bundle: {len(worker_js)} bytes", file=sys.stderr)
+
+    boundary = '----WebKitFormBoundary7MA4YWxkTrZu0gW'
+    metadata = {
+        'main_module': 'index.js',
+        'compatibility_date': '2026-10-01',
+        'bindings': [
+            {'type': 'd1', 'name': 'DB', 'id': CONFIG['DB_ID']},
+            {'type': 'kv_namespace', 'name': 'KV', 'namespace_id': CONFIG['KV_ID']},
+            {'type': 'ai', 'name': 'AI'},
+            {'type': 'plain_text', 'name': 'APP_NAME', 'text': CONFIG['APP_NAME']},
+            {'type': 'plain_text', 'name': 'ENVIRONMENT', 'text': CONFIG['ENVIRONMENT']},
+        ],
+        # 기존 Secrets 보존 (명시적)
+        'keep_bindings': ['secret_text', 'secret_key'],
+    }
+    # 배포 전 검증: 필수 바인딩 확인
+    binding_names = {b['name'] for b in metadata['bindings']}
+    required = {'DB', 'KV', 'AI', 'APP_NAME', 'ENVIRONMENT'}
+    missing = required - binding_names
+    if missing:
+        print(f"ERROR: 필수 바인딩 누락: {missing}", file=sys.stderr)
+        sys.exit(1)
+    env_binding = next((b for b in metadata['bindings'] if b['name'] == 'ENVIRONMENT'), None)
+    if not env_binding or env_binding.get('text') != CONFIG['ENVIRONMENT']:
+        print(f"ERROR: ENVIRONMENT={CONFIG['ENVIRONMENT']} 미설정", file=sys.stderr)
+        sys.exit(1)
+    print(f"배포 검증 통과: {SCRIPT_NAME}, ENVIRONMENT={CONFIG['ENVIRONMENT']}", file=sys.stderr)
+
+    parts = [
+        f'--{boundary}\r\n'.encode(),
+        b'Content-Disposition: form-data; name="metadata"\r\n\r\n',
+        json.dumps(metadata).encode() + b'\r\n',
+        f'--{boundary}\r\n'.encode(),
+        b'Content-Disposition: form-data; name="index.js"; filename="index.js"\r\n',
+        b'Content-Type: application/javascript+module\r\n\r\n',
+        worker_js + b'\r\n',
+        f'--{boundary}--\r\n'.encode(),
+    ]
+    body = b''.join(parts)
+
+    url = BASE + f'/accounts/{ACCOUNT_ID}/workers/scripts/{SCRIPT_NAME}'
+    req = urllib.request.Request(url, data=body, method='PUT')
+    req.add_header('Content-Type', f'multipart/form-data; boundary={boundary}')
+    add_surrogate_to_request(req, CREDENTIAL, allowed_hosts=ALLOWED_HOSTS)
+
+    with urllib.request.urlopen(req) as resp:
+        result = read_json_response(resp)
+        if result.get('success'):
+            print("UPLOAD SUCCESS", file=sys.stderr)
+            # DEPLOY-003: 검증 전 자동 승격 금지 - 검증 통과 후에만 승격
+        else:
+            print(f"Failed: {result}", file=sys.stderr)
+            sys.exit(1)
+
+    # 배포 후 검증: 핵심 URL이 200을 반환하는지 확인
+    import time
+    time.sleep(2)
+    base_url = CONFIG['BASE_URL']
+    checks = {
+        '/api/health': 200,
+        '/wallpaper.webp': 200,
+        '/icon-192.png': 200,
+        '/manifest.json': 200,
+    }
+    failed = False
+    for path, want in checks.items():
+        try:
+            req = urllib.request.Request(base_url + path + '?vfy=1',
+                                         headers={'User-Agent': 'MyHubDeploy/1.0'})
+            with urllib.request.urlopen(req, timeout=15) as r:
+                code = r.status
+        except urllib.error.HTTPError as e:
+            code = e.code
+        except Exception as e:
+            code = f'ERR {e}'
+        ok = (code == want)
+        print(f"  verify {path}: {code} {'OK' if ok else 'FAIL'}", file=sys.stderr)
+        if not ok:
+            failed = True
+    # 정적 에셋이 immutable 캐시 헤더로 서빙되는지 확인 (?v= 버전 캐시 무효화와 한 쌍)
+    try:
+        req = urllib.request.Request(base_url + '/manifest.json?vfy=1',
+                                     headers={'User-Agent': 'MyHubDeploy/1.0'})
+        with urllib.request.urlopen(req, timeout=15) as r:
+            css_cc = r.headers.get('Cache-Control', '')
+    except Exception as e:
+        css_cc = f'ERR {e}'
+    ok = ('immutable' in css_cc)
+    print(f"  verify /manifest.json Cache-Control: {css_cc!r} {'OK' if ok else 'FAIL'}", file=sys.stderr)
+    if not ok:
+        failed = True
+    # /api/system은 인증 필요 → 401이어야 정상
+    try:
+        req = urllib.request.Request(base_url + '/api/system?vfy=1',
+                                     headers={'User-Agent': 'MyHubDeploy/1.0'})
+        with urllib.request.urlopen(req, timeout=15) as r:
+            sys_code = r.status
+    except urllib.error.HTTPError as e:
+        sys_code = e.code
+    except Exception as e:
+        sys_code = f'ERR {e}'
+    ok = (sys_code == 401)
+    print(f"  verify /api/system (unauth): {sys_code} {'OK' if ok else 'FAIL'}", file=sys.stderr)
+    if not ok:
+        failed = True
+    # / (no auth) → 로그인 리다이렉트(302)여야 정상
+    try:
+        class NoRedirect(urllib.request.HTTPRedirectHandler):
+            def redirect_request(self, req, fp, code, msg, headers, newurl):
+                return None
+        opener = urllib.request.build_opener(NoRedirect)
+        req = urllib.request.Request(base_url + '/?vfy=1',
+                                     headers={'User-Agent': 'MyHubDeploy/1.0'})
+        with opener.open(req, timeout=15) as r:
+            page_code = r.status
+    except urllib.error.HTTPError as e:
+        page_code = e.code
+    except Exception as e:
+        page_code = f'ERR {e}'
+    ok = (page_code == 302)
+    print(f"  verify / (unauth): {page_code} {'OK' if ok else 'FAIL'}", file=sys.stderr)
+    if not ok:
+        failed = True
+    # 콘텐츠 검증: /login.html(공개·no-cache) 본문에 이번 배포의 에셋 버전(?v=)이 있어야 함.
+    # 상태 코드만으로는 구버전 Worker가 계속 서빙되는지 알 수 없어서, 실제 본문으로 반영 확인.
+    if asset_ver:
+        marker = f'?v={asset_ver}'
+        try:
+            req = urllib.request.Request(base_url + '/login.html?vfy=1',
+                                         headers={'User-Agent': 'MyHubDeploy/1.0'})
+            with urllib.request.urlopen(req, timeout=15) as r:
+                login_code = r.status
+                login_body = r.read().decode('utf-8', 'replace')
+        except urllib.error.HTTPError as e:
+            login_code = e.code
+            login_body = ''
+        except Exception as e:
+            login_code = f'ERR {e}'
+            login_body = ''
+        ok = (login_code == 200 and marker in login_body)
+        print(f"  verify /login.html content {marker!r}: {login_code} {'OK' if ok else 'FAIL'}", file=sys.stderr)
+        if not ok:
+            failed = True
+    if failed:
+        print("DEPLOY VERIFY FAIL — 배포 검증 실패", file=sys.stderr)
+        print("승격 차단: 검증 실패로 100% 트래픽 승격을 수행하지 않습니다.", file=sys.stderr)
+        sys.exit(1)
+    print("DEPLOY VERIFY PASS")
+    # DEPLOY-003: 검증 통과 후에만 100% 승격
+    try:
+        ver_url = BASE + f'/accounts/{ACCOUNT_ID}/workers/scripts/{SCRIPT_NAME}/versions?page=1&per_page=1'
+        ver_req = urllib.request.Request(ver_url)
+        add_surrogate_to_request(ver_req, CREDENTIAL, allowed_hosts=ALLOWED_HOSTS)
+        with urllib.request.urlopen(ver_req) as ver_resp:
+            ver_result = read_json_response(ver_resp)
+            if ver_result.get('success'):
+                items = ver_result.get('result', {}).get('items', [])
+                if items:
+                    latest_id = items[0]['id']
+                    dep_url = BASE + f'/accounts/{ACCOUNT_ID}/workers/scripts/{SCRIPT_NAME}/deployments'
+                    dep_data = json.dumps({
+                        'strategy': 'percentage',
+                        'versions': [{'version_id': latest_id, 'percentage': 100}]
+                    }).encode()
+                    dep_req = urllib.request.Request(dep_url, data=dep_data, method='POST')
+                    dep_req.add_header('Content-Type', 'application/json')
+                    add_surrogate_to_request(dep_req, CREDENTIAL, allowed_hosts=ALLOWED_HOSTS)
+                    with urllib.request.urlopen(dep_req) as dep_resp:
+                        dep_result = read_json_response(dep_resp)
+                        if dep_result.get('success'):
+                            print("Promoted to 100% after verify PASS")
+                        else:
+                            print(f"Promote failed: {dep_result}", file=sys.stderr)
+                            sys.exit(1)
+    except Exception as e:
+        print(f"Promote error: {e}", file=sys.stderr)
+        sys.exit(1)
+    print("Deployed!")
+
+if __name__ == '__main__':
+    main()
