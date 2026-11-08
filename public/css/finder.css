@@ -1,0 +1,187 @@
+/* MyHub Finder — Mac 스타일 목록 (D-15 v3 계약)
+ * 열 헤더 정렬·줄무늬 행·파란 선택·하단 경로+상태 한 줄. */
+
+.finder-layout { display: flex; height: calc(100dvh - var(--topnav-h, 52px)); min-height: 0; }
+
+.finder-side {
+  width: 210px; flex: 0 0 210px; padding: 12px 8px; overflow-y: auto;
+  background: #edf1f7; border-right: 1px solid rgba(0,0,0,.06);
+  display: flex; flex-direction: column; gap: 1px;
+}
+.finder-side-badge {
+  margin-left: auto; min-width: 19px; height: 19px; padding: 0 6px;
+  border-radius: 999px; background: rgba(10,132,255,.18); color: #0a5fd7;
+  font-size: 11px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center;
+}
+.finder-side-usage { margin-top: auto; }
+.finder-side-title { font-size: 11px; font-weight: 700; color: #8e8e93; padding: 10px 8px 4px; }
+.finder-side-item {
+  display: flex; align-items: center; gap: 8px; width: 100%;
+  border: 0; background: none; cursor: pointer; text-align: left;
+  padding: 6px 8px; border-radius: 8px; font-size: 13px; color: #1d1d1f;
+}
+.finder-side-item svg { width: 16px; height: 16px; color: #0a84ff; flex: 0 0 16px; }
+.finder-side-item:hover { background: rgba(0,0,0,.05); }
+.finder-side-item.is-active { background: rgba(10,132,255,.16); color: #0a5fd7; font-weight: 600; }
+#sideFavorites { display: flex; flex-direction: column; gap: 1px; }
+.finder-side-usage { font-size: 11px; color: #8e8e93; padding: 4px 8px; }
+
+.finder-main { flex: 1; display: flex; flex-direction: column; min-width: 0; background: #fff; }
+.finder-main.is-dragover { outline: 2px solid #a5c8f0; outline-offset: -2px; }
+.finder-toolbar {
+  display: flex; align-items: center; gap: 4px; padding: 6px 10px;
+  border-bottom: 1px solid rgba(0,0,0,.06);
+}
+.finder-nav-btn {
+  border: 0; background: none; cursor: pointer; padding: 5px; border-radius: 7px;
+  display: inline-flex; color: #3f3f46;
+}
+.finder-nav-btn:hover { background: rgba(0,0,0,.06); }
+.finder-nav-btn svg { width: 17px; height: 17px; }
+.finder-path { display: flex; align-items: center; gap: 2px; font-size: 13px; min-width: 0; overflow: hidden; }
+.finder-path button {
+  border: 0; background: none; cursor: pointer; padding: 4px 7px; border-radius: 6px;
+  font-size: 13px; color: #3f3f46; white-space: nowrap;
+}
+.finder-path button:hover { background: rgba(0,0,0,.06); }
+.finder-path .is-current, .finder-path button.is-current { font-weight: 700; color: #18181b; }
+.finder-path-sep { color: #a1a1aa; }
+.finder-toolbar .spacer { flex: 1; }
+.finder-empty-trash {
+  border: 0; background: none; color: #dc2626; cursor: pointer; font-size: 12.5px;
+  padding: 5px 9px; border-radius: 7px;
+}
+.finder-empty-trash:hover { background: rgba(220,38,38,.08); }
+
+.finder-list { flex: 1; overflow-y: auto; min-height: 0; }
+.finder-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.finder-table thead th {
+  position: sticky; top: 0; z-index: 1; background: #fbfbfc;
+  text-align: left; font-weight: 600; color: #52525b; font-size: 12px;
+  padding: 7px 10px; border-bottom: 1px solid rgba(0,0,0,.08); cursor: pointer; user-select: none;
+}
+.finder-table tbody td { padding: 6px 10px; border-bottom: 1px solid rgba(0,0,0,.04); vertical-align: middle; }
+.finder-table tbody tr:nth-child(even) { background: #fafafa; }
+.finder-table tbody tr.finder-row { cursor: default; }
+.finder-table tbody tr.finder-row.is-selected { background: #0a84ff; color: #fff; }
+.finder-table tbody tr.finder-row.is-selected td { border-bottom-color: transparent; }
+.finder-cell-name { display: flex; align-items: center; gap: 8px; font-weight: 500; }
+.finder-cell-name svg { flex: 0 0 auto; }
+/* file-icons 인라인 SVG(문서 페이지 도형)는 행 높이로 커지지 않게 22px로 고정 */
+.finder-cell-name > svg { width: 22px; height: 22px; flex: 0 0 22px; }
+.finder-cell-name > span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.finder-row-icon { width: 22px; height: 22px; color: #71717a; }
+.finder-row-icon-folder { color: #e8b93e; fill: #ffd60a; }
+.finder-cell-loc { color: #71717a; }
+tr.is-selected .finder-cell-loc { color: rgba(255,255,255,.85); }
+.finder-empty { padding: 48px 20px; text-align: center; color: #8e8e93; font-size: 13px; }
+
+.finder-statusbar {
+  padding: 6px 12px; border-top: 1px solid rgba(0,0,0,.06);
+  font-size: 12px; color: #52525b; background: #fbfbfc;
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+}
+
+/* ---------- 도구모음: 보기 전환·정렬·검색 ---------- */
+.finder-view-toggle {
+  display: inline-flex; gap: 2px; padding: 2px; margin-left: 8px;
+  background: rgba(0,0,0,.06); border-radius: 9px;
+}
+.finder-view-toggle button {
+  border: 0; background: none; cursor: pointer; padding: 4px 9px; border-radius: 7px;
+  display: inline-flex; color: #52525b;
+}
+.finder-view-toggle button svg { width: 15px; height: 15px; }
+.finder-view-toggle button.is-active { background: #fff; color: #18181b; box-shadow: 0 1px 4px rgba(0,0,0,.14); }
+.finder-toolbar-search { display: inline-flex; align-items: center; }
+.finder-toolbar-search[hidden] { display: none; }
+.finder-toolbar-search input {
+  border: 1px solid rgba(0,0,0,.12); background: #f4f4f5; border-radius: 999px;
+  padding: 5px 12px; font-size: 12.5px; width: 170px; outline: none;
+}
+.finder-toolbar-search input:focus { background: #fff; border-color: #a5c8f0; }
+
+/* ---------- 격자 보기 ---------- */
+.finder-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, 96px); gap: 6px;
+  padding: 14px; align-content: start;
+}
+.finder-grid-item {
+  border: 0; background: none; cursor: default; padding: 10px 4px 8px; border-radius: 10px;
+  display: flex; flex-direction: column; align-items: center; gap: 7px; font-size: 12px; color: #1d1d1f;
+}
+.finder-grid-item:hover { background: rgba(0,0,0,.04); }
+.finder-grid-item.is-selected { background: rgba(10,132,255,.16); }
+.finder-grid-icon-wrap { display: flex; width: 44px; height: 44px; align-items: center; justify-content: center; }
+.finder-grid-icon-wrap > svg { width: 44px; height: 44px; }
+.finder-grid-icon { width: 44px; height: 44px; color: #71717a; }
+.finder-grid-name {
+  max-width: 92px; text-align: center; line-height: 1.3; word-break: break-all;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+
+/* ---------- 뷰어 ---------- */
+#finderViewer {
+  position: fixed; inset: 0; z-index: 90; display: none;
+  background: rgba(20,20,24,.45); backdrop-filter: blur(6px);
+  align-items: center; justify-content: center; padding: 22px;
+}
+#finderViewer.is-open { display: flex; }
+.fv-window {
+  background: #fff; border-radius: 16px; width: min(980px, 100%); height: min(760px, 100%);
+  display: flex; flex-direction: column; overflow: hidden;
+  box-shadow: 0 30px 80px rgba(0,0,0,.4);
+}
+#fvChrome {
+  display: flex; align-items: center; gap: 8px; padding: 9px 12px;
+  border-bottom: 1px solid rgba(0,0,0,.07); background: #fbfbfc;
+}
+#fvName { font-size: 13.5px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#fvChrome .spacer { flex: 1; }
+#fvSave {
+  border: 0; background: #a5c8f0; color: #12315e; font-weight: 700; cursor: pointer;
+  padding: 6px 14px; border-radius: 8px; font-size: 13px;
+}
+#fvClose { border: 0; background: none; cursor: pointer; display: flex; padding: 5px; border-radius: 7px; color: #52525b; }
+#fvClose svg { width: 17px; height: 17px; }
+#fvBody { flex: 1; overflow: auto; min-height: 0; position: relative; }
+.fv-loading, .fv-empty { padding: 48px 20px; text-align: center; color: #8e8e93; font-size: 13px; }
+.fv-note { padding: 8px 14px; font-size: 12px; color: #92400e; background: #fffbeb; }
+.fv-text { width: 100%; height: 100%; border: 0; padding: 16px; font: 13px/1.6 ui-monospace, Menlo, monospace; resize: none; outline: none; }
+.fv-image { max-width: 100%; max-height: 100%; display: block; margin: 0 auto; }
+.fv-doc { padding: 28px 34px; font-size: 14px; line-height: 1.7; }
+.fv-sheet { display: flex; flex-direction: column; height: 100%; }
+.fv-sheet-tabs { display: flex; gap: 4px; padding: 8px 10px 0; }
+.fv-sheet-tabs button {
+  border: 1px solid rgba(0,0,0,.1); border-bottom: 0; background: #f4f4f5; cursor: pointer;
+  padding: 5px 12px; border-radius: 8px 8px 0 0; font-size: 12.5px;
+}
+.fv-sheet-tabs button.is-active { background: #fff; font-weight: 700; }
+.fv-sheet-grid { flex: 1; overflow: auto; }
+.fv-sheet-grid table { border-collapse: collapse; font-size: 12.5px; }
+.fv-sheet-grid th, .fv-sheet-grid td { border: 1px solid rgba(0,0,0,.09); padding: 4px 8px; white-space: nowrap; }
+.fv-sheet-grid th { background: #f4f4f5; }
+.fv-slides { padding: 18px; display: flex; flex-direction: column; gap: 14px; background: #f4f4f5; min-height: 100%; }
+.fv-slide { background: #fff; border-radius: 10px; padding: 18px 20px; box-shadow: 0 2px 10px rgba(0,0,0,.08); position: relative; }
+.fv-slide-no { position: absolute; top: 8px; right: 12px; font-size: 11px; color: #a1a1aa; }
+.fv-slide p { margin: 2px 0; font-size: 13.5px; }
+.fv-pdf { height: 100%; display: flex; flex-direction: column; }
+.fv-pdf-frame { flex: 1; width: 100%; border: 0; }
+
+/* 공용 우클릭 메뉴 (myhub- 접두사) */
+.myhub-context-menu {
+  position: fixed; z-index: 120; min-width: 180px; padding: 5px;
+  background: rgba(255,255,255,.97); border: 1px solid rgba(0,0,0,.09); border-radius: 12px;
+  box-shadow: 0 14px 40px rgba(0,0,0,.22); display: flex; flex-direction: column;
+}
+.myhub-context-item {
+  border: 0; background: none; text-align: left; padding: 7px 10px; border-radius: 7px;
+  font-size: 13px; cursor: pointer; color: #18181b;
+}
+.myhub-context-item:hover { background: #eff6ff; }
+.myhub-context-item-danger { color: #dc2626; }
+
+@media (max-width: 767px) {
+  .finder-side { width: 158px; flex-basis: 158px; }
+  .finder-table thead th:nth-child(2), .finder-table tbody td:nth-child(2) { display: none; }
+}

@@ -1,0 +1,387 @@
+{
+  "version": 1,
+  "tool": "semgrep",
+  "semgrep_version": "1.182.1",
+  "generated_at": "2026-10-29",
+  "generated_from_commit": "f763965",
+  "rulesets": [
+    "p/security-audit",
+    "p/secrets",
+    "p/javascript",
+    "p/typescript",
+    ".semgrep/myhub-rules.yaml"
+  ],
+  "identity": "check_id + path + snippet_hash(sha256(normalized matched source lines)[:16]) + occurrence",
+  "adjudication": "docs/semgrep-recheck-20261029.md — 생성 시점 검출 전건 오탐 판정 기록",
+  "count": 46,
+  "entries": [
+    {
+      "check_id": "python.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-use-detected",
+      "path": "apply_d1.py",
+      "line": 42,
+      "snippet_hash": "218f00d1f14a5e2a",
+      "occurrence": 1,
+      "snippet": "resp = urllib.request.urlopen(req, timeout=30)"
+    },
+    {
+      "check_id": "python.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-use-detected",
+      "path": "check_deploy_safety.py",
+      "line": 36,
+      "snippet_hash": "973eef760ae7df69",
+      "occurrence": 1,
+      "snippet": "with urllib.request.urlopen(req, timeout=10) as r:"
+    },
+    {
+      "check_id": "python.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-use-detected",
+      "path": "deploy_full.py",
+      "line": 155,
+      "snippet_hash": "5206c06fc71aa738",
+      "occurrence": 1,
+      "snippet": "with urllib.request.urlopen(req, timeout=timeout) as r:"
+    },
+    {
+      "check_id": "python.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-use-detected",
+      "path": "deploy_full.py",
+      "line": 298,
+      "snippet_hash": "c63fd09b5bd9b394",
+      "occurrence": 1,
+      "snippet": "with urllib.request.urlopen(req) as resp:"
+    },
+    {
+      "check_id": "python.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-use-detected",
+      "path": "deploy_full.py",
+      "line": 668,
+      "snippet_hash": "c63fd09b5bd9b394",
+      "occurrence": 2,
+      "snippet": "with urllib.request.urlopen(req) as resp:"
+    },
+    {
+      "check_id": "python.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-use-detected",
+      "path": "deploy_full.py",
+      "line": 874,
+      "snippet_hash": "c63fd09b5bd9b394",
+      "occurrence": 3,
+      "snippet": "with urllib.request.urlopen(req) as resp:"
+    },
+    {
+      "check_id": "python.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-use-detected",
+      "path": "deploy_safe.py",
+      "line": 91,
+      "snippet_hash": "c63fd09b5bd9b394",
+      "occurrence": 1,
+      "snippet": "with urllib.request.urlopen(req) as resp:"
+    },
+    {
+      "check_id": "python.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-use-detected",
+      "path": "deploy_staging.py",
+      "line": 158,
+      "snippet_hash": "c63fd09b5bd9b394",
+      "occurrence": 1,
+      "snippet": "with urllib.request.urlopen(req) as resp:"
+    },
+    {
+      "check_id": "python.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-use-detected",
+      "path": "deploy_staging.py",
+      "line": 179,
+      "snippet_hash": "759850115d59f806",
+      "occurrence": 1,
+      "snippet": "with urllib.request.urlopen(req, timeout=15) as r:"
+    },
+    {
+      "check_id": "python.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-use-detected",
+      "path": "deploy_staging_minimal.py",
+      "line": 98,
+      "snippet_hash": "c63fd09b5bd9b394",
+      "occurrence": 1,
+      "snippet": "with urllib.request.urlopen(req) as resp:"
+    },
+    {
+      "check_id": "python.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-use-detected",
+      "path": "scripts/backup_production.py",
+      "line": 71,
+      "snippet_hash": "dc25f8792f42589f",
+      "occurrence": 1,
+      "snippet": "with urllib.request.urlopen(req, timeout=60) as resp:"
+    },
+    {
+      "check_id": "python.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-use-detected",
+      "path": "scripts/clairic-ab/probe_deploy.py",
+      "line": 63,
+      "snippet_hash": "7b5480c59fa96403",
+      "occurrence": 1,
+      "snippet": "with urllib.request.urlopen(req, timeout=10) as resp:"
+    },
+    {
+      "check_id": "python.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-use-detected",
+      "path": "scripts/clairic-ab/run_ab.py",
+      "line": 81,
+      "snippet_hash": "31f963de0c0bb648",
+      "occurrence": 1,
+      "snippet": "with urllib.request.urlopen(req, timeout=timeout) as resp:"
+    },
+    {
+      "check_id": "python.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-use-detected",
+      "path": "scripts/clairic-ab/run_ab.py",
+      "line": 121,
+      "snippet_hash": "9bfd547c84d05ce1",
+      "occurrence": 1,
+      "snippet": "with urllib.request.urlopen(req, timeout=120) as resp:"
+    },
+    {
+      "check_id": "python.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-use-detected",
+      "path": "scripts/perf_test.py",
+      "line": 26,
+      "snippet_hash": "8217e590745b5c17",
+      "occurrence": 1,
+      "snippet": "with urllib.request.urlopen(req, data=payload, timeout=30) as r:"
+    },
+    {
+      "check_id": "semgrep.myhub-eval-or-new-function",
+      "path": "src/services/studio-workspace.ts",
+      "line": 249,
+      "snippet_hash": "44903dfb6041f3c7",
+      "occurrence": 1,
+      "snippet": "new Function(content)"
+    },
+    {
+      "check_id": "semgrep.myhub-hardcoded-worker-secret",
+      "path": "scripts/test-worker-search.mjs",
+      "line": 6,
+      "snippet_hash": "7ab41054854bf045",
+      "occurrence": 1,
+      "snippet": "const SECRET = \"qa-local-test-secret-20261012-do-not-use-in-prod\";"
+    },
+    {
+      "check_id": "semgrep.myhub-hardcoded-worker-secret",
+      "path": "src/modules/mcp/tokens.ts",
+      "line": 16,
+      "snippet_hash": "6facc710632fed6a",
+      "occurrence": 1,
+      "snippet": "export const MCP_TOKEN_PREFIX = 'mcp_'"
+    },
+    {
+      "check_id": "semgrep.myhub-hardcoded-worker-secret",
+      "path": "vitest.config.ts",
+      "line": 34,
+      "snippet_hash": "4dd5ca0cce1dd8c8",
+      "occurrence": 1,
+      "snippet": "SESSION_SECRET: 'runtime-test-only-session-secret-not-for-production',"
+    },
+    {
+      "check_id": "semgrep.myhub-hardcoded-worker-secret",
+      "path": "vitest.config.ts",
+      "line": 42,
+      "snippet_hash": "eab0b29d472e9cf1",
+      "occurrence": 1,
+      "snippet": "GOOGLE_CLIENT_SECRET: 'runtime-test-client-secret',"
+    },
+    {
+      "check_id": "semgrep.myhub-locked-memo-query-without-filter",
+      "path": "src/services/fact-graph.ts",
+      "line": 328,
+      "snippet_hash": "b15bf7d288b4eab6",
+      "occurrence": 1,
+      "snippet": "const memo = await env.DB.prepare("
+    },
+    {
+      "check_id": "semgrep.myhub-sql-template-interpolation",
+      "path": "src/index.ts",
+      "line": 104,
+      "snippet_hash": "d50857eb6d1a9384",
+      "occurrence": 1,
+      "snippet": "tableNames.map((name) => c.env.DB.prepare(`SELECT COUNT(*) as n FROM \"${name}\"`))"
+    },
+    {
+      "check_id": "semgrep.myhub-sql-template-interpolation",
+      "path": "src/index.ts",
+      "line": 112,
+      "snippet_hash": "daa2a978381915f0",
+      "occurrence": 1,
+      "snippet": "const r = await c.env.DB.prepare(`SELECT COUNT(*) as n FROM \"${name}\"`).first<{ n: number }>()"
+    },
+    {
+      "check_id": "semgrep.myhub-sql-template-interpolation",
+      "path": "src/modules/artifact/routes.ts",
+      "line": 515,
+      "snippet_hash": "9cc706a4e30c2e17",
+      "occurrence": 1,
+      "snippet": "const result = await c.env.DB.prepare("
+    },
+    {
+      "check_id": "semgrep.myhub-sql-template-interpolation",
+      "path": "src/modules/backup/routes.ts",
+      "line": 167,
+      "snippet_hash": "6373c1f88f26e664",
+      "occurrence": 1,
+      "snippet": "env.DB.prepare(`SELECT * FROM ${table}`)"
+    },
+    {
+      "check_id": "semgrep.myhub-sql-template-interpolation",
+      "path": "src/modules/backup/routes.ts",
+      "line": 283,
+      "snippet_hash": "6373c1f88f26e664",
+      "occurrence": 2,
+      "snippet": "env.DB.prepare(`SELECT * FROM ${table}`)"
+    },
+    {
+      "check_id": "semgrep.myhub-sql-template-interpolation",
+      "path": "src/modules/memo/routes.ts",
+      "line": 287,
+      "snippet_hash": "c2ecc68f7769a1a3",
+      "occurrence": 1,
+      "snippet": "const { results } = await c.env.DB.prepare("
+    },
+    {
+      "check_id": "semgrep.myhub-sql-template-interpolation",
+      "path": "src/modules/memo/routes.ts",
+      "line": 308,
+      "snippet_hash": "573f6941c74cf107",
+      "occurrence": 1,
+      "snippet": "const { results } = await c.env.DB.prepare("
+    },
+    {
+      "check_id": "semgrep.myhub-sql-template-interpolation",
+      "path": "src/modules/memo/routes.ts",
+      "line": 326,
+      "snippet_hash": "747138879a2d9604",
+      "occurrence": 1,
+      "snippet": "const { results } = await c.env.DB.prepare("
+    },
+    {
+      "check_id": "semgrep.myhub-sql-template-interpolation",
+      "path": "src/modules/memo/routes.ts",
+      "line": 353,
+      "snippet_hash": "8c0c9c28372d3d08",
+      "occurrence": 1,
+      "snippet": "const { results } = await c.env.DB.prepare("
+    },
+    {
+      "check_id": "semgrep.myhub-sql-template-interpolation",
+      "path": "src/modules/memo/routes.ts",
+      "line": 365,
+      "snippet_hash": "3b2e94112553895b",
+      "occurrence": 1,
+      "snippet": "const { results } = await c.env.DB.prepare("
+    },
+    {
+      "check_id": "semgrep.myhub-sql-template-interpolation",
+      "path": "src/modules/memory/routes.ts",
+      "line": 97,
+      "snippet_hash": "94dc18ca416e2cab",
+      "occurrence": 1,
+      "snippet": "const { results } = await c.env.DB.prepare("
+    },
+    {
+      "check_id": "semgrep.myhub-sql-template-interpolation",
+      "path": "src/modules/memory/routes.ts",
+      "line": 175,
+      "snippet_hash": "123a73dd7eade619",
+      "occurrence": 1,
+      "snippet": "await c.env.DB.prepare("
+    },
+    {
+      "check_id": "semgrep.myhub-sql-template-interpolation",
+      "path": "src/modules/schedule/routes.ts",
+      "line": 125,
+      "snippet_hash": "16fa0fc2af9f1c99",
+      "occurrence": 1,
+      "snippet": "const { results: singles } = await db.prepare("
+    },
+    {
+      "check_id": "semgrep.myhub-sql-template-interpolation",
+      "path": "src/modules/schedule/routes.ts",
+      "line": 149,
+      "snippet_hash": "8f8eccc8b34c1e90",
+      "occurrence": 1,
+      "snippet": "const { results: recurring } = await db.prepare("
+    },
+    {
+      "check_id": "semgrep.myhub-sql-template-interpolation",
+      "path": "src/modules/todo/routes.ts",
+      "line": 97,
+      "snippet_hash": "eabc9e23998c4926",
+      "occurrence": 1,
+      "snippet": "const { results } = await db.prepare("
+    },
+    {
+      "check_id": "semgrep.myhub-sql-template-interpolation",
+      "path": "src/services/approval-flow.ts",
+      "line": 147,
+      "snippet_hash": "b11be978cc47c061",
+      "occurrence": 1,
+      "snippet": "const row = await this.db"
+    },
+    {
+      "check_id": "semgrep.myhub-sql-template-interpolation",
+      "path": "src/services/fact-graph.ts",
+      "line": 394,
+      "snippet_hash": "63a85178001a31ae",
+      "occurrence": 1,
+      "snippet": "const { results: seedRows } = await env.DB.prepare("
+    },
+    {
+      "check_id": "semgrep.myhub-sql-template-interpolation",
+      "path": "src/services/fact-graph.ts",
+      "line": 403,
+      "snippet_hash": "278ec138f8e0eb97",
+      "occurrence": 1,
+      "snippet": "const { results: relRows } = await env.DB.prepare("
+    },
+    {
+      "check_id": "semgrep.myhub-sql-template-interpolation",
+      "path": "src/services/memory-service.ts",
+      "line": 326,
+      "snippet_hash": "9a8f1169d4017ca8",
+      "occurrence": 1,
+      "snippet": "const { results } = await env.DB.prepare("
+    },
+    {
+      "check_id": "semgrep.myhub-sql-template-interpolation",
+      "path": "src/services/memory-service.ts",
+      "line": 436,
+      "snippet_hash": "5e104172863edf2b",
+      "occurrence": 1,
+      "snippet": "const { results } = await env.DB.prepare("
+    },
+    {
+      "check_id": "semgrep.myhub-sql-template-interpolation",
+      "path": "src/services/schedule-tools.ts",
+      "line": 113,
+      "snippet_hash": "ce99c5c67b005962",
+      "occurrence": 1,
+      "snippet": "const { results: singles } = await env.DB.prepare("
+    },
+    {
+      "check_id": "semgrep.myhub-sql-template-interpolation",
+      "path": "src/services/schedule-tools.ts",
+      "line": 121,
+      "snippet_hash": "aacd6e7ce1c847eb",
+      "occurrence": 1,
+      "snippet": "const { results: recurring } = await env.DB.prepare("
+    },
+    {
+      "check_id": "semgrep.myhub-sql-template-interpolation",
+      "path": "src/services/schedule-tools.ts",
+      "line": 205,
+      "snippet_hash": "5528c53e291c7928",
+      "occurrence": 1,
+      "snippet": "await env.DB.prepare(`UPDATE schedules SET ${fields.join(', ')} WHERE id = ?`).bind(...params, id).run();"
+    },
+    {
+      "check_id": "semgrep.myhub-sql-template-interpolation",
+      "path": "src/services/todo-tools.ts",
+      "line": 180,
+      "snippet_hash": "4c49c005a65264fa",
+      "occurrence": 1,
+      "snippet": "await env.DB.prepare(`UPDATE todos SET ${fields.join(', ')} WHERE id = ?`).bind(...params, id).run();"
+    },
+    {
+      "check_id": "semgrep.myhub-sql-template-interpolation",
+      "path": "src/services/workflow.ts",
+      "line": 218,
+      "snippet_hash": "a4aed09d9de17a8d",
+      "occurrence": 1,
+      "snippet": "const upd = await db"
+    }
+  ]
+}
