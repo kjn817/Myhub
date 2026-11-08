@@ -25,14 +25,14 @@ import { rotateEncryptionKey, type RotationCounts } from '../../services/key-rot
 export const keyRotationApp = new Hono<{ Bindings: Env }>()
 
 const MIN_NEW_KEY_LENGTH = 16
-const ROTATION_STEP_UP_MAX_AGE_MS = 2 * 60 * 1000
+export const ROTATION_STEP_UP_MAX_AGE_MS = 2 * 60 * 1000
 
 type StepUpGate =
   | { ok: true }
   | { ok: false; status: number; body: { ok: false; error: string; code: string } }
 
 /** 로테이션용 step-up — 보호 게이트 + 발급 2분 이내 신선도 요구. */
-async function requireRotationStepUp(c: any, now: number = Date.now()): Promise<StepUpGate> {
+export async function requireRotationStepUp(c: any, now: number = Date.now()): Promise<StepUpGate> {
   const gate = await requireProtectedAccess(c)
   if (!gate.ok) return gate
   if (!(await hasConfiguredPin(c))) return { ok: true }

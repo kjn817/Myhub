@@ -110,6 +110,11 @@
 
   if (window.lucide && window.lucide.createIcons) window.lucide.createIcons();
 
+  // CSP 파일럿 전제: 속성형 핸들러(onclick=)를 쓰지 않고 addEventListener로만 건다
+  // (script-src-attr 'none' — tests/unit/csp-inventory.test.ts가 고정).
+  el('dryRunBtn').addEventListener('click', function () { window.krDryRun(); });
+  el('executeBtn').addEventListener('click', function () { window.krExecute(); });
+
   window.krExecute = async function () {
     hide('errorBox'); hide('successBox');
     if (!lastPending) { show('errorBox', '먼저 dry-run을 실행하세요.'); return; }
@@ -125,18 +130,16 @@
         show('errorBox', '전환 완료 건수가 dry-run 대상과 다릅니다 — rotated: ' + countsText(report.rotated) + ' / pending: ' + countsText(lastPending) + '. 대시보드 교체로 넘어가지 말고 이 건수를 Claude에 알려주세요.');
         return;
       }
-      el('newKey').value = '';
       show('successBox', '로테이션 완료 — ' + countsText(report.rotated) + ' 전부 새 키로 전환됐습니다.');
-      show('warnBox', '경고: 지금부터 Cloudflare 대시보드에서 MEMO_ENCRYPTION_KEY를 새 값으로 교체하기 전까지, 전환된 항목은 운영 화면에서 읽히지 않습니다. 이 페이지의 안내대로 대시보드 교체를 바로 이어서 마치고, 교체 후에는 보호 메모 열람으로 복호화를 확인하세요.');
+      show('warnBox', '경고 · 현재 상태는 「전환 완료 · 시크릿 교체 대기」입니다: 지금부터 Cloudflare 대시보드에서 MEMO_ENCRYPTION_KEY를 새 값으로 교체하기 전까지, 전환된 항목은 운영 화면에서 읽히지 않습니다. 이 페이지의 안내대로 대시보드 교체를 바로 이어서 마치고, 교체 후에는 보호 메모 열람으로 복호화를 확인하세요. 교체가 늦어져도 암호문 데이터가 깨지지는 않지만, 그 사이에는 새 잠긴 메모를 만들지 마세요. 교체 후에도 열리지 않으면 값을 더 바꾸지 말고 아래 「문제가 생기면」 순서대로 확인하세요.');
     } catch (e) {
       show('errorBox', e.message || '로테이션 중 오류가 발생했습니다.');
     } finally {
+      // 실행을 시도한 뒤에는 결과와 무관하게 입력란의 키 값을 비운다 —
+      // 서버가 일부라도 전환했을 수 있는 상태에서 값을 화면에 남기지 않기
+      // 위해서다. 재시도·롤백에 필요한 값은 비밀번호 관리자 보관본을 쓴다.
+      el('newKey').value = '';
       el('dryRunBtn').disabled = false;
     }
   };
-  // 버튼 배선 — KEY_ROTATION_CSP script-src-attr 'none'이라 인라인 onclick 불가.
-  var dryBtn = el('dryRunBtn');
-  if (dryBtn) dryBtn.addEventListener('click', function () { window.krDryRun(); });
-  var execBtn = el('executeBtn');
-  if (execBtn) execBtn.addEventListener('click', function () { window.krExecute(); });
 })();

@@ -208,7 +208,7 @@ html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
   @media (max-width: 768px) {
     .assistant-cards { gap: 8px; }
     .assistant-card { width: 90px; padding: 8px 4px; }
-    .assistant-card img { width: 56px; height: 56px; }
+    .assistant-card img { width: 52px; height: 52px; }
     .assistant-card .card-name { font-size: 14px; }
     .assistant-card .card-desc { font-size: 11px; }
   }
@@ -361,7 +361,7 @@ html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
     position: relative;
   }
   .sidebar-left {
-    width: 280px; background: var(--bg);
+    width: 429px; background: var(--bg);
     display: flex; flex-direction: column; overflow: hidden;
     position: fixed; left: 0; top: 0; bottom: 0; z-index: 55;
     box-shadow: 4px 0 20px rgba(0,0,0,0.12);

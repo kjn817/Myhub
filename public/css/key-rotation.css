@@ -1,3 +1,5 @@
+/* 키 로테이션 페이지 전용 스타일 (2026-11-01 CSP 파일럿으로 key-rotation.html의
+   인라인 <style> 블록에서 추출 — style-src-elem 'self' enforce의 전제) */
 .wrap { max-width: 600px; margin: 0 auto; padding: 20px; }
 .card { background: white; border: 1px solid #eee; border-radius: 12px; padding: 24px; margin-bottom: 16px; }
 .card h2 { margin: 0 0 16px 0; font-size: 18px; }

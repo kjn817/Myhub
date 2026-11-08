@@ -67,7 +67,7 @@
 .browser-notice { color: #b45309; font-weight: 600; min-height: 1em; }
 .browser-notice:empty { min-height: 0; }
 .browser-section-title { font-size: 13px; font-weight: 700; color: #52525b; margin: 26px 0 10px; }
-.browser-favs { display: flex; gap: 14px; flex-wrap: wrap; }
+.browser-favs { display: flex; gap: 40px; flex-wrap: wrap; }
 .browser-fav {
   border: 0; background: none; cursor: pointer; display: flex; flex-direction: column;
   align-items: center; gap: 7px; padding: 0; width: 64px;
