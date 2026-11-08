@@ -1,0 +1,172 @@
+/* 로그인 페이지 스타일 — macOS 로그인 화면 문법으로 리스타일 (2026-11-02).
+   인증 동작이 의존하는 클래스 계약(.step/.active/.error/.show/.btn/.field/
+   .code/.timer)은 그대로 유지하고 시각만 바꾼다: 차분한 중성 배경, 중앙
+   정렬 컬럼, 원형 아바타+이름, pill형 입력·버튼, 부드러운 페이드인.
+   흔들림(.shake)은 login-visual.js가 오류 표시 시점에만 부여한다. */
+:root {
+    --bg: #ececf0;
+    --card: #ffffff;
+    --text: #1d1d1f;
+    --sub: #6e6e73;
+    --border: #d2d2d7;
+    --accent: #1d1d1f;
+    --accent-hover: #000000;
+    --link: #0066cc;
+    --radius: 20px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+  .topbar {
+    color: var(--sub);
+    padding: 18px 24px;
+    font-size: 14px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+  }
+  .topbar .lucide { width: 18px; height: 18px; }
+  .wrap {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+  }
+  .card {
+    background: var(--card);
+    border: 1px solid rgba(0, 0, 0, 0.04);
+    border-radius: var(--radius);
+    padding: 36px 40px 40px;
+    width: 100%;
+    max-width: 380px;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.10);
+    animation: loginFadeIn 0.45s ease both;
+  }
+  .card.shake { animation: loginShake 0.4s ease; }
+  @keyframes loginFadeIn {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: none; }
+  }
+  @keyframes loginShake {
+    0%, 100% { transform: translateX(0); }
+    20% { transform: translateX(-9px); }
+    40% { transform: translateX(8px); }
+    60% { transform: translateX(-5px); }
+    80% { transform: translateX(3px); }
+  }
+  .login-hero {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 26px;
+  }
+  .login-avatar {
+    width: 76px;
+    height: 76px;
+    border-radius: 50%;
+    background: #a5c8f0;
+    color: #ffffff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 27px;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    box-shadow: inset 0 -6px 14px rgba(0, 0, 0, 0.08);
+  }
+  .login-name { font-size: 19px; font-weight: 600; }
+  .card h1 {
+    font-size: 15px;
+    font-weight: 600;
+    text-align: center;
+    color: var(--text);
+    margin-bottom: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+  }
+  .card h1 .lucide { width: 17px; height: 17px; color: var(--sub); }
+  .card p.desc {
+    color: var(--sub);
+    font-size: 13.5px;
+    text-align: center;
+    margin-bottom: 22px;
+    line-height: 1.55;
+  }
+  .field { margin-bottom: 14px; }
+  .field label {
+    display: block;
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--sub);
+    text-align: center;
+    margin-bottom: 7px;
+  }
+  .field input {
+    width: 100%;
+    padding: 11px 18px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    font-size: 15px;
+    outline: none;
+    background: #fbfbfd;
+    text-align: center;
+  }
+  .field input:focus { border-color: #7db8f0; box-shadow: 0 0 0 3px rgba(125, 184, 240, 0.25); background: #ffffff; }
+  .field input.code {
+    font-size: 22px;
+    letter-spacing: 8px;
+    font-weight: 700;
+  }
+  .btn {
+    width: 100%;
+    padding: 12px;
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: 999px;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    margin-top: 4px;
+  }
+  .btn:hover { background: var(--accent-hover); }
+  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .btn.secondary {
+    background: transparent;
+    color: var(--link);
+    border: none;
+    font-weight: 500;
+    font-size: 13.5px;
+    padding: 9px;
+    margin-top: 6px;
+  }
+  .btn.secondary:hover { background: rgba(0, 102, 204, 0.06); }
+  .error {
+    color: #d70015;
+    font-size: 13px;
+    text-align: center;
+    margin-top: 12px;
+    display: none;
+  }
+  .error.show { display: block; }
+  .step { display: none; }
+  .step.active { display: block; }
+  .timer {
+    text-align: center;
+    color: var(--sub);
+    font-size: 13px;
+    margin-top: 12px;
+  }

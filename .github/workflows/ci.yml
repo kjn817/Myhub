@@ -1,0 +1,45 @@
+name: CI
+
+# 2026-10-31 신설 — 그동안 이 저장소에는 CI가 없어 수동 게이트만 있었다.
+# 목적: 정상 파일시스템 환경에서 plain `npm ci`가 통과함을 증명하고
+# (개발 VM의 overlay FS는 chown 제한으로 node-gyp EPERM이 발생해
+# 로컬에서는 이 증명이 불가능하다), 타입·단위·런타임 테스트를
+# 푸시마다 자동으로 확인한다.
+#
+# 트리거 브랜치:
+# - main: 정식 브랜치
+# - fix/unlock-block-remove-ciphertext: 현재 작업 브랜치
+# - ci/npm-ci-proof: npm ci 증명용 브랜치 (증명 완료 후 이 줄은 제거 가능)
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - fix/unlock-block-remove-ciphertext
+      - ci/npm-ci-proof
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install (plain npm ci — lockfile proof)
+        run: npm ci
+
+      - name: Type check
+        run: npx tsc --noEmit
+
+      - name: Unit tests (Jest)
+        run: npx jest --ci
+
+      - name: Runtime tests (Vitest / miniflare)
+        run: npm run test:runtime

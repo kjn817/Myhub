@@ -1,0 +1,60 @@
+name = "myhub"
+main = "src/index-inline.ts"
+compatibility_date = "2026-10-01"
+
+[assets]
+directory = "./public"
+binding = "ASSETS"
+run_worker_first = true
+# html_handling="none" 필수 (audit P-1, 2026-10-28): 기본 auto-trailing-slash는
+# /login.html → 307 → /login으로 보내고 /login은 인증 allowlist에 없어
+# 무인증 리다이렉트 루프가 된다. deploy_full.py ASSETS_CONFIG와 동일하게 유지할 것.
+html_handling = "none"
+
+[vars]
+APP_NAME = "MyHub"
+# Clef-flash 자동 라우터 Feature Flag (2026-10-15)
+# true: 신규 Clef-flash 라우터 사용 / false: 기존 레거시 라우터 사용 (기본값)
+# 2026-10-15: E2E 테스트에서 3개 실행 문제 발견 → false로 복구, 수정 후 재검증 예정
+CLEF_ROUTER_ENABLED = "false"
+
+# 워크플로 엔진 이식 경로 — 일정 알림 Cron (2026-10-25, 트랙 8)
+# true: handleScheduled가 워크플로 엔진(src/services/reminder-workflow.ts)으로 위임
+# false(기본): 기존 경로 유지. 운영 활성화는 마이그레이션 0050 적용 후 승인 단계에서
+# deploy_full.py metadata bindings에 plain_text WORKFLOW_REMINDER_ENABLED=true를 추가할 것
+# (deploy_full.py는 wrangler.toml [vars]를 업로드 메타데이터에 동기화하지 않음).
+WORKFLOW_REMINDER_ENABLED = "false"
+
+# Google 쓰기 플래그 (2026-10-28 사용자 승인 — 테스트 계정만 연결됨).
+# 'true'면 /api/google/oauth/start?mode=write가 calendar.events scope 동의를 허용.
+# wrangler dev용 기록 — deploy_full.py는 wrangler.toml [vars]를 동기화하지
+# 않으므로 운영 기준은 deploy_full.py build_worker_metadata의 plain_text 바인딩이다.
+GOOGLE_WRITE_ENABLED = "true"
+
+# D1 데이터베이스 바인딩
+# 배포 전 아래 database_id를 실제 값으로 교체:
+#   npx wrangler d1 create myhub-db  → 출력된 database_id를 여기에 입력
+[[d1_databases]]
+binding = "DB"
+database_name = "myhub-db"
+database_id = "0dd871c5-3d1c-4cea-bfbe-3e258f477106"
+
+# 파일 저장소: Cloudinary (무료 25GB, 카드 불필요)
+# 인증 정보는 Worker secret으로 등록 (wrangler secret put):
+#   CLOUDINARY_CLOUD_NAME / CLOUDINARY_API_KEY / CLOUDINARY_API_SECRET
+
+[[kv_namespaces]]
+binding = "KV"
+id = "83d3e9027c9145ae89c15df3bdee9999"
+
+# Artifact 작업 Queue (백그라운드 AI 실행)
+[[queues.producers]]
+queue = "myhub-artifact-jobs"
+binding = "ARTIFACT_QUEUE"
+
+[[queues.consumers]]
+queue = "myhub-artifact-jobs"
+max_batch_size = 1
+max_retries = 3
+max_concurrency = 2
+

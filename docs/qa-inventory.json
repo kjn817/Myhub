@@ -1,0 +1,390 @@
+{
+  "apis": [
+    {
+      "id": "API-MEMO-001",
+      "module": "memo",
+      "method": "GET",
+      "route": "/stats",
+      "status": "NOT TESTED"
+    },
+    {
+      "id": "API-MEMO-002",
+      "module": "memo",
+      "method": "GET",
+      "route": "/tags",
+      "status": "NOT TESTED"
+    },
+    {
+      "id": "API-MEMO-003",
+      "module": "memo",
+      "method": "GET",
+      "route": "/calendar",
+      "status": "NOT TESTED"
+    },
+    {
+      "id": "API-MEMO-004",
+      "module": "memo",
+      "method": "GET",
+      "route": "/",
+      "status": "NOT TESTED"
+    },
+    {
+      "id": "API-MEMO-005",
+      "module": "memo",
+      "method": "POST",
+      "route": "/",
+      "status": "NOT TESTED"
+    },
+    {
+      "id": "API-MEMO-006",
+      "module": "memo",
+      "method": "PUT",
+      "route": "/:id",
+      "status": "NOT TESTED"
+    },
+    {
+      "id": "API-MEMO-007",
+      "module": "memo",
+      "method": "POST",
+      "route": "/:id/lock",
+      "status": "NOT TESTED"
+    },
+    {
+      "id": "API-MEMO-008",
+      "module": "memo",
+      "method": "POST",
+      "route": "/:id/lock-block",
+      "status": "NOT TESTED"
+    },
+    {
+      "id": "API-MEMO-009",
+      "module": "memo",
+      "method": "POST",
+      "route": "/:id/unlock-block/:blockId",
+      "status": "NOT TESTED"
+    },
+    {
+      "id": "API-MEMO-010",
+      "module": "memo",
+      "method": "POST",
+      "route": "/files/:fileId/lock",
+      "status": "NOT TESTED"
+    },
+    {
+      "id": "API-MEMO-011",
+      "module": "memo",
+      "method": "GET",
+      "route": "/files/:fileId/content",
+      "status": "NOT TESTED"
+    },
+    {
+      "id": "API-MEMO-012",
+      "module": "memo",
+      "method": "POST",
+      "route": "/:id/sensitivity",
+      "status": "NOT TESTED"
+    },
+    {
+      "id": "API-MEMO-013",
+      "module": "memo",
+      "method": "DELETE",
+      "route": "/:id",
+      "status": "NOT TESTED"
+    },
+    {
+      "id": "API-MEMO-014",
+      "module": "memo",
+      "method": "GET",
+      "route": "/:id/files",
+      "status": "NOT TESTED"
+    },
+    {
+      "id": "API-MEMO-015",
+      "module": "memo",
+      "method": "POST",
+      "route": "/:id/files",
+      "status": "NOT TESTED"
+    },
+    {
+      "id": "API-MEMO-016",
+      "module": "memo",
+      "method": "GET",
+      "route": "/files/:fileId",
+      "status": "NOT TESTED"
+    },
+    {
+      "id": "API-MEMO-017",
+      "module": "memo",
+      "method": "DELETE",
+      "route": "/files/:fileId",
+      "status": "NOT TESTED"
+    },
+    {
+      "id": "API-AI-001",
+      "module": "ai",
+      "method": "GET",
+      "route": "/personas",
+      "status": "NOT TESTED"
+    },
+    {
+      "id": "API-AI-002",
+      "module": "ai",
+      "method": "POST",
+      "route": "/chat",
+      "status": "NOT TESTED"
+    },
+    {
+      "id": "API-AI-003",
+      "module": "ai",
+      "method": "POST",
+      "route": "/orchestrate",
+      "status": "NOT TESTED"
+    },
+    {
+      "id": "API-AI-004",
+      "module": "ai",
+      "method": "GET",
+      "route": "/history",
+      "status": "NOT TESTED"
+    },
+    {
+      "id": "API-AI-005",
+      "module": "ai",
+      "method": "GET",
+      "route": "/conversations",
+      "status": "NOT TESTED"
+    },
+    {
+      "id": "API-AI-006",
+      "module": "ai",
+      "method": "POST",
+      "route": "/conversations",
+      "status": "NOT TESTED"
+    },
+    {
+      "id": "API-AI-007",
+      "module": "ai",
+      "method": "DELETE",
+      "route": "/conversations/:id",
+      "status": "NOT TESTED"
+    },
+    {
+      "id": "API-AI-008",
+      "module": "ai",
+      "method": "POST",
+      "route": "/memory",
+      "status": "NOT TESTED"
+    },
+    {
+      "id": "API-AI-009",
+      "module": "ai",
+      "method": "GET",
+      "route": "/memory",
+      "status": "NOT TESTED"
+    },
+    {
+      "id": "API-AI-010",
+      "module": "ai",
+      "method": "DELETE",
+      "route": "/memory/:key",
+      "status": "NOT TESTED"
+    },
+    {
+      "id": "API-AI-011",
+      "module": "ai",
+      "method": "GET",
+      "route": "/tools",
+      "status": "NOT TESTED"
+    },
+    {
+      "id": "API-AI-012",
+      "module": "ai",
+      "method": "GET",
+      "route": "/room-history",
+      "status": "NOT TESTED"
+    },
+    {
+      "id": "API-AI-013",
+      "module": "ai",
+      "method": "GET",
+      "route": "/models",
+      "status": "NOT TESTED"
+    },
+    {
+      "id": "API-AI-014",
+      "module": "ai",
+      "method": "GET",
+      "route": "/settings",
+      "status": "NOT TESTED"
+    },
+    {
+      "id": "API-AI-015",
+      "module": "ai",
+      "method": "POST",
+      "route": "/settings",
+      "status": "NOT TESTED"
+    },
+    {
+      "id": "API-AI-016",
+      "module": "ai",
+      "method": "GET",
+      "route": "/quota",
+      "status": "NOT TESTED"
+    },
+    {
+      "id": "API-AI-017",
+      "module": "ai",
+      "method": "GET",
+      "route": "/usage",
+      "status": "NOT TESTED"
+    },
+    {
+      "id": "API-AI-018",
+      "module": "ai",
+      "method": "GET",
+      "route": "/websearch",
+      "status": "NOT TESTED"
+    },
+    {
+      "id": "API-AI-019",
+      "module": "ai",
+      "method": "GET",
+      "route": "/github",
+      "status": "NOT TESTED"
+    },
+    {
+      "id": "API-AI-020",
+      "module": "ai",
+      "method": "POST",
+      "route": "/image",
+      "status": "NOT TESTED"
+    },
+    {
+      "id": "API-AI-021",
+      "module": "ai",
+      "method": "GET",
+      "route": "/debug/errors",
+      "status": "NOT TESTED"
+    },
+    {
+      "id": "API-SCHEDULE-001",
+      "module": "schedule",
+      "method": "GET",
+      "route": "/list",
+      "status": "NOT TESTED"
+    },
+    {
+      "id": "API-SCHEDULE-002",
+      "module": "schedule",
+      "method": "GET",
+      "route": "/:id",
+      "status": "NOT TESTED"
+    },
+    {
+      "id": "API-SCHEDULE-003",
+      "module": "schedule",
+      "method": "POST",
+      "route": "/create",
+      "status": "NOT TESTED"
+    },
+    {
+      "id": "API-SCHEDULE-004",
+      "module": "schedule",
+      "method": "PUT",
+      "route": "/:id",
+      "status": "NOT TESTED"
+    },
+    {
+      "id": "API-SCHEDULE-005",
+      "module": "schedule",
+      "method": "DELETE",
+      "route": "/:id",
+      "status": "NOT TESTED"
+    },
+    {
+      "id": "API-SCHEDULE-006",
+      "module": "schedule",
+      "method": "POST",
+      "route": "/:id/reminders",
+      "status": "NOT TESTED"
+    },
+    {
+      "id": "API-TODO-001",
+      "module": "todo",
+      "method": "GET",
+      "route": "/list",
+      "status": "NOT TESTED"
+    },
+    {
+      "id": "API-TODO-002",
+      "module": "todo",
+      "method": "GET",
+      "route": "/:id",
+      "status": "NOT TESTED"
+    },
+    {
+      "id": "API-TODO-003",
+      "module": "todo",
+      "method": "POST",
+      "route": "/create",
+      "status": "NOT TESTED"
+    },
+    {
+      "id": "API-TODO-004",
+      "module": "todo",
+      "method": "PUT",
+      "route": "/reorder",
+      "status": "NOT TESTED"
+    },
+    {
+      "id": "API-TODO-005",
+      "module": "todo",
+      "method": "PUT",
+      "route": "/:id",
+      "status": "NOT TESTED"
+    },
+    {
+      "id": "API-TODO-006",
+      "module": "todo",
+      "method": "POST",
+      "route": "/:id/toggle",
+      "status": "NOT TESTED"
+    },
+    {
+      "id": "API-TODO-007",
+      "module": "todo",
+      "method": "DELETE",
+      "route": "/:id",
+      "status": "NOT TESTED"
+    },
+    {
+      "id": "API-AUTH-001",
+      "module": "auth",
+      "method": "POST",
+      "route": "/request",
+      "status": "NOT TESTED"
+    },
+    {
+      "id": "API-AUTH-002",
+      "module": "auth",
+      "method": "POST",
+      "route": "/verify",
+      "status": "NOT TESTED"
+    },
+    {
+      "id": "API-AUTH-003",
+      "module": "auth",
+      "method": "POST",
+      "route": "/logout",
+      "status": "NOT TESTED"
+    },
+    {
+      "id": "API-AUTH-004",
+      "module": "auth",
+      "method": "GET",
+      "route": "/me",
+      "status": "NOT TESTED"
+    }
+  ],
+  "total": 55
+}

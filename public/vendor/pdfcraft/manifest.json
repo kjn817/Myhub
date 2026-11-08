@@ -1,0 +1,14 @@
+{
+  "sourceCommit": "ca64a31c6ccc61d326970cc576e00043671d3f57",
+  "glue": "pdfcraft-web-b3d25b7e92d662c0.js",
+  "wasm": "pdfcraft-web-b3d25b7e92d662c0_bg.wasm",
+  "wasmBytes": 36111193,
+  "wasmParts": [
+    "pdfcraft-web-b3d25b7e92d662c0_bg.wasm.part0",
+    "pdfcraft-web-b3d25b7e92d662c0_bg.wasm.part1"
+  ],
+  "wasmPartBytes": [
+    18055597,
+    18055596
+  ]
+}

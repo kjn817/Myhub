@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<meta name="theme-color" content="#ffffff">
+<link rel="manifest" href="/manifest.json">
+<title>브라우저</title>
+<link rel="stylesheet" href="/shell.css">
+<link rel="stylesheet" href="/css/browser.css">
+<script src="/vendor/lucide/lucide.min.js"></script>
+</head>
+<body class="browser-body">
+<header class="g-nav browser-chrome">
+  <a href="/" class="brand-logo" aria-label="MyHub 홈"><img src="/icon-192.png" alt="JN" style="height:26px;width:auto;display:block;"></a>
+  <div class="browser-tabs" id="browserTabs"></div>
+  <button type="button" class="browser-newtab" id="browserNewTab" aria-label="새 탭"><i data-lucide="plus"></i></button>
+  <div class="spacer"></div>
+</header>
+
+<div class="browser-toolbar">
+  <div class="browser-address-wrap">
+    <i data-lucide="lock" class="browser-address-lock"></i>
+    <input id="browserAddress" type="text" placeholder="주소 입력" autocomplete="off" spellcheck="false">
+  </div>
+  <button type="button" class="browser-start-btn" id="browserStartBtn">브라우저 시작</button>
+</div>
+
+<main class="browser-main">
+  <section id="browserStart">
+    <div class="browser-start-inner">
+      <div class="browser-notice-card">
+        <h1>실제 브라우저</h1>
+        <p>원격 브라우저에서 실제 페이지를 엽니다. 무료 한도는 <strong>하루 10분 · 1회 2분</strong>이고 매일 <strong>09:00</strong>에 초기화돼요.</p>
+        <p class="browser-notice" id="browserNotice" role="alert"></p>
+      </div>
+      <h2 class="browser-section-title">즐겨찾기</h2>
+      <div class="browser-favs" id="browserFavs"></div>
+      <h2 class="browser-section-title">최근 방문</h2>
+      <div class="browser-recents" id="browserRecents"></div>
+    </div>
+  </section>
+  <iframe id="browserFrame" title="원격 브라우저" style="display:none;"></iframe>
+  <div id="browserPill" style="display:none;">
+    <span class="browser-pill-dot"></span>
+    <span>남은 시간 <strong id="browserPillTime">2:00</strong></span>
+    <button type="button" id="browserPillEnd">종료</button>
+  </div>
+</main>
+
+<script src="/nav.js"></script>
+<script src="/js/assistant-bridge.js"></script>
+<script src="/js/browser-live.js"></script>
+<script src="/js/browser.js"></script>
+</body>
+</html>

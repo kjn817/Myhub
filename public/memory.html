@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#ffffff">
+<title>내 기억</title>
+<link rel="stylesheet" href="/shell.css">
+<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+<style>
+.wrap { max-width: 800px; margin: 0 auto; padding: 20px; }
+.header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+.btn { padding: 10px 20px; background: #007aff; color: white; border: none; border-radius: 8px; cursor: pointer; }
+.btn-danger { background: #ff3b30; }
+.btn-secondary { background: #f0f0f0; color: #333; }
+.search-box { display: flex; gap: 8px; margin-bottom: 16px; }
+.search-box input, .search-box select { padding: 10px; border: 1px solid #ddd; border-radius: 8px; }
+.search-box input { flex: 1; }
+.memory-item { padding: 16px; border: 1px solid #eee; border-radius: 8px; margin-bottom: 12px; }
+.memory-item .cat { font-size: 12px; color: #007aff; margin-bottom: 4px; }
+.memory-item .content { margin-bottom: 8px; white-space: pre-wrap; }
+.memory-item .meta { font-size: 12px; color: #999; margin-bottom: 8px; }
+.memory-item .actions { display: flex; gap: 8px; }
+.memory-item .actions button { padding: 6px 12px; font-size: 13px; }
+.modal { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 100; }
+.modal.show { display: flex; align-items: center; justify-content: center; }
+.modal-content { background: white; padding: 24px; border-radius: 12px; max-width: 500px; width: 90%; }
+.modal-content textarea, .modal-content select { width: 100%; padding: 10px; margin-bottom: 12px; border: 1px solid #ddd; border-radius: 8px; }
+.modal-content textarea { min-height: 100px; resize: vertical; }
+.empty { text-align: center; padding: 40px; color: #999; }
+.notice { background: #fff8e1; padding: 12px; border-radius: 8px; margin-bottom: 16px; font-size: 14px; }
+</style>
+</head>
+<body>
+<header class="g-nav"><a href="/" class="brand-logo" aria-label="MyHub 홈"><img src="/icon-192.png" alt="JN" style="height:26px;width:auto;display:block;"></a><div class="spacer"></div></header>
+<div class="wrap">
+  <div class="header">
+    <h1>내 기억</h1>
+    <button class="btn" onclick="openModal()">+ 새 기억</button>
+  </div>
+  <div class="notice">직접 저장한 기억만 표시됩니다. AI가 자동으로 저장하지 않습니다.</div>
+  <div class="search-box">
+    <input id="q" type="search" placeholder="기억 검색" onkeypress="if(event.key==='Enter')loadMemories()">
+    <select id="category" onchange="loadMemories()">
+      <option value="">전체</option>
+      <option value="general">일반</option>
+      <option value="preference">선호</option>
+      <option value="fact">사실</option>
+      <option value="schedule">일정</option>
+      <option value="work">업무</option>
+    </select>
+    <button class="btn btn-secondary" onclick="loadMemories()">검색</button>
+  </div>
+  <div id="list"></div>
+</div>
+
+<div class="modal" id="modal">
+  <div class="modal-content">
+    <h2 id="modalTitle">새 기억</h2>
+    <textarea id="content" placeholder="기억할 내용을 입력하세요"></textarea>
+    <select id="modalCategory">
+      <option value="general">일반</option>
+      <option value="preference">선호</option>
+      <option value="fact">사실</option>
+      <option value="schedule">일정</option>
+      <option value="work">업무</option>
+    </select>
+    <div style="margin-bottom:12px;">
+      <label style="display:block;margin-bottom:8px;">
+        <input type="checkbox" id="allowAiUse"> 네 비서가 대화에 활용 허용
+      </label>
+      <label style="display:block;">
+        <input type="checkbox" id="allowProviderSend"> 외부 AI에 전송 허용 (주의: 외부 서버로 전송됨)
+      </label>
+    </div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;">
+      <button class="btn btn-secondary" onclick="closeModal()">취소</button>
+      <button class="btn" onclick="saveMemory()">저장</button>
+    </div>
+  </div>
+</div>
+
+<script src="/nav.js"></script>
+<script>
+let editingId = null;
+const catNames = { general: '일반', preference: '선호', fact: '사실', schedule: '일정', work: '업무' };
+
+function esc(s) {
+  const d = document.createElement('div');
+  d.textContent = s || '';
+  return d.innerHTML;
+}
+
+async function loadMemories() {
+  const q = document.getElementById('q').value.trim();
+  const cat = document.getElementById('category').value;
+  let url = '/api/memory?';
+  if (q) url += `q=${encodeURIComponent(q)}&`;
+  if (cat) url += `category=${cat}`;
+  try {
+    const res = await fetch(url);
+    const data = await res.json();
+    renderList(data.results || []);
+  } catch (e) {
+    document.getElementById('list').innerHTML = '<div class="empty">불러오기 실패</div>';
+  }
+}
+
+function renderList(items) {
+  const el = document.getElementById('list');
+  if (!items.length) {
+    el.innerHTML = '<div class="empty">저장된 기억이 없습니다.</div>';
+    return;
+  }
+  el.innerHTML = items.map(m => `
+    <div class="memory-item">
+      <div class="cat">${esc(catNames[m.category] || m.category)}</div>
+      <div class="content">${esc(m.content)}</div>
+      <div class="meta">${esc((m.created_at || '').slice(0, 10))}</div>
+      <div class="actions">
+        <button class="btn btn-secondary" onclick="editMemory(${m.id}, ${JSON.stringify(m.content).replace(/"/g, '&quot;')}, '${m.category}')">수정</button>
+        <button class="btn btn-secondary" onclick="deactivateMemory(${m.id})">보관</button>
+        <button class="btn btn-danger" onclick="deleteMemory(${m.id})">영구 삭제</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+function openModal() {
+  editingId = null;
+  document.getElementById('modalTitle').textContent = '새 기억';
+  document.getElementById('content').value = '';
+  document.getElementById('modal').classList.add('show');
+}
+
+function closeModal() {
+  document.getElementById('modal').classList.remove('show');
+}
+
+function editMemory(id, content, category) {
+  editingId = id;
+  document.getElementById('modalTitle').textContent = '기억 수정';
+  document.getElementById('content').value = content;
+  document.getElementById('modalCategory').value = category;
+  document.getElementById('modal').classList.add('show');
+}
+
+async function saveMemory() {
+  const content = document.getElementById('content').value.trim();
+  const category = document.getElementById('modalCategory').value;
+  const allow_ai_use = document.getElementById('allowAiUse').checked;
+  const allow_provider_send = document.getElementById('allowProviderSend').checked;
+  if (!content) { alert('내용을 입력하세요.'); return; }
+  try {
+    const url = editingId ? `/api/memory/${editingId}` : '/api/memory';
+    const method = editingId ? 'PUT' : 'POST';
+    const res = await fetch(url, {
+      method,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content, category, allow_ai_use, allow_provider_send })
+    });
+    const data = await res.json();
+    if (data.ok) {
+      closeModal();
+      loadMemories();
+    } else if (data.error === 'duplicate') {
+      alert('이미 저장된 기억입니다.');
+    } else {
+      alert('저장 실패: ' + (data.error || ''));
+    }
+  } catch (e) {
+    alert('저장 중 오류');
+  }
+}
+
+async function deactivateMemory(id) {
+  if (!confirm('이 기억을 보관함으로 이동할까요? (목록에서 숨겨집니다)')) return;
+  try {
+    const res = await fetch(`/api/memory/${id}`, { method: 'DELETE' });
+    const data = await res.json();
+    if (data.ok) loadMemories();
+    else alert('실패: ' + data.error);
+  } catch (e) { alert('오류 발생'); }
+}
+
+async function deleteMemory(id) {
+  if (!confirm('정말 영구 삭제할까요? 이 작업은 되돌릴 수 없습니다.')) return;
+  if (!confirm('다시 한번 확인: 영구 삭제하시겠습니까?')) return;
+  try {
+    const res = await fetch(`/api/memory/${id}?permanent=true`, { method: 'DELETE' });
+    const data = await res.json();
+    if (data.ok) loadMemories();
+    else alert('실패: ' + data.error);
+  } catch (e) { alert('오류 발생'); }
+}
+
+loadMemories();
+lucide.createIcons();
+</script>
+</body>
+</html>

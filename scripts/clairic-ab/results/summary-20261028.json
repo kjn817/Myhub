@@ -1,0 +1,215 @@
+{
+  "raw": "scripts/clairic-ab/results/raw-20261028.json",
+  "arms": {
+    "clairic": {
+      "n": 180,
+      "accuracy": 0.8111111111111111,
+      "correct": 146,
+      "detection_precision": 0.8962962962962963,
+      "detection_recall": 0.9029850746268657,
+      "null_accuracy": 0.6956521739130435,
+      "value_accuracy_on_present": 0.8507462686567164,
+      "n_gt_present": 134,
+      "n_gt_null": 46,
+      "cost": {
+        "calls": 30,
+        "probe_retries": 7,
+        "neurons_source": "table",
+        "latency_mean_ms": 229.8,
+        "latency_p50_ms": 226.0,
+        "latency_p90_ms": 290,
+        "client_latency_mean_ms": 1468.5,
+        "input_tokens": 23816,
+        "output_tokens": 0,
+        "neurons_total": 216.5,
+        "neurons_per_call": 7.22,
+        "usd_total": 0.002382,
+        "usd_per_1000_memos": 0.0794,
+        "memos_per_free_day": 1385
+      },
+      "by_field": {
+        "person": 0.9667,
+        "event_date": 0.8,
+        "event_time": 0.9333,
+        "amount": 1.0,
+        "task": 0.5,
+        "place": 0.6667
+      },
+      "by_lang": {
+        "ko": 0.7778,
+        "en": 0.8444
+      }
+    },
+    "llm": {
+      "n": 180,
+      "accuracy": 0.7777777777777778,
+      "correct": 140,
+      "detection_precision": 0.8863636363636364,
+      "detection_recall": 0.8731343283582089,
+      "null_accuracy": 0.6739130434782609,
+      "value_accuracy_on_present": 0.8134328358208955,
+      "n_gt_present": 134,
+      "n_gt_null": 46,
+      "cost": {
+        "calls": 30,
+        "probe_retries": 4,
+        "neurons_source": "live",
+        "latency_mean_ms": 21066.5,
+        "latency_p50_ms": 18063.5,
+        "latency_p90_ms": 31087,
+        "client_latency_mean_ms": 26276.2,
+        "input_tokens": 4586,
+        "output_tokens": 31652,
+        "neurons_total": 1177.4,
+        "neurons_per_call": 39.25,
+        "usd_total": 0.012936,
+        "usd_per_1000_memos": 0.4312,
+        "memos_per_free_day": 254
+      },
+      "by_field": {
+        "person": 0.8667,
+        "event_date": 0.7667,
+        "event_time": 0.9,
+        "amount": 0.9,
+        "task": 0.3333,
+        "place": 0.9
+      },
+      "by_lang": {
+        "ko": 0.7333,
+        "en": 0.8222
+      }
+    },
+    "llm-fast": {
+      "n": 180,
+      "accuracy": 0.8055555555555556,
+      "correct": 145,
+      "detection_precision": 0.8986486486486487,
+      "detection_recall": 0.9925373134328358,
+      "null_accuracy": 0.6739130434782609,
+      "value_accuracy_on_present": 0.8507462686567164,
+      "n_gt_present": 134,
+      "n_gt_null": 46,
+      "cost": {
+        "calls": 30,
+        "probe_retries": 5,
+        "neurons_source": "live",
+        "latency_mean_ms": 3207,
+        "latency_p50_ms": 3163.5,
+        "latency_p90_ms": 3798,
+        "client_latency_mean_ms": 4755.0,
+        "input_tokens": 4707,
+        "output_tokens": 1777,
+        "neurons_total": 111.3,
+        "neurons_per_call": 3.71,
+        "usd_total": 0.000894,
+        "usd_per_1000_memos": 0.0298,
+        "memos_per_free_day": 2695
+      },
+      "by_field": {
+        "person": 1.0,
+        "event_date": 0.5,
+        "event_time": 0.9333,
+        "amount": 1.0,
+        "task": 0.4333,
+        "place": 0.9667
+      },
+      "by_lang": {
+        "ko": 0.7889,
+        "en": 0.8222
+      }
+    }
+  },
+  "threshold_sweep": [
+    {
+      "threshold": 0.5,
+      "accepted": 114,
+      "accepted_correct": 110,
+      "precision": 0.9649122807017544,
+      "recall_vs_present": 0.8208955223880597,
+      "auto_share": 0.8507462686567164,
+      "review_share": 0.14925373134328357
+    },
+    {
+      "threshold": 0.8,
+      "accepted": 107,
+      "accepted_correct": 104,
+      "precision": 0.9719626168224299,
+      "recall_vs_present": 0.7761194029850746,
+      "auto_share": 0.7985074626865671,
+      "review_share": 0.20149253731343286
+    },
+    {
+      "threshold": 0.9,
+      "accepted": 105,
+      "accepted_correct": 103,
+      "precision": 0.9809523809523809,
+      "recall_vs_present": 0.7686567164179104,
+      "auto_share": 0.7835820895522388,
+      "review_share": 0.21641791044776115
+    },
+    {
+      "threshold": 0.95,
+      "accepted": 100,
+      "accepted_correct": 98,
+      "precision": 0.98,
+      "recall_vs_present": 0.7313432835820896,
+      "auto_share": 0.746268656716418,
+      "review_share": 0.25373134328358204
+    },
+    {
+      "threshold": 0.99,
+      "accepted": 91,
+      "accepted_correct": 89,
+      "precision": 0.978021978021978,
+      "recall_vs_present": 0.664179104477612,
+      "auto_share": 0.6791044776119403,
+      "review_share": 0.32089552238805974
+    },
+    {
+      "threshold": 0.999,
+      "accepted": 76,
+      "accepted_correct": 74,
+      "precision": 0.9736842105263158,
+      "recall_vs_present": 0.5522388059701493,
+      "auto_share": 0.5671641791044776,
+      "review_share": 0.4328358208955224
+    }
+  ],
+  "null_sweep": [
+    {
+      "threshold": 0.5,
+      "accepted": 32,
+      "accepted_correct": 32,
+      "null_precision": 1.0,
+      "null_recall": 0.6956521739130435
+    },
+    {
+      "threshold": 0.8,
+      "accepted": 30,
+      "accepted_correct": 30,
+      "null_precision": 1.0,
+      "null_recall": 0.6521739130434783
+    },
+    {
+      "threshold": 0.9,
+      "accepted": 30,
+      "accepted_correct": 30,
+      "null_precision": 1.0,
+      "null_recall": 0.6521739130434783
+    },
+    {
+      "threshold": 0.95,
+      "accepted": 28,
+      "accepted_correct": 28,
+      "null_precision": 1.0,
+      "null_recall": 0.6086956521739131
+    },
+    {
+      "threshold": 0.99,
+      "accepted": 27,
+      "accepted_correct": 27,
+      "null_precision": 1.0,
+      "null_recall": 0.5869565217391305
+    }
+  ]
+}

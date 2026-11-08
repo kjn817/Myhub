@@ -1,0 +1,23 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "entry": [
+    "src/index.ts",
+    "src/scheduled.ts",
+    "src/modules.ts",
+    "public/**/*.js",
+    "gemini-relay/main.ts",
+    "scripts/*.mjs",
+    "tests/evals/*.cjs",
+    "tests/sec-001-test.cjs",
+    "tests/worker/*.ts"
+  ],
+  "ignore": [
+    "*.test.js",
+    "*-bundle.cjs",
+    ".scratch/**"
+  ],
+  "ignoreDependencies": [
+    "cloudflare"
+  ],
+  "ignoreExportsUsedInFile": true
+}

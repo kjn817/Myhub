@@ -1,0 +1,44 @@
+{
+  "run_id": "run-002",
+  "repo": "myhub",
+  "target": "/home/hatch/workspace/myhub",
+  "source_ref": "57b55549269ef27cab7070107d69e2139a8d55dc",
+  "profile": "quick",
+  "scope_paths": [
+    "src/modules/auth/routes.ts",
+    "public/login.html",
+    "src/index.ts",
+    "migrations/0043_auth_pins.sql",
+    "migrations/0045_auth_pins_fail_count.sql",
+    "tests/unit/auth-routes.test.ts",
+    "tests/unit/core-index.test.ts"
+  ],
+  "budget": null,
+  "execution_policy": "sandboxed-source-and-local-only",
+  "run_status": "complete",
+  "skill": {
+    "name": "security-audit",
+    "source": "https://github.com/cloudflare/security-audit-skill",
+    "commit": "c1c8a8c1471069fb0e188eeaff69b8e8db6564a8",
+    "license": "MIT",
+    "local_path": "skills/security-audit"
+  },
+  "myhub_adapter": "skills/security-audit/MYHUB-ADAPTER.md",
+  "prior_run": "run-001",
+  "purpose": "run-001 confirmed 7건(중간 3건 + 낮음 4건)의 수정(커밋 57b5554) 재감사: 수정이 실제로 결함을 제거했는지 로컬 재현으로 확인하고, 변경된 코드에서 새로 생긴 결함을 찾는다.",
+  "agents_spent": {
+    "hunter": 1,
+    "candidate_verifiers": 9,
+    "follow_up_verifiers": 0,
+    "total": 10
+  },
+  "result": {
+    "confirmed": 9,
+    "needs_validation": 0,
+    "rejected": 0,
+    "severities": {
+      "medium": 1,
+      "low": 8
+    }
+  }
+}

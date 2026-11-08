@@ -1,0 +1,44 @@
+node_modules/
+# 운영 백업 스냅샷 (잠긴 메모 등 실데이터 포함 — 저장소에 추적 금지, 로컬 보관만)
+backups/
+.wrangler/
+dist/
+*.log
+.env
+.env.*
+.DS_Store
+.dev.vars
+
+# deploy_full.py 스테이징 (ASSETS 업로드용 복사본, audit P-1)
+.deploy-assets/
+
+# 관문 30: 생성 파일 (deploy_full.py가 생성)
+src/index-inline.ts
+ai-bundle.cjs
+ai-routes-bundle.cjs
+orch-bundle.cjs
+router-bundle.cjs
+sched-tools-bundle.cjs
+coverage/
+
+# promptfoo eval 결과 (tests/evals/run-eval.sh 산출물)
+tests/evals/results/
+
+# garak 레드팀 결과 (tests/redteam/run-garak.sh 산출물)
+tests/redteam/results/
+
+# garak 가상환경 (작업자 로컬 설치 — ~/.venvs/myhub-garak 권장,
+# worktree 안에 만들 경우 .venv-garak)
+.venv-garak/
+.venv*/
+
+# StrykerJS 뮤테이션 리포트·임시 디렉토리
+reports/
+.stryker-tmp/
+
+# Stryker 기준선 작업용 스크래치 (리포트 JSON 보관)
+.stryker-baseline/
+__pycache__/
+
+# 복구 작업 산출물 (운영 번들 회수본 — 저장소 추적 제외, 로컬 보관만)
+.recovery/

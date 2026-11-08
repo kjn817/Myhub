@@ -1,0 +1,172 @@
+[
+ {
+  "coverage_id": "src%2Fmodules%2Fauth%2Froutes.ts%23POST%20%2Fapi%2Fauth%2Fpin-login::src%2Fmodules%2Fauth%2Froutes.ts%23D1%20gate%20preemption%20UPDATE%20%2B%20PBKDF2%20verifyPin::profile%2Fquick%2Fall-in-scope-subsystems::ATTACK-CLASSES.md%23Access%20control",
+  "canonical_refs": {
+   "surface": "src/modules/auth/routes.ts#POST /api/auth/pin-login",
+   "boundary": "src/modules/auth/routes.ts#D1 gate preemption UPDATE + PBKDF2 verifyPin",
+   "subsystem": "profile/quick/all-in-scope-subsystems",
+   "attack_class": "ATTACK-CLASSES.md#Access control"
+  },
+  "surface": "src/modules/auth/routes.ts#POST /api/auth/pin-login",
+  "boundary": "src/modules/auth/routes.ts#D1 gate preemption UPDATE + PBKDF2 verifyPin",
+  "subsystem": "profile/quick/all-in-scope-subsystems",
+  "attack_class": "ATTACK-CLASSES.md#Access control",
+  "starting_paths": [
+   "src/modules/auth/routes.ts"
+  ],
+  "ordinary_attack_class_block": "ATTACK-CLASSES.md#Access control",
+  "selected_companion_blocks": [
+   "WEB-PROTOCOL-AND-AUTH.md#MFA enrollment and assurance downgrade",
+   "WEB-PROTOCOL-AND-AUTH.md#Step-up binding and bypass",
+   "WEB-PROTOCOL-AND-AUTH.md#Core discipline",
+   "WEB-PROTOCOL-AND-AUTH.md#Universal moves",
+   "WEB-PROTOCOL-AND-AUTH.md#Validation rules"
+  ],
+  "excluded_blocks": [
+   {
+    "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+    "reason": "No native/binary code in the auth scope."
+   },
+   {
+    "block": "AI-AND-LLM.md#Core discipline",
+    "reason": "No LLM interaction in the auth module."
+   },
+   {
+    "block": "PROTOCOLS-RPC-AND-MESSAGING.md#Core discipline",
+    "reason": "No RPC, broker, or queue surface in the auth scope."
+   },
+   {
+    "block": "SUPPLY-CHAIN-AND-RELEASE.md#Core discipline",
+    "reason": "Dependency/CI audit is a separate run, not this scoped pilot."
+   }
+  ],
+  "prior_status": "prior_confirmed_changed_source",
+  "attempts": [],
+  "wave": 1,
+  "status": "candidate",
+  "agent_id": "6b311b66-3d1c-41ac-a446-30f8090b7935",
+  "reviewed_paths": [
+   "src/modules/auth/routes.ts",
+   "tests/unit/auth-pin-gate.test.ts"
+  ],
+  "local_checks": [
+   {
+    "agent_id": "6b311b66-3d1c-41ac-a446-30f8090b7935",
+    "reviewed_paths": [
+     "src/modules/auth/routes.ts",
+     "tests/unit/auth-pin-gate.test.ts"
+    ],
+    "invariant": "Hunter re-ran the run-002 reproduction scenarios against commit cf80259 and hunted for new defects in the changed code.",
+    "method": "source",
+    "result": "Source review and local reproduction complete; candidates listed in result_fingerprints.",
+    "artifact": null
+   },
+   {
+    "agent_id": "504dbc63-1f14-4f62-b7ed-c6c7faf24a54",
+    "reviewed_paths": [
+     "src/modules/auth/routes.ts",
+     "tests/unit/auth-pin-gate.test.ts"
+    ],
+    "invariant": "Independent verifier re-read every cited source location and independently reproduced the decisive local result with a fresh harness.",
+    "method": "source",
+    "result": "Verified auth/pin-lock-gate-stale-read as FIXED; see REPORT.md.",
+    "artifact": null
+   },
+   {
+    "agent_id": "94e7a358-f08a-4231-915c-f8e549067567",
+    "reviewed_paths": [
+     "src/modules/auth/routes.ts",
+     "tests/unit/auth-pin-gate.test.ts"
+    ],
+    "invariant": "Independent verifier re-read every cited source location and independently reproduced the decisive local result with a fresh harness.",
+    "method": "source",
+    "result": "Verified auth/pin-gate-failure-leaves-lock as confirmed; see findings.json.",
+    "artifact": null
+   }
+  ],
+  "result_fingerprints": [
+   "auth/pin-gate-failure-leaves-lock"
+  ],
+  "unresolved": []
+ },
+ {
+  "coverage_id": "src%2Fmodules%2Fauth%2Froutes.ts%23POST%20%2Fapi%2Fauth%2Fpin-login::src%2Fmodules%2Fauth%2Froutes.ts%23success%20reset%20UPDATE%20%2B%20fail_count%20lifecycle::profile%2Fquick%2Fall-in-scope-subsystems::ATTACK-CLASSES.md%23Access%20control",
+  "canonical_refs": {
+   "surface": "src/modules/auth/routes.ts#POST /api/auth/pin-login",
+   "boundary": "src/modules/auth/routes.ts#success reset UPDATE + fail_count lifecycle",
+   "subsystem": "profile/quick/all-in-scope-subsystems",
+   "attack_class": "ATTACK-CLASSES.md#Access control"
+  },
+  "surface": "src/modules/auth/routes.ts#POST /api/auth/pin-login",
+  "boundary": "src/modules/auth/routes.ts#success reset UPDATE + fail_count lifecycle",
+  "subsystem": "profile/quick/all-in-scope-subsystems",
+  "attack_class": "ATTACK-CLASSES.md#Access control",
+  "starting_paths": [
+   "src/modules/auth/routes.ts"
+  ],
+  "ordinary_attack_class_block": "ATTACK-CLASSES.md#Access control",
+  "selected_companion_blocks": [
+   "WEB-PROTOCOL-AND-AUTH.md#MFA enrollment and assurance downgrade",
+   "WEB-PROTOCOL-AND-AUTH.md#Step-up binding and bypass",
+   "WEB-PROTOCOL-AND-AUTH.md#Core discipline",
+   "WEB-PROTOCOL-AND-AUTH.md#Universal moves",
+   "WEB-PROTOCOL-AND-AUTH.md#Validation rules"
+  ],
+  "excluded_blocks": [
+   {
+    "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+    "reason": "No native/binary code in the auth scope."
+   },
+   {
+    "block": "AI-AND-LLM.md#Core discipline",
+    "reason": "No LLM interaction in the auth module."
+   },
+   {
+    "block": "PROTOCOLS-RPC-AND-MESSAGING.md#Core discipline",
+    "reason": "No RPC, broker, or queue surface in the auth scope."
+   },
+   {
+    "block": "SUPPLY-CHAIN-AND-RELEASE.md#Core discipline",
+    "reason": "Dependency/CI audit is a separate run, not this scoped pilot."
+   }
+  ],
+  "prior_status": "prior_confirmed_changed_source",
+  "attempts": [],
+  "wave": 1,
+  "status": "candidate",
+  "agent_id": "6b311b66-3d1c-41ac-a446-30f8090b7935",
+  "reviewed_paths": [
+   "src/modules/auth/routes.ts",
+   "tests/unit/auth-pin-gate.test.ts"
+  ],
+  "local_checks": [
+   {
+    "agent_id": "6b311b66-3d1c-41ac-a446-30f8090b7935",
+    "reviewed_paths": [
+     "src/modules/auth/routes.ts",
+     "tests/unit/auth-pin-gate.test.ts"
+    ],
+    "invariant": "Hunter re-ran the run-002 reproduction scenarios against commit cf80259 and hunted for new defects in the changed code.",
+    "method": "source",
+    "result": "Source review and local reproduction complete; candidates listed in result_fingerprints.",
+    "artifact": null
+   },
+   {
+    "agent_id": "0cc5472a-8ffc-4a32-8b7a-945ffa32c002",
+    "reviewed_paths": [
+     "src/modules/auth/routes.ts",
+     "tests/unit/auth-pin-gate.test.ts"
+    ],
+    "invariant": "Independent verifier re-read every cited source location and independently reproduced the decisive local result with a fresh harness.",
+    "method": "source",
+    "result": "Verified auth/pin-failcount-no-decay as confirmed and auth/pin-success-reset-erases-concurrent-failure as confirmed (informational); see findings.json.",
+    "artifact": null
+   }
+  ],
+  "result_fingerprints": [
+   "auth/pin-failcount-no-decay",
+   "auth/pin-success-reset-erases-concurrent-failure"
+  ],
+  "unresolved": []
+ }
+]

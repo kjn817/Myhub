@@ -1,0 +1,21 @@
+name = "myhub-staging"
+main = "src/index.ts"
+compatibility_date = "2026-10-01"
+
+[assets]
+directory = "./public"
+binding = "ASSETS"
+run_worker_first = true
+
+[vars]
+APP_NAME = "MyHub"
+ENVIRONMENT = "staging"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "myhub-db-staging"
+database_id = "995184a9-b291-402c-adf5-0d8d80a59e1c"
+
+[[kv_namespaces]]
+binding = "KV"
+id = "45e164df619847f5bd0a829340d3b71d"

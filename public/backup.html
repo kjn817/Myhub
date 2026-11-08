@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#ffffff">
+<link rel="manifest" href="/manifest.json">
+<title>백업 - MyHub</title>
+<link rel="stylesheet" href="/shell.css">
+<script src="/vendor/lucide/lucide.min.js"></script>
+<link rel="stylesheet" href="/css/backup.css">
+</head>
+<body>
+<header class="g-nav"><a href="/" class="brand-logo" aria-label="MyHub 홈"><img src="/icon-192.png" alt="JN" style="height:26px;width:auto;display:block;"></a><div class="spacer"></div></header>
+<div class="wrap">
+  <h1>데이터 백업</h1>
+  
+  <div class="card">
+    <h2>암호화 백업 생성</h2>
+    <div class="desc">
+      모든 데이터를 AES-256-GCM으로 암호화하여 백업합니다.<br>
+      백업 암호를 잊어버리면 복원할 수 없으니 안전하게 보관하세요.
+    </div>
+    
+    <div class="error" id="errorBox"></div>
+    <div class="success" id="successBox"></div>
+    
+    <div class="field">
+      <label for="password">백업 암호 (최소 8자)</label>
+      <input type="password" id="password" placeholder="백업 암호 입력" autocomplete="new-password">
+    </div>
+    
+    <div class="field">
+      <label for="passwordConfirm">백업 암호 확인</label>
+      <input type="password" id="passwordConfirm" placeholder="백업 암호 다시 입력" autocomplete="new-password">
+    </div>
+    
+    <button class="btn" id="backupBtn">백업 생성</button>
+    
+    <div class="loading" id="loading">
+      <p>백업을 생성하고 있습니다...</p>
+    </div>
+  </div>
+  
+  <div class="card">
+    <div class="info">
+      <strong>백업 대상</strong>
+      <ul>
+        <li>메모, 일정, 할 일</li>
+        <li>AI 대화 및 기억</li>
+        <li>사용자 설정</li>
+      </ul>
+      <strong>보안</strong>
+      <ul>
+        <li>AES-256-GCM 암호화</li>
+        <li>PBKDF2 키 파생</li>
+        <li>백업 암호는 서버에 저장되지 않음</li>
+      </ul>
+      <strong>암호화 키 교체</strong>
+      <ul>
+        <li>잠긴 메모 등의 암호화 키를 새 값으로 교체할 때는 <a href="/key-rotation.html">키 로테이션</a> 페이지에서 진행하세요.</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<script src="/nav.js"></script>
+<script src="/js/step-up.js"></script>
+<script src="/js/backup.js"></script>
+</body>
+</html>

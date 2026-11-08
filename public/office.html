@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<meta name="theme-color" content="#ffffff">
+<link rel="manifest" href="/manifest.json">
+<title>오피스</title>
+<link rel="stylesheet" href="/shell.css">
+<link rel="stylesheet" href="/css/office.css">
+<link rel="stylesheet" href="/css/picker.css">
+<script src="/vendor/lucide/lucide.min.js"></script>
+</head>
+<body class="office-body">
+<header class="g-nav">
+  <a href="/" class="brand-logo" aria-label="MyHub 홈"><img src="/icon-192.png" alt="JN" style="height:26px;width:auto;display:block;"></a>
+  <div class="spacer"></div>
+</header>
+
+<div class="office-menubar">
+  <button type="button" class="office-menu-btn" id="officeFileBtn">파일</button>
+  <button type="button" class="office-menu-btn" id="officeEditBtn">편집</button>
+  <span class="office-doc-name" id="officeDocName"></span>
+  <div class="spacer"></div>
+  <button type="button" class="office-fold-btn" id="officeFoldBtn" aria-label="접기/펼치기"><i data-lucide="chevron-up"></i></button>
+</div>
+
+<div id="officeStart" style="display:none;">
+  <h1>어떤 문서를 만들까요?</h1>
+  <div class="office-start-grid" id="officeStartGrid"></div>
+</div>
+
+<div id="officeSurface">
+  <iframe id="officeEngine" title="문서 편집기"></iframe>
+  <div id="officeEngineFail" style="display:none;">
+    <p>편집 엔진을 불러오지 못했어요.</p>
+    <p class="office-engine-fail-sub">엔진이 준비되면 같은 자리에서 바로 열립니다.</p>
+  </div>
+</div>
+
+<script src="/nav.js"></script>
+<script src="/js/file-icons.js"></script>
+<script src="/js/office-fetch.js"></script>
+<script src="/js/office-memory.js"></script>
+<script src="/js/office-picker.js"></script>
+<script src="/js/assistant-bridge.js"></script>
+<script src="/vendor/pdf-lib/pdf-lib.min.js"></script>
+<script src="/js/sheet-gridcraft.js"></script>
+<script src="/js/office-sessions.js"></script>
+<script src="/js/office-assistant.js"></script>
+<script src="/js/fonts.js"></script>
+<script src="/js/office.js"></script>
+</body>
+</html>

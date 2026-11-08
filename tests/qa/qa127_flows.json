@@ -1,0 +1,158 @@
+[
+ {
+  "flow": "MEMO",
+  "name": "생성",
+  "pass": true,
+  "detail": "status=200 id=57"
+ },
+ {
+  "flow": "MEMO",
+  "name": "목록 조회에 생성 메모 포함",
+  "pass": true,
+  "detail": "status=200"
+ },
+ {
+  "flow": "MEMO",
+  "name": "수정",
+  "pass": true,
+  "detail": "status=200"
+ },
+ {
+  "flow": "MEMO",
+  "name": "DB 수정 반영",
+  "pass": true,
+  "detail": "rows=True"
+ },
+ {
+  "flow": "MEMO",
+  "name": "삭제",
+  "pass": true,
+  "detail": "status=200"
+ },
+ {
+  "flow": "MEMO",
+  "name": "DB 삭제 확인",
+  "pass": true,
+  "detail": "rows=[{'n': 0}]"
+ },
+ {
+  "flow": "MEMO",
+  "name": "검색 빈 결과",
+  "pass": true,
+  "detail": "status=200"
+ },
+ {
+  "flow": "TODO",
+  "name": "생성",
+  "pass": true,
+  "detail": "status=200 id=4"
+ },
+ {
+  "flow": "TODO",
+  "name": "토글",
+  "pass": true,
+  "detail": "status=200"
+ },
+ {
+  "flow": "TODO",
+  "name": "DB 토글 반영",
+  "pass": true,
+  "detail": "rows=[{'status': 'done'}]"
+ },
+ {
+  "flow": "TODO",
+  "name": "삭제",
+  "pass": true,
+  "detail": "status=200"
+ },
+ {
+  "flow": "TODO",
+  "name": "DB 삭제 확인",
+  "pass": true,
+  "detail": "rows=[{'n': 0}]"
+ },
+ {
+  "flow": "SCHEDULE",
+  "name": "생성",
+  "pass": true,
+  "detail": "status=200 id=4"
+ },
+ {
+  "flow": "SCHEDULE",
+  "name": "수정",
+  "pass": true,
+  "detail": "status=200"
+ },
+ {
+  "flow": "SCHEDULE",
+  "name": "DB 수정 반영",
+  "pass": true,
+  "detail": "rows=True"
+ },
+ {
+  "flow": "SCHEDULE",
+  "name": "삭제",
+  "pass": true,
+  "detail": "status=200"
+ },
+ {
+  "flow": "SCHEDULE",
+  "name": "DB 삭제 확인",
+  "pass": true,
+  "detail": "rows=[{'n': 0}]"
+ },
+ {
+  "flow": "AUTH",
+  "name": "OTP 요청 rate limit (429)",
+  "pass": true,
+  "detail": "rate limit enforced"
+ },
+ {
+  "flow": "AUTH",
+  "name": "오코드 거부",
+  "pass": true,
+  "detail": "status=400"
+ },
+ {
+  "flow": "SECURITY",
+  "name": "미인증 401 /api/memo/stats",
+  "pass": true,
+  "detail": "status=401"
+ },
+ {
+  "flow": "SECURITY",
+  "name": "미인증 401 /api/memo?limit=3",
+  "pass": true,
+  "detail": "status=401"
+ },
+ {
+  "flow": "SECURITY",
+  "name": "미인증 401 /api/todo/list",
+  "pass": true,
+  "detail": "status=401"
+ },
+ {
+  "flow": "SECURITY",
+  "name": "미인증 401 /api/schedule/list",
+  "pass": true,
+  "detail": "status=401"
+ },
+ {
+  "flow": "SECURITY",
+  "name": "미인증 401 /api/ai/personas",
+  "pass": true,
+  "detail": "status=401"
+ },
+ {
+  "flow": "SECURITY",
+  "name": "메모 잠금",
+  "pass": true,
+  "detail": "status=200"
+ },
+ {
+  "flow": "SECURITY",
+  "name": "DB 잠금 플래그",
+  "pass": true,
+  "detail": "rows=[{'is_locked': 1}]"
+ }
+]

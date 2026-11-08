@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#ffffff">
+<link rel="manifest" href="/manifest.json">
+<title>키 로테이션 - MyHub</title>
+<link rel="stylesheet" href="/shell.css">
+<script src="/vendor/lucide/lucide.min.js"></script>
+<link rel="stylesheet" href="/css/key-rotation.css">
+</head>
+<body>
+<header class="g-nav"><a href="/" class="brand-logo" aria-label="MyHub 홈"><img src="/icon-192.png" alt="JN" style="height:26px;width:auto;display:block;"></a><div class="spacer"></div></header>
+<div class="wrap">
+  <h1>암호화 키 로테이션</h1>
+
+  <div class="card">
+    <h2>새 키로 교체</h2>
+    <div class="desc">
+      잠긴 메모·블록·첨부와 Google 토큰을 새 암호화 키로 다시 암호화합니다.<br>
+      새 키 값은 비밀번호 관리자에서 만든 값을 직접 붙여넣으세요. 값은 이 브라우저에서 서버로 한 번 전송될 뿐, 어디에도 저장되지 않습니다.<br>
+      <strong>실행 후에는 대시보드 시크릿 교체까지 한 번에 마쳐야 합니다</strong> — 교체 전까지 전환된 항목은 읽히지 않습니다.
+    </div>
+
+    <div class="error" id="errorBox"></div>
+    <div class="success" id="successBox"></div>
+    <div class="warn" id="warnBox"></div>
+
+    <div class="field">
+      <label for="newKey">새 키 값</label>
+      <input type="password" id="newKey" placeholder="비밀번호 관리자에서 만든 새 키 값" autocomplete="off">
+    </div>
+
+    <table class="census" id="censusTable">
+      <thead><tr><th>항목</th><th>기준 건수</th><th>dry-run 건수</th><th>대조</th></tr></thead>
+      <tbody id="censusBody"></tbody>
+    </table>
+
+    <button class="btn secondary" id="dryRunBtn">1. dry-run으로 대상 확인</button>
+    <button class="btn" id="executeBtn" disabled style="margin-top:8px;">2. 로테이션 실행</button>
+  </div>
+
+  <div class="card">
+    <div class="info">
+      <strong>실행 직후 할 일 — 대시보드 시크릿 교체</strong>
+      <ol>
+        <li>Cloudflare 대시보드 → Workers &amp; Pages → <strong>myhub</strong> → Settings → Variables and Secrets</li>
+        <li><strong>MEMO_ENCRYPTION_KEY</strong>를 편집해, 방금 입력한 새 키 값으로 교체하고 Deploy</li>
+        <li>교체 후 확인: 메모 화면에서 잠긴 메모 1건을 열어(PIN step-up) 본문이 보이는지, Google 연동 상태가 정상인지 확인</li>
+      </ol>
+      <strong>문제가 생기면</strong>
+      <ul>
+        <li>건수가 기준과 다르면 실행 버튼이 자동으로 막힙니다. 화면의 건수만 Claude에 알려주세요.</li>
+        <li>대시보드 교체 후에도 잠긴 메모가 열리지 않으면, 값을 다시 바꾸지 말고 Claude에 알려주세요.</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<script src="/nav.js"></script>
+<script src="/js/step-up.js"></script>
+<script src="/js/key-rotation.js"></script>
+</body>
+</html>

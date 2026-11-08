@@ -1,0 +1,39 @@
+{
+  "run_id": "run-001",
+  "repo": "myhub",
+  "target": "/home/hatch/workspace/myhub",
+  "source_ref": "2494f055743c675824c0dd077e9353512f83823d",
+  "profile": "quick",
+  "scope_paths": [
+    "src/modules/auth/routes.ts",
+    "public/login.html",
+    "migrations/0043_auth_pins.sql",
+    "tests/unit/auth-routes.test.ts"
+  ],
+  "budget": null,
+  "execution_policy": "sandboxed-source-and-local-only",
+  "run_status": "complete",
+  "skill": {
+    "name": "security-audit",
+    "source": "https://github.com/cloudflare/security-audit-skill",
+    "commit": "c1c8a8c1471069fb0e188eeaff69b8e8db6564a8",
+    "license": "MIT",
+    "local_path": "skills/security-audit"
+  },
+  "myhub_adapter": "skills/security-audit/MYHUB-ADAPTER.md",
+  "agents_spent": {
+    "hunter": 1,
+    "candidate_verifiers": 7,
+    "follow_up_verifiers": 1,
+    "total": 9
+  },
+  "result": {
+    "confirmed": 7,
+    "needs_validation": 0,
+    "rejected": 0,
+    "severities": {
+      "medium": 3,
+      "low": 4
+    }
+  }
+}

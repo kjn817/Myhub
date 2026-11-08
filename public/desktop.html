@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<meta name="theme-color" content="#ffffff">
+<link rel="manifest" href="/manifest.json">
+<title>MyHub</title>
+<link rel="stylesheet" href="/shell.css">
+<link rel="stylesheet" href="/css/desktop.css">
+<script src="/vendor/lucide/lucide.min.js" defer></script>
+</head>
+<body class="dt-body">
+<div id="dt-loading" aria-hidden="true">
+  <img class="dt-loading-mark" src="/jn-logo.png" alt="">
+  <div class="dt-loading-bar"><span></span></div>
+</div>
+
+<header id="dt-topbar">
+  <span id="dt-jn">JN</span>
+  <span id="dt-app-title">데스크톱</span>
+  <div id="dt-app-actions"></div>
+  <div class="dt-bar-spacer"></div>
+  <div id="dt-bar-assistant"></div>
+  <button id="dt-profile" type="button" aria-label="내 프로필"><img src="/avatars/rumi.webp" alt=""></button>
+  <button id="dt-gear" type="button" aria-label="설정"><i data-lucide="settings"></i></button>
+  <span id="dt-clock"></span>
+</header>
+<div id="dt-hotstrip" aria-hidden="true"></div>
+
+<main id="dt-surface">
+  <div id="dt-wallpaper"></div>
+  <div id="dt-icons"></div>
+  <div id="dt-widgets"></div>
+  <div id="dt-root"></div>
+  <div id="dt-wallpaper-cap"></div>
+</main>
+
+<nav id="dt-taskbar" aria-label="독"></nav>
+<div id="dt-subchat"></div>
+
+<script src="/js/file-icons.js"></script>
+<script src="/js/desktop/state.js"></script>
+<script src="/js/desktop/tiles.js"></script>
+<script src="/js/desktop/windows.js"></script>
+<script src="/js/desktop/dock.js"></script>
+<script src="/js/desktop/desktop-icons.js"></script>
+<script src="/js/desktop/widgets.js"></script>
+<script src="/js/desktop/menu.js"></script>
+<script src="/js/desktop/settings-menu.js"></script>
+<script src="/js/desktop/wallpaper.js"></script>
+<script src="/js/desktop/subchat.js"></script>
+<script src="/js/desktop/version-guard.js"></script>
+<script src="/js/desktop/main.js"></script>
+</body>
+</html>

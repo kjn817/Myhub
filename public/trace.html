@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#ffffff">
+<title>추적 — MyHub</title>
+<link rel="stylesheet" href="/shell.css">
+<script src="/vendor/lucide/lucide.min.js"></script>
+<link rel="stylesheet" href="/css/trace.css">
+</head>
+<body>
+<header class="g-nav"><a href="/" class="brand-logo" aria-label="MyHub 홈"><img src="/icon-192.png" alt="JN" style="height:26px;width:auto;display:block;"></a><div class="spacer"></div><span class="ver" id="clock"></span></header>
+<div class="wrap">
+  <div id="list-view">
+    <div class="header">
+      <h1>추적</h1>
+      <button class="btn" id="traceRefreshBtn">새로고침</button>
+    </div>
+    <div class="sub">LLM 호출과 도구 실행을 트레이스로 묶어 보여줍니다. 프롬프트 버전·모델·토큰·소요시간이 스팬으로 남습니다. 메모 본문은 저장하지 않습니다.</div>
+    <div id="trace-list"></div>
+  </div>
+  <div id="detail-view" style="display:none">
+    <button class="btn back" id="traceBackBtn">← 목록으로</button>
+    <div class="detail-head" id="detail-id"></div>
+    <div class="detail-meta" id="detail-meta"></div>
+    <div class="timeline" id="timeline"></div>
+  </div>
+</div>
+<script src="/nav.js"></script>
+<script src="/js/trace.js"></script>
+</body>
+</html>

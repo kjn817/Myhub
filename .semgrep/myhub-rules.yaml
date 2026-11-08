@@ -1,0 +1,98 @@
+# MyHub 커스텀 Semgrep 규칙
+# - 헌법: "암호화 키는 Worker Secret만, 코드에 하드코딩 금지"
+# - 보안 경계: 잠긴 메모(is_locked=1)는 AI/외부 전송 경로에서 원천 차단
+#   (유일한 안전 접근 계층: src/services/ai-access.ts)
+# - 공식 규칙셋(p/security-audit, p/secrets 등)의 보완용. 이 파일만으로는
+#   전체 검사가 되지 않으며, scripts/run-semgrep.sh가 공식 규칙셋과 함께 실행한다.
+rules:
+  # 1) Worker Secret 하드코딩: 비밀 이름의 변수/상수에 문자열 리터럴을 직접 대입
+  #    (정상 패턴은 c.env.X / env.X 로 읽는 것. 리터럴 대입은 유출/유출 위험)
+  - id: myhub-hardcoded-worker-secret
+    languages: [typescript, javascript]
+    severity: ERROR
+    message: >-
+      비밀 이름(API_KEY/SECRET/TOKEN/PASSWORD/PRIVATE_KEY)의 변수에 문자열
+      리터럴이 직접 대입됨. Worker Secret(env.X)으로 읽어야 한다.
+      MyHub 헌법: "암호화 키는 Worker Secret만, 코드에 하드코딩 금지".
+    # 테스트 파일 제외: 테스트는 mockEnv({ GEMINI_API_KEY_1: 'g1' })처럼
+    # 가짜 값을 쓰는 것이 정상 패턴이라 이름 기반 규칙의 노이즈가 된다.
+    # 테스트 내 실제 고엔트로피 비밀은 p/secrets가 계속 검사한다.
+    paths:
+      exclude:
+        - '*.test.js'
+        - '*.test.ts'
+        - /tests/**
+    patterns:
+      - pattern-either:
+          - pattern: const $NAME = "..."
+          - pattern: let $NAME = "..."
+          - pattern: var $NAME = "..."
+          - pattern: '$NAME: "..."'
+      # 비밀 단어가 이름에 포함될 때 탐지. GOOGLE_TOKEN_URL 같은 URL 상수는
+      # pattern-not-regex로 제외한다.
+      # (주의: metavariable-regex는 전일치 의미라 양쪽에 .*가 필요하다.
+      #  (?i)...$ 같은 앵커는 동작하지 않음을 2026-10-27 프로브로 확인.)
+      - metavariable-regex:
+          metavariable: $NAME
+          regex: (?i).*(api[_-]?key|secret|token|password|private[_-]?key|session[_-]?secret).*
+      - pattern-not-regex: (?i)_URL\s*[=:]
+
+  # 2) eval / Function 생성자: 사용자 입력 기반 코드 실행 경로.
+  #    src/services/studio-workspace.ts의 new Function(content)는 JS 문법
+  #    검증용으로만 쓰고 실행하지 않지만, 규칙이 잡으면 판정 기록에 남긴다.
+  - id: myhub-eval-or-new-function
+    languages: [typescript, javascript]
+    severity: WARNING
+    message: >-
+      eval/new Function은 코드 실행 싱크. 사용자 입력이 도달하면 RCE.
+      문법 검증 등 실행하지 않는 용도면 docs/semgrep-YYYYMMDD.md에 판정을 기록할 것.
+    patterns:
+      - pattern-either:
+          - pattern: eval(...)
+          - pattern: new Function(...)
+
+  # 3) D1 prepare()에 템플릿 보간: SQL 인젝션 위험.
+  #    정상 패턴은 ? 바인딩. ${} 보간은 상수 화이트리스트(BACKUP_TABLES,
+  #    sqlite_master의 t.name)인 경우에만 허용되며, 그 경우 판정 기록에 남긴다.
+  - id: myhub-sql-template-interpolation
+    languages: [typescript, javascript]
+    severity: ERROR
+    message: >-
+      D1 prepare() SQL에 ${} 보간이 있음. ? 플레이스홀더 바인딩을 쓸 것.
+      테이블명 보간이 불가피하면 상수 화이트리스트에서만 가져올 것.
+    patterns:
+      - pattern-either:
+          - pattern: $DB.prepare(`...${...}...`)
+          - pattern: $DB.prepare("...${...}...")
+          - pattern: $DB.prepare('...${...}...')
+
+  # 4) 잠긴 메모 경계: AI/외부 전송 경로에서 memos를 조회할 때 is_locked 필터 누락.
+  #    잠긴 메모는 ai-access.ts의 안전 접근 계층을 통해서만 조회해야 한다.
+  #    이 규칙은 AI 관련 경로에만 적용한다 (메모 CRUD는 소유자 본인 접근이라
+  #    is_locked 필터가 없어도 정상 — 소유권 검사는 별도 규칙/감사로 다룬다).
+  - id: myhub-locked-memo-query-without-filter
+    languages: [typescript, javascript]
+    severity: ERROR
+    message: >-
+      AI/외부 경로에서 memos 조회 시 is_locked=0 필터가 없음. 잠긴 메모가
+      외부 AI로 유출될 수 있다. src/services/ai-access.ts의 안전 접근
+      계층을 경유하거나 is_locked=0 조건을 추가할 것.
+    paths:
+      include:
+        - /src/modules/ai/**
+        - /src/ai/**
+        - /src/services/ai*.ts
+        - /src/services/memo-context.ts
+        - /src/services/memory-*.ts
+        - /src/services/briefing*.ts
+        - /src/services/news-*.ts
+        - /src/services/fact-*.ts
+        - /src/services/unified-search.ts
+      exclude:
+        - /src/services/ai-access.ts
+    patterns:
+      - pattern: $DB.prepare($SQL)
+      - metavariable-regex:
+          metavariable: $SQL
+          regex: (?s).*FROM memos.*
+      - pattern-not-regex: (?s)is_locked

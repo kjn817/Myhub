@@ -1,0 +1,41 @@
+{
+  "run_id": "run-003",
+  "repo": "myhub",
+  "target": "/home/hatch/workspace/myhub",
+  "source_ref": "cf802593964e04182b39e7966246f2778c494657",
+  "profile": "quick",
+  "scope_paths": [
+    "src/modules/auth/routes.ts",
+    "tests/unit/auth-pin-gate.test.ts",
+    "migrations/0045_auth_pins_fail_count.sql"
+  ],
+  "budget": null,
+  "execution_policy": "sandboxed-source-and-local-only",
+  "run_status": "complete",
+  "skill": {
+    "name": "security-audit",
+    "source": "https://github.com/cloudflare/security-audit-skill",
+    "commit": "c1c8a8c1471069fb0e188eeaff69b8e8db6564a8",
+    "license": "MIT",
+    "local_path": "skills/security-audit"
+  },
+  "myhub_adapter": "skills/security-audit/MYHUB-ADAPTER.md",
+  "prior_run": "run-002",
+  "purpose": "run-002 medium 1건(auth/pin-lock-gate-stale-read)의 수정(커밋 cf80259) 재감사: 동시 버스트 재현 시나리오를 동일하게 돌려 수정이 실제로 결함을 제거했는지 확인하고, 변경된 코드에서 새로 생긴 결함을 찾는다.",
+  "agents_spent": {
+    "hunter": 1,
+    "candidate_verifiers": 3,
+    "follow_up_verifiers": 0,
+    "total": 4
+  },
+  "result": {
+    "confirmed": 3,
+    "needs_validation": 0,
+    "rejected": 0,
+    "severities": {
+      "medium": 0,
+      "low": 2,
+      "informational": 1
+    }
+  }
+}

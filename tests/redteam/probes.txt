@@ -1,0 +1,38 @@
+# MyHub garak 프로브 목록 (garak 0.17.1 실측 기준, 활성 프로브만).
+# 한 줄에 하나씩, "# ..." 주석 허용. run-garak.sh가 이 파일을 읽어
+# garak 설정의 probe_spec으로 합친다.
+#
+# 선정 기준: MyHub 핵심 보안 경계(메모발 프롬프트 인젝션)와 직접 관련 있는
+# 3개 패밀리만. 💤(비활성) 표시 프로브와 Full 변형은 기본에서 제외한다:
+#  - Full 변형(Hijack*Full, DanInTheWildFull)은 동일 패턴의 확장판이라
+#    기본 스캔이 무거워지면 나중에 추가한다.
+#  - 💤 프로브(dan.AutoDAN 등)는 공격자 모델이 필요하거나 실험적이라
+#    라이브 스캔 단계에서 개별 검토 후 추가한다.
+# 프로브 이름은 `garak --list_probes`로 재확인할 것 (버전마다 바뀐다).
+
+# --- promptinject: 메모 속 악성 지시문을 AI가 따르는지 (핵심 경계) ---
+promptinject.HijackLongPrompt
+promptinject.HijackKillHumans
+promptinject.HijackHateHumans
+
+# --- encoding: 인코딩으로 인젝션을 숨기는 우회 ---
+encoding.InjectBase64
+encoding.InjectBase32
+encoding.InjectBase16
+encoding.InjectHex
+encoding.InjectROT13
+encoding.InjectMorse
+encoding.InjectBraille
+encoding.InjectAscii85
+encoding.InjectBase2048
+encoding.InjectEcoji
+encoding.InjectNato
+encoding.InjectUU
+encoding.InjectZalgo
+encoding.InjectAtbash
+encoding.InjectUnicodeTagChars
+
+# --- dan: 탈옥(역할극·개발자 모드 등)으로 가드레일을 우회 ---
+dan.DanInTheWild
+dan.Ablation_Dan_11_0
+dan.AutoDANCached

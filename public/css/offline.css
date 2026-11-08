@@ -1,0 +1,14 @@
+/* MyHub 오프라인 폴백 페이지 (offline.html 전용으로 분리됨) */
+body {
+  margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center;
+  background: #f5f5f4; color: #1c1917;
+  font-family: -apple-system, "Segoe UI", sans-serif;
+}
+main { text-align: center; padding: 24px; max-width: 320px; }
+h1 { font-size: 20px; margin: 0 0 8px; }
+p { font-size: 14px; color: #57534e; line-height: 1.6; margin: 0 0 20px; }
+button {
+  font-size: 15px; padding: 10px 20px; border: none; border-radius: 8px;
+  background: #bfdbfe; color: #1e3a5f; cursor: pointer;
+}
+button:active { background: #93c5fd; }

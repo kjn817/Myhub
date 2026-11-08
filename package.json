@@ -1,0 +1,53 @@
+{
+  "dependencies": {
+    "@cloudflare/workers-oauth-provider": "1.2.4",
+    "@modelcontextprotocol/server": "^2.4.0",
+    "hono": "^4.7.0",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-plugin": "^1.4.7",
+    "@cloudflare/workers-types": "^5.0.0",
+    "@modelcontextprotocol/client": "^2.4.0",
+    "@playwright/test": "^1.64.0",
+    "@stryker-mutator/core": "^10.1.1",
+    "@stryker-mutator/jest-runner": "^10.1.1",
+    "@types/jest": "^30.0.0",
+    "better-sqlite3": "^13.0.3",
+    "fast-check": "^4.10.2",
+    "jest": "^30.5.2",
+    "jest-environment-jsdom": "^30.5.2",
+    "jscpd": "^5.4.2",
+    "jsdom": "^30.1.2",
+    "knip": "^6.43.0",
+    "madge": "^8.0.0",
+    "msw": "^2.15.0",
+    "promptfoo": "^0.125.1",
+    "ts-jest": "^29.4.15",
+    "typescript": "^5.6.0",
+    "vite": "^8.3.5",
+    "vitest": "^5.0.5",
+    "wrangler": "^4.0.0"
+  },
+  "name": "myhub",
+  "private": true,
+  "scripts": {
+    "db:migrate": "wrangler d1 execute myhub-db --remote --file=./migrations/0001_init.sql",
+    "deploy": "wrangler deploy",
+    "dev": "wrangler dev",
+    "test:backup": "python3 tests/integration/test_backup_restore.py",
+    "test:backup-14tables": "python3 tests/integration/test_backup_14tables.py",
+    "test:briefing": "python3 tests/integration/test_briefing_privacy.py",
+    "eval:live": "bash tests/evals/run-eval.sh",
+    "eval:validate": "bash tests/evals/run-eval.sh --validate",
+    "lint:security": "bash scripts/run-semgrep.sh",
+    "lint:security:gate": "bash scripts/semgrep-gate.sh",
+    "lint:deadcode": "knip --no-progress",
+    "lint:circular": "madge --circular --extensions ts src",
+    "lint:duplication": "jscpd --min-tokens 50 --format typescript src",
+    "test:mutation": "stryker run",
+    "test:runtime": "vitest run --config vitest.config.ts"
+  },
+  "type": "module",
+  "version": "0.1.0"
+}

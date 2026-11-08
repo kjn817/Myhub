@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="mobile-web-app-capable" content="yes">
+<link rel="apple-touch-startup-image" href="/splash/splash-1170x2532.png" media="(device-width: 390px) and (device-height: 844px) and (-webkit-device-pixel-ratio: 3)">
+<link rel="apple-touch-startup-image" href="/splash/splash-1179x2556.png" media="(device-width: 393px) and (device-height: 852px) and (-webkit-device-pixel-ratio: 3)">
+<link rel="apple-touch-startup-image" href="/splash/splash-1290x2796.png" media="(device-width: 430px) and (device-height: 932px) and (-webkit-device-pixel-ratio: 3)">
+<link rel="apple-touch-startup-image" href="/splash/splash-1284x2778.png" media="(device-width: 428px) and (device-height: 926px) and (-webkit-device-pixel-ratio: 3)">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<meta name="theme-color" content="#ffffff">
+<link rel="manifest" href="/manifest.json">
+<title>메모</title>
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/dompurify/dist/purify.min.js"></script>
+<link rel="stylesheet" href="/shell.css">
+<link rel="stylesheet" href="/assistant-widget.css">
+  <script src="/vendor/lucide/lucide.min.js"></script>
+<link rel="stylesheet" href="/css/memo.css">
+</head>
+<body>
+<header class="g-nav"><a href="/" class="brand-logo" aria-label="MyHub 홈"><img src="/icon-192.png" alt="JN" style="height:26px;width:auto;display:block;"></a><div class="spacer"></div><span class="ver" id="clock"></span></header>
+<div class="g-main">
+<div class="wrap">
+  <header class="top">
+    <h1>메모</h1>
+    <span class="count" id="count"></span>
+  </header>
+
+  <div class="layout" id="layout">
+    <div class="col-left">
+      <div class="search" id="searchBox">
+        <div class="search-row">
+          <div class="box"><span class="s-ic"><i data-lucide="search"></i></span><input id="q" type="search" placeholder="메모 · 파일명 검색  ( / )" autocomplete="off"></div>
+          <button class="tgl" id="tglCal" aria-label="달력"><i data-lucide="calendar-days"></i></button>
+          <button class="tgl" id="tglTag" aria-label="태그"><i data-lucide="hash"></i></button>
+        </div>
+      </div>
+      <div class="activefilters" id="activeFilters"></div>
+      <div class="left-scroll">
+        <ul id="list" class="memo-list"></ul>
+        <div class="empty" id="empty" style="display:none"><span class="big"><i data-lucide="notebook-pen"></i></span>아직 메모가 없어요</div>
+      </div>
+      <div class="pager" id="pager" style="display:none">
+        <button id="pgPrev" aria-label="이전 페이지"><i data-lucide="chevron-left"></i></button>
+        <span id="pgInfo"></span>
+        <button id="pgNext" aria-label="다음 페이지"><i data-lucide="chevron-right"></i></button>
+      </div>
+    </div>
+    <div class="col-mid" id="colMid">
+      <div class="composer" id="composerCard">
+        <div class="composer-head">
+          <span class="composer-title" id="composerTitleLabel" title="클릭하여 제목 수정">새 메모</span>
+          <span class="composer-actions">
+            <label class="icon-btn" title="파일 첨부" aria-label="파일 첨부"><i data-lucide="paperclip"></i><input type="file" id="files" multiple aria-label="파일 첨부"></label>
+            <button class="icon-btn" id="add" title="저장 (⌘/Ctrl+Enter)" aria-label="저장"><i data-lucide="save"></i></button>
+          </span>
+        </div>
+        <div class="toolbar hidden" id="composerToolbar"></div>
+        <div class="rich" id="composerRich" contenteditable="true" data-ph="새 메모..." role="textbox" aria-multiline="true"></div>
+        <div class="pending" id="pending"></div>
+        <div class="paste-hint">⌘/Ctrl + Enter 저장</div>
+      </div>
+      <div id="panes"></div>
+    </div>
+    <div class="col-right" id="colRight">
+      <div class="cal-card" id="calCard" hidden>
+        <div class="cal-head">
+          <button id="calPrev" aria-label="이전 달"><i data-lucide="chevron-left"></i></button>
+          <b id="calTitle"></b>
+          <button id="calNext" aria-label="다음 달"><i data-lucide="chevron-right"></i></button>
+        </div>
+        <div class="cal-grid" id="calGrid"></div>
+      </div>
+      <div class="tagbar" id="tagbar" hidden></div>
+    </div>
+  </div>
+</div>
+</div>
+
+<div class="lightbox" id="lb">
+  <div class="stage"><img id="lb-img" alt=""></div>
+  <button class="lb-btn lb-close" id="lb-close" aria-label="닫기"><i data-lucide="x"></i></button>
+  <button class="lb-btn lb-prev" id="lb-prev" aria-label="이전"><i data-lucide="chevron-left"></i></button>
+  <button class="lb-btn lb-next" id="lb-next" aria-label="다음"><i data-lucide="chevron-right"></i></button>
+  <div class="lb-zoom">
+    <button class="lb-btn" id="lb-zout" aria-label="축소">−</button>
+    <button class="lb-btn" id="lb-zreset" aria-label="원래 크기" style="font-size:13px">1:1</button>
+    <button class="lb-btn" id="lb-zin" aria-label="확대">＋</button>
+  </div>
+  <a class="lb-btn lb-dl" id="lb-dl" aria-label="원본 다운로드"><i data-lucide="download"></i></a>
+  <button class="lb-btn lb-copy" id="lb-copy" aria-label="이미지 복사"><i data-lucide="copy"></i></button>
+  <div class="lb-count" id="lb-count"></div>
+</div>
+
+<script src="/js/memo-bundle.js"></script>
+<script src="/nav.js"></script>
+<script src="/assistant-widget.js"></script>
+<script>if(window.AssistantWidget)AssistantWidget.init({ personaId: "keeper", personaName: "에코", avatar: "/avatars/echo.webp", askInTitleBar: true });</script>
+<script>
+// 모바일 스크롤시 상단바 숨기기/보이기
+(function() {
+  if (window.innerWidth > 768) return;
+  const nav = document.querySelector('.g-nav');
+  if (!nav) return;
+  // 상단바 검색 입력창 → 본문 검색과 동기화
+  const navQ = document.getElementById('navQ');
+  const mainQ = document.getElementById('q');
+  if (navQ && mainQ) {
+    let navTimer;
+    navQ.addEventListener('input', () => {
+      clearTimeout(navTimer);
+      navTimer = setTimeout(() => {
+        mainQ.value = navQ.value;
+        mainQ.dispatchEvent(new Event('input', { bubbles: true }));
+      }, 300);
+    });
+  }
+  // 상단바 달력/태그 버튼 연결
+  const navCal = document.getElementById('navCal');
+  const navTag = document.getElementById('navTag');
+  if (navCal) {
+    navCal.onclick = () => {
+      const tglCal = document.getElementById('tglCal');
+      if (tglCal) tglCal.click();
+    };
+  }
+  if (navTag) {
+    navTag.onclick = () => {
+      const tglTag = document.getElementById('tglTag');
+      if (tglTag) tglTag.click();
+    };
+  }
+  let lastY = window.scrollY;
+  let accumulated = 0;
+  let lastToggle = 0;
+  window.addEventListener('scroll', () => {
+    const now = Date.now();
+    const y = window.scrollY;
+    const dy = y - lastY;
+    lastY = y;
+    if (now - lastToggle < 300) return;
+    accumulated += dy;
+    if (accumulated > 150 && y > 200) {
+      if (!nav.classList.contains('nav-hidden')) {
+        nav.classList.add('nav-hidden');
+        document.body.classList.add('nav-hidden');
+      }
+      accumulated = 0;
+      lastToggle = now;
+    } else if (accumulated < -80) {
+      if (nav.classList.contains('nav-hidden')) {
+        nav.classList.remove('nav-hidden');
+        document.body.classList.remove('nav-hidden');
+      }
+      accumulated = 0;
+      lastToggle = now;
+    }
+    if ((dy > 0 && accumulated < 0) || (dy < 0 && accumulated > 0)) {
+      accumulated = dy;
+    }
+  }, { passive: true });
+})();
+</script>
+</body>
+</html>

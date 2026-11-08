@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<meta name="theme-color" content="#ffffff">
+<link rel="manifest" href="/manifest.json">
+<title>일정</title>
+<link rel="stylesheet" href="/shell.css">
+<link rel="stylesheet" href="/assistant-widget.css">
+<script src="/vendor/lucide/lucide.min.js"></script>
+<link rel="stylesheet" href="/css/schedule.css">
+</head>
+<body>
+<header class="g-nav">
+  <a href="/" class="brand-logo" aria-label="MyHub 홈"><img src="/icon-192.png" alt="JN" style="height:26px;width:auto;display:block;"></a>
+  <div class="spacer"></div>
+  <button class="icon-btn" id="addBtn" aria-label="일정 추가"><i data-lucide="plus"></i></button>
+  <button class="icon-btn" id="pushBtn" aria-label="일정 알림 설정"><i data-lucide="bell"></i></button>
+  <span class="ver" id="clock"></span>
+</header>
+
+<div class="g-main">
+<div class="wrap">
+  <div class="page-head">
+    <h1>일정</h1>
+    <span class="spacer"></span>
+  </div>
+
+  <div class="google-row" id="googleRow">
+    <div class="google-info">
+      <div class="google-title"><i data-lucide="link"></i>Google 연동 <span class="google-status" id="googleStatusLabel" data-state="unknown">확인 중…</span></div>
+      <div class="google-desc" id="googleStatusDesc">Gmail·캘린더 연동 상태를 확인하고 있어요.</div>
+    </div>
+    <button class="m-btn solid" id="googleConnectBtn" type="button" style="display:none;">연결하기</button>
+    <button class="m-btn ghost" id="googleDisconnectBtn" type="button" style="display:none;">연결 해제</button>
+  </div>
+
+  <div class="cal-layout">
+    <div class="cal-left">
+      <div class="cal-nav">
+        <button class="nav-btn" id="prevM" aria-label="이전 달"><i data-lucide="chevron-left"></i></button>
+        <h2 id="calTitle"></h2>
+        <button class="nav-btn" id="nextM" aria-label="다음 달"><i data-lucide="chevron-right"></i></button>
+        <span class="spacer"></span>
+        <button class="nav-btn today-btn" id="todayBtn">오늘</button>
+      </div>
+      <div class="cal-grid" id="calGrid"></div>
+    </div>
+    <div class="day-sec">
+      <h3 id="dayTitle"></h3>
+      <div id="dayItems"></div>
+    </div>
+  </div>
+</div>
+</div>
+
+<div class="modal-back" id="modalBack">
+  <div class="modal">
+    <h3 id="modalTitle">일정 추가</h3>
+    <input type="hidden" id="fId">
+    <div class="fld"><label>제목</label><input id="fTitle" type="text" maxlength="200" placeholder="일정 제목"></div>
+    <div class="fld-row">
+      <div class="fld"><label>시작</label><input id="fStart" type="datetime-local"></div>
+      <div class="fld"><label>종료</label><input id="fEnd" type="datetime-local"></div>
+    </div>
+    <div class="fld"><label>장소</label><input id="fLocation" type="text" maxlength="200" placeholder="장소 (선택)"></div>
+    <div class="fld"><label>설명</label><textarea id="fDesc" maxlength="2000" placeholder="설명 (선택)"></textarea></div>
+    <div class="fld"><label>반복</label>
+      <select id="fRrule">
+        <option value="">안 함</option>
+        <option value="FREQ=DAILY">매일</option>
+        <option value="FREQ=WEEKLY">매주</option>
+        <option value="FREQ=MONTHLY">매월</option>
+      </select>
+    </div>
+    <div class="modal-acts">
+      <button class="m-btn text-danger" id="delBtn" style="display:none;">삭제</button>
+      <span class="grow"></span>
+      <button class="m-btn ghost" id="cancelBtn">취소</button>
+      <button class="m-btn solid" id="saveBtn">저장</button>
+    </div>
+  </div>
+</div>
+
+<script src="/nav.js"></script>
+<script src="/js/google-connect.js"></script>
+<script src="/assistant-widget.js"></script>
+<script src="/js/schedule.js"></script>
+</body>
+</html>

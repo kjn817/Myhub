@@ -1,0 +1,1 @@
+{"$schema":"../../../../node_modules/wrangler/config-schema.json","compatibility_date":"2026-10-01","d1_databases":[{"binding":"DB","database_id":"22222222-2222-4222-8222-222222222222","database_name":"myhub-oauth-poc","migrations_dir":"../../../migrations"}],"main":"index.ts","name":"myhub-oauth-poc-mcp","services":[{"binding":"AUTH_SERVER","service":"myhub-oauth-poc-auth"}]}
