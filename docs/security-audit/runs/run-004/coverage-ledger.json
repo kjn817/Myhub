@@ -1,0 +1,939 @@
+[
+ {
+  "agent_id": "a8319043-9217-48e7-addb-fb9611f6dc23",
+  "attack_class": "ATTACK-CLASSES.md#Injection",
+  "attempts": [],
+  "boundary": "public/login.html#no unsafe-inline + SRI lucide + deploy_full.py CSP header",
+  "canonical_refs": {
+   "attack_class": "ATTACK-CLASSES.md#Injection",
+   "boundary": "public/login.html#no unsafe-inline + SRI lucide + deploy_full.py CSP header",
+   "subsystem": "profile/quick/all-in-scope-subsystems",
+   "surface": "public/login.html#CSP + external login.js and login.css"
+  },
+  "coverage_id": "public%2Flogin.html%23CSP%20%2B%20external%20login.js%20and%20login.css::public%2Flogin.html%23no%20unsafe-inline%20%2B%20SRI%20lucide%20%2B%20deploy_full.py%20CSP%20header::profile%2Fquick%2Fall-in-scope-subsystems::ATTACK-CLASSES.md%23Injection",
+  "excluded_blocks": [
+   {
+    "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+    "reason": "No native/binary code in the auth scope."
+   },
+   {
+    "block": "AI-AND-LLM.md#Core discipline",
+    "reason": "No LLM interaction in the auth module."
+   },
+   {
+    "block": "PROTOCOLS-RPC-AND-MESSAGING.md#Core discipline",
+    "reason": "No RPC, broker, or queue surface in the auth scope."
+   },
+   {
+    "block": "SUPPLY-CHAIN-AND-RELEASE.md#Core discipline",
+    "reason": "Dependency/CI audit is a separate run, not this scoped re-audit."
+   }
+  ],
+  "local_checks": [
+   {
+    "agent_id": "a8319043-9217-48e7-addb-fb9611f6dc23",
+    "artifact": null,
+    "invariant": "df17d3e re-audit: login.html has no inline script/style/onclick; CSP meta drops unsafe-inline; login.js/css are external and served from the inline bundle with a CSP header.",
+    "method": "source",
+    "result": "Verifier C independently reproduced: 47 static checks PASS; live serving of src/index-inline.ts: /login.html 200 + CSP header, /js/login.js and /css/login.css 200 unauthenticated, /index.html -> 302 /login.html; login-csp-unsafe-inline FIXED (browser click flow NOT TESTED).",
+    "reviewed_paths": [
+     "public/login.html",
+     "public/js/login.js",
+     "public/css/login.css",
+     "deploy_full.py",
+     "src/index.ts"
+    ]
+   },
+   {
+    "agent_id": "4ebc43a7-0041-4c8a-8f65-0cd642c3ee87",
+    "artifact": null,
+    "invariant": "Independent verifier re-read every cited source location and independently reproduced the decisive local result with a fresh harness.",
+    "method": "source",
+    "result": "login-csp-unsafe-inline FIXED: 47 checks PASS in /tmp/run004-c-static.cjs; browser click flow NOT TESTED.",
+    "reviewed_paths": [
+     "public/login.html",
+     "public/js/login.js",
+     "public/css/login.css",
+     "deploy_full.py",
+     "src/index.ts"
+    ]
+   }
+  ],
+  "ordinary_attack_class_block": "ATTACK-CLASSES.md#Injection",
+  "prior_status": "prior_confirmed_changed_source",
+  "result_fingerprints": [],
+  "reviewed_paths": [
+   "public/login.html",
+   "public/js/login.js",
+   "public/css/login.css",
+   "deploy_full.py",
+   "src/index.ts"
+  ],
+  "selected_companion_blocks": [
+   "CLIENT-SIDE.md#Core discipline",
+   "CLIENT-SIDE.md#DOM and object-state attack classes",
+   "CLIENT-SIDE.md#Universal moves",
+   "CLIENT-SIDE.md#Validation rules"
+  ],
+  "starting_paths": [
+   "public/login.html",
+   "deploy_full.py"
+  ],
+  "status": "covered",
+  "subsystem": "profile/quick/all-in-scope-subsystems",
+  "surface": "public/login.html#CSP + external login.js and login.css",
+  "unresolved": [],
+  "wave": 1
+ },
+ {
+  "agent_id": "a8319043-9217-48e7-addb-fb9611f6dc23",
+  "attack_class": "ATTACK-CLASSES.md#Access control",
+  "attempts": [],
+  "boundary": "src/modules/auth/routes.ts#getSessionVersion D1 SELECT + fail-closed on read error",
+  "canonical_refs": {
+   "attack_class": "ATTACK-CLASSES.md#Access control",
+   "boundary": "src/modules/auth/routes.ts#getSessionVersion D1 SELECT + fail-closed on read error",
+   "subsystem": "profile/quick/all-in-scope-subsystems",
+   "surface": "src/modules/auth/routes.ts#GET /api/auth/me"
+  },
+  "coverage_id": "src%2Fmodules%2Fauth%2Froutes.ts%23GET%20%2Fapi%2Fauth%2Fme::src%2Fmodules%2Fauth%2Froutes.ts%23getSessionVersion%20D1%20SELECT%20%2B%20fail-closed%20on%20read%20error::profile%2Fquick%2Fall-in-scope-subsystems::ATTACK-CLASSES.md%23Access%20control",
+  "excluded_blocks": [
+   {
+    "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+    "reason": "No native/binary code in the auth scope."
+   },
+   {
+    "block": "AI-AND-LLM.md#Core discipline",
+    "reason": "No LLM interaction in the auth module."
+   },
+   {
+    "block": "PROTOCOLS-RPC-AND-MESSAGING.md#Core discipline",
+    "reason": "No RPC, broker, or queue surface in the auth scope."
+   },
+   {
+    "block": "SUPPLY-CHAIN-AND-RELEASE.md#Core discipline",
+    "reason": "Dependency/CI audit is a separate run, not this scoped re-audit."
+   }
+  ],
+  "local_checks": [
+   {
+    "agent_id": "a8319043-9217-48e7-addb-fb9611f6dc23",
+    "artifact": null,
+    "invariant": "df17d3e re-audit: getSessionVersion reads session_versions from D1 and lets read errors propagate so verifySessionForEnv denies the session (fail-closed).",
+    "method": "source",
+    "result": "Verifier A independently reproduced with a fault-injected D1: 0051-applied read failure -> 500/401 on /verify, /me, /logout; 0051-missing -> fail-closed per the deployment gate.",
+    "reviewed_paths": [
+     "src/modules/auth/routes.ts",
+     "tests/unit/auth-low-fixes.test.ts"
+    ]
+   },
+   {
+    "agent_id": "50b20e22-53f8-477c-ade1-af1390d5be97",
+    "artifact": null,
+    "invariant": "Independent verifier re-read every cited source location and independently reproduced the decisive local result with a fresh harness.",
+    "method": "source",
+    "result": "sessver-fail-open FIXED: 44 checks PASS in /tmp/run004-verifier-a.cjs.",
+    "reviewed_paths": [
+     "src/modules/auth/routes.ts",
+     "tests/unit/auth-low-fixes.test.ts"
+    ]
+   }
+  ],
+  "ordinary_attack_class_block": "ATTACK-CLASSES.md#Access control",
+  "prior_status": "prior_confirmed_changed_source",
+  "result_fingerprints": [],
+  "reviewed_paths": [
+   "src/modules/auth/routes.ts",
+   "tests/unit/auth-low-fixes.test.ts"
+  ],
+  "selected_companion_blocks": [
+   "WEB-PROTOCOL-AND-AUTH.md#MFA enrollment and assurance downgrade",
+   "WEB-PROTOCOL-AND-AUTH.md#Step-up binding and bypass",
+   "WEB-PROTOCOL-AND-AUTH.md#Core discipline",
+   "WEB-PROTOCOL-AND-AUTH.md#Universal moves",
+   "WEB-PROTOCOL-AND-AUTH.md#Validation rules"
+  ],
+  "starting_paths": [
+   "src/modules/auth/routes.ts"
+  ],
+  "status": "covered",
+  "subsystem": "profile/quick/all-in-scope-subsystems",
+  "surface": "src/modules/auth/routes.ts#GET /api/auth/me",
+  "unresolved": [],
+  "wave": 1
+ },
+ {
+  "agent_id": "a8319043-9217-48e7-addb-fb9611f6dc23",
+  "attack_class": "ATTACK-CLASSES.md#Access control",
+  "attempts": [],
+  "boundary": "src/modules/auth/routes.ts#gate CASE no-decay restart after lock expiry",
+  "canonical_refs": {
+   "attack_class": "ATTACK-CLASSES.md#Access control",
+   "boundary": "src/modules/auth/routes.ts#gate CASE no-decay restart after lock expiry",
+   "subsystem": "profile/quick/all-in-scope-subsystems",
+   "surface": "src/modules/auth/routes.ts#POST /api/auth/pin-login"
+  },
+  "coverage_id": "src%2Fmodules%2Fauth%2Froutes.ts%23POST%20%2Fapi%2Fauth%2Fpin-login::src%2Fmodules%2Fauth%2Froutes.ts%23gate%20CASE%20no-decay%20restart%20after%20lock%20expiry::profile%2Fquick%2Fall-in-scope-subsystems::ATTACK-CLASSES.md%23Access%20control",
+  "excluded_blocks": [
+   {
+    "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+    "reason": "No native/binary code in the auth scope."
+   },
+   {
+    "block": "AI-AND-LLM.md#Core discipline",
+    "reason": "No LLM interaction in the auth module."
+   },
+   {
+    "block": "PROTOCOLS-RPC-AND-MESSAGING.md#Core discipline",
+    "reason": "No RPC, broker, or queue surface in the auth scope."
+   },
+   {
+    "block": "SUPPLY-CHAIN-AND-RELEASE.md#Core discipline",
+    "reason": "Dependency/CI audit is a separate run, not this scoped re-audit."
+   }
+  ],
+  "local_checks": [
+   {
+    "agent_id": "a8319043-9217-48e7-addb-fb9611f6dc23",
+    "artifact": null,
+    "invariant": "df17d3e re-audit: gate UPDATE CASE restarts fail_count at 1 when the lock already expired.",
+    "method": "source",
+    "result": "Verifier B independently reproduced N1-N4: expired lock + 1 wrong guess -> fail_count=1, no relock; pin-failcount-no-decay FIXED.",
+    "reviewed_paths": [
+     "src/modules/auth/routes.ts",
+     "tests/unit/auth-low-fixes.test.ts"
+    ]
+   },
+   {
+    "agent_id": "8d1461be-bd3c-49e4-9725-5335f6ca2554",
+    "artifact": null,
+    "invariant": "Independent verifier re-read every cited source location and independently reproduced the decisive local result with a fresh harness.",
+    "method": "source",
+    "result": "pin-failcount-no-decay FIXED: 15/15 checks PASS; negative control on 23e1e91 gives 12 FAIL / 3 PASS.",
+    "reviewed_paths": [
+     "src/modules/auth/routes.ts",
+     "tests/unit/auth-low-fixes.test.ts"
+    ]
+   }
+  ],
+  "ordinary_attack_class_block": "ATTACK-CLASSES.md#Access control",
+  "prior_status": "prior_confirmed_changed_source",
+  "result_fingerprints": [],
+  "reviewed_paths": [
+   "src/modules/auth/routes.ts",
+   "tests/unit/auth-low-fixes.test.ts"
+  ],
+  "selected_companion_blocks": [
+   "WEB-PROTOCOL-AND-AUTH.md#MFA enrollment and assurance downgrade",
+   "WEB-PROTOCOL-AND-AUTH.md#Step-up binding and bypass",
+   "WEB-PROTOCOL-AND-AUTH.md#Core discipline",
+   "WEB-PROTOCOL-AND-AUTH.md#Universal moves",
+   "WEB-PROTOCOL-AND-AUTH.md#Validation rules"
+  ],
+  "starting_paths": [
+   "src/modules/auth/routes.ts"
+  ],
+  "status": "covered",
+  "subsystem": "profile/quick/all-in-scope-subsystems",
+  "surface": "src/modules/auth/routes.ts#POST /api/auth/pin-login",
+  "unresolved": [],
+  "wave": 1
+ },
+ {
+  "agent_id": "a8319043-9217-48e7-addb-fb9611f6dc23",
+  "attack_class": "ATTACK-CLASSES.md#Access control",
+  "attempts": [],
+  "boundary": "src/modules/auth/routes.ts#gate try/catch + compensation UPDATE + salt and hash pre-validation",
+  "canonical_refs": {
+   "attack_class": "ATTACK-CLASSES.md#Access control",
+   "boundary": "src/modules/auth/routes.ts#gate try/catch + compensation UPDATE + salt and hash pre-validation",
+   "subsystem": "profile/quick/all-in-scope-subsystems",
+   "surface": "src/modules/auth/routes.ts#POST /api/auth/pin-login"
+  },
+  "coverage_id": "src%2Fmodules%2Fauth%2Froutes.ts%23POST%20%2Fapi%2Fauth%2Fpin-login::src%2Fmodules%2Fauth%2Froutes.ts%23gate%20try%2Fcatch%20%2B%20compensation%20UPDATE%20%2B%20salt%20and%20hash%20pre-validation::profile%2Fquick%2Fall-in-scope-subsystems::ATTACK-CLASSES.md%23Access%20control",
+  "excluded_blocks": [
+   {
+    "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+    "reason": "No native/binary code in the auth scope."
+   },
+   {
+    "block": "AI-AND-LLM.md#Core discipline",
+    "reason": "No LLM interaction in the auth module."
+   },
+   {
+    "block": "PROTOCOLS-RPC-AND-MESSAGING.md#Core discipline",
+    "reason": "No RPC, broker, or queue surface in the auth scope."
+   },
+   {
+    "block": "SUPPLY-CHAIN-AND-RELEASE.md#Core discipline",
+    "reason": "Dependency/CI audit is a separate run, not this scoped re-audit."
+   }
+  ],
+  "local_checks": [
+   {
+    "agent_id": "a8319043-9217-48e7-addb-fb9611f6dc23",
+    "artifact": null,
+    "invariant": "df17d3e re-audit: post-gate steps are wrapped in try/catch with a compensation UPDATE (MAX(fail_count - 1, 0), unlock); corrupted salt/hash are rejected before gate preemption.",
+    "method": "source",
+    "result": "Verifier B independently reproduced G1-G5: verifyPin exception after preemption -> 500 + compensation, no stuck lock; corrupted salt -> 500 before preemption; pin-gate-failure-leaves-lock FIXED.",
+    "reviewed_paths": [
+     "src/modules/auth/routes.ts",
+     "tests/unit/auth-low-fixes.test.ts"
+    ]
+   },
+   {
+    "agent_id": "8d1461be-bd3c-49e4-9725-5335f6ca2554",
+    "artifact": null,
+    "invariant": "Independent verifier re-read every cited source location and independently reproduced the decisive local result with a fresh harness.",
+    "method": "source",
+    "result": "pin-gate-failure-leaves-lock FIXED: 15/15 checks PASS; negative control on 23e1e91 gives 12 FAIL / 3 PASS.",
+    "reviewed_paths": [
+     "src/modules/auth/routes.ts",
+     "tests/unit/auth-low-fixes.test.ts"
+    ]
+   }
+  ],
+  "ordinary_attack_class_block": "ATTACK-CLASSES.md#Access control",
+  "prior_status": "prior_confirmed_changed_source",
+  "result_fingerprints": [],
+  "reviewed_paths": [
+   "src/modules/auth/routes.ts",
+   "tests/unit/auth-low-fixes.test.ts"
+  ],
+  "selected_companion_blocks": [
+   "WEB-PROTOCOL-AND-AUTH.md#MFA enrollment and assurance downgrade",
+   "WEB-PROTOCOL-AND-AUTH.md#Step-up binding and bypass",
+   "WEB-PROTOCOL-AND-AUTH.md#Core discipline",
+   "WEB-PROTOCOL-AND-AUTH.md#Universal moves",
+   "WEB-PROTOCOL-AND-AUTH.md#Validation rules"
+  ],
+  "starting_paths": [
+   "src/modules/auth/routes.ts"
+  ],
+  "status": "covered",
+  "subsystem": "profile/quick/all-in-scope-subsystems",
+  "surface": "src/modules/auth/routes.ts#POST /api/auth/pin-login",
+  "unresolved": [],
+  "wave": 1
+ },
+ {
+  "agent_id": "a8319043-9217-48e7-addb-fb9611f6dc23",
+  "attack_class": "ATTACK-CLASSES.md#Business logic",
+  "attempts": [],
+  "boundary": "src/modules/auth/routes.ts#getClientIp CF-Connecting-IP only + per-IP skip",
+  "canonical_refs": {
+   "attack_class": "ATTACK-CLASSES.md#Business logic",
+   "boundary": "src/modules/auth/routes.ts#getClientIp CF-Connecting-IP only + per-IP skip",
+   "subsystem": "profile/quick/all-in-scope-subsystems",
+   "surface": "src/modules/auth/routes.ts#POST /api/auth/pin-login"
+  },
+  "coverage_id": "src%2Fmodules%2Fauth%2Froutes.ts%23POST%20%2Fapi%2Fauth%2Fpin-login::src%2Fmodules%2Fauth%2Froutes.ts%23getClientIp%20CF-Connecting-IP%20only%20%2B%20per-IP%20skip::profile%2Fquick%2Fall-in-scope-subsystems::ATTACK-CLASSES.md%23Business%20logic",
+  "excluded_blocks": [
+   {
+    "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+    "reason": "No native/binary code in the auth scope."
+   },
+   {
+    "block": "AI-AND-LLM.md#Core discipline",
+    "reason": "No LLM interaction in the auth module."
+   },
+   {
+    "block": "PROTOCOLS-RPC-AND-MESSAGING.md#Core discipline",
+    "reason": "No RPC, broker, or queue surface in the auth scope."
+   },
+   {
+    "block": "SUPPLY-CHAIN-AND-RELEASE.md#Core discipline",
+    "reason": "Dependency/CI audit is a separate run, not this scoped re-audit."
+   }
+  ],
+  "local_checks": [
+   {
+    "agent_id": "a8319043-9217-48e7-addb-fb9611f6dc23",
+    "artifact": null,
+    "invariant": "df17d3e re-audit: only CF-Connecting-IP is trusted (XFF ignored); unidentifiable IP returns null and skips per-IP checks; global backstops verify:global / pin:global 100/hr exist.",
+    "method": "source",
+    "result": "Verifier A independently reproduced: XFF spoofing has no effect; unknown-IP path skips per-IP limiting; rate-limit-unknown-ip FIXED.",
+    "reviewed_paths": [
+     "src/modules/auth/routes.ts",
+     "tests/unit/auth-low-fixes.test.ts"
+    ]
+   },
+   {
+    "agent_id": "50b20e22-53f8-477c-ade1-af1390d5be97",
+    "artifact": null,
+    "invariant": "Independent verifier re-read every cited source location and independently reproduced the decisive local result with a fresh harness.",
+    "method": "source",
+    "result": "rate-limit-unknown-ip FIXED: 44 checks PASS in /tmp/run004-verifier-a.cjs.",
+    "reviewed_paths": [
+     "src/modules/auth/routes.ts",
+     "tests/unit/auth-low-fixes.test.ts"
+    ]
+   }
+  ],
+  "ordinary_attack_class_block": "ATTACK-CLASSES.md#Business logic",
+  "prior_status": "prior_confirmed_changed_source",
+  "result_fingerprints": [],
+  "reviewed_paths": [
+   "src/modules/auth/routes.ts",
+   "tests/unit/auth-low-fixes.test.ts"
+  ],
+  "selected_companion_blocks": [
+   "RESOURCE-EXHAUSTION-AND-AVAILABILITY.md#Core discipline",
+   "RESOURCE-EXHAUSTION-AND-AVAILABILITY.md#Quota and scheduling attack classes",
+   "RESOURCE-EXHAUSTION-AND-AVAILABILITY.md#Universal moves",
+   "RESOURCE-EXHAUSTION-AND-AVAILABILITY.md#Validation rules"
+  ],
+  "starting_paths": [
+   "src/modules/auth/routes.ts"
+  ],
+  "status": "covered",
+  "subsystem": "profile/quick/all-in-scope-subsystems",
+  "surface": "src/modules/auth/routes.ts#POST /api/auth/pin-login",
+  "unresolved": [],
+  "wave": 1
+ },
+ {
+  "agent_id": "a8319043-9217-48e7-addb-fb9611f6dc23",
+  "attack_class": "ATTACK-CLASSES.md#Access control",
+  "attempts": [],
+  "boundary": "src/modules/auth/routes.ts#locked-branch resetPinCounter retry + iterations pre-validation",
+  "canonical_refs": {
+   "attack_class": "ATTACK-CLASSES.md#Access control",
+   "boundary": "src/modules/auth/routes.ts#locked-branch resetPinCounter retry + iterations pre-validation",
+   "subsystem": "profile/quick/all-in-scope-subsystems",
+   "surface": "src/modules/auth/routes.ts#POST /api/auth/pin-login"
+  },
+  "coverage_id": "src%2Fmodules%2Fauth%2Froutes.ts%23POST%20%2Fapi%2Fauth%2Fpin-login::src%2Fmodules%2Fauth%2Froutes.ts%23locked-branch%20resetPinCounter%20retry%20%2B%20iterations%20pre-validation::profile%2Fquick%2Fall-in-scope-subsystems::ATTACK-CLASSES.md%23Access%20control",
+  "excluded_blocks": [
+   {
+    "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+    "reason": "No native/binary code in the auth scope."
+   },
+   {
+    "block": "AI-AND-LLM.md#Core discipline",
+    "reason": "No LLM interaction in the auth module."
+   },
+   {
+    "block": "PROTOCOLS-RPC-AND-MESSAGING.md#Core discipline",
+    "reason": "No RPC, broker, or queue surface in the auth scope."
+   },
+   {
+    "block": "SUPPLY-CHAIN-AND-RELEASE.md#Core discipline",
+    "reason": "Dependency/CI audit is a separate run, not this scoped re-audit."
+   }
+  ],
+  "local_checks": [
+   {
+    "agent_id": "a8319043-9217-48e7-addb-fb9611f6dc23",
+    "artifact": null,
+    "invariant": "886c012 follow-up: locked-branch reset goes through resetPinCounter (one retry on transient D1 failure); iterations pre-validation rejects 0 / non-integer / negative rows before gate preemption.",
+    "method": "source",
+    "result": "Verifier D independently re-verified with a fresh harness: 10/10 scenarios PASS (reset fails once -> 200, twice -> 500, iterations 0/1.5/-3 -> 500 with 0 UPDATEs); negative control on df17d3e confirms old behavior. Iterations upper bound remains open (informational).",
+    "reviewed_paths": [
+     "src/modules/auth/routes.ts",
+     "tests/unit/auth-low-fixes.test.ts"
+    ]
+   },
+   {
+    "agent_id": "f2e54e9a-9e60-4f2a-bdfa-7f5d0696e9d0",
+    "artifact": null,
+    "invariant": "Independent verifier re-read every cited source location and independently reproduced the decisive local result with a fresh harness.",
+    "method": "source",
+    "result": "auth/pin-locked-branch-no-retry FIXED; auth/pin-iterations-no-upper-bound confirmed informational; 10/10 harness scenarios PASS + negative control.",
+    "reviewed_paths": [
+     "src/modules/auth/routes.ts",
+     "tests/unit/auth-low-fixes.test.ts"
+    ]
+   }
+  ],
+  "ordinary_attack_class_block": "ATTACK-CLASSES.md#Access control",
+  "prior_status": "new",
+  "result_fingerprints": [
+   "auth/pin-locked-branch-no-retry",
+   "auth/pin-iterations-no-upper-bound"
+  ],
+  "reviewed_paths": [
+   "src/modules/auth/routes.ts",
+   "tests/unit/auth-low-fixes.test.ts"
+  ],
+  "selected_companion_blocks": [
+   "WEB-PROTOCOL-AND-AUTH.md#MFA enrollment and assurance downgrade",
+   "WEB-PROTOCOL-AND-AUTH.md#Step-up binding and bypass",
+   "WEB-PROTOCOL-AND-AUTH.md#Core discipline",
+   "WEB-PROTOCOL-AND-AUTH.md#Universal moves",
+   "WEB-PROTOCOL-AND-AUTH.md#Validation rules"
+  ],
+  "starting_paths": [
+   "src/modules/auth/routes.ts"
+  ],
+  "status": "candidate",
+  "subsystem": "profile/quick/all-in-scope-subsystems",
+  "surface": "src/modules/auth/routes.ts#POST /api/auth/pin-login",
+  "unresolved": [],
+  "wave": 1
+ },
+ {
+  "agent_id": "a8319043-9217-48e7-addb-fb9611f6dc23",
+  "attack_class": "ATTACK-CLASSES.md#Access control",
+  "attempts": [],
+  "boundary": "src/modules/auth/routes.ts#pinLoginKvFallback 'no such column' only",
+  "canonical_refs": {
+   "attack_class": "ATTACK-CLASSES.md#Access control",
+   "boundary": "src/modules/auth/routes.ts#pinLoginKvFallback 'no such column' only",
+   "subsystem": "profile/quick/all-in-scope-subsystems",
+   "surface": "src/modules/auth/routes.ts#POST /api/auth/pin-login"
+  },
+  "coverage_id": "src%2Fmodules%2Fauth%2Froutes.ts%23POST%20%2Fapi%2Fauth%2Fpin-login::src%2Fmodules%2Fauth%2Froutes.ts%23pinLoginKvFallback%20%27no%20such%20column%27%20only::profile%2Fquick%2Fall-in-scope-subsystems::ATTACK-CLASSES.md%23Access%20control",
+  "excluded_blocks": [
+   {
+    "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+    "reason": "No native/binary code in the auth scope."
+   },
+   {
+    "block": "AI-AND-LLM.md#Core discipline",
+    "reason": "No LLM interaction in the auth module."
+   },
+   {
+    "block": "PROTOCOLS-RPC-AND-MESSAGING.md#Core discipline",
+    "reason": "No RPC, broker, or queue surface in the auth scope."
+   },
+   {
+    "block": "SUPPLY-CHAIN-AND-RELEASE.md#Core discipline",
+    "reason": "Dependency/CI audit is a separate run, not this scoped re-audit."
+   }
+  ],
+  "local_checks": [
+   {
+    "agent_id": "a8319043-9217-48e7-addb-fb9611f6dc23",
+    "artifact": null,
+    "invariant": "df17d3e re-audit: KV fallback is entered only on 'no such column'; any other D1 error fails with 500.",
+    "method": "source",
+    "result": "Verifier B independently reproduced K1-K4: 'no such column' -> fallback, transient D1 error -> 500; pin-kv-fallback-race FIXED.",
+    "reviewed_paths": [
+     "src/modules/auth/routes.ts",
+     "tests/unit/auth-low-fixes.test.ts"
+    ]
+   },
+   {
+    "agent_id": "8d1461be-bd3c-49e4-9725-5335f6ca2554",
+    "artifact": null,
+    "invariant": "Independent verifier re-read every cited source location and independently reproduced the decisive local result with a fresh harness.",
+    "method": "source",
+    "result": "pin-kv-fallback-race FIXED: 15/15 checks PASS; negative control on 23e1e91 gives 12 FAIL / 3 PASS.",
+    "reviewed_paths": [
+     "src/modules/auth/routes.ts",
+     "tests/unit/auth-low-fixes.test.ts"
+    ]
+   }
+  ],
+  "ordinary_attack_class_block": "ATTACK-CLASSES.md#Access control",
+  "prior_status": "prior_confirmed_changed_source",
+  "result_fingerprints": [],
+  "reviewed_paths": [
+   "src/modules/auth/routes.ts",
+   "tests/unit/auth-low-fixes.test.ts"
+  ],
+  "selected_companion_blocks": [
+   "WEB-PROTOCOL-AND-AUTH.md#MFA enrollment and assurance downgrade",
+   "WEB-PROTOCOL-AND-AUTH.md#Step-up binding and bypass",
+   "WEB-PROTOCOL-AND-AUTH.md#Core discipline",
+   "WEB-PROTOCOL-AND-AUTH.md#Universal moves",
+   "WEB-PROTOCOL-AND-AUTH.md#Validation rules"
+  ],
+  "starting_paths": [
+   "src/modules/auth/routes.ts"
+  ],
+  "status": "covered",
+  "subsystem": "profile/quick/all-in-scope-subsystems",
+  "surface": "src/modules/auth/routes.ts#POST /api/auth/pin-login",
+  "unresolved": [],
+  "wave": 1
+ },
+ {
+  "agent_id": "a8319043-9217-48e7-addb-fb9611f6dc23",
+  "attack_class": "ATTACK-CLASSES.md#Access control",
+  "attempts": [],
+  "boundary": "src/modules/auth/routes.ts#bump-before-UPSERT order",
+  "canonical_refs": {
+   "attack_class": "ATTACK-CLASSES.md#Access control",
+   "boundary": "src/modules/auth/routes.ts#bump-before-UPSERT order",
+   "subsystem": "profile/quick/all-in-scope-subsystems",
+   "surface": "src/modules/auth/routes.ts#POST /api/auth/set-pin"
+  },
+  "coverage_id": "src%2Fmodules%2Fauth%2Froutes.ts%23POST%20%2Fapi%2Fauth%2Fset-pin::src%2Fmodules%2Fauth%2Froutes.ts%23bump-before-UPSERT%20order::profile%2Fquick%2Fall-in-scope-subsystems::ATTACK-CLASSES.md%23Access%20control",
+  "excluded_blocks": [
+   {
+    "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+    "reason": "No native/binary code in the auth scope."
+   },
+   {
+    "block": "AI-AND-LLM.md#Core discipline",
+    "reason": "No LLM interaction in the auth module."
+   },
+   {
+    "block": "PROTOCOLS-RPC-AND-MESSAGING.md#Core discipline",
+    "reason": "No RPC, broker, or queue surface in the auth scope."
+   },
+   {
+    "block": "SUPPLY-CHAIN-AND-RELEASE.md#Core discipline",
+    "reason": "Dependency/CI audit is a separate run, not this scoped re-audit."
+   }
+  ],
+  "local_checks": [
+   {
+    "agent_id": "a8319043-9217-48e7-addb-fb9611f6dc23",
+    "artifact": null,
+    "invariant": "886c012 follow-up: bumpSessionVersion runs before the PIN UPSERT so a bump failure leaves PIN and sessions unchanged.",
+    "method": "source",
+    "result": "Verifier D independently re-verified with a fresh harness: bump failure -> 500 + 0 UPSERTs + OTP session kept + old PIN login 200; normal set-pin -> bump index < UPSERT index in call log, old session 401; negative control on df17d3e reproduces the inconsistency.",
+    "reviewed_paths": [
+     "src/modules/auth/routes.ts",
+     "tests/unit/auth-low-fixes.test.ts"
+    ]
+   },
+   {
+    "agent_id": "f2e54e9a-9e60-4f2a-bdfa-7f5d0696e9d0",
+    "artifact": null,
+    "invariant": "Independent verifier re-read every cited source location and independently reproduced the decisive local result with a fresh harness.",
+    "method": "source",
+    "result": "auth/set-pin-order FIXED; 10/10 harness scenarios PASS (shared file with locked-branch checks) + negative control.",
+    "reviewed_paths": [
+     "src/modules/auth/routes.ts",
+     "tests/unit/auth-low-fixes.test.ts"
+    ]
+   }
+  ],
+  "ordinary_attack_class_block": "ATTACK-CLASSES.md#Access control",
+  "prior_status": "new",
+  "result_fingerprints": [
+   "auth/set-pin-order"
+  ],
+  "reviewed_paths": [
+   "src/modules/auth/routes.ts",
+   "tests/unit/auth-low-fixes.test.ts"
+  ],
+  "selected_companion_blocks": [
+   "WEB-PROTOCOL-AND-AUTH.md#MFA enrollment and assurance downgrade",
+   "WEB-PROTOCOL-AND-AUTH.md#Step-up binding and bypass",
+   "WEB-PROTOCOL-AND-AUTH.md#Core discipline",
+   "WEB-PROTOCOL-AND-AUTH.md#Universal moves",
+   "WEB-PROTOCOL-AND-AUTH.md#Validation rules"
+  ],
+  "starting_paths": [
+   "src/modules/auth/routes.ts"
+  ],
+  "status": "candidate",
+  "subsystem": "profile/quick/all-in-scope-subsystems",
+  "surface": "src/modules/auth/routes.ts#POST /api/auth/set-pin",
+  "unresolved": [],
+  "wave": 1
+ },
+ {
+  "agent_id": "a8319043-9217-48e7-addb-fb9611f6dc23",
+  "attack_class": "ATTACK-CLASSES.md#Access control",
+  "attempts": [],
+  "boundary": "src/modules/auth/routes.ts#bumpSessionVersion UPDATE ... RETURNING version",
+  "canonical_refs": {
+   "attack_class": "ATTACK-CLASSES.md#Access control",
+   "boundary": "src/modules/auth/routes.ts#bumpSessionVersion UPDATE ... RETURNING version",
+   "subsystem": "profile/quick/all-in-scope-subsystems",
+   "surface": "src/modules/auth/routes.ts#POST /api/auth/set-pin"
+  },
+  "coverage_id": "src%2Fmodules%2Fauth%2Froutes.ts%23POST%20%2Fapi%2Fauth%2Fset-pin::src%2Fmodules%2Fauth%2Froutes.ts%23bumpSessionVersion%20UPDATE%20...%20RETURNING%20version::profile%2Fquick%2Fall-in-scope-subsystems::ATTACK-CLASSES.md%23Access%20control",
+  "excluded_blocks": [
+   {
+    "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+    "reason": "No native/binary code in the auth scope."
+   },
+   {
+    "block": "AI-AND-LLM.md#Core discipline",
+    "reason": "No LLM interaction in the auth module."
+   },
+   {
+    "block": "PROTOCOLS-RPC-AND-MESSAGING.md#Core discipline",
+    "reason": "No RPC, broker, or queue surface in the auth scope."
+   },
+   {
+    "block": "SUPPLY-CHAIN-AND-RELEASE.md#Core discipline",
+    "reason": "Dependency/CI audit is a separate run, not this scoped re-audit."
+   }
+  ],
+  "local_checks": [
+   {
+    "agent_id": "a8319043-9217-48e7-addb-fb9611f6dc23",
+    "artifact": null,
+    "invariant": "df17d3e re-audit: bump is a single D1 UPDATE ... RETURNING version, no KV read-modify-write.",
+    "method": "source",
+    "result": "Verifier A independently reproduced: concurrent /set-pin leaves at most 1 surviving session; bump race FIXED.",
+    "reviewed_paths": [
+     "src/modules/auth/routes.ts",
+     "tests/unit/auth-low-fixes.test.ts"
+    ]
+   },
+   {
+    "agent_id": "50b20e22-53f8-477c-ade1-af1390d5be97",
+    "artifact": null,
+    "invariant": "Independent verifier re-read every cited source location and independently reproduced the decisive local result with a fresh harness.",
+    "method": "source",
+    "result": "sessver-bump-race FIXED: 44 checks PASS in /tmp/run004-verifier-a.cjs.",
+    "reviewed_paths": [
+     "src/modules/auth/routes.ts",
+     "tests/unit/auth-low-fixes.test.ts"
+    ]
+   }
+  ],
+  "ordinary_attack_class_block": "ATTACK-CLASSES.md#Access control",
+  "prior_status": "prior_confirmed_changed_source",
+  "result_fingerprints": [],
+  "reviewed_paths": [
+   "src/modules/auth/routes.ts",
+   "tests/unit/auth-low-fixes.test.ts"
+  ],
+  "selected_companion_blocks": [
+   "WEB-PROTOCOL-AND-AUTH.md#MFA enrollment and assurance downgrade",
+   "WEB-PROTOCOL-AND-AUTH.md#Step-up binding and bypass",
+   "WEB-PROTOCOL-AND-AUTH.md#Core discipline",
+   "WEB-PROTOCOL-AND-AUTH.md#Universal moves",
+   "WEB-PROTOCOL-AND-AUTH.md#Validation rules"
+  ],
+  "starting_paths": [
+   "src/modules/auth/routes.ts"
+  ],
+  "status": "covered",
+  "subsystem": "profile/quick/all-in-scope-subsystems",
+  "surface": "src/modules/auth/routes.ts#POST /api/auth/set-pin",
+  "unresolved": [],
+  "wave": 1
+ },
+ {
+  "agent_id": "a8319043-9217-48e7-addb-fb9611f6dc23",
+  "attack_class": "ATTACK-CLASSES.md#Access control",
+  "attempts": [],
+  "boundary": "src/modules/auth/routes.ts#correct code and PIN bypass exhaustion counters",
+  "canonical_refs": {
+   "attack_class": "ATTACK-CLASSES.md#Access control",
+   "boundary": "src/modules/auth/routes.ts#correct code and PIN bypass exhaustion counters",
+   "subsystem": "profile/quick/all-in-scope-subsystems",
+   "surface": "src/modules/auth/routes.ts#POST /api/auth/verify + POST /api/auth/pin-login"
+  },
+  "coverage_id": "src%2Fmodules%2Fauth%2Froutes.ts%23POST%20%2Fapi%2Fauth%2Fverify%20%2B%20POST%20%2Fapi%2Fauth%2Fpin-login::src%2Fmodules%2Fauth%2Froutes.ts%23correct%20code%20and%20PIN%20bypass%20exhaustion%20counters::profile%2Fquick%2Fall-in-scope-subsystems::ATTACK-CLASSES.md%23Access%20control",
+  "excluded_blocks": [
+   {
+    "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+    "reason": "No native/binary code in the auth scope."
+   },
+   {
+    "block": "AI-AND-LLM.md#Core discipline",
+    "reason": "No LLM interaction in the auth module."
+   },
+   {
+    "block": "PROTOCOLS-RPC-AND-MESSAGING.md#Core discipline",
+    "reason": "No RPC, broker, or queue surface in the auth scope."
+   },
+   {
+    "block": "SUPPLY-CHAIN-AND-RELEASE.md#Core discipline",
+    "reason": "Dependency/CI audit is a separate run, not this scoped re-audit."
+   }
+  ],
+  "local_checks": [
+   {
+    "agent_id": "a8319043-9217-48e7-addb-fb9611f6dc23",
+    "artifact": null,
+    "invariant": "df17d3e re-audit: correct OTP code succeeds regardless of attempts; correct PIN succeeds while locked; wrong guesses alone consume counters.",
+    "method": "source",
+    "result": "Verifier C independently reproduced: 5 wrong /verify -> attempts=5 row kept, owner correct code -> 200; 5 wrong /pin-login -> locked, owner correct PIN -> 200 + fail_count=0; lockout-dos-verify-pin-residual FIXED.",
+    "reviewed_paths": [
+     "src/modules/auth/routes.ts",
+     "tests/unit/auth-low-fixes.test.ts"
+    ]
+   },
+   {
+    "agent_id": "4ebc43a7-0041-4c8a-8f65-0cd642c3ee87",
+    "artifact": null,
+    "invariant": "Independent verifier re-read every cited source location and independently reproduced the decisive local result with a fresh harness.",
+    "method": "source",
+    "result": "lockout-dos-verify-pin-residual FIXED: 48 checks PASS in /tmp/run004-c.cjs.",
+    "reviewed_paths": [
+     "src/modules/auth/routes.ts",
+     "tests/unit/auth-low-fixes.test.ts"
+    ]
+   }
+  ],
+  "ordinary_attack_class_block": "ATTACK-CLASSES.md#Access control",
+  "prior_status": "prior_confirmed_changed_source",
+  "result_fingerprints": [],
+  "reviewed_paths": [
+   "src/modules/auth/routes.ts",
+   "tests/unit/auth-low-fixes.test.ts"
+  ],
+  "selected_companion_blocks": [
+   "WEB-PROTOCOL-AND-AUTH.md#MFA enrollment and assurance downgrade",
+   "WEB-PROTOCOL-AND-AUTH.md#Step-up binding and bypass",
+   "WEB-PROTOCOL-AND-AUTH.md#Core discipline",
+   "WEB-PROTOCOL-AND-AUTH.md#Universal moves",
+   "WEB-PROTOCOL-AND-AUTH.md#Validation rules"
+  ],
+  "starting_paths": [
+   "src/modules/auth/routes.ts"
+  ],
+  "status": "covered",
+  "subsystem": "profile/quick/all-in-scope-subsystems",
+  "surface": "src/modules/auth/routes.ts#POST /api/auth/verify + POST /api/auth/pin-login",
+  "unresolved": [],
+  "wave": 1
+ },
+ {
+  "agent_id": "a8319043-9217-48e7-addb-fb9611f6dc23",
+  "attack_class": "ATTACK-CLASSES.md#Business logic",
+  "attempts": [],
+  "boundary": "src/modules/auth/routes.ts#global backstop verify:global and pin:global 100 per hour",
+  "canonical_refs": {
+   "attack_class": "ATTACK-CLASSES.md#Business logic",
+   "boundary": "src/modules/auth/routes.ts#global backstop verify:global and pin:global 100 per hour",
+   "subsystem": "profile/quick/all-in-scope-subsystems",
+   "surface": "src/modules/auth/routes.ts#POST /api/auth/verify + POST /api/auth/pin-login"
+  },
+  "coverage_id": "src%2Fmodules%2Fauth%2Froutes.ts%23POST%20%2Fapi%2Fauth%2Fverify%20%2B%20POST%20%2Fapi%2Fauth%2Fpin-login::src%2Fmodules%2Fauth%2Froutes.ts%23global%20backstop%20verify%3Aglobal%20and%20pin%3Aglobal%20100%20per%20hour::profile%2Fquick%2Fall-in-scope-subsystems::ATTACK-CLASSES.md%23Business%20logic",
+  "excluded_blocks": [
+   {
+    "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+    "reason": "No native/binary code in the auth scope."
+   },
+   {
+    "block": "AI-AND-LLM.md#Core discipline",
+    "reason": "No LLM interaction in the auth module."
+   },
+   {
+    "block": "PROTOCOLS-RPC-AND-MESSAGING.md#Core discipline",
+    "reason": "No RPC, broker, or queue surface in the auth scope."
+   },
+   {
+    "block": "SUPPLY-CHAIN-AND-RELEASE.md#Core discipline",
+    "reason": "Dependency/CI audit is a separate run, not this scoped re-audit."
+   }
+  ],
+  "local_checks": [
+   {
+    "agent_id": "a8319043-9217-48e7-addb-fb9611f6dc23",
+    "artifact": null,
+    "invariant": "df17d3e re-audit regression hunt: the global backstop itself is a new exhaustion point — distributed wrong guesses can fill the 100/hr bucket and block the owner's correct submission.",
+    "method": "source",
+    "result": "Verifier C independently reproduced: 5 IPs x 20 /verify wrong -> owner correct code 429; 10 IPs x 10 /pin-login wrong -> owner correct PIN 429; single no-CF-header attacker 100x -> 429; existing session /me 200 after exhaustion.",
+    "reviewed_paths": [
+     "src/modules/auth/routes.ts",
+     "tests/unit/auth-low-fixes.test.ts"
+    ]
+   },
+   {
+    "agent_id": "4ebc43a7-0041-4c8a-8f65-0cd642c3ee87",
+    "artifact": null,
+    "invariant": "Independent verifier re-read every cited source location and independently reproduced the decisive local result with a fresh harness.",
+    "method": "source",
+    "result": "auth/rate-limit-global-backstop-dos confirmed low (residual); 48 checks PASS in /tmp/run004-c.cjs.",
+    "reviewed_paths": [
+     "src/modules/auth/routes.ts",
+     "tests/unit/auth-low-fixes.test.ts"
+    ]
+   }
+  ],
+  "ordinary_attack_class_block": "ATTACK-CLASSES.md#Business logic",
+  "prior_status": "new",
+  "result_fingerprints": [
+   "auth/rate-limit-global-backstop-dos"
+  ],
+  "reviewed_paths": [
+   "src/modules/auth/routes.ts",
+   "tests/unit/auth-low-fixes.test.ts"
+  ],
+  "selected_companion_blocks": [
+   "RESOURCE-EXHAUSTION-AND-AVAILABILITY.md#Core discipline",
+   "RESOURCE-EXHAUSTION-AND-AVAILABILITY.md#Quota and scheduling attack classes",
+   "RESOURCE-EXHAUSTION-AND-AVAILABILITY.md#Universal moves",
+   "RESOURCE-EXHAUSTION-AND-AVAILABILITY.md#Validation rules"
+  ],
+  "starting_paths": [
+   "src/modules/auth/routes.ts"
+  ],
+  "status": "candidate",
+  "subsystem": "profile/quick/all-in-scope-subsystems",
+  "surface": "src/modules/auth/routes.ts#POST /api/auth/verify + POST /api/auth/pin-login",
+  "unresolved": [],
+  "wave": 1
+ },
+ {
+  "agent_id": "a8319043-9217-48e7-addb-fb9611f6dc23",
+  "attack_class": "ATTACK-CLASSES.md#Business logic",
+  "attempts": [],
+  "boundary": "src/modules/auth/routes.ts#checkRateLimit INSERT ... ON CONFLICT DO UPDATE",
+  "canonical_refs": {
+   "attack_class": "ATTACK-CLASSES.md#Business logic",
+   "boundary": "src/modules/auth/routes.ts#checkRateLimit INSERT ... ON CONFLICT DO UPDATE",
+   "subsystem": "profile/quick/all-in-scope-subsystems",
+   "surface": "src/modules/auth/routes.ts#POST /api/auth/verify"
+  },
+  "coverage_id": "src%2Fmodules%2Fauth%2Froutes.ts%23POST%20%2Fapi%2Fauth%2Fverify::src%2Fmodules%2Fauth%2Froutes.ts%23checkRateLimit%20INSERT%20...%20ON%20CONFLICT%20DO%20UPDATE::profile%2Fquick%2Fall-in-scope-subsystems::ATTACK-CLASSES.md%23Business%20logic",
+  "excluded_blocks": [
+   {
+    "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+    "reason": "No native/binary code in the auth scope."
+   },
+   {
+    "block": "AI-AND-LLM.md#Core discipline",
+    "reason": "No LLM interaction in the auth module."
+   },
+   {
+    "block": "PROTOCOLS-RPC-AND-MESSAGING.md#Core discipline",
+    "reason": "No RPC, broker, or queue surface in the auth scope."
+   },
+   {
+    "block": "SUPPLY-CHAIN-AND-RELEASE.md#Core discipline",
+    "reason": "Dependency/CI audit is a separate run, not this scoped re-audit."
+   }
+  ],
+  "local_checks": [
+   {
+    "agent_id": "a8319043-9217-48e7-addb-fb9611f6dc23",
+    "artifact": null,
+    "invariant": "df17d3e re-audit: checkRateLimit is one D1 statement (claim + increment + limit in a single UPSERT); window expiry restarts at 1.",
+    "method": "source",
+    "result": "Verifier A independently reproduced with delay interleaving: concurrent bursts never exceed the limit; rate-limit-kv-race FIXED.",
+    "reviewed_paths": [
+     "src/modules/auth/routes.ts",
+     "tests/unit/auth-low-fixes.test.ts"
+    ]
+   },
+   {
+    "agent_id": "50b20e22-53f8-477c-ade1-af1390d5be97",
+    "artifact": null,
+    "invariant": "Independent verifier re-read every cited source location and independently reproduced the decisive local result with a fresh harness.",
+    "method": "source",
+    "result": "rate-limit-kv-race FIXED: 44 checks PASS in /tmp/run004-verifier-a.cjs.",
+    "reviewed_paths": [
+     "src/modules/auth/routes.ts",
+     "tests/unit/auth-low-fixes.test.ts"
+    ]
+   }
+  ],
+  "ordinary_attack_class_block": "ATTACK-CLASSES.md#Business logic",
+  "prior_status": "prior_confirmed_changed_source",
+  "result_fingerprints": [],
+  "reviewed_paths": [
+   "src/modules/auth/routes.ts",
+   "tests/unit/auth-low-fixes.test.ts"
+  ],
+  "selected_companion_blocks": [
+   "RESOURCE-EXHAUSTION-AND-AVAILABILITY.md#Core discipline",
+   "RESOURCE-EXHAUSTION-AND-AVAILABILITY.md#Quota and scheduling attack classes",
+   "RESOURCE-EXHAUSTION-AND-AVAILABILITY.md#Universal moves",
+   "RESOURCE-EXHAUSTION-AND-AVAILABILITY.md#Validation rules"
+  ],
+  "starting_paths": [
+   "src/modules/auth/routes.ts"
+  ],
+  "status": "covered",
+  "subsystem": "profile/quick/all-in-scope-subsystems",
+  "surface": "src/modules/auth/routes.ts#POST /api/auth/verify",
+  "unresolved": [],
+  "wave": 1
+ }
+]

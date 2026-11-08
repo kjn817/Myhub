@@ -1,0 +1,696 @@
+[
+  {
+    "coverage_id": "public%2Flogin.html%23pinLogin%2Fset-pin%20client::public%2Flogin.html%23PIN%20input%20and%20OTP-to-PIN%20issuance%20flow::profile%2Fquick%2Fall-in-scope-subsystems::ATTACK-CLASSES.md%23Feature%20abuse%20and%20data%20leakage",
+    "canonical_refs": {
+      "surface": "public/login.html#pinLogin/set-pin client",
+      "boundary": "public/login.html#PIN input and OTP-to-PIN issuance flow",
+      "subsystem": "profile/quick/all-in-scope-subsystems",
+      "attack_class": "ATTACK-CLASSES.md#Feature abuse and data leakage"
+    },
+    "surface": "public/login.html#pinLogin/set-pin client",
+    "boundary": "public/login.html#PIN input and OTP-to-PIN issuance flow",
+    "subsystem": "profile/quick/all-in-scope-subsystems",
+    "attack_class": "ATTACK-CLASSES.md#Feature abuse and data leakage",
+    "starting_paths": [
+      "public/login.html",
+      "src/modules/auth/routes.ts"
+    ],
+    "ordinary_attack_class_block": "ATTACK-CLASSES.md#Feature abuse and data leakage",
+    "selected_companion_blocks": [
+      "WEB-PROTOCOL-AND-AUTH.md#Cookie scope and transport",
+      "WEB-PROTOCOL-AND-AUTH.md#Core discipline",
+      "WEB-PROTOCOL-AND-AUTH.md#Universal moves",
+      "WEB-PROTOCOL-AND-AUTH.md#Validation rules"
+    ],
+    "excluded_blocks": [
+      {
+        "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+        "reason": "No native/binary code in the auth scope."
+      },
+      {
+        "block": "AI-AND-LLM.md#Core discipline",
+        "reason": "No LLM interaction in the auth module."
+      },
+      {
+        "block": "PROTOCOLS-RPC-AND-MESSAGING.md#Core discipline",
+        "reason": "No RPC, broker, or queue surface in the auth scope."
+      },
+      {
+        "block": "SUPPLY-CHAIN-AND-RELEASE.md#Core discipline",
+        "reason": "Dependency/CI audit is a separate run, not this scoped pilot."
+      }
+    ],
+    "prior_status": "none",
+    "attempts": [],
+    "wave": 1,
+    "status": "candidate",
+    "agent_id": "a5ecfe7a-44d2-419c-84ba-de63986fc873",
+    "reviewed_paths": [
+      "public/login.html",
+      "src/index.ts",
+      "src/modules/auth/routes.ts"
+    ],
+    "local_checks": [
+      {
+        "agent_id": "a5ecfe7a-44d2-419c-84ba-de63986fc873",
+        "reviewed_paths": [
+          "public/login.html",
+          "src/modules/auth/routes.ts"
+        ],
+        "invariant": "Hunter reviewed the unit entry surface and attack class from source; candidates recorded in findings.json.",
+        "method": "source",
+        "result": "Source review complete; candidates (if any) listed in result_fingerprints.",
+        "artifact": null
+      },
+      {
+        "agent_id": "e646695b-fe63-4f17-8d42-49468aea0dd9",
+        "reviewed_paths": [
+          "public/login.html",
+          "src/index.ts"
+        ],
+        "invariant": "Independent verifier re-read every cited source location and independently reproduced the decisive local result.",
+        "method": "source",
+        "result": "Promoted auth/login-page-cdn-no-sri from needs_validation to confirmed (medium); corrected sink line 141 to 145.",
+        "artifact": null
+      },
+      {
+        "agent_id": "9d748dc1-ed09-4ac8-9bce-5ab2548d83b1",
+        "reviewed_paths": [
+          "public/login.html",
+          "src/index.ts"
+        ],
+        "invariant": "Independent verifier re-read every cited source location and independently reproduced the decisive local result.",
+        "method": "source",
+        "result": "Re-verified the promoted confirmed record; corrected schema shape (severity/confidence objects) and confirmed medium.",
+        "artifact": null
+      }
+    ],
+    "result_fingerprints": [
+      "auth/login-page-cdn-no-sri"
+    ],
+    "unresolved": []
+  },
+  {
+    "coverage_id": "src%2Findex.ts%23auth%20middleware::src%2Findex.ts%23verifySession%20gate%20for%20protected%20routes::profile%2Fquick%2Fall-in-scope-subsystems::ATTACK-CLASSES.md%23Access%20control",
+    "canonical_refs": {
+      "surface": "src/index.ts#auth middleware",
+      "boundary": "src/index.ts#verifySession gate for protected routes",
+      "subsystem": "profile/quick/all-in-scope-subsystems",
+      "attack_class": "ATTACK-CLASSES.md#Access control"
+    },
+    "surface": "src/index.ts#auth middleware",
+    "boundary": "src/index.ts#verifySession gate for protected routes",
+    "subsystem": "profile/quick/all-in-scope-subsystems",
+    "attack_class": "ATTACK-CLASSES.md#Access control",
+    "starting_paths": [
+      "src/index.ts"
+    ],
+    "ordinary_attack_class_block": "ATTACK-CLASSES.md#Access control",
+    "selected_companion_blocks": [],
+    "excluded_blocks": [
+      {
+        "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+        "reason": "No native/binary code in the auth scope."
+      },
+      {
+        "block": "AI-AND-LLM.md#Core discipline",
+        "reason": "No LLM interaction in the auth module."
+      },
+      {
+        "block": "PROTOCOLS-RPC-AND-MESSAGING.md#Core discipline",
+        "reason": "No RPC, broker, or queue surface in the auth scope."
+      },
+      {
+        "block": "SUPPLY-CHAIN-AND-RELEASE.md#Core discipline",
+        "reason": "Dependency/CI audit is a separate run, not this scoped pilot."
+      }
+    ],
+    "prior_status": "none",
+    "attempts": [],
+    "wave": 1,
+    "status": "out_of_scope",
+    "agent_id": null,
+    "reviewed_paths": [],
+    "local_checks": [],
+    "result_fingerprints": [],
+    "unresolved": [
+      "Pilot run-001 scope is the auth module only; src/index.ts middleware is a later run."
+    ]
+  },
+  {
+    "coverage_id": "src%2Fmodules%2Fauth%2Froutes.ts%23GET%20%2Fapi%2Fauth%2Fme::src%2Fmodules%2Fauth%2Froutes.ts%23verifySession%20%2B%20hasPin%2FhasPassword%20disclosure::profile%2Fquick%2Fall-in-scope-subsystems::ATTACK-CLASSES.md%23Feature%20abuse%20and%20data%20leakage",
+    "canonical_refs": {
+      "surface": "src/modules/auth/routes.ts#GET /api/auth/me",
+      "boundary": "src/modules/auth/routes.ts#verifySession + hasPin/hasPassword disclosure",
+      "subsystem": "profile/quick/all-in-scope-subsystems",
+      "attack_class": "ATTACK-CLASSES.md#Feature abuse and data leakage"
+    },
+    "surface": "src/modules/auth/routes.ts#GET /api/auth/me",
+    "boundary": "src/modules/auth/routes.ts#verifySession + hasPin/hasPassword disclosure",
+    "subsystem": "profile/quick/all-in-scope-subsystems",
+    "attack_class": "ATTACK-CLASSES.md#Feature abuse and data leakage",
+    "starting_paths": [
+      "src/modules/auth/routes.ts"
+    ],
+    "ordinary_attack_class_block": "ATTACK-CLASSES.md#Feature abuse and data leakage",
+    "selected_companion_blocks": [
+      "WEB-PROTOCOL-AND-AUTH.md#JWT verification and claim binding",
+      "WEB-PROTOCOL-AND-AUTH.md#Core discipline",
+      "WEB-PROTOCOL-AND-AUTH.md#Universal moves",
+      "WEB-PROTOCOL-AND-AUTH.md#Validation rules"
+    ],
+    "excluded_blocks": [
+      {
+        "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+        "reason": "No native/binary code in the auth scope."
+      },
+      {
+        "block": "AI-AND-LLM.md#Core discipline",
+        "reason": "No LLM interaction in the auth module."
+      },
+      {
+        "block": "PROTOCOLS-RPC-AND-MESSAGING.md#Core discipline",
+        "reason": "No RPC, broker, or queue surface in the auth scope."
+      },
+      {
+        "block": "SUPPLY-CHAIN-AND-RELEASE.md#Core discipline",
+        "reason": "Dependency/CI audit is a separate run, not this scoped pilot."
+      }
+    ],
+    "prior_status": "none",
+    "attempts": [],
+    "wave": 1,
+    "status": "covered",
+    "agent_id": "a5ecfe7a-44d2-419c-84ba-de63986fc873",
+    "reviewed_paths": [
+      "src/modules/auth/routes.ts"
+    ],
+    "local_checks": [
+      {
+        "agent_id": "a5ecfe7a-44d2-419c-84ba-de63986fc873",
+        "reviewed_paths": [
+          "src/modules/auth/routes.ts"
+        ],
+        "invariant": "Hunter reviewed the /me handler; hasPin/hasPassword are returned only to the session owner (same principal), so no cross-boundary disclosure.",
+        "method": "source",
+        "result": "No candidate; unit covered.",
+        "artifact": null
+      }
+    ],
+    "result_fingerprints": [],
+    "unresolved": []
+  },
+  {
+    "coverage_id": "src%2Fmodules%2Fauth%2Froutes.ts%23POST%20%2Fapi%2Fauth%2Flogout::src%2Fmodules%2Fauth%2Froutes.ts%23Set-Cookie%20Max-Age%3D0%20clearing::profile%2Fquick%2Fall-in-scope-subsystems::ATTACK-CLASSES.md%23Access%20control",
+    "canonical_refs": {
+      "surface": "src/modules/auth/routes.ts#POST /api/auth/logout",
+      "boundary": "src/modules/auth/routes.ts#Set-Cookie Max-Age=0 clearing",
+      "subsystem": "profile/quick/all-in-scope-subsystems",
+      "attack_class": "ATTACK-CLASSES.md#Access control"
+    },
+    "surface": "src/modules/auth/routes.ts#POST /api/auth/logout",
+    "boundary": "src/modules/auth/routes.ts#Set-Cookie Max-Age=0 clearing",
+    "subsystem": "profile/quick/all-in-scope-subsystems",
+    "attack_class": "ATTACK-CLASSES.md#Access control",
+    "starting_paths": [
+      "src/modules/auth/routes.ts"
+    ],
+    "ordinary_attack_class_block": "ATTACK-CLASSES.md#Access control",
+    "selected_companion_blocks": [
+      "WEB-PROTOCOL-AND-AUTH.md#Session fixation and invalidation",
+      "WEB-PROTOCOL-AND-AUTH.md#Core discipline",
+      "WEB-PROTOCOL-AND-AUTH.md#Universal moves",
+      "WEB-PROTOCOL-AND-AUTH.md#Validation rules"
+    ],
+    "excluded_blocks": [
+      {
+        "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+        "reason": "No native/binary code in the auth scope."
+      },
+      {
+        "block": "AI-AND-LLM.md#Core discipline",
+        "reason": "No LLM interaction in the auth module."
+      },
+      {
+        "block": "PROTOCOLS-RPC-AND-MESSAGING.md#Core discipline",
+        "reason": "No RPC, broker, or queue surface in the auth scope."
+      },
+      {
+        "block": "SUPPLY-CHAIN-AND-RELEASE.md#Core discipline",
+        "reason": "Dependency/CI audit is a separate run, not this scoped pilot."
+      }
+    ],
+    "prior_status": "none",
+    "attempts": [],
+    "wave": 1,
+    "status": "candidate",
+    "agent_id": "a5ecfe7a-44d2-419c-84ba-de63986fc873",
+    "reviewed_paths": [
+      "src/modules/auth/routes.ts"
+    ],
+    "local_checks": [
+      {
+        "agent_id": "a5ecfe7a-44d2-419c-84ba-de63986fc873",
+        "reviewed_paths": [
+          "src/modules/auth/routes.ts"
+        ],
+        "invariant": "Hunter reviewed the unit entry surface and attack class from source; candidates recorded in findings.json.",
+        "method": "source",
+        "result": "Source review complete; candidates (if any) listed in result_fingerprints.",
+        "artifact": null
+      },
+      {
+        "agent_id": "204a0e20-c8a4-4e4b-8a33-5a13356ac9b3",
+        "reviewed_paths": [
+          "src/modules/auth/routes.ts"
+        ],
+        "invariant": "Independent verifier re-read every cited source location and independently reproduced the decisive local result.",
+        "method": "source",
+        "result": "Confirmed auth/session-no-revocation by independent mock-harness reproduction.",
+        "artifact": null
+      }
+    ],
+    "result_fingerprints": [
+      "auth/session-no-revocation"
+    ],
+    "unresolved": []
+  },
+  {
+    "coverage_id": "src%2Fmodules%2Fauth%2Froutes.ts%23POST%20%2Fapi%2Fauth%2Fpin-login::src%2Fmodules%2Fauth%2Froutes.ts%23KV%20PIN%20fail%20counter%20pinfail%3A%20%2B%20PBKDF2%20verifyPin::profile%2Fquick%2Fall-in-scope-subsystems::ATTACK-CLASSES.md%23Access%20control",
+    "canonical_refs": {
+      "surface": "src/modules/auth/routes.ts#POST /api/auth/pin-login",
+      "boundary": "src/modules/auth/routes.ts#KV PIN fail counter pinfail: + PBKDF2 verifyPin",
+      "subsystem": "profile/quick/all-in-scope-subsystems",
+      "attack_class": "ATTACK-CLASSES.md#Access control"
+    },
+    "surface": "src/modules/auth/routes.ts#POST /api/auth/pin-login",
+    "boundary": "src/modules/auth/routes.ts#KV PIN fail counter pinfail: + PBKDF2 verifyPin",
+    "subsystem": "profile/quick/all-in-scope-subsystems",
+    "attack_class": "ATTACK-CLASSES.md#Access control",
+    "starting_paths": [
+      "src/modules/auth/routes.ts",
+      "public/login.html"
+    ],
+    "ordinary_attack_class_block": "ATTACK-CLASSES.md#Access control",
+    "selected_companion_blocks": [
+      "WEB-PROTOCOL-AND-AUTH.md#MFA enrollment and assurance downgrade",
+      "WEB-PROTOCOL-AND-AUTH.md#Step-up binding and bypass",
+      "WEB-PROTOCOL-AND-AUTH.md#Core discipline",
+      "WEB-PROTOCOL-AND-AUTH.md#Universal moves",
+      "WEB-PROTOCOL-AND-AUTH.md#Validation rules"
+    ],
+    "excluded_blocks": [
+      {
+        "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+        "reason": "No native/binary code in the auth scope."
+      },
+      {
+        "block": "AI-AND-LLM.md#Core discipline",
+        "reason": "No LLM interaction in the auth module."
+      },
+      {
+        "block": "PROTOCOLS-RPC-AND-MESSAGING.md#Core discipline",
+        "reason": "No RPC, broker, or queue surface in the auth scope."
+      },
+      {
+        "block": "SUPPLY-CHAIN-AND-RELEASE.md#Core discipline",
+        "reason": "Dependency/CI audit is a separate run, not this scoped pilot."
+      }
+    ],
+    "prior_status": "none",
+    "attempts": [],
+    "wave": 1,
+    "status": "candidate",
+    "agent_id": "a5ecfe7a-44d2-419c-84ba-de63986fc873",
+    "reviewed_paths": [
+      "public/login.html",
+      "src/modules/auth/routes.ts"
+    ],
+    "local_checks": [
+      {
+        "agent_id": "a5ecfe7a-44d2-419c-84ba-de63986fc873",
+        "reviewed_paths": [
+          "src/modules/auth/routes.ts",
+          "public/login.html"
+        ],
+        "invariant": "Hunter reviewed the unit entry surface and attack class from source; candidates recorded in findings.json.",
+        "method": "source",
+        "result": "Source review complete; candidates (if any) listed in result_fingerprints.",
+        "artifact": null
+      },
+      {
+        "agent_id": "15add901-7c9a-404b-bcbf-7b2addd03904",
+        "reviewed_paths": [
+          "src/modules/auth/routes.ts"
+        ],
+        "invariant": "Independent verifier re-read every cited source location and independently reproduced the decisive local result.",
+        "method": "source",
+        "result": "Confirmed auth/pin-lockout-kv-race by independent mock-harness reproduction.",
+        "artifact": null
+      },
+      {
+        "agent_id": "c640caae-2df5-4e2d-9ea7-ade928f1439a",
+        "reviewed_paths": [
+          "src/modules/auth/routes.ts"
+        ],
+        "invariant": "Independent verifier re-read every cited source location and independently reproduced the decisive local result.",
+        "method": "source",
+        "result": "Confirmed auth/attempt-counter-lockout-dos by independent mock-harness reproduction.",
+        "artifact": null
+      }
+    ],
+    "result_fingerprints": [
+      "auth/attempt-counter-lockout-dos",
+      "auth/pin-lockout-kv-race"
+    ],
+    "unresolved": []
+  },
+  {
+    "coverage_id": "src%2Fmodules%2Fauth%2Froutes.ts%23POST%20%2Fapi%2Fauth%2Frequest::src%2Fmodules%2Fauth%2Froutes.ts%23KV%20rate%20limit%20rl%3A%20%2B%20otp_codes%20daily%20code::profile%2Fquick%2Fall-in-scope-subsystems::ATTACK-CLASSES.md%23Business%20logic",
+    "canonical_refs": {
+      "surface": "src/modules/auth/routes.ts#POST /api/auth/request",
+      "boundary": "src/modules/auth/routes.ts#KV rate limit rl: + otp_codes daily code",
+      "subsystem": "profile/quick/all-in-scope-subsystems",
+      "attack_class": "ATTACK-CLASSES.md#Business logic"
+    },
+    "surface": "src/modules/auth/routes.ts#POST /api/auth/request",
+    "boundary": "src/modules/auth/routes.ts#KV rate limit rl: + otp_codes daily code",
+    "subsystem": "profile/quick/all-in-scope-subsystems",
+    "attack_class": "ATTACK-CLASSES.md#Business logic",
+    "starting_paths": [
+      "src/modules/auth/routes.ts",
+      "migrations/0043_auth_pins.sql"
+    ],
+    "ordinary_attack_class_block": "ATTACK-CLASSES.md#Business logic",
+    "selected_companion_blocks": [
+      "WEB-PROTOCOL-AND-AUTH.md#Password reset and broader recovery",
+      "WEB-PROTOCOL-AND-AUTH.md#Core discipline",
+      "WEB-PROTOCOL-AND-AUTH.md#Universal moves",
+      "WEB-PROTOCOL-AND-AUTH.md#Validation rules"
+    ],
+    "excluded_blocks": [
+      {
+        "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+        "reason": "No native/binary code in the auth scope."
+      },
+      {
+        "block": "AI-AND-LLM.md#Core discipline",
+        "reason": "No LLM interaction in the auth module."
+      },
+      {
+        "block": "PROTOCOLS-RPC-AND-MESSAGING.md#Core discipline",
+        "reason": "No RPC, broker, or queue surface in the auth scope."
+      },
+      {
+        "block": "SUPPLY-CHAIN-AND-RELEASE.md#Core discipline",
+        "reason": "Dependency/CI audit is a separate run, not this scoped pilot."
+      }
+    ],
+    "prior_status": "none",
+    "attempts": [],
+    "wave": 1,
+    "status": "candidate",
+    "agent_id": "a5ecfe7a-44d2-419c-84ba-de63986fc873",
+    "reviewed_paths": [
+      "src/modules/auth/routes.ts"
+    ],
+    "local_checks": [
+      {
+        "agent_id": "a5ecfe7a-44d2-419c-84ba-de63986fc873",
+        "reviewed_paths": [
+          "src/modules/auth/routes.ts"
+        ],
+        "invariant": "Hunter reviewed the unit entry surface and attack class from source; candidates recorded in findings.json.",
+        "method": "source",
+        "result": "Source review complete; candidates (if any) listed in result_fingerprints.",
+        "artifact": null
+      },
+      {
+        "agent_id": "b1787f3a-676a-4ade-b536-cc4c51823e59",
+        "reviewed_paths": [
+          "src/modules/auth/routes.ts"
+        ],
+        "invariant": "Independent verifier re-read every cited source location and independently reproduced the decisive local result.",
+        "method": "source",
+        "result": "Confirmed auth/otp-request-race by independent mock-harness reproduction.",
+        "artifact": null
+      },
+      {
+        "agent_id": "c640caae-2df5-4e2d-9ea7-ade928f1439a",
+        "reviewed_paths": [
+          "src/modules/auth/routes.ts"
+        ],
+        "invariant": "Independent verifier re-read every cited source location and independently reproduced the decisive local result.",
+        "method": "source",
+        "result": "Confirmed auth/attempt-counter-lockout-dos by independent mock-harness reproduction.",
+        "artifact": null
+      }
+    ],
+    "result_fingerprints": [
+      "auth/attempt-counter-lockout-dos",
+      "auth/otp-request-race"
+    ],
+    "unresolved": []
+  },
+  {
+    "coverage_id": "src%2Fmodules%2Fauth%2Froutes.ts%23POST%20%2Fapi%2Fauth%2Fset-pin::src%2Fmodules%2Fauth%2Froutes.ts%23verifySession%20on%20myhub_session%20cookie::profile%2Fquick%2Fall-in-scope-subsystems::ATTACK-CLASSES.md%23Access%20control",
+    "canonical_refs": {
+      "surface": "src/modules/auth/routes.ts#POST /api/auth/set-pin",
+      "boundary": "src/modules/auth/routes.ts#verifySession on myhub_session cookie",
+      "subsystem": "profile/quick/all-in-scope-subsystems",
+      "attack_class": "ATTACK-CLASSES.md#Access control"
+    },
+    "surface": "src/modules/auth/routes.ts#POST /api/auth/set-pin",
+    "boundary": "src/modules/auth/routes.ts#verifySession on myhub_session cookie",
+    "subsystem": "profile/quick/all-in-scope-subsystems",
+    "attack_class": "ATTACK-CLASSES.md#Access control",
+    "starting_paths": [
+      "src/modules/auth/routes.ts",
+      "public/login.html"
+    ],
+    "ordinary_attack_class_block": "ATTACK-CLASSES.md#Access control",
+    "selected_companion_blocks": [
+      "WEB-PROTOCOL-AND-AUTH.md#MFA enrollment and assurance downgrade",
+      "WEB-PROTOCOL-AND-AUTH.md#Core discipline",
+      "WEB-PROTOCOL-AND-AUTH.md#Universal moves",
+      "WEB-PROTOCOL-AND-AUTH.md#Validation rules"
+    ],
+    "excluded_blocks": [
+      {
+        "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+        "reason": "No native/binary code in the auth scope."
+      },
+      {
+        "block": "AI-AND-LLM.md#Core discipline",
+        "reason": "No LLM interaction in the auth module."
+      },
+      {
+        "block": "PROTOCOLS-RPC-AND-MESSAGING.md#Core discipline",
+        "reason": "No RPC, broker, or queue surface in the auth scope."
+      },
+      {
+        "block": "SUPPLY-CHAIN-AND-RELEASE.md#Core discipline",
+        "reason": "Dependency/CI audit is a separate run, not this scoped pilot."
+      }
+    ],
+    "prior_status": "none",
+    "attempts": [],
+    "wave": 1,
+    "status": "candidate",
+    "agent_id": "a5ecfe7a-44d2-419c-84ba-de63986fc873",
+    "reviewed_paths": [
+      "public/login.html",
+      "src/modules/auth/routes.ts"
+    ],
+    "local_checks": [
+      {
+        "agent_id": "a5ecfe7a-44d2-419c-84ba-de63986fc873",
+        "reviewed_paths": [
+          "src/modules/auth/routes.ts",
+          "public/login.html"
+        ],
+        "invariant": "Hunter reviewed the unit entry surface and attack class from source; candidates recorded in findings.json.",
+        "method": "source",
+        "result": "Source review complete; candidates (if any) listed in result_fingerprints.",
+        "artifact": null
+      },
+      {
+        "agent_id": "c0e0d28d-e7fc-403f-bc59-15cd6901e20b",
+        "reviewed_paths": [
+          "src/modules/auth/routes.ts",
+          "public/login.html"
+        ],
+        "invariant": "Independent verifier re-read every cited source location and independently reproduced the decisive local result.",
+        "method": "source",
+        "result": "Confirmed auth/set-pin-no-step-up (overall low) by independent mock-harness reproduction.",
+        "artifact": null
+      },
+      {
+        "agent_id": "204a0e20-c8a4-4e4b-8a33-5a13356ac9b3",
+        "reviewed_paths": [
+          "src/modules/auth/routes.ts"
+        ],
+        "invariant": "Independent verifier re-read every cited source location and independently reproduced the decisive local result.",
+        "method": "source",
+        "result": "Confirmed auth/session-no-revocation by independent mock-harness reproduction.",
+        "artifact": null
+      }
+    ],
+    "result_fingerprints": [
+      "auth/session-no-revocation",
+      "auth/set-pin-no-step-up"
+    ],
+    "unresolved": []
+  },
+  {
+    "coverage_id": "src%2Fmodules%2Fauth%2Froutes.ts%23POST%20%2Fapi%2Fauth%2Fverify::src%2Fmodules%2Fauth%2Froutes.ts%23OTP%20attempts%20counter%20%2B%20atomic%20conditional%20DELETE::profile%2Fquick%2Fall-in-scope-subsystems::ATTACK-CLASSES.md%23Access%20control",
+    "canonical_refs": {
+      "surface": "src/modules/auth/routes.ts#POST /api/auth/verify",
+      "boundary": "src/modules/auth/routes.ts#OTP attempts counter + atomic conditional DELETE",
+      "subsystem": "profile/quick/all-in-scope-subsystems",
+      "attack_class": "ATTACK-CLASSES.md#Access control"
+    },
+    "surface": "src/modules/auth/routes.ts#POST /api/auth/verify",
+    "boundary": "src/modules/auth/routes.ts#OTP attempts counter + atomic conditional DELETE",
+    "subsystem": "profile/quick/all-in-scope-subsystems",
+    "attack_class": "ATTACK-CLASSES.md#Access control",
+    "starting_paths": [
+      "src/modules/auth/routes.ts"
+    ],
+    "ordinary_attack_class_block": "ATTACK-CLASSES.md#Access control",
+    "selected_companion_blocks": [
+      "WEB-PROTOCOL-AND-AUTH.md#MFA enrollment and assurance downgrade",
+      "WEB-PROTOCOL-AND-AUTH.md#Step-up binding and bypass",
+      "WEB-PROTOCOL-AND-AUTH.md#Core discipline",
+      "WEB-PROTOCOL-AND-AUTH.md#Universal moves",
+      "WEB-PROTOCOL-AND-AUTH.md#Validation rules"
+    ],
+    "excluded_blocks": [
+      {
+        "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+        "reason": "No native/binary code in the auth scope."
+      },
+      {
+        "block": "AI-AND-LLM.md#Core discipline",
+        "reason": "No LLM interaction in the auth module."
+      },
+      {
+        "block": "PROTOCOLS-RPC-AND-MESSAGING.md#Core discipline",
+        "reason": "No RPC, broker, or queue surface in the auth scope."
+      },
+      {
+        "block": "SUPPLY-CHAIN-AND-RELEASE.md#Core discipline",
+        "reason": "Dependency/CI audit is a separate run, not this scoped pilot."
+      }
+    ],
+    "prior_status": "none",
+    "attempts": [],
+    "wave": 1,
+    "status": "candidate",
+    "agent_id": "a5ecfe7a-44d2-419c-84ba-de63986fc873",
+    "reviewed_paths": [
+      "src/modules/auth/routes.ts"
+    ],
+    "local_checks": [
+      {
+        "agent_id": "a5ecfe7a-44d2-419c-84ba-de63986fc873",
+        "reviewed_paths": [
+          "src/modules/auth/routes.ts"
+        ],
+        "invariant": "Hunter reviewed the unit entry surface and attack class from source; candidates recorded in findings.json.",
+        "method": "source",
+        "result": "Source review complete; candidates (if any) listed in result_fingerprints.",
+        "artifact": null
+      },
+      {
+        "agent_id": "abdbadf4-2e44-48d4-b71d-2076048ee61f",
+        "reviewed_paths": [
+          "src/modules/auth/routes.ts"
+        ],
+        "invariant": "Independent verifier re-read every cited source location and independently reproduced the decisive local result.",
+        "method": "source",
+        "result": "Confirmed auth/otp-verify-attempts-race by independent mock-harness reproduction.",
+        "artifact": null
+      },
+      {
+        "agent_id": "c640caae-2df5-4e2d-9ea7-ade928f1439a",
+        "reviewed_paths": [
+          "src/modules/auth/routes.ts"
+        ],
+        "invariant": "Independent verifier re-read every cited source location and independently reproduced the decisive local result.",
+        "method": "source",
+        "result": "Confirmed auth/attempt-counter-lockout-dos by independent mock-harness reproduction.",
+        "artifact": null
+      }
+    ],
+    "result_fingerprints": [
+      "auth/attempt-counter-lockout-dos",
+      "auth/otp-verify-attempts-race"
+    ],
+    "unresolved": []
+  },
+  {
+    "coverage_id": "src%2Fmodules%2Fauth%2Froutes.ts%23createSession%2FverifySession::src%2Fmodules%2Fauth%2Froutes.ts%23HMAC-SHA256%20session%20token%20with%20SESSION_SECRET::profile%2Fquick%2Fall-in-scope-subsystems::ATTACK-CLASSES.md%23Cryptography%20and%20secrets",
+    "canonical_refs": {
+      "surface": "src/modules/auth/routes.ts#createSession/verifySession",
+      "boundary": "src/modules/auth/routes.ts#HMAC-SHA256 session token with SESSION_SECRET",
+      "subsystem": "profile/quick/all-in-scope-subsystems",
+      "attack_class": "ATTACK-CLASSES.md#Cryptography and secrets"
+    },
+    "surface": "src/modules/auth/routes.ts#createSession/verifySession",
+    "boundary": "src/modules/auth/routes.ts#HMAC-SHA256 session token with SESSION_SECRET",
+    "subsystem": "profile/quick/all-in-scope-subsystems",
+    "attack_class": "ATTACK-CLASSES.md#Cryptography and secrets",
+    "starting_paths": [
+      "src/modules/auth/routes.ts"
+    ],
+    "ordinary_attack_class_block": "ATTACK-CLASSES.md#Cryptography and secrets",
+    "selected_companion_blocks": [
+      "WEB-PROTOCOL-AND-AUTH.md#JWT verification and claim binding",
+      "WEB-PROTOCOL-AND-AUTH.md#Cookie scope and transport",
+      "WEB-PROTOCOL-AND-AUTH.md#Core discipline",
+      "WEB-PROTOCOL-AND-AUTH.md#Universal moves",
+      "WEB-PROTOCOL-AND-AUTH.md#Validation rules"
+    ],
+    "excluded_blocks": [
+      {
+        "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+        "reason": "No native/binary code in the auth scope."
+      },
+      {
+        "block": "AI-AND-LLM.md#Core discipline",
+        "reason": "No LLM interaction in the auth module."
+      },
+      {
+        "block": "PROTOCOLS-RPC-AND-MESSAGING.md#Core discipline",
+        "reason": "No RPC, broker, or queue surface in the auth scope."
+      },
+      {
+        "block": "SUPPLY-CHAIN-AND-RELEASE.md#Core discipline",
+        "reason": "Dependency/CI audit is a separate run, not this scoped pilot."
+      }
+    ],
+    "prior_status": "none",
+    "attempts": [],
+    "wave": 1,
+    "status": "covered",
+    "agent_id": "a5ecfe7a-44d2-419c-84ba-de63986fc873",
+    "reviewed_paths": [
+      "src/modules/auth/routes.ts"
+    ],
+    "local_checks": [
+      {
+        "agent_id": "a5ecfe7a-44d2-419c-84ba-de63986fc873",
+        "reviewed_paths": [
+          "src/modules/auth/routes.ts"
+        ],
+        "invariant": "Hunter reviewed HMAC signing, expiry check, and allowlist email binding; existing Jest tests (83) cover tamper, expiry, wrong secret, and missing delimiter cases.",
+        "method": "source",
+        "result": "No candidate; unit covered.",
+        "artifact": null
+      }
+    ],
+    "result_fingerprints": [],
+    "unresolved": []
+  }
+]

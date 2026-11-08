@@ -1,0 +1,394 @@
+[
+ {
+  "conditions": [
+   {
+    "description": "auth_pins 행의 iterations가 극단적으로 큰 값으로 손상돼 있어야 한다",
+    "kind": "data_state"
+   },
+   {
+    "description": "미인증 원격 호출로 해당 계정의 PIN 로그인을 시도할 수 있다",
+    "kind": "authentication_level"
+   }
+  ],
+  "confidence": {
+   "reason": "검증자 D가 소스상 상한 부재를 확인했고, set-pin이 100000만 저장한다는 코드 경로도 확인했다. 실측 재현은 하지 않았으나(값 자체가 코드로 도달 불가), 코드상 도달 가능성은 명백하다.",
+   "score": "high"
+  },
+  "description": "886c012의 손상 행 사전 검증은 iterations가 0·비정수·음수인 행을 막지만 상한은 두지 않는다. iterations=10^9 같은 행이 존재하면 verifyPin의 PBKDF2 deriveBits가 매우 느려져 해당 계정의 로그인 시도가 장시간 CPU를 점유한다. 다만 set-pin은 iterations=100000만 저장하므로 이 값은 손상된 DB 행을 통해서만 도달 가능하고, 이번 수정이 새로 만든 문제가 아니라 기존부터 있던 이론적 지점이라 informational로 기록한다. 검증자 D가 관찰로 보고했다.",
+  "evidence": [
+   {
+    "description": "iterations 사전 검증 — 0·비정수·음수만 차단, 상한 없음",
+    "file": "src/modules/auth/routes.ts",
+    "line": 598
+   },
+   {
+    "description": "hashPin은 iterations=100000만 저장",
+    "file": "src/modules/auth/routes.ts",
+    "line": 175
+   }
+  ],
+  "execution": {
+   "attacker_perspective": "공격자가 auth_pins 행을 직접 쓸 수 없으므로 이 경로는 원격 악용이 아니라 DB 손상 시나리오다. 손상된 행이 존재하면 해당 계정의 로그인 시도마다 PBKDF2가 장시간 CPU를 점유한다.",
+   "instructions": [
+    "iterations=10^9인 행을 만들고 정답 PIN 로그인을 시도한다",
+    "응답 지연을 측정한다"
+   ],
+   "observed_result": "실측 재현은 하지 않았다(NOT TESTED — 값 자체가 코드 경로로 도달 불가하고, 실측은 로그인 경로를 장시간 점유하는 행위라 로컬에서도 실행하지 않았다). 소스 확인: 사전 검증에 상한이 없고, verifyPin이 row.iterations를 그대로 PBKDF2에 전달하며, set-pin은 100000만 저장한다.",
+   "payloads": [
+    "POST /api/auth/pin-login {\"pin\": \"<correct>\"} (iterations=1000000000 row)"
+   ]
+  },
+  "fingerprint": "auth/pin-iterations-no-upper-bound",
+  "intended_behavior": "iterations는 코드가 실제로 저장하는 값(100000) 근처로 상한을 두어, 손상 행이 로그인 경로의 CPU를 과점하지 않게 해야 한다.",
+  "remediation": {
+   "code_changes": [
+    {
+     "file_name": "src/modules/auth/routes.ts",
+     "fixed_code": "// 사전 검증에 상한 추가 (예: iterations > 1000000 → 500).\n// 코드가 저장하는 값은 100000이므로 10배 여유를 둬도 정상 경로는 영향받지 않는다."
+    }
+   ],
+   "strategy": "사전 검증에 상한(예: 1,000,000)을 추가한다. 한 줄 변경이나, 이번 run의 수정 범위(9건 + 신규 2건) 밖의 이론적 지점이라 적용하지 않고 후속 후보로 기록한다."
+  },
+  "root_cause": "사전 검증(routes.ts:596~599)이 하한(정수·1 이상)만 검사하고 상한을 두지 않는다. PBKDF2 반복 횟수는 입력값에 비례해 계산 시간이 늘어나므로, 상한 없는 외부 입력이 그대로 deriveBits에 전달된다.",
+  "severity": {
+   "impact": {
+    "reason": "손상된 DB 행을 통해서만 도달 가능하고, 영향도 해당 계정의 로그인 경로 CPU 점유에 그친다. 데이터 접근·세션 탈취·권한 상승은 없다.",
+    "score": "informational"
+   },
+   "likelihood": {
+    "reason": "공격자가 auth_pins 행을 쓸 수 없어 원격 유발이 불가능하고, DB 손상이라는 전제가 필요하다.",
+    "score": "informational"
+   },
+   "overall_severity": "informational"
+  },
+  "title": "손상 행 iterations 사전 검증에 상한이 없어 극단적으로 큰 값이 PBKDF2를 매우 느리게 만들 수 있다",
+  "trace": [
+   {
+    "description": "iterations 사전 검증 — 하한만 검사하고 상한이 없다",
+    "file": "src/modules/auth/routes.ts",
+    "kind": "entrypoint",
+    "line": 598,
+    "scope": "POST /api/auth/pin-login"
+   },
+   {
+    "description": "verifyPin에 row.iterations가 그대로 전달된다",
+    "file": "src/modules/auth/routes.ts",
+    "kind": "propagation",
+    "line": 609,
+    "scope": "POST /api/auth/pin-login"
+   },
+   {
+    "description": "PBKDF2 deriveBits — 반복 횟수에 비례해 계산 시간이 늘어난다",
+    "file": "src/modules/auth/routes.ts",
+    "kind": "sink",
+    "line": 185,
+    "scope": "verifyPin"
+   }
+  ],
+  "verdict": "confirmed"
+ },
+ {
+  "conditions": [
+   {
+    "description": "공격자가 아닌 소유자가 정답 PIN으로 POST /api/auth/pin-login을 호출한다",
+    "kind": "authentication_level"
+   },
+   {
+    "description": "auth_pins 행이 fail_count=5·locked_until이 미래인 잠금 상태여야 한다",
+    "kind": "data_state"
+   },
+   {
+    "description": "정답 처리 중 카운터 초기화 UPDATE가 일시 D1 오류로 실패하거나 iterations가 손상돼 있어야 한다",
+    "kind": "timing_dependency"
+   }
+  ],
+  "confidence": {
+   "reason": "검증자 B가 X1·X2를 독립 하네스로 재현했고, 검증자 D가 수정 후 10개 시나리오(1회 실패→200, 2회 실패→500, iterations 0/1.5/-3→500·UPDATE 0회, 잠금 중 오답→429)로 FIXED를 확인했으며, 음성 대조군(df17d3e 코드)으로 구 동작(재시도 없음·게이트 선점 실행)을 대조했다.",
+   "score": "high"
+  },
+  "description": "df17d3e의 /pin-login 잠금 중 분기(isLocked)는 verifyPin + 카운터 초기화 UPDATE를 try/catch 없이 수행했다. 정답 PIN인데 초기화 UPDATE가 일시 D1 오류로 실패하면 500을 돌려주고 fail_count=5·locked_until은 그대로 남아 소유자가 정답 PIN으로도 15분간 로그인할 수 없다. 게이트 분기는 같은 턴에 try/catch + 보상 UPDATE로 보호됐지만 잠금 중 분기는 게이트 선점이 없어 '되돌릴 것이 없다'는 이유로 보호가 빠졌다. fail-closed라 인증 우회는 아니고 15분 후 만료·OTP→set-pin으로 복구 가능하나, 정당한 소유자가 정답 PIN에도 D1 일시 장애 1회로 15분간 잠기는 가용성 결함이다. 같은 분기의 verifyPin도 손상된 iterations(0) 행에서 PBKDF2 OperationError를 던져 같은 결과를 냈다. 검증자 B가 X1(초기화 실패 주입)·X2(iterations=0) 시나리오로 재현해 확인했고, 커밋 886c012에서 수정돼 검증자 D가 독립 하네스 10개 시나리오 + 음성 대조군으로 FIXED를 확인했다.",
+  "evidence": [
+   {
+    "description": "잠금 중 분기 — try/catch 없는 verifyPin + 초기화 UPDATE (df17d3e)",
+    "file": "src/modules/auth/routes.ts",
+    "line": 605
+   },
+   {
+    "description": "손상 행 사전 검증 — salt/hash만 검사하고 iterations는 보지 않음 (df17d3e)",
+    "file": "src/modules/auth/routes.ts",
+    "line": 596
+   },
+   {
+    "description": "수정 후 resetPinCounter 헬퍼 — 일시 오류 시 1회 재시도 (886c012)",
+    "file": "src/modules/auth/routes.ts",
+    "line": 681
+   },
+   {
+    "description": "수정 후 iterations 사전 검증 — 0·비정수·음수면 게이트 선점 전에 500 (886c012)",
+    "file": "src/modules/auth/routes.ts",
+    "line": 598
+   }
+  ],
+  "execution": {
+   "attacker_perspective": "공격자 관점이 아니라 소유자 가용성 관점이다. 소유자가 잠금 상태에서 정답 PIN을 제출하는 순간 D1 일시 장애 1회가 겹치면 정답임에도 500을 받고 15분간 잠긴다.",
+   "instructions": [
+    "fail_count=5·locked_until=미래인 잠금 행을 만든 뒤 정답 PIN을 보낸다",
+    "카운터 초기화 UPDATE가 1회 실패하게 주입하고 결과를 기록한다",
+    "초기화 UPDATE가 2회 실패하게 주입하고 결과를 기록한다",
+    "iterations=0인 손상 행으로 정답 PIN을 보내고 auth_pins UPDATE 호출 횟수를 기록한다"
+   ],
+   "observed_result": "검증자 B (df17d3e): X1 초기화 실패 주입 → 500, fail_count=5·locked_until 그대로, 직후 정답 재시도도 잠금 유지. X2 iterations=0 → verifyPin 예외로 500, 잠금 잔존. 검증자 D (886c012): 잠금 중 정답 + 초기화 1회 실패 → 재시도로 200, reset 2회 호출, fail_count=0·locked_until=null, Set-Cookie 발급. 2회 실패 → 500·잠금 그대로·쿠키 미발급, 고장 해제 후 재시도 → 200. iterations 0/1.5/-3 → 500 + auth_pins UPDATE 0회. 음성 대조군(df17d3e): reset 1회 실패 시 500에 reset 1회 호출(재시도 없음), iterations=0 시 게이트 선점 UPDATE 실행됨.",
+   "payloads": [
+    "POST /api/auth/pin-login {\"pin\": \"<correct>\"} (locked, reset fails once)",
+    "POST /api/auth/pin-login {\"pin\": \"<correct>\"} (locked, iterations=0 row)"
+   ]
+  },
+  "fingerprint": "auth/pin-locked-branch-no-retry",
+  "intended_behavior": "잠금 중 정답 PIN은 초기화 UPDATE의 일시 실패에도 재시도로 성공해야 한다. 손상된 iterations 행은 게이트 선점 전에 500으로 분리돼야 한다. 재시도마저 실패하면 500으로 두고 소유자가 재시도하거나 15분 뒤 만료되는 것이 허용된다.",
+  "remediation": {
+   "code_changes": [
+    {
+     "file_name": "src/modules/auth/routes.ts",
+     "fixed_code": "async function resetPinCounter(db: DbLike, email: string): Promise<void> {\n  const sql = `UPDATE auth_pins SET fail_count = 0, locked_until = NULL WHERE email = ?`\n  try { await db.prepare(sql).bind(email).run() }\n  catch { await db.prepare(sql).bind(email).run() }\n}\n// 잠금 중 분기: await resetPinCounter(c.env.DB, normEmail)\n// 손상 행 사전 검증에 iterations 추가:\n// !Number.isInteger(row.iterations) || row.iterations < 1 → 500"
+    }
+   ],
+   "strategy": "잠금 중 분기의 초기화 UPDATE를 재시도 헬퍼로 감싸고, iterations를 salt/hash와 같은 사전 검증으로 분리한다. 게이트 분기와 달리 선점분이 없어 보상 UPDATE는 필요 없다. 적용됨: 커밋 886c012, 검증자 D 독립 재검증으로 FIXED 확인."
+  },
+  "root_cause": "잠금 중 분기(routes.ts:605~617, df17d3e 기준)는 게이트 선점이 없다는 이유로 try/catch + 재시도 패턴이 적용되지 않았다. 게이트 분기(:640~670)는 보상 UPDATE까지 갖췄지만, 잠금 중 분기의 초기화 UPDATE는 단일 await였다. 또한 손상 행 사전 검증이 salt/hash base64만 보고 iterations는 보지 않아 iterations=0 행이 verifyPin의 PBKDF2 deriveBits에서 OperationError를 일으켰다.",
+  "severity": {
+   "impact": {
+    "reason": "차단되는 것은 소유자의 PIN 로그인 경로 하나뿐이며 데이터 접근·세션 탈취·권한 상승은 없다. 잠금은 15분 후 만료되고 OTP→set-pin 복구 경로가 독립적으로 동작한다.",
+    "score": "low"
+   },
+   "likelihood": {
+    "reason": "D1 일시 장애와 정답 제출이 동시에 겹쳐야 하고, 장애가 없으면 발생하지 않는다. 공격자가 의도적으로 유발할 수 있는 경로가 아니다.",
+    "score": "low"
+   },
+   "overall_severity": "low"
+  },
+  "title": "잠금 중 /pin-login 분기에 try/catch이 없어 정답 PIN 처리 중 예외 시 잠금이 그대로 남는다",
+  "trace": [
+   {
+    "description": "잠금 중 분기 진입 — isLocked이면 정답 PIN 확인으로 간다",
+    "file": "src/modules/auth/routes.ts",
+    "kind": "entrypoint",
+    "line": 605,
+    "scope": "POST /api/auth/pin-login"
+   },
+   {
+    "description": "verifyPin — iterations=0 손상 행에서 PBKDF2 OperationError를 던진다",
+    "file": "src/modules/auth/routes.ts",
+    "kind": "propagation",
+    "line": 609,
+    "scope": "POST /api/auth/pin-login"
+   },
+   {
+    "description": "df17d3e 기준 카운터 초기화 UPDATE 단일 await — 실패 시 500, 잠금 그대로 잔존 (886c012에서 resetPinCounter 재시도로 교체)",
+    "file": "src/modules/auth/routes.ts",
+    "kind": "sink",
+    "line": 616,
+    "scope": "POST /api/auth/pin-login"
+   }
+  ],
+  "verdict": "confirmed"
+ },
+ {
+  "conditions": [
+   {
+    "description": "미인증 원격 공격자가 여러 IP에서 POST /api/auth/verify 또는 /pin-login을 호출할 수 있다",
+    "kind": "authentication_level"
+   },
+   {
+    "description": "1시간 안에 해당 경로 전역 버킷 100회를 소진해야 한다",
+    "kind": "timing_dependency"
+   },
+   {
+    "description": "마이그레이션 0051이 적용돼 rate_limits 테이블이 존재해야 한다",
+    "kind": "data_state"
+   }
+  ],
+  "confidence": {
+   "reason": "검증자 C가 5개 IP × 20회 /verify 오답 → 소유자 정답 429, 10개 IP × 10회 /pin-login 오답 → 소유자 정답 PIN 429, CF 헤더 없는 단일 공격자 100회 → 정답 429, 전역 소진 후 기존 세션 /me 200을 각각 독립 하네스로 실측했다.",
+   "score": "high"
+  },
+  "description": "df17d3e가 도입한 전역 백스톱은 /verify·/pin-login의 속도 제한을 IP 식별 불가 상황에서도 묶기 위해 verify:global·pin:global 키에 100회/시간 상한을 둔다. 검증자 C가 실측했다: 5개 IP × 20회 /verify 오답 = 100회 전부 400 → 소유자 정답 429(코드 행은 살아있음). 10개 IP × 10회 /pin-login 오답 = 100회 → 소유자 정답 PIN 429. CF 헤더 없는 단일 공격자 100회로도 전역 소진이 가능하다(운영은 CF 헤더가 normally 존재하므로 이 경로는 조건부, IP 분산 경로가 현실적). 원본 결함(5회로 차단) 대비 장벽은 20배 높아졌고(100회·IP 분산 필요), 영향은 최대 1시간이며 기존 30일 세션은 무영향(전역 소진 후 /me 200 실측)이다. 다만 정답 제출이 속도 제한 단계에서 먼저 막히므로 백스톱 자체가 새 소진 지점이 된 것은 맞다. 양 로그인 경로 동시 차단은 200회/시간이 필요하다. 이번 run에서는 구조적 트레이드오프(전역 버킷은 IP 식별 불가 공격을 막는 유일한 수단)라 재설계하지 않고 잔존 low로 기록한다.",
+  "evidence": [
+   {
+    "description": "/verify 전역 백스톱 — verify:global 100회/시간",
+    "file": "src/modules/auth/routes.ts",
+    "line": 451
+   },
+   {
+    "description": "/pin-login 전역 백스톱 — pin:global 100회/시간",
+    "file": "src/modules/auth/routes.ts",
+    "line": 557
+   },
+   {
+    "description": "속도 제한이 정답 판정보다 먼저 수행됨 — 정답 제출이 429 단계에서 막힌다",
+    "file": "src/modules/auth/routes.ts",
+    "line": 448
+   },
+   {
+    "description": "정답 코드는 attempts와 무관하게 성공 — 단 속도 제한 단계를 통과한 뒤에만",
+    "file": "src/modules/auth/routes.ts",
+    "line": 471
+   }
+  ],
+  "execution": {
+   "attacker_perspective": "미인증 원격 공격자가 여러 IP를 동원해 1시간 안에 /verify 또는 /pin-login 전역 버킷 100회를 오답으로 채우면, 소유자의 정답 코드·정답 PIN 제출이 429를 받아 최대 1시간 로그인할 수 없게 된다. 기존 세션은 영향받지 않는다.",
+   "instructions": [
+    "5개 IP에서 /verify 오답을 20회씩 보내 전역 100회를 채운 뒤 소유자 정답 코드를 보낸다",
+    "10개 IP에서 /pin-login 오답을 10회씩 보내 전역 100회를 채운 뒤 소유자 정답 PIN을 보낸다",
+    "CF 헤더 없이 단일 공격자 100회로도 전역 소진이 되는지 확인한다",
+    "전역 소진 후 기존 세션 /me가 200인지 확인한다"
+   ],
+   "observed_result": "검증자 C 독립 하네스(실제 routes.ts + better-sqlite3): D1 5개 IP × 20회 /verify 오답 = 100회 전부 400 → 소유자 정답 429(코드 행 살아있음). D2 10개 IP × 10회 /pin-login 오답 = 100회 → 소유자 정답 PIN 429. D3 CF 헤더 없는 단일 공격자 100회 → 소유자 정답 429. D4 전역 소진 후 /me 200 — 기존 30일 세션 무영향. 원본 결함(5회 차단) 대비 장벽 20배.",
+   "payloads": [
+    "POST /api/auth/verify {\"code\": \"000000\"} x20 from 5 IPs (100 total)",
+    "POST /api/auth/pin-login {\"pin\": \"000000\"} x10 from 10 IPs (100 total)"
+   ]
+  },
+  "fingerprint": "auth/rate-limit-global-backstop-dos",
+  "intended_behavior": "분산 오답 공격이 전역 버킷을 소진해도 소유자의 정답 제출은 막히지 않아야 한다. 또는 전역 상한이 현실적 공격 비용을 훨씬 웃돌아 소진 자체가 실용적으로 불가능해야 한다.",
+  "remediation": {
+   "code_changes": [],
+   "strategy": "두 방향 중 하나를 설계 결정으로 선택할 것. (a) 전역 상한을 현실적 공격 비용을 훨씬 웃도는 수준으로 올린다(예: 100→1000회/시간) — 단순하나 소진 지점 자체는 남는다. (b) 속도 제한 검사를 자격 증명 검증 뒤로 옮겨 오답에만 적용한다 — 정답 제출은 버킷과 무관하게 성공하고, 오답은 D1 잠금(5회/15분)이 PBKDF2 비용을 묶으므로 CPU 보호도 유지된다. 단, 속도 제한의 DoS 방어 역할이 바뀌는 구조 변경이라 별도 설계 검토가 필요하다. 이번 run에서는 적용하지 않고 잔존 low로 기록한다."
+  },
+  "root_cause": "전역 백스톱(routes.ts:451 verify:global, :557 pin:global)은 호출자 구분 없이 모든 /verify·/pin-login 호출을 하나의 버킷으로 묶는다. 정답 제출도 속도 제한 단계를 먼저 통과해야 하므로, 버킷이 소진되면 정답 여부와 무관하게 429가 된다. per-IP 버킷은 IP 분산으로 우회되고 전역 버킷은 분산 공격의 합산량을 막는 설계라, 전역 버킷 자체가 소진 지점이 되는 것은 이 설계의 고유한 트레이드오프다.",
+  "severity": {
+   "impact": {
+    "reason": "차단되는 것은 소유자의 OTP·PIN 로그인 제출 경로뿐이며 데이터 접근·세션 탈취·권한 상승은 없다. 영향은 최대 1시간이고 기존 세션은 무영향이며 OTP 재요청·PIN 재발급 복구 경로도 같은 버킷을 쓰나 세션 유지는 된다.",
+    "score": "low"
+   },
+   "likelihood": {
+    "reason": "100회·IP 분산이 필요해 원본 결함(5회)보다 장벽이 20배 높고, 공격자는 여러 IP를 확보해야 하며, 차단도 1시간으로 제한된다.",
+    "score": "low"
+   },
+   "overall_severity": "low"
+  },
+  "title": "전역 백스톱(verify:global·pin:global 100회/시간)을 분산 공격으로 소진하면 소유자 정답 제출이 429를 받는다",
+  "trace": [
+   {
+    "description": "per-IP 속도 제한 — IP 분산 공격은 이 단계를 우회한다",
+    "file": "src/modules/auth/routes.ts",
+    "kind": "entrypoint",
+    "line": 448,
+    "scope": "POST /api/auth/verify"
+   },
+   {
+    "description": "전역 백스톱 verify:global 100회/시간 — 소진 시 정답 여부와 무관하게 429",
+    "file": "src/modules/auth/routes.ts",
+    "kind": "propagation",
+    "line": 451,
+    "scope": "POST /api/auth/verify"
+   },
+   {
+    "description": "전역 백스톱 pin:global 100회/시간 — /pin-login 경로의 동일 소진 지점",
+    "file": "src/modules/auth/routes.ts",
+    "kind": "sink",
+    "line": 557,
+    "scope": "POST /api/auth/pin-login"
+   }
+  ],
+  "verdict": "confirmed"
+ },
+ {
+  "conditions": [
+   {
+    "description": "OTP 본인확인을 마친 소유자가 POST /api/auth/set-pin을 호출한다",
+    "kind": "authentication_level"
+   },
+   {
+    "description": "PIN UPSERT은 성공하고 bumpSessionVersion UPDATE만 일시 실패해야 한다",
+    "kind": "timing_dependency"
+   },
+   {
+    "description": "마이그레이션 0051이 적용돼 session_versions 테이블이 존재해야 한다",
+    "kind": "data_state"
+   }
+  ],
+  "confidence": {
+   "reason": "검증자 C가 bump만 실패하게 주입해 500 + PIN 교체 + 구 세션 /me 200을 실측했고, 검증자 D가 수정 후 bump 실패→500 + UPSERT 0회 + OTP 세션 유지·구 PIN 로그인 200, 정상 set-pin→bump 인덱스 < UPSERT 인덱스·구 세션 401을 확인했으며, 음성 대조군(df17d3e)으로 구 동작(500이면서 UPSERT 실행·새 PIN 200 + 구 세션 200)을 재현했다.",
+   "score": "high"
+  },
+  "description": "df17d3e의 /set-pin은 PIN UPSERT → fail_count 초기화 → bumpSessionVersion 순서였다. bump UPDATE만 일시 실패하게 주입하면 /set-pin은 500인데 PIN 행은 새 PIN으로 교체되고 session_versions는 0 그대로라 구 세션이 /me 200으로 살아남는다 — PIN 교체 후 구 세션 무효화 누락이다. 일시적 D1 장애라는 좁은 창구가 필요하나, PIN을 바꾼 사용자가 '이전 세션은 전부 끊겼다'고 믿는 상태에서 구 세션이 유효한 채로 남는 것은 무효화 보장 위반이다. 검증자 C가 fault injection으로 실증했고, 커밋 886c012에서 bump-first 순서로 바꿔 검증자 D가 독립 하네스 + 음성 대조군으로 FIXED를 확인했다.",
+  "evidence": [
+   {
+    "description": "수정 후 /set-pin 순서 — bump 호출이 PIN UPSERT보다 앞선다 (886c012)",
+    "file": "src/modules/auth/routes.ts",
+    "line": 764
+   },
+   {
+    "description": "PIN UPSERT — bump 뒤에 위치 (886c012)",
+    "file": "src/modules/auth/routes.ts",
+    "line": 766
+   },
+   {
+    "description": "bump UPDATE ... RETURNING — 실패 시 예외 전파 (df17d3e와 동일)",
+    "file": "src/modules/auth/routes.ts",
+    "line": 224
+   }
+  ],
+  "execution": {
+   "attacker_perspective": "공격자 관점이 아니라 무효화 보장 관점이다. 소유자가 PIN을 바꾼 뒤 구 세션이 살아남으면, 탈취된 구 세션이 PIN 교체 이후에도 유효한 채로 남는다.",
+   "instructions": [
+    "OTP 세션으로 /set-pin을 호출하되 bump UPDATE만 실패하게 주입한다",
+    "응답 코드, PIN 행(새 PIN 로그인 가능 여부), 구 세션 /me 결과를 기록한다",
+    "주입 없이 정상 /set-pin을 호출하고 호출 로그에서 bump와 UPSERT 순서를 확인한다"
+   ],
+   "observed_result": "검증자 C (df17d3e): bump만 실패 주입 → /set-pin 500인데 PIN 행은 새 PIN으로 교체되고 session_versions는 0 그대로라 구 세션이 /me 200으로 살아남음. 검증자 D (886c012): bump 실패 → 500 + INSERT INTO auth_pins 0회 + 버전 0 유지 + 기존 OTP 세션 /me 200 + 구 PIN 로그인 200. bump 1회 실패 후 재시도 → 200·UPSERT 1회·버전 1·새 PIN 200·구 PIN 401·구 OTP 세션 401. 정상 set-pin → 호출 로그에서 bump 인덱스 < UPSERT 인덱스 직접 확인, 구 PIN 세션 /me 401·새 쿠키 세션 200. 음성 대조군(df17d3e): bump 실패 시 500이면서 UPSERT 실행 — 새 PIN 로그인 200 + 구 OTP 세션 /me 200 + 버전 0.",
+   "payloads": [
+    "POST /api/auth/set-pin {\"pin\": \"<new>\"} (bump fails)",
+    "POST /api/auth/set-pin {\"pin\": \"<new>\"} (normal)"
+   ]
+  },
+  "fingerprint": "auth/set-pin-order",
+  "intended_behavior": "bump이 실패하면 PIN도 세션도 그대로인 일관된 상태로 남아야 한다. PIN 교체는 모든 기존 세션 무효화가 성공한 뒤에만 일어나야 한다.",
+  "remediation": {
+   "code_changes": [
+    {
+     "file_name": "src/modules/auth/routes.ts",
+     "fixed_code": "// /set-pin: bumpSessionVersion을 PIN UPSERT보다 먼저 수행한다.\nconst nextVersion = await bumpSessionVersion(c.env, normEmail)\nawait c.env.DB.prepare(`INSERT INTO auth_pins ... ON CONFLICT(email) DO UPDATE ...`).bind(...).run()\n// bump 실패 시 PIN도 세션도 그대로인 일관된 상태로 남는다."
+    }
+   ],
+   "strategy": "두 쓰기의 순서를 교환해 무효화를 PIN 교체보다 먼저 수행한다. bump이 실패하면 아무것도 바뀌지 않은 일관 상태로 남고, UPSERT이 실패하면 세션은 이미 무효화된 fail-closed 상태가 된다(재시도 시 OTP를 새로 받아야 하는 UX 비용이 있으나 안전 방향이다). 적용됨: 커밋 886c012, 검증자 D 독립 재검증으로 FIXED 확인."
+  },
+  "root_cause": "/set-pin(routes.ts:764~771, df17d3e 기준)이 부수 효과가 있는 두 쓰기를 'PIN 교체 먼저, 세션 무효화 나중' 순서로 수행했다. bump이 실패하면 앞 단계(PIN 교체)는 이미 커밋됐는데 뒤 단계(무효화)는 실행되지 않아 일관성이 깨진다. D1은 다중 문장 트랜잭션을 제공하지 않으므로 순서가 유일한 일관성 보장 수단인데, 실패 시 안전한 쪽이 뒤에 있었다.",
+  "severity": {
+   "impact": {
+    "reason": "구 세션이 살아남는 것은 무효화 보장 위반이나, 발생하려면 bump만 골라 실패하는 일시 D1 장애가 필요하고, PIN 자체는 새 값으로 교체돼 구 PIN으로는 로그인할 수 없다. 구 세션을 가진 자가 있어야 악용된다.",
+    "score": "low"
+   },
+   "likelihood": {
+    "reason": "bump UPDATE만 일시 실패하는 좁은 창구가 필요하고, 공격자가 원격에서 D1 내부 장애를 골라 유발할 수 없다.",
+    "score": "low"
+   },
+   "overall_severity": "low"
+  },
+  "title": "/set-pin이 PIN 교체 후 bump을 해서 bump 실패 시 새 PIN이 적용됐는데 구 세션이 살아남는다",
+  "trace": [
+   {
+    "description": "886c012 기준 bumpSessionVersion 호출 — PIN UPSERT보다 먼저 수행된다",
+    "file": "src/modules/auth/routes.ts",
+    "kind": "entrypoint",
+    "line": 764,
+    "scope": "POST /api/auth/set-pin"
+   },
+   {
+    "description": "PIN UPSERT — bump이 성공한 뒤에만 실행된다",
+    "file": "src/modules/auth/routes.ts",
+    "kind": "propagation",
+    "line": 766,
+    "scope": "POST /api/auth/set-pin"
+   },
+   {
+    "description": "UPDATE session_versions ... RETURNING version — 실패 시 예외를 던져 /set-pin이 500으로 실패한다",
+    "file": "src/modules/auth/routes.ts",
+    "kind": "sink",
+    "line": 224,
+    "scope": "bumpSessionVersion"
+   }
+  ],
+  "verdict": "confirmed"
+ }
+]

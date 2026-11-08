@@ -1,0 +1,821 @@
+[
+ {
+  "coverage_id": "public%2Flogin.html%23pinLogin%2Fset-pin%20client::public%2Flogin.html%23PIN%20input%20and%20OTP-to-PIN%20issuance%20flow::profile%2Fquick%2Fall-in-scope-subsystems::ATTACK-CLASSES.md%23Feature%20abuse%20and%20data%20leakage",
+  "canonical_refs": {
+   "surface": "public/login.html#pinLogin/set-pin client",
+   "boundary": "public/login.html#PIN input and OTP-to-PIN issuance flow",
+   "subsystem": "profile/quick/all-in-scope-subsystems",
+   "attack_class": "ATTACK-CLASSES.md#Feature abuse and data leakage"
+  },
+  "surface": "public/login.html#pinLogin/set-pin client",
+  "boundary": "public/login.html#PIN input and OTP-to-PIN issuance flow",
+  "subsystem": "profile/quick/all-in-scope-subsystems",
+  "attack_class": "ATTACK-CLASSES.md#Feature abuse and data leakage",
+  "starting_paths": [
+   "public/login.html",
+   "src/modules/auth/routes.ts"
+  ],
+  "ordinary_attack_class_block": "ATTACK-CLASSES.md#Feature abuse and data leakage",
+  "selected_companion_blocks": [
+   "WEB-PROTOCOL-AND-AUTH.md#Cookie scope and transport",
+   "WEB-PROTOCOL-AND-AUTH.md#Core discipline",
+   "WEB-PROTOCOL-AND-AUTH.md#Universal moves",
+   "WEB-PROTOCOL-AND-AUTH.md#Validation rules"
+  ],
+  "excluded_blocks": [
+   {
+    "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+    "reason": "No native/binary code in the auth scope."
+   },
+   {
+    "block": "AI-AND-LLM.md#Core discipline",
+    "reason": "No LLM interaction in the auth module."
+   },
+   {
+    "block": "PROTOCOLS-RPC-AND-MESSAGING.md#Core discipline",
+    "reason": "No RPC, broker, or queue surface in the auth scope."
+   },
+   {
+    "block": "SUPPLY-CHAIN-AND-RELEASE.md#Core discipline",
+    "reason": "Dependency/CI audit is a separate run, not this scoped pilot."
+   }
+  ],
+  "prior_status": "prior_confirmed_changed_source",
+  "attempts": [],
+  "wave": 1,
+  "status": "candidate",
+  "agent_id": "7307998b-38e7-4f11-be30-0875214d224d",
+  "reviewed_paths": [
+   "public/login.html",
+   "src/modules/auth/routes.ts"
+  ],
+  "local_checks": [
+   {
+    "agent_id": "7307998b-38e7-4f11-be30-0875214d224d",
+    "reviewed_paths": [
+     "public/login.html",
+     "src/modules/auth/routes.ts"
+    ],
+    "invariant": "Hunter re-ran the run-001 reproduction scenarios against commit 57b5554 and hunted for new defects in the changed code.",
+    "method": "source",
+    "result": "Source review and local reproduction complete; candidates (if any) listed in result_fingerprints.",
+    "artifact": null
+   },
+   {
+    "agent_id": "3b639661-7f4b-44fc-861a-5ad57bbd89ad",
+    "reviewed_paths": [
+     "public/login.html",
+     "src/modules/auth/routes.ts"
+    ],
+    "invariant": "Independent verifier re-read every cited source location and independently reproduced the decisive local result with a fresh harness.",
+    "method": "source",
+    "result": "Verified auth/login-csp-unsafe-inline as confirmed; see findings.json.",
+    "artifact": null
+   }
+  ],
+  "result_fingerprints": [
+   "auth/login-csp-unsafe-inline"
+  ],
+  "unresolved": []
+ },
+ {
+  "coverage_id": "src%2Findex.ts%23auth%20middleware::src%2Findex.ts%23verifySession%20gate%20for%20protected%20routes::profile%2Fquick%2Fall-in-scope-subsystems::ATTACK-CLASSES.md%23Access%20control",
+  "canonical_refs": {
+   "surface": "src/index.ts#auth middleware",
+   "boundary": "src/index.ts#verifySession gate for protected routes",
+   "subsystem": "profile/quick/all-in-scope-subsystems",
+   "attack_class": "ATTACK-CLASSES.md#Access control"
+  },
+  "surface": "src/index.ts#auth middleware",
+  "boundary": "src/index.ts#verifySession gate for protected routes",
+  "subsystem": "profile/quick/all-in-scope-subsystems",
+  "attack_class": "ATTACK-CLASSES.md#Access control",
+  "starting_paths": [
+   "src/index.ts"
+  ],
+  "ordinary_attack_class_block": "ATTACK-CLASSES.md#Access control",
+  "selected_companion_blocks": [],
+  "excluded_blocks": [
+   {
+    "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+    "reason": "No native/binary code in the auth scope."
+   },
+   {
+    "block": "AI-AND-LLM.md#Core discipline",
+    "reason": "No LLM interaction in the auth module."
+   },
+   {
+    "block": "PROTOCOLS-RPC-AND-MESSAGING.md#Core discipline",
+    "reason": "No RPC, broker, or queue surface in the auth scope."
+   },
+   {
+    "block": "SUPPLY-CHAIN-AND-RELEASE.md#Core discipline",
+    "reason": "Dependency/CI audit is a separate run, not this scoped pilot."
+   }
+  ],
+  "prior_status": "prior_out_of_scope",
+  "attempts": [],
+  "wave": 1,
+  "status": "covered",
+  "agent_id": "7307998b-38e7-4f11-be30-0875214d224d",
+  "reviewed_paths": [
+   "src/index.ts",
+   "src/modules/auth/routes.ts"
+  ],
+  "local_checks": [
+   {
+    "agent_id": "7307998b-38e7-4f11-be30-0875214d224d",
+    "reviewed_paths": [
+     "src/index.ts",
+     "src/modules/auth/routes.ts"
+    ],
+    "invariant": "Hunter re-ran the run-001 reproduction scenarios against commit 57b5554 and hunted for new defects in the changed code.",
+    "method": "source",
+    "result": "Source review and local reproduction complete; no candidates found in this unit. Middleware observation (no allowlist binding in verifySessionForEnv call) recorded in REPORT.md, not a finding.",
+    "artifact": null
+   }
+  ],
+  "result_fingerprints": [],
+  "unresolved": []
+ },
+ {
+  "coverage_id": "src%2Fmodules%2Fauth%2Froutes.ts%23GET%20%2Fapi%2Fauth%2Fme::src%2Fmodules%2Fauth%2Froutes.ts%23verifySession%20%2B%20hasPin%2FhasPassword%20disclosure::profile%2Fquick%2Fall-in-scope-subsystems::ATTACK-CLASSES.md%23Feature%20abuse%20and%20data%20leakage",
+  "canonical_refs": {
+   "surface": "src/modules/auth/routes.ts#GET /api/auth/me",
+   "boundary": "src/modules/auth/routes.ts#verifySession + hasPin/hasPassword disclosure",
+   "subsystem": "profile/quick/all-in-scope-subsystems",
+   "attack_class": "ATTACK-CLASSES.md#Feature abuse and data leakage"
+  },
+  "surface": "src/modules/auth/routes.ts#GET /api/auth/me",
+  "boundary": "src/modules/auth/routes.ts#verifySession + hasPin/hasPassword disclosure",
+  "subsystem": "profile/quick/all-in-scope-subsystems",
+  "attack_class": "ATTACK-CLASSES.md#Feature abuse and data leakage",
+  "starting_paths": [
+   "src/modules/auth/routes.ts"
+  ],
+  "ordinary_attack_class_block": "ATTACK-CLASSES.md#Feature abuse and data leakage",
+  "selected_companion_blocks": [
+   "WEB-PROTOCOL-AND-AUTH.md#JWT verification and claim binding",
+   "WEB-PROTOCOL-AND-AUTH.md#Core discipline",
+   "WEB-PROTOCOL-AND-AUTH.md#Universal moves",
+   "WEB-PROTOCOL-AND-AUTH.md#Validation rules"
+  ],
+  "excluded_blocks": [
+   {
+    "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+    "reason": "No native/binary code in the auth scope."
+   },
+   {
+    "block": "AI-AND-LLM.md#Core discipline",
+    "reason": "No LLM interaction in the auth module."
+   },
+   {
+    "block": "PROTOCOLS-RPC-AND-MESSAGING.md#Core discipline",
+    "reason": "No RPC, broker, or queue surface in the auth scope."
+   },
+   {
+    "block": "SUPPLY-CHAIN-AND-RELEASE.md#Core discipline",
+    "reason": "Dependency/CI audit is a separate run, not this scoped pilot."
+   }
+  ],
+  "prior_status": "prior_covered_changed_source",
+  "attempts": [],
+  "wave": 1,
+  "status": "candidate",
+  "agent_id": "7307998b-38e7-4f11-be30-0875214d224d",
+  "reviewed_paths": [
+   "src/modules/auth/routes.ts"
+  ],
+  "local_checks": [
+   {
+    "agent_id": "7307998b-38e7-4f11-be30-0875214d224d",
+    "reviewed_paths": [
+     "src/modules/auth/routes.ts"
+    ],
+    "invariant": "Hunter re-ran the run-001 reproduction scenarios against commit 57b5554 and hunted for new defects in the changed code.",
+    "method": "source",
+    "result": "Source review and local reproduction complete; candidates (if any) listed in result_fingerprints.",
+    "artifact": null
+   },
+   {
+    "agent_id": "567f49e8-4073-4b99-994a-0f5ee843368f",
+    "reviewed_paths": [
+     "src/modules/auth/routes.ts"
+    ],
+    "invariant": "Independent verifier re-read every cited source location and independently reproduced the decisive local result with a fresh harness.",
+    "method": "source",
+    "result": "Verified auth/sessver-fail-open as confirmed; see findings.json.",
+    "artifact": null
+   }
+  ],
+  "result_fingerprints": [
+   "auth/sessver-fail-open"
+  ],
+  "unresolved": []
+ },
+ {
+  "coverage_id": "src%2Fmodules%2Fauth%2Froutes.ts%23POST%20%2Fapi%2Fauth%2Flogout::src%2Fmodules%2Fauth%2Froutes.ts%23Set-Cookie%20Max-Age%3D0%20clearing::profile%2Fquick%2Fall-in-scope-subsystems::ATTACK-CLASSES.md%23Access%20control",
+  "canonical_refs": {
+   "surface": "src/modules/auth/routes.ts#POST /api/auth/logout",
+   "boundary": "src/modules/auth/routes.ts#Set-Cookie Max-Age=0 clearing",
+   "subsystem": "profile/quick/all-in-scope-subsystems",
+   "attack_class": "ATTACK-CLASSES.md#Access control"
+  },
+  "surface": "src/modules/auth/routes.ts#POST /api/auth/logout",
+  "boundary": "src/modules/auth/routes.ts#Set-Cookie Max-Age=0 clearing",
+  "subsystem": "profile/quick/all-in-scope-subsystems",
+  "attack_class": "ATTACK-CLASSES.md#Access control",
+  "starting_paths": [
+   "src/modules/auth/routes.ts"
+  ],
+  "ordinary_attack_class_block": "ATTACK-CLASSES.md#Access control",
+  "selected_companion_blocks": [
+   "WEB-PROTOCOL-AND-AUTH.md#Session fixation and invalidation",
+   "WEB-PROTOCOL-AND-AUTH.md#Core discipline",
+   "WEB-PROTOCOL-AND-AUTH.md#Universal moves",
+   "WEB-PROTOCOL-AND-AUTH.md#Validation rules"
+  ],
+  "excluded_blocks": [
+   {
+    "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+    "reason": "No native/binary code in the auth scope."
+   },
+   {
+    "block": "AI-AND-LLM.md#Core discipline",
+    "reason": "No LLM interaction in the auth module."
+   },
+   {
+    "block": "PROTOCOLS-RPC-AND-MESSAGING.md#Core discipline",
+    "reason": "No RPC, broker, or queue surface in the auth scope."
+   },
+   {
+    "block": "SUPPLY-CHAIN-AND-RELEASE.md#Core discipline",
+    "reason": "Dependency/CI audit is a separate run, not this scoped pilot."
+   }
+  ],
+  "prior_status": "prior_confirmed_changed_source",
+  "attempts": [],
+  "wave": 1,
+  "status": "candidate",
+  "agent_id": "7307998b-38e7-4f11-be30-0875214d224d",
+  "reviewed_paths": [
+   "src/modules/auth/routes.ts"
+  ],
+  "local_checks": [
+   {
+    "agent_id": "7307998b-38e7-4f11-be30-0875214d224d",
+    "reviewed_paths": [
+     "src/modules/auth/routes.ts"
+    ],
+    "invariant": "Hunter re-ran the run-001 reproduction scenarios against commit 57b5554 and hunted for new defects in the changed code.",
+    "method": "source",
+    "result": "Source review and local reproduction complete; candidates (if any) listed in result_fingerprints.",
+    "artifact": null
+   },
+   {
+    "agent_id": "aac29457-4ad3-440f-87c5-dfc5f22460f2",
+    "reviewed_paths": [
+     "src/modules/auth/routes.ts"
+    ],
+    "invariant": "Independent verifier re-read every cited source location and independently reproduced the decisive local result with a fresh harness.",
+    "method": "source",
+    "result": "Verified auth/sessver-bump-race as confirmed; see findings.json.",
+    "artifact": null
+   },
+   {
+    "agent_id": "567f49e8-4073-4b99-994a-0f5ee843368f",
+    "reviewed_paths": [
+     "src/modules/auth/routes.ts"
+    ],
+    "invariant": "Independent verifier re-read every cited source location and independently reproduced the decisive local result with a fresh harness.",
+    "method": "source",
+    "result": "Verified auth/sessver-fail-open as confirmed; see findings.json.",
+    "artifact": null
+   }
+  ],
+  "result_fingerprints": [
+   "auth/sessver-bump-race",
+   "auth/sessver-fail-open"
+  ],
+  "unresolved": []
+ },
+ {
+  "coverage_id": "src%2Fmodules%2Fauth%2Froutes.ts%23POST%20%2Fapi%2Fauth%2Fpin-login::src%2Fmodules%2Fauth%2Froutes.ts%23KV%20PIN%20fail%20counter%20pinfail%3A%20%2B%20PBKDF2%20verifyPin::profile%2Fquick%2Fall-in-scope-subsystems::ATTACK-CLASSES.md%23Access%20control",
+  "canonical_refs": {
+   "surface": "src/modules/auth/routes.ts#POST /api/auth/pin-login",
+   "boundary": "src/modules/auth/routes.ts#KV PIN fail counter pinfail: + PBKDF2 verifyPin",
+   "subsystem": "profile/quick/all-in-scope-subsystems",
+   "attack_class": "ATTACK-CLASSES.md#Access control"
+  },
+  "surface": "src/modules/auth/routes.ts#POST /api/auth/pin-login",
+  "boundary": "src/modules/auth/routes.ts#KV PIN fail counter pinfail: + PBKDF2 verifyPin",
+  "subsystem": "profile/quick/all-in-scope-subsystems",
+  "attack_class": "ATTACK-CLASSES.md#Access control",
+  "starting_paths": [
+   "src/modules/auth/routes.ts",
+   "public/login.html"
+  ],
+  "ordinary_attack_class_block": "ATTACK-CLASSES.md#Access control",
+  "selected_companion_blocks": [
+   "WEB-PROTOCOL-AND-AUTH.md#MFA enrollment and assurance downgrade",
+   "WEB-PROTOCOL-AND-AUTH.md#Step-up binding and bypass",
+   "WEB-PROTOCOL-AND-AUTH.md#Core discipline",
+   "WEB-PROTOCOL-AND-AUTH.md#Universal moves",
+   "WEB-PROTOCOL-AND-AUTH.md#Validation rules"
+  ],
+  "excluded_blocks": [
+   {
+    "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+    "reason": "No native/binary code in the auth scope."
+   },
+   {
+    "block": "AI-AND-LLM.md#Core discipline",
+    "reason": "No LLM interaction in the auth module."
+   },
+   {
+    "block": "PROTOCOLS-RPC-AND-MESSAGING.md#Core discipline",
+    "reason": "No RPC, broker, or queue surface in the auth scope."
+   },
+   {
+    "block": "SUPPLY-CHAIN-AND-RELEASE.md#Core discipline",
+    "reason": "Dependency/CI audit is a separate run, not this scoped pilot."
+   }
+  ],
+  "prior_status": "prior_confirmed_changed_source",
+  "attempts": [],
+  "wave": 1,
+  "status": "candidate",
+  "agent_id": "7307998b-38e7-4f11-be30-0875214d224d",
+  "reviewed_paths": [
+   "public/login.html",
+   "src/modules/auth/routes.ts"
+  ],
+  "local_checks": [
+   {
+    "agent_id": "7307998b-38e7-4f11-be30-0875214d224d",
+    "reviewed_paths": [
+     "public/login.html",
+     "src/modules/auth/routes.ts"
+    ],
+    "invariant": "Hunter re-ran the run-001 reproduction scenarios against commit 57b5554 and hunted for new defects in the changed code.",
+    "method": "source",
+    "result": "Source review and local reproduction complete; candidates (if any) listed in result_fingerprints.",
+    "artifact": null
+   },
+   {
+    "agent_id": "897ab607-332f-4f2e-b02e-c0f1170d9caf",
+    "reviewed_paths": [
+     "public/login.html",
+     "src/modules/auth/routes.ts"
+    ],
+    "invariant": "Independent verifier re-read every cited source location and independently reproduced the decisive local result with a fresh harness.",
+    "method": "source",
+    "result": "Verified auth/lockout-dos-verify-pin-residual as confirmed; see findings.json.",
+    "artifact": null
+   },
+   {
+    "agent_id": "360767a2-5994-4d2f-855c-41d1fde06688",
+    "reviewed_paths": [
+     "public/login.html",
+     "src/modules/auth/routes.ts"
+    ],
+    "invariant": "Independent verifier re-read every cited source location and independently reproduced the decisive local result with a fresh harness.",
+    "method": "source",
+    "result": "Verified auth/pin-failcount-no-decay as confirmed; see findings.json.",
+    "artifact": null
+   },
+   {
+    "agent_id": "5e236d71-a476-43e9-8bdc-5957c05c6b56",
+    "reviewed_paths": [
+     "public/login.html",
+     "src/modules/auth/routes.ts"
+    ],
+    "invariant": "Independent verifier re-read every cited source location and independently reproduced the decisive local result with a fresh harness.",
+    "method": "source",
+    "result": "Verified auth/pin-kv-fallback-race as confirmed; see findings.json.",
+    "artifact": null
+   },
+   {
+    "agent_id": "5c930ad5-12d9-4ad1-a8aa-c029203c96c5",
+    "reviewed_paths": [
+     "public/login.html",
+     "src/modules/auth/routes.ts"
+    ],
+    "invariant": "Independent verifier re-read every cited source location and independently reproduced the decisive local result with a fresh harness.",
+    "method": "source",
+    "result": "Verified auth/pin-lock-gate-stale-read as confirmed; see findings.json.",
+    "artifact": null
+   },
+   {
+    "agent_id": "8a254de5-ea25-432d-a8ac-dff543719a04",
+    "reviewed_paths": [
+     "public/login.html",
+     "src/modules/auth/routes.ts"
+    ],
+    "invariant": "Independent verifier re-read every cited source location and independently reproduced the decisive local result with a fresh harness.",
+    "method": "source",
+    "result": "Verified auth/rate-limit-kv-race as confirmed; see findings.json.",
+    "artifact": null
+   },
+   {
+    "agent_id": "584b7ef7-805b-454e-9d00-d874f8acbac9",
+    "reviewed_paths": [
+     "public/login.html",
+     "src/modules/auth/routes.ts"
+    ],
+    "invariant": "Independent verifier re-read every cited source location and independently reproduced the decisive local result with a fresh harness.",
+    "method": "source",
+    "result": "Verified auth/rate-limit-unknown-ip as confirmed; see findings.json.",
+    "artifact": null
+   }
+  ],
+  "result_fingerprints": [
+   "auth/lockout-dos-verify-pin-residual",
+   "auth/pin-failcount-no-decay",
+   "auth/pin-kv-fallback-race",
+   "auth/pin-lock-gate-stale-read",
+   "auth/rate-limit-kv-race",
+   "auth/rate-limit-unknown-ip"
+  ],
+  "unresolved": []
+ },
+ {
+  "coverage_id": "src%2Fmodules%2Fauth%2Froutes.ts%23POST%20%2Fapi%2Fauth%2Frequest::src%2Fmodules%2Fauth%2Froutes.ts%23KV%20rate%20limit%20rl%3A%20%2B%20otp_codes%20daily%20code::profile%2Fquick%2Fall-in-scope-subsystems::ATTACK-CLASSES.md%23Business%20logic",
+  "canonical_refs": {
+   "surface": "src/modules/auth/routes.ts#POST /api/auth/request",
+   "boundary": "src/modules/auth/routes.ts#KV rate limit rl: + otp_codes daily code",
+   "subsystem": "profile/quick/all-in-scope-subsystems",
+   "attack_class": "ATTACK-CLASSES.md#Business logic"
+  },
+  "surface": "src/modules/auth/routes.ts#POST /api/auth/request",
+  "boundary": "src/modules/auth/routes.ts#KV rate limit rl: + otp_codes daily code",
+  "subsystem": "profile/quick/all-in-scope-subsystems",
+  "attack_class": "ATTACK-CLASSES.md#Business logic",
+  "starting_paths": [
+   "src/modules/auth/routes.ts",
+   "migrations/0043_auth_pins.sql"
+  ],
+  "ordinary_attack_class_block": "ATTACK-CLASSES.md#Business logic",
+  "selected_companion_blocks": [
+   "WEB-PROTOCOL-AND-AUTH.md#Password reset and broader recovery",
+   "WEB-PROTOCOL-AND-AUTH.md#Core discipline",
+   "WEB-PROTOCOL-AND-AUTH.md#Universal moves",
+   "WEB-PROTOCOL-AND-AUTH.md#Validation rules"
+  ],
+  "excluded_blocks": [
+   {
+    "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+    "reason": "No native/binary code in the auth scope."
+   },
+   {
+    "block": "AI-AND-LLM.md#Core discipline",
+    "reason": "No LLM interaction in the auth module."
+   },
+   {
+    "block": "PROTOCOLS-RPC-AND-MESSAGING.md#Core discipline",
+    "reason": "No RPC, broker, or queue surface in the auth scope."
+   },
+   {
+    "block": "SUPPLY-CHAIN-AND-RELEASE.md#Core discipline",
+    "reason": "Dependency/CI audit is a separate run, not this scoped pilot."
+   }
+  ],
+  "prior_status": "prior_confirmed_changed_source",
+  "attempts": [],
+  "wave": 1,
+  "status": "candidate",
+  "agent_id": "7307998b-38e7-4f11-be30-0875214d224d",
+  "reviewed_paths": [
+   "migrations/0043_auth_pins.sql",
+   "src/modules/auth/routes.ts"
+  ],
+  "local_checks": [
+   {
+    "agent_id": "7307998b-38e7-4f11-be30-0875214d224d",
+    "reviewed_paths": [
+     "migrations/0043_auth_pins.sql",
+     "src/modules/auth/routes.ts"
+    ],
+    "invariant": "Hunter re-ran the run-001 reproduction scenarios against commit 57b5554 and hunted for new defects in the changed code.",
+    "method": "source",
+    "result": "Source review and local reproduction complete; candidates (if any) listed in result_fingerprints.",
+    "artifact": null
+   },
+   {
+    "agent_id": "897ab607-332f-4f2e-b02e-c0f1170d9caf",
+    "reviewed_paths": [
+     "migrations/0043_auth_pins.sql",
+     "src/modules/auth/routes.ts"
+    ],
+    "invariant": "Independent verifier re-read every cited source location and independently reproduced the decisive local result with a fresh harness.",
+    "method": "source",
+    "result": "Verified auth/lockout-dos-verify-pin-residual as confirmed; see findings.json.",
+    "artifact": null
+   },
+   {
+    "agent_id": "8a254de5-ea25-432d-a8ac-dff543719a04",
+    "reviewed_paths": [
+     "migrations/0043_auth_pins.sql",
+     "src/modules/auth/routes.ts"
+    ],
+    "invariant": "Independent verifier re-read every cited source location and independently reproduced the decisive local result with a fresh harness.",
+    "method": "source",
+    "result": "Verified auth/rate-limit-kv-race as confirmed; see findings.json.",
+    "artifact": null
+   },
+   {
+    "agent_id": "584b7ef7-805b-454e-9d00-d874f8acbac9",
+    "reviewed_paths": [
+     "migrations/0043_auth_pins.sql",
+     "src/modules/auth/routes.ts"
+    ],
+    "invariant": "Independent verifier re-read every cited source location and independently reproduced the decisive local result with a fresh harness.",
+    "method": "source",
+    "result": "Verified auth/rate-limit-unknown-ip as confirmed; see findings.json.",
+    "artifact": null
+   }
+  ],
+  "result_fingerprints": [
+   "auth/lockout-dos-verify-pin-residual",
+   "auth/rate-limit-kv-race",
+   "auth/rate-limit-unknown-ip"
+  ],
+  "unresolved": []
+ },
+ {
+  "coverage_id": "src%2Fmodules%2Fauth%2Froutes.ts%23POST%20%2Fapi%2Fauth%2Fset-pin::src%2Fmodules%2Fauth%2Froutes.ts%23verifySession%20on%20myhub_session%20cookie::profile%2Fquick%2Fall-in-scope-subsystems::ATTACK-CLASSES.md%23Access%20control",
+  "canonical_refs": {
+   "surface": "src/modules/auth/routes.ts#POST /api/auth/set-pin",
+   "boundary": "src/modules/auth/routes.ts#verifySession on myhub_session cookie",
+   "subsystem": "profile/quick/all-in-scope-subsystems",
+   "attack_class": "ATTACK-CLASSES.md#Access control"
+  },
+  "surface": "src/modules/auth/routes.ts#POST /api/auth/set-pin",
+  "boundary": "src/modules/auth/routes.ts#verifySession on myhub_session cookie",
+  "subsystem": "profile/quick/all-in-scope-subsystems",
+  "attack_class": "ATTACK-CLASSES.md#Access control",
+  "starting_paths": [
+   "src/modules/auth/routes.ts",
+   "public/login.html"
+  ],
+  "ordinary_attack_class_block": "ATTACK-CLASSES.md#Access control",
+  "selected_companion_blocks": [
+   "WEB-PROTOCOL-AND-AUTH.md#MFA enrollment and assurance downgrade",
+   "WEB-PROTOCOL-AND-AUTH.md#Core discipline",
+   "WEB-PROTOCOL-AND-AUTH.md#Universal moves",
+   "WEB-PROTOCOL-AND-AUTH.md#Validation rules"
+  ],
+  "excluded_blocks": [
+   {
+    "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+    "reason": "No native/binary code in the auth scope."
+   },
+   {
+    "block": "AI-AND-LLM.md#Core discipline",
+    "reason": "No LLM interaction in the auth module."
+   },
+   {
+    "block": "PROTOCOLS-RPC-AND-MESSAGING.md#Core discipline",
+    "reason": "No RPC, broker, or queue surface in the auth scope."
+   },
+   {
+    "block": "SUPPLY-CHAIN-AND-RELEASE.md#Core discipline",
+    "reason": "Dependency/CI audit is a separate run, not this scoped pilot."
+   }
+  ],
+  "prior_status": "prior_confirmed_changed_source",
+  "attempts": [],
+  "wave": 1,
+  "status": "candidate",
+  "agent_id": "7307998b-38e7-4f11-be30-0875214d224d",
+  "reviewed_paths": [
+   "public/login.html",
+   "src/modules/auth/routes.ts"
+  ],
+  "local_checks": [
+   {
+    "agent_id": "7307998b-38e7-4f11-be30-0875214d224d",
+    "reviewed_paths": [
+     "public/login.html",
+     "src/modules/auth/routes.ts"
+    ],
+    "invariant": "Hunter re-ran the run-001 reproduction scenarios against commit 57b5554 and hunted for new defects in the changed code.",
+    "method": "source",
+    "result": "Source review and local reproduction complete; candidates (if any) listed in result_fingerprints.",
+    "artifact": null
+   },
+   {
+    "agent_id": "aac29457-4ad3-440f-87c5-dfc5f22460f2",
+    "reviewed_paths": [
+     "public/login.html",
+     "src/modules/auth/routes.ts"
+    ],
+    "invariant": "Independent verifier re-read every cited source location and independently reproduced the decisive local result with a fresh harness.",
+    "method": "source",
+    "result": "Verified auth/sessver-bump-race as confirmed; see findings.json.",
+    "artifact": null
+   },
+   {
+    "agent_id": "567f49e8-4073-4b99-994a-0f5ee843368f",
+    "reviewed_paths": [
+     "public/login.html",
+     "src/modules/auth/routes.ts"
+    ],
+    "invariant": "Independent verifier re-read every cited source location and independently reproduced the decisive local result with a fresh harness.",
+    "method": "source",
+    "result": "Verified auth/sessver-fail-open as confirmed; see findings.json.",
+    "artifact": null
+   }
+  ],
+  "result_fingerprints": [
+   "auth/sessver-bump-race",
+   "auth/sessver-fail-open"
+  ],
+  "unresolved": []
+ },
+ {
+  "coverage_id": "src%2Fmodules%2Fauth%2Froutes.ts%23POST%20%2Fapi%2Fauth%2Fverify::src%2Fmodules%2Fauth%2Froutes.ts%23OTP%20attempts%20counter%20%2B%20atomic%20conditional%20DELETE::profile%2Fquick%2Fall-in-scope-subsystems::ATTACK-CLASSES.md%23Access%20control",
+  "canonical_refs": {
+   "surface": "src/modules/auth/routes.ts#POST /api/auth/verify",
+   "boundary": "src/modules/auth/routes.ts#OTP attempts counter + atomic conditional DELETE",
+   "subsystem": "profile/quick/all-in-scope-subsystems",
+   "attack_class": "ATTACK-CLASSES.md#Access control"
+  },
+  "surface": "src/modules/auth/routes.ts#POST /api/auth/verify",
+  "boundary": "src/modules/auth/routes.ts#OTP attempts counter + atomic conditional DELETE",
+  "subsystem": "profile/quick/all-in-scope-subsystems",
+  "attack_class": "ATTACK-CLASSES.md#Access control",
+  "starting_paths": [
+   "src/modules/auth/routes.ts"
+  ],
+  "ordinary_attack_class_block": "ATTACK-CLASSES.md#Access control",
+  "selected_companion_blocks": [
+   "WEB-PROTOCOL-AND-AUTH.md#MFA enrollment and assurance downgrade",
+   "WEB-PROTOCOL-AND-AUTH.md#Step-up binding and bypass",
+   "WEB-PROTOCOL-AND-AUTH.md#Core discipline",
+   "WEB-PROTOCOL-AND-AUTH.md#Universal moves",
+   "WEB-PROTOCOL-AND-AUTH.md#Validation rules"
+  ],
+  "excluded_blocks": [
+   {
+    "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+    "reason": "No native/binary code in the auth scope."
+   },
+   {
+    "block": "AI-AND-LLM.md#Core discipline",
+    "reason": "No LLM interaction in the auth module."
+   },
+   {
+    "block": "PROTOCOLS-RPC-AND-MESSAGING.md#Core discipline",
+    "reason": "No RPC, broker, or queue surface in the auth scope."
+   },
+   {
+    "block": "SUPPLY-CHAIN-AND-RELEASE.md#Core discipline",
+    "reason": "Dependency/CI audit is a separate run, not this scoped pilot."
+   }
+  ],
+  "prior_status": "prior_confirmed_changed_source",
+  "attempts": [],
+  "wave": 1,
+  "status": "candidate",
+  "agent_id": "7307998b-38e7-4f11-be30-0875214d224d",
+  "reviewed_paths": [
+   "src/modules/auth/routes.ts"
+  ],
+  "local_checks": [
+   {
+    "agent_id": "7307998b-38e7-4f11-be30-0875214d224d",
+    "reviewed_paths": [
+     "src/modules/auth/routes.ts"
+    ],
+    "invariant": "Hunter re-ran the run-001 reproduction scenarios against commit 57b5554 and hunted for new defects in the changed code.",
+    "method": "source",
+    "result": "Source review and local reproduction complete; candidates (if any) listed in result_fingerprints.",
+    "artifact": null
+   },
+   {
+    "agent_id": "897ab607-332f-4f2e-b02e-c0f1170d9caf",
+    "reviewed_paths": [
+     "src/modules/auth/routes.ts"
+    ],
+    "invariant": "Independent verifier re-read every cited source location and independently reproduced the decisive local result with a fresh harness.",
+    "method": "source",
+    "result": "Verified auth/lockout-dos-verify-pin-residual as confirmed; see findings.json.",
+    "artifact": null
+   },
+   {
+    "agent_id": "8a254de5-ea25-432d-a8ac-dff543719a04",
+    "reviewed_paths": [
+     "src/modules/auth/routes.ts"
+    ],
+    "invariant": "Independent verifier re-read every cited source location and independently reproduced the decisive local result with a fresh harness.",
+    "method": "source",
+    "result": "Verified auth/rate-limit-kv-race as confirmed; see findings.json.",
+    "artifact": null
+   },
+   {
+    "agent_id": "584b7ef7-805b-454e-9d00-d874f8acbac9",
+    "reviewed_paths": [
+     "src/modules/auth/routes.ts"
+    ],
+    "invariant": "Independent verifier re-read every cited source location and independently reproduced the decisive local result with a fresh harness.",
+    "method": "source",
+    "result": "Verified auth/rate-limit-unknown-ip as confirmed; see findings.json.",
+    "artifact": null
+   }
+  ],
+  "result_fingerprints": [
+   "auth/lockout-dos-verify-pin-residual",
+   "auth/rate-limit-kv-race",
+   "auth/rate-limit-unknown-ip"
+  ],
+  "unresolved": []
+ },
+ {
+  "coverage_id": "src%2Fmodules%2Fauth%2Froutes.ts%23createSession%2FverifySession::src%2Fmodules%2Fauth%2Froutes.ts%23HMAC-SHA256%20session%20token%20with%20SESSION_SECRET::profile%2Fquick%2Fall-in-scope-subsystems::ATTACK-CLASSES.md%23Cryptography%20and%20secrets",
+  "canonical_refs": {
+   "surface": "src/modules/auth/routes.ts#createSession/verifySession",
+   "boundary": "src/modules/auth/routes.ts#HMAC-SHA256 session token with SESSION_SECRET",
+   "subsystem": "profile/quick/all-in-scope-subsystems",
+   "attack_class": "ATTACK-CLASSES.md#Cryptography and secrets"
+  },
+  "surface": "src/modules/auth/routes.ts#createSession/verifySession",
+  "boundary": "src/modules/auth/routes.ts#HMAC-SHA256 session token with SESSION_SECRET",
+  "subsystem": "profile/quick/all-in-scope-subsystems",
+  "attack_class": "ATTACK-CLASSES.md#Cryptography and secrets",
+  "starting_paths": [
+   "src/modules/auth/routes.ts"
+  ],
+  "ordinary_attack_class_block": "ATTACK-CLASSES.md#Cryptography and secrets",
+  "selected_companion_blocks": [
+   "WEB-PROTOCOL-AND-AUTH.md#JWT verification and claim binding",
+   "WEB-PROTOCOL-AND-AUTH.md#Cookie scope and transport",
+   "WEB-PROTOCOL-AND-AUTH.md#Core discipline",
+   "WEB-PROTOCOL-AND-AUTH.md#Universal moves",
+   "WEB-PROTOCOL-AND-AUTH.md#Validation rules"
+  ],
+  "excluded_blocks": [
+   {
+    "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+    "reason": "No native/binary code in the auth scope."
+   },
+   {
+    "block": "AI-AND-LLM.md#Core discipline",
+    "reason": "No LLM interaction in the auth module."
+   },
+   {
+    "block": "PROTOCOLS-RPC-AND-MESSAGING.md#Core discipline",
+    "reason": "No RPC, broker, or queue surface in the auth scope."
+   },
+   {
+    "block": "SUPPLY-CHAIN-AND-RELEASE.md#Core discipline",
+    "reason": "Dependency/CI audit is a separate run, not this scoped pilot."
+   }
+  ],
+  "prior_status": "prior_covered_changed_source",
+  "attempts": [],
+  "wave": 1,
+  "status": "candidate",
+  "agent_id": "7307998b-38e7-4f11-be30-0875214d224d",
+  "reviewed_paths": [
+   "src/modules/auth/routes.ts"
+  ],
+  "local_checks": [
+   {
+    "agent_id": "7307998b-38e7-4f11-be30-0875214d224d",
+    "reviewed_paths": [
+     "src/modules/auth/routes.ts"
+    ],
+    "invariant": "Hunter re-ran the run-001 reproduction scenarios against commit 57b5554 and hunted for new defects in the changed code.",
+    "method": "source",
+    "result": "Source review and local reproduction complete; candidates (if any) listed in result_fingerprints.",
+    "artifact": null
+   },
+   {
+    "agent_id": "aac29457-4ad3-440f-87c5-dfc5f22460f2",
+    "reviewed_paths": [
+     "src/modules/auth/routes.ts"
+    ],
+    "invariant": "Independent verifier re-read every cited source location and independently reproduced the decisive local result with a fresh harness.",
+    "method": "source",
+    "result": "Verified auth/sessver-bump-race as confirmed; see findings.json.",
+    "artifact": null
+   },
+   {
+    "agent_id": "567f49e8-4073-4b99-994a-0f5ee843368f",
+    "reviewed_paths": [
+     "src/modules/auth/routes.ts"
+    ],
+    "invariant": "Independent verifier re-read every cited source location and independently reproduced the decisive local result with a fresh harness.",
+    "method": "source",
+    "result": "Verified auth/sessver-fail-open as confirmed; see findings.json.",
+    "artifact": null
+   }
+  ],
+  "result_fingerprints": [
+   "auth/sessver-bump-race",
+   "auth/sessver-fail-open"
+  ],
+  "unresolved": []
+ }
+]
