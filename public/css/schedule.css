@@ -1,3 +1,4 @@
+/* 일정 페이지 전용 스타일 — 파일 길이 규칙(500줄)을 위해 schedule.html의 <style>에서 추출 (2026-11-01) */
   /* 2026 미니멀 — Linear/Notion 스타일 */
   :root {
     --ink: #171717;
@@ -16,18 +17,16 @@
   .lucide { width: 16px; height: 16px; stroke-width: 2; flex-shrink: 0; }
   button .lucide { pointer-events: none; }
 
-  .wrap { max-width: 720px; margin: 0 auto; padding: 0 24px 80px; }
+  .wrap { max-width: 720px; margin: 0 auto; padding: 24px 24px 80px; }
   @media (min-width: 900px) {
-    .wrap { max-width: 1200px; padding: 0 40px 80px; }
+    .wrap { max-width: 1200px; padding: 24px 40px 80px; }
   }
-  @media (min-width: 1400px) {
-    .wrap { max-width: 1400px; }
+  @media (min-width: 1024px) {
+    /* 유연 레이아웃: 고정 max-width를 버려 큰 화면에서 창 전체를 쓴다 (메모 구조 차용).
+       달력 격자는 cal-layout의 1fr 열이, 상세 그리드가 창 폭에 맞게 늘어난다. */
+    .wrap { max-width: none; }
   }
 
-  /* 헤더 */
-  .page-head { display: flex; align-items: baseline; padding: 28px 0 20px; }
-  .page-head h1 { font-size: 20px; font-weight: 650; letter-spacing: -0.3px; }
-  .page-head .spacer { flex: 1; }
   .icon-btn {
     background: none; border: none; color: var(--faint); cursor: pointer;
     width: 32px; height: 32px; display: inline-flex; align-items: center; justify-content: center;
@@ -36,10 +35,10 @@
   .icon-btn:hover { background: var(--bg-hover); color: var(--ink); }
   .icon-btn .lucide { width: 18px; height: 18px; }
 
-  /* 월 네비게이션 — 미니멀 */
+  /* 상단 네비게이션 — 미니멀 */
   #pushBtn.active { color: var(--ink); }
   #pushBtn.active .lucide { fill: currentColor; }
-  .cal-nav { display: flex; align-items: center; gap: 4px; margin-bottom: 16px; }
+  .cal-nav { display: flex; align-items: center; gap: 4px; margin-bottom: 16px; flex-wrap: wrap; row-gap: 8px; }
   .cal-nav h2 { font-size: 15px; font-weight: 650; letter-spacing: -0.2px; margin: 0 8px; min-width: 110px; text-align: center; }
   .cal-nav .spacer { flex: 1; }
   .cal-nav .today-btn { border: 1px solid var(--line); border-radius: 16px; padding: 6px 14px; font-size: 13px; font-weight: 600; background: #fff; }
@@ -54,29 +53,44 @@
   .nav-btn:hover { background: var(--bg-hover); color: var(--ink); }
   .nav-btn .lucide { width: 15px; height: 15px; }
 
-  /* 푸시 알림 설정 — 2026 미니멀 */
-  .push-row { display: flex; align-items: center; gap: 12px; padding: 12px 4px; border-bottom: 1px solid var(--line); margin-bottom: 16px; }
+  /* 뷰 전환 (월/주/일) — 세그먼트 컨트롤 */
+  .view-switch { display: inline-flex; border: 1px solid var(--line); border-radius: 16px; padding: 2px; gap: 2px; background: #fff; margin-right: 8px; }
+  .vs-btn {
+    border: none; background: none; padding: 4px 13px; font-size: 13px; font-weight: 600;
+    color: var(--gray); border-radius: 14px; cursor: pointer; font-family: inherit; transition: all 0.15s;
+  }
+  .vs-btn:hover { color: var(--ink); }
+  .vs-btn.active { background: var(--ink); color: #fff; }
 
-  /* Google 연동 — 일정 화면 상단 (OAuth 콜백 복귀 지점) */
-  .google-row { display: flex; align-items: center; gap: 12px; padding: 12px 4px; border-bottom: 1px solid var(--line); margin-bottom: 16px; }
-  .google-info { flex: 1; min-width: 0; }
-  .google-title { font-size: 14px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
-  .google-title .lucide { width: 15px; height: 15px; color: var(--gray); }
-  .google-status { font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 999px; background: #f0f0f0; color: var(--gray); }
-  .google-status[data-state="connected"] { background: var(--accent-soft); color: var(--accent); }
-  .google-status[data-state="unknown"] { background: #fef3c7; color: #92400e; }
-  .google-desc { font-size: 12px; color: var(--faint); margin-top: 2px; line-height: 1.5; }
-  .google-row .m-btn { flex: none; }
-  .push-info { flex: 1; min-width: 0; }
-  .push-title { font-size: 14px; font-weight: 600; }
-  .push-desc { font-size: 12px; color: var(--faint); margin-top: 2px; line-height: 1.5; }
-  .switch { width: 44px; height: 26px; border-radius: 13px; background: #e2e2e2; border: none; cursor: pointer; position: relative; transition: background 0.2s; flex: none; padding: 0; }
-  .switch .knob { position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.25); transition: left 0.2s; }
-  .switch[aria-checked="true"] { background: var(--ink); }
-  .switch[aria-checked="true"] .knob { left: 21px; }
-  .switch:disabled { opacity: 0.45; cursor: default; }
+  /* 주 뷰 — 7열 그리드 */
+  .week-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); border-top: 1px solid var(--line); border-left: 1px solid var(--line); }
+  .wk-col {
+    min-height: 190px; padding: 8px 6px; cursor: pointer; background: #fff;
+    border-right: 1px solid var(--line); border-bottom: 1px solid var(--line);
+    transition: background 0.12s;
+  }
+  .wk-col:hover { background: var(--bg-hover); }
+  .wk-col.selected { background: var(--accent-soft); }
+  .wk-head { text-align: center; margin-bottom: 4px; cursor: pointer; }
+  .wk-dow { font-size: 11px; font-weight: 600; color: var(--faint); letter-spacing: 0.4px; margin-bottom: 2px; }
+  .wk-col.sun .wk-dow, .wk-col.sun .dnum { color: var(--danger); }
+  .wk-col.sat .wk-dow, .wk-col.sat .dnum { color: #2563eb; }
+  .wk-col.today .dnum { background: var(--ink); color: #fff; border-radius: 50%; font-weight: 650; }
+  .wk-col.today.sun .dnum { background: var(--danger); }
+  .wk-ev {
+    background: var(--bg-hover); border-radius: 6px; padding: 5px 6px; margin-top: 4px;
+    font-size: 11.5px; line-height: 1.35; cursor: pointer; word-break: break-word;
+  }
+  .wk-ev:hover { background: #ececec; }
+  .wk-time { display: block; font-size: 10.5px; color: var(--faint); font-variant-numeric: tabular-nums; }
+  .wk-more { font-size: 11px; color: var(--faint); margin-top: 4px; padding: 2px 6px; }
 
-  /* 캘린더 — 선만 있는 그리드 */
+  /* 일 뷰 — 선택일 상세 목록 (패널과 같은 행 계약 + 설명 표시) */
+  .day-view { border-top: 1px solid var(--line); }
+  .s-desc { font-size: 12.5px; color: var(--gray); margin-top: 2px; white-space: pre-wrap; word-break: break-word; }
+  .cal-layout.mode-day .day-sec { display: none; }
+
+  /* 캘린더 — 날짜 있는 그리드 */
   .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); border-top: 1px solid var(--line); border-left: 1px solid var(--line); }
   .cal-dow {
     text-align: center; font-size: 11px; font-weight: 600; color: var(--faint);
@@ -118,6 +132,7 @@
   .cal-layout { display: block; }
   @media (min-width: 900px) {
     .cal-layout { display: grid; grid-template-columns: 1fr 380px; gap: 48px; align-items: start; }
+    .cal-layout.mode-day { grid-template-columns: 1fr; }
     .day-sec { margin-top: 0; position: sticky; top: 76px; max-height: calc(100dvh - 100px); overflow-y: auto; }
     .cal-grid { font-size: 15px; }
     .cal-grid .cell { min-height: 88px; padding: 10px; }
@@ -184,19 +199,24 @@
   .m-btn.text-danger:hover { background: #fef2f2; }
 
   @media (max-width: 640px) {
-    .wrap { padding: 0 16px 80px; }
-    .page-head { padding: 20px 0 16px; }
+    .wrap { padding: 20px 16px 80px; }
     .cal-cell { min-height: 58px; padding: 6px 4px; }
     .dnum { font-size: 12px; width: 24px; height: 24px; }
     .ev-label { display: none; }
     .s-time { min-width: 64px; font-size: 12px; }
     .modal { border-radius: 16px 16px 0 0; max-width: none; max-height: 85dvh; }
     .modal-back { align-items: flex-end; padding: 0; }
+    .wk-col { min-height: 128px; padding: 6px 3px; }
+    .wk-ev { font-size: 10.5px; padding: 4px; }
+    .wk-time { display: none; }
+    .wk-head .dnum { width: 22px; height: 22px; font-size: 12px; }
+    .view-switch { margin-right: 4px; }
+    .vs-btn { padding: 4px 10px; }
   }
   /* 커스텀 확인 모달 */
-  .confirm-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.4); display: flex; align-items: center; justify-content: center; z-index: 1000; }
-  .confirm-modal { background: #fff; border-radius: 12px; padding: 24px; max-width: 320px; width: 90%; box-shadow: 0 8px 32px rgba(0,0,0,0.2); }
-  .confirm-modal p { margin: 0 0 20px; font-size: 15px; }
-  .confirm-btns { display: flex; gap: 8px; justify-content: flex-end; }
-  .confirm-btns button { padding: 8px 16px; border-radius: 8px; border: 1px solid #ddd; background: #fff; cursor: pointer; }
-  .confirm-btns .danger { background: #dc2626; color: #fff; border-color: #dc2626; }
+  .sched-confirm-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.4); display: flex; align-items: center; justify-content: center; z-index: 1000; }
+  .sched-confirm-modal { background: #fff; border-radius: 12px; padding: 24px; max-width: 320px; width: 90%; box-shadow: 0 8px 32px rgba(0,0,0,0.2); }
+  .sched-confirm-modal p { margin: 0 0 20px; font-size: 15px; }
+  .sched-confirm-btns { display: flex; gap: 8px; justify-content: flex-end; }
+  .sched-confirm-btns button { padding: 8px 16px; border-radius: 8px; border: 1px solid #ddd; background: #fff; cursor: pointer; }
+  .sched-confirm-btns .danger { background: #dc2626; color: #fff; border-color: #dc2626; }

@@ -103,7 +103,9 @@ export function registerMemoFileRoutes(memoApp: Hono<{ Bindings: Env }>): void {
 
   memoApp.post('/:id/files', async (c) => {
     const memoId = Number(c.req.param('id'))
-    const body = await c.req.parseBody()
+    // all: 같은 'files' 필드의 다중 파일을 배열로 받아야 한다 — 기본 파싱은
+    // 마지막 값만 남겨 먼저 온 파일이 조용히 버려진다.
+    const body = await c.req.parseBody({ all: true })
     const f = body['files']
     const arr = Array.isArray(f) ? f : f ? [f] : []
     const uploadFiles = arr.filter((x): x is File => x instanceof File)

@@ -72,10 +72,33 @@
   </div>
 </div>
 
+<div id="officePicker" class="office-picker-backdrop" hidden>
+  <div class="office-picker" role="dialog" aria-modal="true" aria-labelledby="officePickerTitle">
+    <div class="office-picker-head">
+      <strong id="officePickerTitle">파일 열기</strong>
+      <button type="button" id="officePickerClose" aria-label="닫기"><i data-lucide="x"></i></button>
+    </div>
+    <nav class="office-picker-crumb" id="officeCrumb" aria-label="폴더 경로"></nav>
+    <div class="office-picker-list" id="officePickList"></div>
+    <div class="office-picker-save" id="officeSaveRow" hidden>
+      <label for="officeSaveName">이름</label>
+      <input type="text" id="officeSaveName" autocomplete="off">
+    </div>
+    <p class="office-picker-status" id="officePickerStatus"></p>
+    <div class="office-picker-foot">
+      <button type="button" id="officePickImport" class="office-ghost-btn office-pick-import" hidden>이 기계에서 가져오기</button>
+      <button type="button" id="officePickCancel" class="office-ghost-btn">취소</button>
+      <button type="button" id="officePickConfirm" class="office-primary-btn">열기</button>
+    </div>
+  </div>
+</div>
+
 <input type="file" id="finderFileInput" multiple hidden>
 
 <script src="/nav.js"></script>
 <script src="/js/file-icons.js"></script>
+<script src="/js/asset-url.js"></script>
+<script src="/js/finder-codec.js"></script>
 <script src="/js/finder-viewer.js"></script>
 <script src="/js/finder-format-text.js"></script>
 <script src="/js/finder-format-hwp.js"></script>

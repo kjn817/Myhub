@@ -29,7 +29,10 @@ const PW_STOP_WORDS = new Set([
 ]);
 const PW_GUIDANCE_NOUN_RE = /^(안전|보안|관리|보호|변경|설정|입력|확인|재설정|정책|절차|방법|안내|문의|관련|주의|경고)/;
 const PW_GUIDANCE_VERB_RE = /^\s*(관리|보관|보호|변경|설정|입력|확인|사용|저장|공유|노출|유출|삭제|갱신)/;
-const PW_KEYWORD_RE = /(?:비밀번호|패스워드|password|passwd|pwd)\s*(?:은|는|:|=|is)?\s*/gi;
+// 표 스캔의 라벨 접미사(확인·번호 등)와 구어 라벨(비번·pw)까지가 값
+// 경계다 — 엔진 본 규칙과 같은 키워드 계열을 유지한다.
+const PW_KEYWORD_RE =
+  /(?:비밀번호|패스워드|비번|password|passwd|pwd|pw)(?:\s*(?:재확인|확인|입력|란|필드|번호|값|confirm|check|field))?["']?\s*(?:은|는|:|=|is)?\s*/gi;
 
 export function passwordValueOk(v: string, ctx: string): boolean {
   const value = v.trim();
@@ -54,8 +57,8 @@ export function scanSpacedPassword(text: string): PrivacySpan[] {
     const accepted: Array<{ start: number; end: number; core: string }> = [];
     let prevEnd = pos;
     let t: RegExpExecArray | null;
-    while ((t = tokRe.exec(text)) !== null && accepted.length < 8) {
-      if (!/^[ \t]*$/.test(text.slice(prevEnd, t.index))) break;
+    while ((t = tokRe.exec(text)) !== null && accepted.length < 32) {
+      if (!/^\s*$/.test(text.slice(prevEnd, t.index))) break;
       const raw = t[0];
       if (/[가-힣ㄱ-ㅎㅏ-ㅣ]/.test(raw)) break;
       if (/['"`]/.test(raw)) break;

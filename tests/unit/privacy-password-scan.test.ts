@@ -69,8 +69,11 @@ describe('scanSpacedPassword', () => {
     expect(scanSpacedPassword("비밀번호: ab 'cd12' ef")).toEqual([])
   })
 
-  test('토큰 사이가 공백이 아니면(줄바꿈) 연결이 끊긴다', () => {
-    expect(scanSpacedPassword('비밀번호: ab\ncd12')).toEqual([])
+  test('토큰 사이의 줄바꿈도 공백으로 취급해 연결이 유지된다 (2026-11-09 누출 사냥에서 계약 변경)', () => {
+    const text = '비밀번호: ab\ncd12'
+    const out = scanSpacedPassword(text)
+    expect(out).toHaveLength(1)
+    expect(text.slice(out[0].start, out[0].end)).toBe('ab\ncd12')
   })
 
   test('끝의 문장부호는 구간에서 제외된다', () => {
@@ -80,11 +83,12 @@ describe('scanSpacedPassword', () => {
     expect(text.slice(out[0].start, out[0].end)).toBe('ab, cd12')
   })
 
-  test('토큰은 최대 8개까지만 하나의 구간으로 묶는다', () => {
-    const text = '비밀번호: a1 b2 c3 d4 e5 f6 g7 h8 i9'
+  test('토큰은 최대 32개까지만 하나의 구간으로 묶는다 (상한 8→32, 2026-11-09 누출 사냥에서 계약 변경)', () => {
+    const toks = Array.from({ length: 33 }, (_, i) => `t${i}`)
+    const text = `비밀번호: ${toks.join(' ')}`
     const out = scanSpacedPassword(text)
     expect(out).toHaveLength(1)
-    expect(text.slice(out[0].start, out[0].end)).toBe('a1 b2 c3 d4 e5 f6 g7 h8')
+    expect(text.slice(out[0].start, out[0].end)).toBe(toks.slice(0, 32).join(' '))
   })
 
   test('합쳐도 4자 미만이면 잡지 않는다', () => {

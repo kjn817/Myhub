@@ -182,7 +182,7 @@ export async function inspectEgressKorean(input: InspectEgressKoreanInput): Prom
       if (hasLockedMarker(content)) continue;
       const judged = judgeKorean(content, {
         sensitiveSource: sensitive,
-        ...(!input.clefInvoke && input.messages[mi].role !== 'system' ? { maxCandidates: EGRESS_JUDGE_MAX_CANDIDATES } : {}),
+        ...(input.messages[mi].role !== 'system' ? { maxCandidates: EGRESS_JUDGE_MAX_CANDIDATES } : {}),
       });
       relationSignal = relationSignal || judged.relationSignal;
       if (judged.overflow > 0 && input.mode === 'enforce' && sensitive) {
@@ -193,7 +193,12 @@ export async function inspectEgressKorean(input: InspectEgressKoreanInput): Prom
         }
       }
       if (input.clefInvoke) {
-        const { candidates } = extractCandidates(content);
+        // 휴리스틱 경로와 같은 상한을 써야 한다 — 기본 상한(8)에 걸린
+        // 후보는 Clef 판정 자체를 받지 못해 enforce에서도 새어 나간다.
+        const { candidates } = extractCandidates(
+          content,
+          input.messages[mi].role !== 'system' ? { maxCandidates: EGRESS_JUDGE_MAX_CANDIDATES } : undefined,
+        );
         if (candidates.length > 0) {
           const scored = await classifyWithClef(input.clefInvoke, content, candidates);
           const findings: PrivacyFinding[] = [];

@@ -39,7 +39,7 @@
         return;
       }
       el.innerHTML = traces.map((t) => `
-        <div class="trace-item" onclick="openTrace('${esc(t.traceId)}')">
+        <div class="trace-item" data-trace-id="${esc(t.traceId)}">
           <div class="top"><span class="dot ${t.hasError ? 'error' : 'ok'}"></span><span class="id">${esc(shortId(t.traceId))}</span></div>
           <div class="meta">${esc(fmtTime(t.startedAt))} · 스팬 ${t.spanCount}개 · ${esc(fmtMs(t.totalMs))}${t.hasError ? ' · 오류 있음' : ''}</div>
         </div>`).join('');
@@ -51,7 +51,9 @@
   async function openTrace(traceId) {
     document.getElementById('list-view').style.display = 'none';
     const detail = document.getElementById('detail-view');
-    detail.style.display = '';
+    // 상세 보기의 초기 화면 CSS 규칙(#detail-view)에 해당하므로,
+    // 보일 때는 인라인 값을 명시해야 한다 (''로 비우면 규칙으로 되돌아간다).
+    detail.style.display = 'block';
     document.getElementById('detail-id').textContent = traceId;
     const tl = document.getElementById('timeline');
     tl.innerHTML = '<div class="empty">불러오는 중…</div>';
@@ -99,14 +101,15 @@
     document.getElementById('list-view').style.display = '';
   }
 
-  window.loadTraces = loadTraces;
-  window.openTrace = openTrace;
-  window.showList = showList;
+  // 배선은 전부 addEventListener로 건다 (CSP script-src-attr 'none' 전제,
+  // 2026-11-01 파일). 분리 목록 항목 innerHTML클릭은 로다시 그려지므로
+  // 항목마다 핸들러를 붙이지 않고 컨테이너에 위임한다.
+  document.getElementById('refreshBtn').addEventListener('click', loadTraces);
+  document.getElementById('backBtn').addEventListener('click', showList);
+  document.getElementById('trace-list').addEventListener('click', (e) => {
+    const item = e.target && e.target.closest ? e.target.closest('.trace-item') : null;
+    if (item) openTrace(item.dataset.traceId);
+  });
 
   loadTraces();
-  // 버튼 배선 — TRACE_CSP script-src-attr 'none'이라 인라인 onclick 불가.
-  var refreshBtn = document.getElementById('traceRefreshBtn');
-  if (refreshBtn) refreshBtn.addEventListener('click', loadTraces);
-  var backBtn = document.getElementById('traceBackBtn');
-  if (backBtn) backBtn.addEventListener('click', showList);
 })();

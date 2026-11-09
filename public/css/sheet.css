@@ -1,12 +1,93 @@
-  html, body { height: 100%; }
-  body { margin: 0; display: flex; flex-direction: column; }
-  #sheetBanner {
-    display: none; padding: 8px 14px; font-size: 12.5px;
-    color: #92400e; background: #fffbeb; border-bottom: 1px solid rgba(0,0,0,.06);
-  }
-  #sheetVeil {
-    display: none; padding: 6px 14px; font-size: 12px; color: #52525b; background: #f4f4f5;
-  }
-  #sheetEngine { flex: 1; width: 100%; border: 0; }
-  #sheetFail { display: none; padding: 48px 20px; text-align: center; color: #52525b; font-size: 14px; }
-  #sheetFail a { color: #2563eb; }
+/* 시트 편집 페이지(sheet.html) 전용 스타일 — fortune.css 위에 얹는 오버라이드 */
+html, body { height: 100%; margin: 0; }
+body { font-family: 'Pretendard', -apple-system, 'Segoe UI', sans-serif; }
+#sheetApp, .sheet-shell { height: 100%; }
+.sheet-shell { display: flex; flex-direction: column; }
+.sheet-editor { position: relative; flex: 1; min-height: 0; }
+.sheet-banner {
+  padding: 10px 14px;
+  background: #fff4e0;
+  color: #7a4b00;
+  font-size: 13px;
+  line-height: 1.5;
+  border-bottom: 1px solid rgba(122, 75, 0, 0.18);
+}
+.sheet-banner p { margin: 0 0 4px; }
+.sheet-banner p:last-of-type { margin-bottom: 0; }
+.sheet-banner-btn {
+  margin-top: 8px;
+  padding: 6px 12px;
+  border: 1px solid rgba(122, 75, 0, 0.4);
+  border-radius: 8px;
+  background: #ffffff;
+  color: #7a4b00;
+  font: 600 13px inherit;
+  cursor: pointer;
+}
+/* 단일 화면 접기: 접힌 화면에서는 리본+수식바 영역을 숨겨
+   문서(그리드)만 넓어진다 (부모 뷰어의 접기와 연동) */
+.sheet-shell-folded .fortune-workarea { display: none; }
+
+/* [파일] 메뉴 줄 (오피스 화면 전용 — fileMenu일 때만 렌더된다).
+   열기·닫기 등 메뉴 안에만, 접기 토글은 줄의 가장 우측 끝에
+   셰브론으로 잡고 끌기가 그 앞에 온다. 접힌 상태에서는 이 줄이 팬다. */
+.sheet-menurow {
+  display: flex; align-items: center; gap: 2px;
+  padding: 3px 8px;
+  background: #fff;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+  flex: none;
+}
+.sheet-filemenu { position: relative; }
+.sheet-filemenu-btn {
+  padding: 4px 10px; border: none; border-radius: 6px; background: none;
+  font: 500 13px inherit; color: #1f2937; cursor: pointer;
+}
+.sheet-filemenu-btn:hover { background: rgba(15, 23, 42, 0.06); }
+.sheet-filemenu-drop {
+  position: absolute; top: calc(100% + 4px); left: 0; z-index: 80;
+  min-width: 148px; padding: 4px;
+  background: #fff; border: 1px solid rgba(15, 23, 42, 0.12); border-radius: 10px;
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.16);
+  display: flex; flex-direction: column;
+}
+/* display를 준 요소는 hidden 속성을 UA 규칙만으로 못 이긴다 — 접힌
+   요소에는 반드시 이 규칙이 필요하다
+   (2026-11-03 운영 실측: [파일] 메뉴가 열리지 않던 사고). */
+.sheet-filemenu-drop[hidden] { display: none; }
+.sheet-menurow[hidden] { display: none; }
+.sheet-filemenu-drop button {
+  padding: 7px 10px; border: none; border-radius: 6px; background: none;
+  font: 13px inherit; color: #1f2937; text-align: left; cursor: pointer;
+}
+.sheet-filemenu-drop button:hover { background: rgba(77, 171, 247, 0.14); }
+.sheet-fold-btn, .sheet-close-btn {
+  width: 26px; height: 26px; flex: none;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: none; border-radius: 6px; background: none;
+  color: #6b7280; font-size: 13px; cursor: pointer;
+}
+.sheet-fold-btn:hover, .sheet-close-btn:hover { background: rgba(15, 23, 42, 0.06); color: #1f2937; }
+.sheet-chevron {
+  display: inline-block; width: 7px; height: 7px; pointer-events: none;
+  border-right: 1.7px solid currentColor; border-bottom: 1.7px solid currentColor;
+}
+.sheet-chevron-up { transform: rotate(-135deg); margin-top: 4px; }
+.sheet-chevron-down { transform: rotate(45deg); margin-bottom: 4px; }
+.sheet-menurow-spacer { flex: 1 1 auto; }
+.sheet-readonly-veil {
+  position: absolute;
+  inset: 0;
+  z-index: 50;
+  background: transparent;
+  cursor: not-allowed;
+}
+
+/* GridCraft 화면 (sheet.html): 엔진 iframe과 로딩·대기 오버레이 */
+.sheet-gc-frame { width: 100%; height: 100%; border: 0; display: block; }
+.sheet-gc-loading {
+  position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  color: #64748b; font-size: 13px; background: #f8fafc;
+}
+.sheet-gc-loading[hidden] { display: none; }

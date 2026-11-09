@@ -43,6 +43,32 @@ function editComposerTitle() {
 $('composerTitleLabel').addEventListener('click', editComposerTitle);
 composerEditor.chipsBox = $('pending');
 
+/* 잠금 지정 (I-03): 새 메모를 만들기 전에 잠금 단계(메모 잠금·민감도)를
+   고정 해 넣을 컴포넌트 코드 레벨 넣는 "잠금" 메뉴를 단다. 거기서는
+   선택만 남기고, 실제 적용은 생성 직후 applyMemoLockSettings가
+   기존 lock/sensitivity API로 수행한다 (생성 API에는 잠금 파라미터가
+   없다). 편집 모드(pane)는 잠금 버튼과는 별개 상태로 충돌하지 않는다. */
+let composerLockState = { locked: false, sensitivity: 1 };
+let composerLockMenuEl = null;
+function mountComposerLockMenu() {
+  const slot = $('composerLockSlot');
+  if (!slot || typeof buildMemoLockMenu !== 'function') return;
+  composerLockMenuEl = buildMemoLockMenu({
+    state: composerLockState,
+    onChange: async (next) => { composerLockState = { locked: next.locked, sensitivity: next.sensitivity }; return true; },
+  });
+  slot.innerHTML = '';
+  slot.appendChild(composerLockMenuEl);
+  refreshIcons();
+}
+function resetComposerLockMenu() {
+  composerLockState = { locked: false, sensitivity: 1 };
+  if (composerLockMenuEl && composerLockMenuEl._setMemoLockState) {
+    composerLockMenuEl._setMemoLockState(composerLockState);
+  }
+}
+mountComposerLockMenu();
+
 $('files').addEventListener('change', (e) => { handleEditorFiles(composerEditor, e.target.files); e.target.value = ''; });
 composerEditor.el.addEventListener('keydown', (e) => {
   if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); $('add').click(); }
@@ -83,7 +109,7 @@ async function uploadPendings(memoId, pendings) {
       out.push(res.files && res.files[0] ? res.files[0] : null);
       if (!res.files || !res.files[0]) {
         console.error('upload returned no files:', res);
-        toast('파일 업로드 실패: ' + (res.error || f.name), 5000);
+        toast('파일 업로드 실패: ' + (res.error ? friendlyError(res, '잠시 후 다시 시도해 주세요.') : f.name), 5000);
       }
     } catch (e) {
       console.error('upload failed:', f && f.name, e);
@@ -190,17 +216,24 @@ $('add').addEventListener('click', async () => {
         renderComposerTitle();
         if (typeof loadMemos === 'function') loadMemos();
       } else {
-        alert('저장 실패: ' + (updateRes.error || 'unknown'));
+        toast('저장 실패: ' + friendlyError(updateRes, '잠시 후 다시 시도해 주세요.'));
       }
       btn.disabled = false;
       return;
     }
     // 1) 메모 먼저 생성 (이미지는 pending 마커)
-    const created = await fetch('/api/memo', {
+    // 생성 실패(HTTP 오류·{ok:false}·빈SON 응답)면 성공 경로를 초기화
+    // 만들지 않으면 빈 고장만 생기고 입력 내용을 그대로 날린다 (깨진 파일 방지).
+    const createRes = await fetch('/api/memo', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ text: markdown }),
-    }).then(r => r.json());
+    });
+    const created = await createRes.json().catch(() => null);
+    if (!createRes.ok || !created || created.ok === false || !created.id) {
+      toast('저장 실패: ' + friendlyError((created && created.error) ? created : { status: createRes.status }, '잠시 후 다시 시도해 주세요.'));
+      return;
+    }
     // 2) 인라인 이미지 업로드 후 마커를 file:ID로 치환
     if (pendings.length) {
       const files = await uploadPendings(created.id, pendings);
@@ -215,8 +248,17 @@ $('add').addEventListener('click', async () => {
     if (composerEditor.otherFiles.length) {
       await uploadPendings(created.id, composerEditor.otherFiles);
     }
+    // 4) 잠금 지정 적용 (I-03): 본문·파일 저장이 모두 끝난 뒤에 건다.
+    //    먼저 올리면 위의 본문 PUT은 step-up 게이트에 걸리기 때문이다.
+    //    실패해도 메모 자체는 저장된 상태이고, 다시 열고 초기화
+    //    진행한다 (사용자는 보여줄 모드 잠금 메뉴에서 다시 걸 수 있다).
+    const lockApply = await applyMemoLockSettings(created.id, composerLockState);
+    if (!lockApply.ok) {
+      toast('메모는 만들어졌지만 잠금 설정이 실패했어요. 메모를 열어 잠금 메뉴에서 다시 설정해주세요.', 5000);
+    }
     // 초기화
     composerTitle = '';
+    resetComposerLockMenu();
     renderComposerTitle();
     composerEditor.el.innerHTML = '';
     composerEditor.blobMap.clear();
@@ -229,6 +271,10 @@ $('add').addEventListener('click', async () => {
     await load();
     renderCal();
     if (isDesktop() && created && created.id) selectMemo(created.id);
+  } catch (e) {
+    // 네트워크 오류·빈SON 응답 파싱 실패 등 은 unhandled rejection으로
+    // 나가지 않고 편집 경로와 같은 방식으로 고정한다 (입력은 유지).
+    toast('저장 실패: ' + friendlyError(e, '잠시 후 다시 시도해 주세요.'));
   } finally {
     btn.disabled = false;
   }

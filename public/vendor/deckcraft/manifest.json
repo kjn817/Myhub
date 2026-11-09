@@ -1,0 +1,15 @@
+{
+  "app": "deckcraft",
+  "entry": "index.html",
+  "html": "index.html",
+  "js": "deckcraft-web-8ae1e3433627f177.js",
+  "wasm": "deckcraft-web-8ae1e3433627f177_bg.wasm",
+  "wasmBytes": 21565556,
+  "files": [
+    "deckcraft-b8fcbb36ecec0385.ico",
+    "deckcraft-web-8ae1e3433627f177.js",
+    "deckcraft-web-8ae1e3433627f177_bg.wasm",
+    "index.html",
+    "snippets/eframe-d31a8450ea12dfc1/inline0.js"
+  ]
+}

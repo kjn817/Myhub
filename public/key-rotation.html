@@ -34,6 +34,11 @@
       <input type="password" id="newKey" placeholder="비밀번호 관리자에서 만든 새 키 값" autocomplete="off">
     </div>
 
+    <div class="field">
+      <label for="newKeyConfirm">새 키 값 확인 (다시 입력)</label>
+      <input type="password" id="newKeyConfirm" placeholder="같은 값을 한 번 더 입력하세요 — 두 입력이 일치해야만 진행됩니다" autocomplete="off">
+    </div>
+
     <table class="census" id="censusTable">
       <thead><tr><th>항목</th><th>기준 건수</th><th>dry-run 건수</th><th>대조</th></tr></thead>
       <tbody id="censusBody"></tbody>
@@ -51,10 +56,17 @@
         <li><strong>MEMO_ENCRYPTION_KEY</strong>를 편집해, 방금 입력한 새 키 값으로 교체하고 Deploy</li>
         <li>교체 후 확인: 메모 화면에서 잠긴 메모 1건을 열어(PIN step-up) 본문이 보이는지, Google 연동 상태가 정상인지 확인</li>
       </ol>
+      <strong>교체가 늦어지면 — 상태와 알아채는 법</strong>
+      <ul>
+        <li>현재 상태는 <strong>「전환 완료 · 시크릿 교체 대기」</strong>입니다. 교체가 몇 시간·며칠 늦어져도 암호문 데이터 자체가 깨지지는 않습니다 — 저장된 암호문은 그대로 있고, 교체만 마치면 다시 열립니다.</li>
+        <li>다만 교체 전까지 전환된 잠긴 메모·첨부는 열리지 않고 Google 연동도 끊겨 보입니다. 잠긴 메모를 열었을 때 본문 대신 복호화 오류가 보이면, 교체가 아직 안 됐거나 대시보드 값이 다르다는 신호입니다.</li>
+        <li>교체 대기 중에는 <strong>새 잠긴 메모를 만들지 마세요.</strong> 아직 구 키를 가진 Worker가 새 잠긴 메모를 구 키로 암호화하면 상태가 섞여 복구가 복잡해집니다.</li>
+      </ul>
       <strong>문제가 생기면</strong>
       <ul>
-        <li>건수가 기준과 다르면 실행 버튼이 자동으로 막힙니다. 화면의 건수만 Claude에 알려주세요.</li>
-        <li>대시보드 교체 후에도 잠긴 메모가 열리지 않으면, 값을 다시 바꾸지 말고 Claude에 알려주세요.</li>
+        <li>건수가 기준과 다르면 실행 버튼이 자동으로 막힙니다. 화면의 건수만 Claude에 알려주세요. 키 값은 채팅에 붙여넣지 마세요.</li>
+        <li>대시보드 교체가 실패했거나 Deploy가 늦어지면, 위의 「교체 대기」 상태가 계속될 뿐 데이터가 더 망가지지는 않습니다. 대시보드에서 교체·Deploy를 다시 완료하면 됩니다.</li>
+        <li>교체 후에도 잠긴 메모가 열리지 않으면: ① 먼저 비밀번호 관리자의 값과 대시보드 값이 완전히 같은지 대조하세요 (앞뒤 공백·줄바꿈 포함 — 붙여넣기 실수가 가장 흔한 원인입니다). 틀렸으면 같은 값으로 다시 저장·Deploy하세요. ② 값이 같은데도 열리지 않으면, <strong>값을 더 바꾸지 말고</strong> 즉시 Claude에 알려주세요. 롤백(<code>POST /api/key-rotation/rollback</code>)은 임의로 실행하지 말고 Claude와 함께 <code>docs/backup-restore.md</code> §6.1 절차로만 진행합니다 — 잘못된 값으로 롤백하면 암호문이 그 값으로 다시 암호화돼 복구가 더 어려워집니다.</li>
       </ul>
     </div>
   </div>

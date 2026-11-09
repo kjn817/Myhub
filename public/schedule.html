@@ -26,11 +26,6 @@
 
 <div class="g-main">
 <div class="wrap">
-  <div class="page-head">
-    <h1>일정</h1>
-    <span class="spacer"></span>
-  </div>
-
   <div class="google-row" id="googleRow">
     <div class="google-info">
       <div class="google-title"><i data-lucide="link"></i>Google 연동 <span class="google-status" id="googleStatusLabel" data-state="unknown">확인 중…</span></div>
@@ -47,9 +42,16 @@
         <h2 id="calTitle"></h2>
         <button class="nav-btn" id="nextM" aria-label="다음 달"><i data-lucide="chevron-right"></i></button>
         <span class="spacer"></span>
+        <div class="view-switch" role="group" aria-label="보기 전환">
+          <button class="vs-btn" type="button" data-view="month">월</button>
+          <button class="vs-btn" type="button" data-view="week">주</button>
+          <button class="vs-btn" type="button" data-view="day">일</button>
+        </div>
         <button class="nav-btn today-btn" id="todayBtn">오늘</button>
       </div>
       <div class="cal-grid" id="calGrid"></div>
+      <div class="week-grid" id="weekGrid" style="display:none;"></div>
+      <div class="day-view" id="dayView" style="display:none;"></div>
     </div>
     <div class="day-sec">
       <h3 id="dayTitle"></h3>
@@ -62,6 +64,7 @@
 <div class="modal-back" id="modalBack">
   <div class="modal">
     <h3 id="modalTitle">일정 추가</h3>
+    <div id="modalNotice" class="modal-notice" hidden></div>
     <input type="hidden" id="fId">
     <div class="fld"><label>제목</label><input id="fTitle" type="text" maxlength="200" placeholder="일정 제목"></div>
     <div class="fld-row">

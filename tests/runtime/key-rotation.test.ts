@@ -141,8 +141,11 @@ describe('key rotation (miniflare, real session + D1 + crypto)', () => {
 
     const before = await memoText()
     expect(before.startsWith('ENC:')).toBe(true)
+    // 현행 계약 (11-07 강화, routes.ts): rotate는 확인 입력(newKeyConfirm)이
+    // 같은 값으로 와야 하고, 비-dry-run 실행은 dry-run 센서스를
+    // expectedCensus로 되돌려 보내야 한다 (없으면 census_required).
     const dry = await req('/api/key-rotation/rotate', 'POST', {
-      body: { newKey: NEW_KEY, dryRun: true },
+      body: { newKey: NEW_KEY, newKeyConfirm: NEW_KEY, dryRun: true },
       cookie: suCookie,
     })
     expect(dry.status).toBe(200)
@@ -150,7 +153,7 @@ describe('key rotation (miniflare, real session + D1 + crypto)', () => {
     expect(await memoText()).toBe(before)
 
     const exec = await req('/api/key-rotation/rotate', 'POST', {
-      body: { newKey: NEW_KEY },
+      body: { newKey: NEW_KEY, newKeyConfirm: NEW_KEY, expectedCensus: dry.body.census },
       cookie: suCookie,
     })
     expect(exec.status).toBe(200)
@@ -163,8 +166,9 @@ describe('key rotation (miniflare, real session + D1 + crypto)', () => {
     ).rejects.toThrow()
 
     // 롤백: 구 형식으로 복귀해 현행(런타임) 키로 다시 읽힌다
+    // 롤백도 비-dry-run이라 expectedCensus가 필요하다 (실행 시점 센서스와 동일).
     const back = await req('/api/key-rotation/rollback', 'POST', {
-      body: { rotatedKey: NEW_KEY },
+      body: { rotatedKey: NEW_KEY, expectedCensus: exec.body.census },
       cookie: suCookie,
     })
     expect(back.status).toBe(200)

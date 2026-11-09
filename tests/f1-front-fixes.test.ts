@@ -111,43 +111,37 @@ describe('매니페스트 완전성 가드', () => {
   })
 })
 
-describe('Excel engineSrc — 버전 부착 후에도 host=parent 유지 (운영 사고 카나리아)', () => {
-  // engineSrc는 F3에서 sheet.html 인라인에서 js/sheet-bridge.js로 추출됐다
-  // (SHEET_CSP script-src 'self' enforce). 검증 성질은 동일하다.
-  const sheet = readPub('/js/sheet-bridge.js')
+describe('Excel GC_URL — 버전 부착 후에도 host=parent 유지 (운영 사고 카나리아)', () => {
+  // 운영 구조(2026-11-09 실측): 엔진 URL은 sheet.html이 아니라
+  // js/sheet-gridcraft.js의 GC_URL 상수가 들고 있고, sheet.html은
+  // #sheetApp에 브리지를 자체 마운트한다 (구 sheet-bridge.js/engineSrc는
+  // 재구축 시대 발명이라 운영에 없다). 검증 성질은 같다 — 배포 버전
+  // 부착이 엔진 URL의 기존 쿼리를 깨면 host=parent를 잃어 엔진이
+  // 호스트 없는 단독 모드로 뜨는 사고가 된다.
+  const bridge = readPub('/js/sheet-gridcraft.js')
+  const gcMatch = bridge.match(/GC_URL = '([^']+)'/)
+  if (!gcMatch) throw new Error('GC_URL을 찾지 못함')
+  const GC_URL = gcMatch[1]
   const ver = createVersioner(MANIFEST, 'testv999')
-  const deployed = ver(sheet)
 
-  function runEngineSrc(html: string, fileId: string | null): string {
-    const m = html.match(/function engineSrc\(\) \{[\s\S]*?\n  \}/)
-    if (!m) throw new Error('engineSrc를 찾지 못함')
-    // eslint-disable-next-line @typescript-eslint/no-implied-eval
-    const factory = new Function(
-      'location',
-      'fileId',
-      m[0] + '\nreturn engineSrc();',
-    ) as (loc: unknown, fid: unknown) => string
-    return factory({ origin: 'http://harness.local' }, fileId)
-  }
-
-  test('원본 sheet.html: 새 문서 URL에 host=parent&new=1', () => {
-    const q = new URLSearchParams(runEngineSrc(sheet, null).split('?')[1])
+  test('GC_URL 원본: host=parent&chrome=notitlebar를 파싱할 수 있다', () => {
+    const q = new URLSearchParams(GC_URL.split('?')[1])
     expect(q.get('host')).toBe('parent')
-    expect(q.get('new')).toBe('1')
+    expect(q.get('chrome')).toBe('notitlebar')
   })
 
-  test('배포본(?v= 부착) sheet.html: host 파라미터가 v 값에 삼켜지지 않는다', () => {
+  test('버전 부착이 GC_URL의 기존 쿼리를 삼키지 않는다', () => {
+    // versioned 파일이 GC_URL을 그대로 참조하는 배포 형태를 재현한다.
+    const deployed = ver(`<script src="${GC_URL}"></script>`)
+    const src = deployed.match(/src="([^"]+)"/)![1]
     // 부착이 실제로 일어났는지 먼저 확인 (안 일어났으면 이 테스트는 무의미)
-    expect(deployed).toContain('/vendor/gridcraft/index.html?v=testv999')
-    const q = new URLSearchParams(runEngineSrc(deployed, null).split('?')[1])
+    expect(src).toContain('v=testv999')
+    // '?'가 하나뿐이어야 한다 — 둘이면 쿼리가 깨진 것이다
+    expect(src.split('?')).toHaveLength(2)
+    const q = new URLSearchParams(src.split('?')[1])
     expect(q.get('host')).toBe('parent')
-    expect(q.get('new')).toBe('1')
-  })
-
-  test('배포본 sheet.html: 파일 열기 URL에 file 파라미터가 유지된다', () => {
-    const q = new URLSearchParams(runEngineSrc(deployed, 'file-42').split('?')[1])
-    expect(q.get('host')).toBe('parent')
-    expect(q.get('file')).toBe('file-42')
+    expect(q.get('chrome')).toBe('notitlebar')
+    expect(q.get('v')).toBe('testv999')
   })
 })
 
@@ -155,93 +149,107 @@ describe('시스템 위젯 summarizeSystem — /api/system 실제 응답 형태'
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const widgets = require('../public/js/desktop/widgets.js')
 
-  test('번들 확정 형태에서 메모·파일·저장소 행이 나온다', () => {
+  // 운영 원본의 모델: { d1: {used,limit,pct}, cloud: {used,limit,pct}, workerName, runtime }
+  // 또는 표시할 수 없으면 null. (재구축본의 storage/system 행 배열 모델은 운영에 없다.)
+  test('cloudinary-api 소스면 D1·클라우드 사용률과 워커 정보가 나온다', () => {
     const sum = widgets.summarizeSystem({
       ok: true,
       d1: { size_bytes: 5242880, limit_bytes: 10737418240 },
-      memos: 128,
       files: { count: 342, bytes: 1048576 },
       cloudinary: { used_bytes: 209715200, limit_bytes: 26843545600 },
+      cloudinary_source: 'cloudinary-api',
+      worker: { name: 'myhub', runtime: 'cloudflare' },
     })
-    expect(sum.system).toEqual([
-      { label: '메모', text: '128개' },
-      { label: '파일', text: '342개' },
-    ])
-    expect(sum.storage.map((r: { label: string }) => r.label)).toEqual(['데이터베이스', '미디어'])
+    expect(sum.d1).toEqual({ used: 5242880, limit: 10737418240, pct: (5242880 / 10737418240) * 100 })
+    expect(sum.cloud).toEqual({ used: 209715200, limit: 26843545600, pct: (209715200 / 26843545600) * 100 })
+    expect(sum.workerName).toBe('myhub')
+    expect(sum.runtime).toBe('cloudflare')
   })
 
-  test('cloudinary가 null이면 미디어 행만 빠지고 나머지는 나온다', () => {
+  test('cloudinary가 아니면 files.bytes를 클라우드 사용량으로 쓴다 (limit 없음)', () => {
     const sum = widgets.summarizeSystem({
       d1: { size_bytes: 1, limit_bytes: 10 },
-      memos: 3,
-      files: { count: 2, bytes: 0 },
+      files: { count: 2, bytes: 1048576 },
       cloudinary: null,
     })
-    expect(sum.system).toHaveLength(2)
-    expect(sum.storage).toHaveLength(1)
+    expect(sum.cloud).toEqual({ used: 1048576, limit: null, pct: 0 })
+    expect(sum.d1.pct).toBe(10)
   })
 
-  test('빈 응답에서는 빈 모델 (위젯이 "표시할 정보가 없어요"를 띄우는 조건)', () => {
-    expect(widgets.summarizeSystem(null)).toEqual({ storage: [], system: [] })
-    expect(widgets.summarizeSystem({})).toEqual({ storage: [], system: [] })
+  test('표시할 수 없는 응답에서는 null (위젯이 빈 상태를 띄우는 조건)', () => {
+    expect(widgets.summarizeSystem(null)).toBeNull()
+    expect(widgets.summarizeSystem({})).toBeNull()
+    expect(widgets.summarizeSystem({ d1: { size_bytes: 1, limit_bytes: 10 } })).toBeNull()
   })
 })
 
-describe('폰트 이름 파싱 parseFontName', () => {
+describe('폰트 이름 파싱 parseFontFileName', () => {
   const fontsJs = readPub('/js/fonts.js')
   let parse: (n: string) => { family: string; weight: number; style: string }
   beforeAll(() => {
     const g = globalThis as unknown as {
       fetch: unknown
       eval: (s: string) => void
-      MyHubFonts: { parseFontName: typeof parse }
+      MyHubFonts: { parseFontFileName: typeof parse }
     }
     g.fetch = () => Promise.reject(new Error('stub'))
     g.eval(fontsJs)
-    parse = g.MyHubFonts.parseFontName
+    parse = g.MyHubFonts.parseFontFileName
   })
 
   test('접미사가 weight/style로 해석된다', () => {
-    expect(parse('Pretendard-Bold')).toEqual({ family: 'Pretendard', weight: 700, style: 'normal' })
-    expect(parse('D2Coding-Regular')).toEqual({ family: 'D2Coding', weight: 400, style: 'normal' })
-    expect(parse('NotoSansKR-Medium')).toEqual({ family: 'NotoSansKR', weight: 500, style: 'normal' })
-    expect(parse('Font-BoldItalic')).toEqual({ family: 'Font', weight: 700, style: 'italic' })
-    expect(parse('Happiness-Sans-Bold').family).toBe('Happiness-Sans')
+    expect(parse('Pretendard-Bold.ttf')).toEqual({ family: 'Pretendard', weight: 700, style: 'normal' })
+    expect(parse('D2Coding-Regular.ttf')).toEqual({ family: 'D2Coding', weight: 400, style: 'normal' })
+    expect(parse('NotoSansKR-Medium.woff2')).toEqual({ family: 'NotoSansKR', weight: 500, style: 'normal' })
+    expect(parse('Font-BoldItalic.ttf')).toEqual({ family: 'Font', weight: 700, style: 'italic' })
+    expect(parse('Happiness-Sans-Bold.ttf').family).toBe('Happiness-Sans')
   })
 
   test('이름 전체가 접미사뿐이면 벗기지 않는다 (보호 규칙)', () => {
-    expect(parse('Bold')).toEqual({ family: 'Bold', weight: 400, style: 'normal' })
-    expect(parse('Regular')).toEqual({ family: 'Regular', weight: 400, style: 'normal' })
+    expect(parse('Bold.ttf')).toEqual({ family: 'Bold', weight: 400, style: 'normal' })
+    expect(parse('Regular.otf')).toEqual({ family: 'Regular', weight: 400, style: 'normal' })
   })
 
   test('접미사가 없으면 그대로', () => {
-    expect(parse('Pretendard')).toEqual({ family: 'Pretendard', weight: 400, style: 'normal' })
+    expect(parse('Pretendard.ttf')).toEqual({ family: 'Pretendard', weight: 400, style: 'normal' })
   })
 })
 
 describe('office.js 배선 핀 (재구축 소실 재발 방지)', () => {
   const office = readPub('/js/office.js')
 
-  test('한글: rhwp 임베드 핸드셰이크(EditorTransport)를 연결한다', () => {
-    expect(office).toContain("import('/vendor/rhwp-editor/transport.js')")
-    expect(office).toContain('EditorTransport')
-    expect(office).toContain('RhwpEditor')
+  test('한글: 빈 hwpx 서식 파일로 바로 진입하고 Finder 열기 핸드셰이크를 연결한다', () => {
+    // 운영 원본의 한글 배선: APPS.hangul이 blank.hwpx 서식을 들고 autoNew로
+    // 직행하며, 파일 열기는 뷰어 코어가 아니라 이 호스트의
+    // 'myhub:open-file' 수신 + 'myhub:open-file-ack' 응답이 맡는다.
+    // (재구축본이 발명한 rhwp-editor transport 경로는 운영에 없다.)
+    expect(office).toContain("title: '한글 2020'")
+    expect(office).toContain("templateUrl: '/templates/blank.hwpx'")
+    expect(office).toContain("'myhub:open-file'")
+    expect(office).toContain("'myhub:open-file-ack'")
   })
 
-  test('한글: 저장이 RPC 내보내기(exportHwpx/exportHwp)를 탄다', () => {
-    expect(office).toContain('exportHwpx')
-    expect(office).toContain('exportHwp')
-    expect(office).toContain('notifySaved')
+  test('저장: 코어 createSave가 createSaveFlow로 배선된다', () => {
+    // 운영 원본의 저장 경로는 RPC 내보내기가 아니라 호스트의
+    // createSaveFlow다 ("다른 이름으로 저장" = 폴더 선택 + 이름 입력 뒤
+    // POST 생성, 폴더 참조로 version 올리기).
+    expect(office).toContain('function createSaveFlow')
+    expect(office).toContain('createSave: createSaveFlow')
   })
 
-  test('PowerPoint: deckcraft:fonts 푸시와 fonts-applied 재레이아웃 넛지가 있다', () => {
-    expect(office).toContain("type: 'deckcraft:fonts'")
-    expect(office).toContain('deckcraft:fonts-applied')
+  test('PowerPoint: deckcraft:fonts 푸시와 fonts-applied 재레이아웃 넛지가 호스트 파일에 있다', () => {
+    // 운영 원본에서 이 배선은 office.js가 아니라 finder-deckcraft.js가
+    // 맡는다 — 핀도 실제 파일에 건다.
+    const deck = readPub('/js/finder-deckcraft.js')
+    expect(deck).toContain("type: 'deckcraft:fonts'")
+    expect(deck).toContain('deckcraft:fonts-applied')
   })
 
-  test('파일 메뉴: 배경막(myhub-menu-backdrop)으로 바깥 클릭을 닫는다', () => {
-    expect(office).toContain('myhub-menu-backdrop')
-    const css = readPub('/css/office.css')
-    expect(css).toContain('.myhub-menu-backdrop')
+  test('접기: 단일 표면 접기 계약(toggle-collapse)이 뷰어 폴드 버튼과 맞물린다', () => {
+    // 운영 원본의 표면 전환 계약: 호스트의 toggle-collapse가 뷰어 코어의
+    // 자체 접기 버튼(#fvFoldBtn)과 같은 코어 접기를 구동한다.
+    // (재구축본의 myhub-menu-backdrop 배경막은 운영에 없다.)
+    expect(office).toContain('toggle-collapse')
+    expect(office).toContain('fvFoldBtn')
   })
 })

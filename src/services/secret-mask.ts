@@ -16,8 +16,9 @@ const PATTERNS: Array<{ name: string; re: RegExp }> = [
   { name: 'API_KEY', re: /sk-[A-Za-z0-9]{20,}/g },
   // password=, passwd=, pwd= 뒤의 값
   { name: 'PASSWORD', re: /(password|passwd|pwd)\s*[:=]\s*([^\s&;"']+)/gi },
-  // Bearer 토큰
-  { name: 'BEARER', re: /Bearer\s+[A-Za-z0-9\-._~+/]+=*$/gim },
+  // Bearer 토큰 — 줄 끝 앵커가 있으면 토큰 뒤에 텍스트가 이어지는
+  // 헤더 한 줄 전체가 빗나간다 (엔진 규칙은 앵커가 없다).
+  { name: 'BEARER', re: /Bearer\s+[A-Za-z0-9\-._~+/]+={0,2}/gi },
 ];
 
 /**

@@ -63,15 +63,14 @@ describe('관문 74: 미리보기 샌드박스 (실제 agent.html 검증)', () =
 
   test('public/*.html의 iframe은 sandbox를 가지거나, 등록된 자사 엔진 프레임이다', () => {
     // 가드 목적은 "신뢰할 수 없는 콘텐츠를 싣는 iframe이 샌드박스 없이
-    // 들어가지 못하게" 하는 것이다. 아래 3개는 부모와 같은 출처에서
-    // 서로 통신하며 동작하는 자사 앱 엔진 프레임이라 샌드박스 대상이
-    // 아니다 (2026-11 원본 구성). 새 iframe이 이 목록 밖에서 샌드박스
-    // 없이 추가되면 이 테스트가 실패한다 — 목록에 넣으려면 자사 엔진
-    // 프레임인 근거가 필요하다.
+    // 들어가지 못하게" 하는 것이다. 운영 구성(2026-11-09 실측): 정적
+    // iframe은 agent.html 미리보기(sandbox 보유)와 아래 라이브 프레임뿐
+    // 이고, 문서 엔진 프레임은 전부 JS가 만들며 생성 코드가 sandbox를
+    // 건다(다음 테스트가 그 계약을 고정한다). 새 iframe이 이 목록 밖에
+    // 샌드박스 없이 추가되면 이 테스트가 실패한다 — 목록에 넣으려면
+    // 자사 엔진 프레임인 근거가 필요하다.
     const FIRST_PARTY_ENGINE_FRAMES = new Set([
-      'browserFrame', // browser.html — 원격 브라우저 표면
-      'officeEngine', // office.html — 문서 엔진
-      'sheetEngine', // sheet.html — 스프레드시트 엔진
+      'bwLiveFrame', // browser.html — 원격 브라우저 라이브 표면 (browser-live.js가 서명 URL을 건다)
     ])
     const files = fs.readdirSync(PUBLIC_DIR).filter((f) => f.endsWith('.html'))
     expect(files.length).toBeGreaterThan(0)
@@ -82,6 +81,24 @@ describe('관문 74: 미리보기 샌드박스 (실제 agent.html 검증)', () =
         if (id && FIRST_PARTY_ENGINE_FRAMES.has(id)) continue
         expect(sandboxTokens(tag)).not.toBeNull()
       }
+    }
+  })
+
+  test('JS가 만드는 엔진 프레임은 생성 코드에서 sandbox를 건다', () => {
+    // 운영의 문서 엔진 프레임(시트·슬라이드·PDF·GridCraft)은 정적 HTML에
+    // 없고 형식 모듈·브리지가 createElement로 만든다. 그 생성 지점에서
+    // sandbox 속성이 빠지면 신뢰할 수 없는 문서 콘텐츠가 부모와 같은
+    // 권한으로 실행되므로, 파일별로 sandbox 부여 코드를 고정한다.
+    const FACTORIES = [
+      'js/finder-format-sheet.js', // 시트 뷰어 프레임
+      'js/finder-format-pdf.js', // pdf.js 뷰어 프레임
+      'js/finder-deckcraft.js', // DeckCraft 편집기 프레임
+      'js/finder-pdfcraft.js', // PdfCraft 편집기 프레임
+      'js/sheet-gridcraft.js', // GridCraft 엔진 프레임
+    ]
+    for (const rel of FACTORIES) {
+      const src = fs.readFileSync(path.join(PUBLIC_DIR, rel), 'utf8')
+      expect(src).toMatch(/setAttribute\(\s*'sandbox'\s*,\s*'allow-scripts/)
     }
   })
 })

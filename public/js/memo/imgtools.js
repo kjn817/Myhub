@@ -28,6 +28,45 @@ async function copyImageToClipboard(url) {
     }
   }
 }
+// 캡션 편집 (E4 최소 구현): 캡션은 이미지 alt를 보여주며 마지막
+// (![캡션](file:ID))로 직행한다. 보여줄 화면에서는 figure 캡션으로 표시.
+let captionPop = null;
+function closeCaptionEditor() {
+  if (captionPop) { captionPop.remove(); captionPop = null; }
+}
+function openCaptionEditor(img) {
+  closeCaptionEditor();
+  const pop = document.createElement('div');
+  pop.className = 'img-caption-pop';
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.value = img.getAttribute('alt') || '';
+  input.placeholder = '이미지 캡션';
+  input.setAttribute('aria-label', '이미지 캡션');
+  const ok = document.createElement('button');
+  ok.type = 'button';
+  ok.textContent = '적용';
+  const apply = () => {
+    img.alt = input.value.trim();
+    const ed = img.closest('[contenteditable="true"]');
+    if (ed) ed.dispatchEvent(new Event('input', { bubbles: true }));
+    closeCaptionEditor();
+  };
+  ok.addEventListener('click', apply);
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); apply(); }
+    if (e.key === 'Escape') closeCaptionEditor();
+    e.stopPropagation();
+  });
+  pop.append(input, ok);
+  const r = img.getBoundingClientRect();
+  pop.style.left = (r.left + window.scrollX) + 'px';
+  pop.style.top = (r.bottom + 8 + window.scrollY) + 'px';
+  document.body.appendChild(pop);
+  captionPop = pop;
+  setTimeout(() => { input.focus(); input.select(); }, 30);
+}
+
 let imgToolsBar = null;
 let imgToolsTimer = null;
 function hideImgTools() {
@@ -43,7 +82,18 @@ function showImgTools(img) {
   bar._img = img;
   const isEditMode = !!img.closest('[contenteditable="true"]');
   if (isEditMode) {
-    // 수정모드: 삭제 버튼만 (휴지통, 적색)
+    // 편집모드: 캡션 편집 + 삭제 버튼
+    const capBtn = document.createElement('button');
+    capBtn.innerHTML = '<i data-lucide="pencil"></i>';
+    capBtn.title = '캡션 편집';
+    capBtn.setAttribute('aria-label', '캡션 편집');
+    capBtn.addEventListener('mousedown', (e) => e.preventDefault());
+    capBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      hideImgTools();
+      openCaptionEditor(img);
+    });
+    bar.appendChild(capBtn);
     const delBtn = document.createElement('button');
     delBtn.innerHTML = '<i data-lucide="trash-2"></i>';
     delBtn.className = 'danger';

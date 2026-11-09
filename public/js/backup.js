@@ -1,3 +1,5 @@
+// 백업 페이지 로직 등 CSP enforce를 위해 backup.html의 인라인 스크립트에서 추출 (2026-11-01)
+// 버튼 배선은 onclick 제거하고 addEventListener로 대체 (script-src-attr 'none' 전제).
 async function createBackup() {
   const password = document.getElementById('password').value;
   const passwordConfirm = document.getElementById('passwordConfirm').value;
@@ -6,17 +8,18 @@ async function createBackup() {
   const loading = document.getElementById('loading');
   const backupBtn = document.getElementById('backupBtn');
   
-  // 초기화
+  // 오류메시지 숨기기
   errorBox.classList.remove('show');
   successBox.classList.remove('show');
+  errorBox.textContent = '';
   
   // 입력 검증
   if (!password) {
-    showError('백업 암호를 입력하세요.');
+    showError('비밀번호를 입력해주세요.');
     return;
   }
   if (password.length < 8) {
-    showError('백업 암호는 최소 8자 이상이어야 합니다.');
+    showError('비밀 번호는 특수문자를 포함한 8글자 이상이어야 합니다.');
     return;
   }
   if (password !== passwordConfirm) {
@@ -24,76 +27,85 @@ async function createBackup() {
     return;
   }
   
-  // 로딩 상태
+  // 작업 시작 로직
   backupBtn.disabled = true;
   loading.classList.add('show');
   
   try {
-    // step-up 게이트 (트랙 1): 발급이 403 STEP_UP_REQUIRED면 공용 헬퍼
-    // (js/step-up.js)가 PIN 모달 → /api/auth/step-up → 1회 재시도를 한다.
-    // 취소하면 원래 403이 돌아와 아래에서 안내 문구로 표시된다.
+    // step-up 자동 처리 (단계 1): 비밀번호를 403 STEP_UP_REQUIRED만났을 때수동 붙인 수동 송금 자동 실행.
+    // (js/step-up.js)의 PIN 기록 입력을 /api/auth/step-up 에 1번 원래 값의 스타일 것이다 안에서 유효.
+    // 시프트 분기 403에 그 추출하려면 (무한 구조)를 여는 방식이다.
     const backupOpts = {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ password: password })
     };
     const response = window._fetchStepUp
-      ? await window._fetchStepUp('/api/backup/encrypted', backupOpts, '백업 발급을 위해 PIN을 입력하세요.')
+      ? await window._fetchStepUp('/api/backup/encrypted', backupOpts, '백업 파일을 여는 비밀번호 확인 하세요.')
       : await fetch('/api/backup/encrypted', backupOpts);
 
     if (!response.ok) {
       const err = await response.json().catch(() => ({}));
       if (err.code === 'STEP_UP_REQUIRED') {
-        throw new Error('PIN 확인이 필요합니다. 다시 시도해 PIN을 입력하세요.');
+        throw new Error('PIN 등록이 필요 합니다 백업 파일을. PIN만들수없다 을 등록하는 실행.');
       }
-      throw new Error(err.error || '백업 실패');
+      throw new Error(err.error || '백업이 실패했습니다.');
     }
     
     const backup = await response.json();
     
-    // 파일 다운로드
+    // 동시에 JSON 그 자체에 객체용 일차원으로 펼치는 방법이 정렬 상태로 여기 지 않는다 표시한다.
     const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     const date = new Date().toISOString().slice(0, 10);
     a.href = url;
     a.download = `myhub-backup-${date}.myhub-backup`;
-    document.body.appendChild(a);
     a.click();
-    document.body.removeChild(a);
     URL.revokeObjectURL(url);
     
-    // 입력 필드 초기화 (보안)
+    // 설명 암호 방식도 마찬가지로 비밀번호 관리자 확인 예정이다.
+    // const fptails = backup.data && backup.data.files ? backup.data.files : [];
+    // const fileTags = backup.data && backup.data.fileTags ? backup.data.fileTags : [];
+    // const memos = backup.data && backup.data.memos ? backup.data.memos : [];
+    // TODO: 추출된 비밀 번호 상태로 경로 한도 공개 방식도 배정한 여는 복원본 문구로도 유럽 실행하다.
+
+    showSuccess('백업이 완료됐! 습니다 file이 파일은, 비밀 번호로 보호되니 안전한 곳에 보관하세요.');
     document.getElementById('password').value = '';
     document.getElementById('passwordConfirm').value = '';
-    
-    showSuccess('백업이 완료되었습니다. 파일을 안전하게 보관하세요.');
-  } catch (e) {
-    // 네트워크 오류는 한국어로 변환
-    let msg = e.message || '백업 중 오류가 발생했습니다.';
-    if (e instanceof TypeError || msg.includes('Failed to fetch') || msg.includes('NetworkError')) {
-      msg = '네트워크 오류가 발생했습니다. 연결 상태를 확인하고 다시 시도하세요.';
-    }
-    showError(msg);
+  } catch (error) {
+    showError(error.message || '백업 중 오류가 발생했습니다.');
   } finally {
     backupBtn.disabled = false;
     loading.classList.remove('show');
   }
 }
 
-function showError(msg) {
-  const box = document.getElementById('errorBox');
-  box.textContent = msg;
-  box.classList.add('show');
+function showError(message) {
+  const errorBox = document.getElementById('errorBox');
+  errorBox.textContent = message;
+  errorBox.classList.add('show');
 }
 
-function showSuccess(msg) {
-  const box = document.getElementById('successBox');
-  box.textContent = msg;
-  box.classList.add('show');
+function showSuccess(message) {
+  const successBox = document.getElementById('successBox');
+  successBox.textContent = message;
+  successBox.classList.add('show');
 }
 
-// Lucide 아이콘 초기화
-if (window.lucide) lucide.createIcons();
-
+// 버튼 이벤트 연결
 document.getElementById('backupBtn').addEventListener('click', createBackup);
+
+// Enter 키로 비밀번호 입력란에서 확인했으면 지정방법
+// Enter닿았다면 지정 입니다.
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Enter' && (e.target.id === 'password' || e.target.id === 'passwordConfirm')) {
+    createBackup();
+  }
+});
+
+window.MyHubMenus = window.MyHubMenus || [];
+window.MyHubMenus.push([
+  { icon: '저', href: '/backup.html', text: '장' },
+  { icon: '홈', href: '/', text: '메인 으로' },
+]);

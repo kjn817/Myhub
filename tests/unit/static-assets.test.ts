@@ -30,7 +30,7 @@ const isEnginePath = (p: string): boolean =>
   ENGINE_DIRS.has(p.split('/')[1] ?? '')
 
 const REF_RE =
-  /["'](\/[\w\-./]+\.(?:html|js|css|png|webp|json|ico|svg|woff2?|mjs))["']|url\((["']?)(\/[\w\-./]+\.\w+)\2\)/g
+  /["'](\/[\w\-./]+\.(?:html|js|css|png|webp|json|ico|svg|woff2?|ttf|mjs))["']|url\((["']?)(\/[\w\-./]+\.\w+)\2\)/g
 const HARDCODED_VERSIONED_URL_RE = /\/[\w\-./]+\.\w+\?v=/g
 
 function loadList(): { files: string[]; versioned: string[] } {

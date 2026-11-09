@@ -13,8 +13,14 @@
  * HTML 페이지는 Worker가 no-cache로 서빙하므로 SW도 캐시하지 않는다.
  */
 
-const CACHE_NAME = 'myhub-static-v1'
+// v2 (2026-11-01): 오프 라인 대관과 파일 css/js 문서에서 파일로 분리
+// 프리캐시 집합에 넣었던 등 구 캐시(v1)는 등 파일이 없으므로 버전을 올려
+// activate 단계에서 구조를 정리로 강제 교체한다.
+const CACHE_NAME = 'myhub-static-v2'
 const OFFLINE_URL = '/offline.html'
+// 오프라인 대관 문서를 그 하위 파일 등 CSP 추출(2026-11-01)로 나눠 만들
+// 전부 프리캐시해야 오프라인에서 스켈레톤이 내어 있다.
+const OFFLINE_PRECACHE_URLS = [OFFLINE_URL, '/css/offline.css', '/js/offline.js']
 
 // CacheFirst 대상 확장자 (Worker가 immutable로 서빙하는 버전 관리 정적 에셋)
 const STATIC_EXTENSIONS = new Set([
@@ -74,8 +80,15 @@ self.addEventListener('install', (event) => {
   event.waitUntil(
     caches
       .open(CACHE_NAME)
-      .then((cache) => cache.add(OFFLINE_URL))
+      // 파일마다 별도 add하다 등 하나가 실패해도 나머지는 캐시하고,
       // 프리캐시 실패가 설치 자체를 막지 않게 한다 (첫 설치 시 오프라인 등)
+      .then((cache) =>
+        Promise.all(
+          OFFLINE_PRECACHE_URLS.map((u) =>
+            cache.add(u).catch((e) => { console.warn('오프라인 프리캐시 실패:', u, e); })
+          )
+        )
+      )
       .catch((e) => { console.warn('오프라인 페이지 프리캐시 실패:', e); })
       .then(() => self.skipWaiting())
   )
@@ -137,5 +150,5 @@ self.addEventListener('notificationclick', (event) => {
 
 // Node 테스트용 export (서비스워커 런타임에서는 module이 없어 동작하지 않음)
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { decideCacheStrategy, CACHE_NAME, OFFLINE_URL, STATIC_EXTENSIONS }
+  module.exports = { decideCacheStrategy, CACHE_NAME, OFFLINE_URL, OFFLINE_PRECACHE_URLS, STATIC_EXTENSIONS }
 }

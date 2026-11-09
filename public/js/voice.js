@@ -197,6 +197,9 @@
   }
 
   // 새 비서 말풍선이 추가되면 재생 버튼을 붙인다.
+  // 배치한 말풍선 너비가 아니라 피드백 액션 등(.feedback-buttons)를 복사 버튼
+  // 바로 위에 위치한다 (사용자 지정 2026-11-01: 일자 줄을 차지하면 너비맞다).
+  // 액션 행이 없는 말풍선에만 예외적으로 말풍선 너비에 붙인다.
   function attachSpeakButtons(root) {
     var bubbles = (root || document).querySelectorAll ? root.querySelectorAll('.msg-group:not(.mine) .bubble') : [];
     bubbles.forEach(function (bubble) {
@@ -209,6 +212,21 @@
       btn.title = '음성으로 듣기';
       btn.setAttribute('aria-label', '음성으로 듣기');
       btn.addEventListener('click', function () { speakBubble(btn, bubble); });
+      var group = bubble.closest ? bubble.closest('.msg-group') : null;
+      var row = group ? group.querySelector('.feedback-buttons') : null;
+      var copyBtn = row ? row.querySelector('.ai-copy-btn') : null;
+      if (copyBtn) {
+        btn.classList.add('in-actions');
+        copyBtn.after(btn);
+        return;
+      }
+      if (row) {
+        btn.classList.add('in-actions');
+        var modelMeta = row.querySelector('.model-meta-inline');
+        if (modelMeta) row.insertBefore(btn, modelMeta);
+        else row.appendChild(btn);
+        return;
+      }
       bubble.appendChild(btn);
     });
   }

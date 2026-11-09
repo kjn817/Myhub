@@ -105,6 +105,14 @@ html.myhub-embedded { --topnav-h: 0px; }
 html.myhub-embedded .g-nav { display: none; }
 html.myhub-embedded .g-main { padding-top: 0; }
 
+/* 오피스 임베드: 페이지 자체 도구 모음·탭 행을 숨기고 편집기가 창 영역
+   전체를 채운다 — 셸이 제목줄·빠른 실행·메뉴를 제공한다 (운영 창 캡처
+   실측). office.html은 CSP enforce 페이지라 인라인 <style>을 둘 수
+   없어 이 규칙은 연결 스타일시트인 여기에 둔다. */
+html.myhub-embedded .office-toolbar,
+html.myhub-embedded .office-tabs { display: none; }
+html.myhub-embedded .office-main { max-width: none; padding: 0; gap: 0; }
+
 /* Lucide icons default sizing */
 .lucide { flex-shrink: 0; }
 

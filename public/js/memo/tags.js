@@ -1,6 +1,11 @@
 /* ================= 6. 태그 ================= */
+// 마지막으로 불러온 태그 목록 을 다시 상단 메모바의 태그 메뉴가 연다
+let lastTags = null;
 async function loadTags() {
-  const tags = await fetch('/api/memo/tags').then(r => r.json()).catch(() => []);
+  const rawTags = await fetch('/api/memo/tags').then(r => r.json()).catch(() => []);
+  // 응답이 배열이 아닌 값(예 오류 객체)일 때 빈 배열로 degrade 해 forEach pageerror 방지
+  const tags = Array.isArray(rawTags) ? rawTags : [];
+  lastTags = tags;
   const bar = $('tagbar');
   bar.innerHTML = '';
   tags.forEach(t => {

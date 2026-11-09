@@ -20,16 +20,48 @@
 <link rel="stylesheet" href="/assistant-widget.css">
   <script src="/vendor/lucide/lucide.min.js"></script>
 <link rel="stylesheet" href="/css/memo.css">
+<style>
+/* 잠금 메뉴 (.myhub-lock-* — 수집된 운영 CSS 전사본에 없어 운영 실측으로 복원.
+   수치·색은 2026-11-09 운영 패널 캡처의 픽셀 측정값: 패널 폭 246px,
+   선택 항목 배경 #dbeefd + 테두리 #006de0, 버튼 89×33 회색 알약) */
+.myhub-lock-menu { position: relative; display: inline-flex; }
+.myhub-lock-btn {
+  display: inline-flex; align-items: center; gap: 4px;
+  background: #eceef0; border: 1px solid transparent; color: var(--text);
+  font-size: 13px; padding: 6px 8px; min-height: 33px;
+  border-radius: 6px; cursor: pointer; white-space: nowrap;
+}
+.myhub-lock-btn:hover { background: #e2e5e8; }
+.myhub-lock-btn svg { width: 14px; height: 14px; }
+.myhub-lock-btn-label { font-weight: 600; }
+.myhub-lock-state { color: var(--text-2); }
+.myhub-lock-panel {
+  position: absolute; top: calc(100% + 6px); right: 0; z-index: 80;
+  width: 246px; padding: 8px; background: #fff;
+  border: 1px solid #c5c6ca; border-radius: 8px;
+  box-shadow: 0 12px 32px rgba(0,0,0,.15);
+}
+.myhub-lock-panel[hidden] { display: none; }
+.myhub-lock-head {
+  font-size: 12.5px; font-weight: 600; color: var(--text-2);
+  padding: 6px 10px 4px;
+}
+.myhub-lock-opt {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 1px;
+  width: 100%; text-align: left; background: transparent;
+  border: 1px solid transparent;
+  border-radius: 7px; padding: 7px 10px; cursor: pointer; color: var(--text);
+}
+.myhub-lock-opt:hover { background: rgba(0,0,0,.045); }
+.myhub-lock-opt.on { background: #dbeefd; border-color: #006de0; }
+.myhub-lock-opt-label { font-size: 14px; font-weight: 700; }
+.myhub-lock-opt-desc { font-size: 12px; color: var(--text-2); line-height: 1.45; }
+</style>
 </head>
 <body>
 <header class="g-nav"><a href="/" class="brand-logo" aria-label="MyHub 홈"><img src="/icon-192.png" alt="JN" style="height:26px;width:auto;display:block;"></a><div class="spacer"></div><span class="ver" id="clock"></span></header>
 <div class="g-main">
 <div class="wrap">
-  <header class="top">
-    <h1>메모</h1>
-    <span class="count" id="count"></span>
-  </header>
-
   <div class="layout" id="layout">
     <div class="col-left">
       <div class="search" id="searchBox">
@@ -55,6 +87,7 @@
         <div class="composer-head">
           <span class="composer-title" id="composerTitleLabel" title="클릭하여 제목 수정">새 메모</span>
           <span class="composer-actions">
+            <span id="composerLockSlot"></span>
             <label class="icon-btn" title="파일 첨부" aria-label="파일 첨부"><i data-lucide="paperclip"></i><input type="file" id="files" multiple aria-label="파일 첨부"></label>
             <button class="icon-btn" id="add" title="저장 (⌘/Ctrl+Enter)" aria-label="저장"><i data-lucide="save"></i></button>
           </span>
@@ -96,6 +129,7 @@
   <div class="lb-count" id="lb-count"></div>
 </div>
 
+<script src="/js/assistant-bridge.js"></script>
 <script src="/js/memo-bundle.js"></script>
 <script src="/nav.js"></script>
 <script src="/assistant-widget.js"></script>

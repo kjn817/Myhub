@@ -55,11 +55,11 @@ function loadStepUp() {
 }
 
 async function fillPinAndConfirm(pin: string) {
-  await waitFor(() => !!doc().querySelector('.pin-prompt-input'), 'PIN 모달 표시')
-  const input: any = doc().querySelector('.pin-prompt-input')
+  await waitFor(() => !!doc().querySelector('.myhub-stepup-pin-input'), 'PIN 모달 표시')
+  const input: any = doc().querySelector('.myhub-stepup-pin-input')
   input.value = pin
   input.dispatchEvent(new (win().Event)('input', { bubbles: true }))
-  doc().querySelector('.confirm-yes').click()
+  doc().querySelector('.myhub-stepup-yes').click()
 }
 
 describe('step-up.js — _fetchStepUp 흐름', () => {
@@ -100,7 +100,7 @@ describe('step-up.js — _fetchStepUp 흐름', () => {
     expect(stepUpCall).toBeTruthy()
     expect(stepUpCall!.body).toEqual({ pin: '135790' })
     // 모달은 닫혔다
-    expect(doc().querySelector('.pin-prompt-input')).toBeNull()
+    expect(doc().querySelector('.myhub-stepup-pin-input')).toBeNull()
   })
 
   test('PIN 취소 → step-up 호출 없이 원래 403 반환', async () => {
@@ -112,8 +112,8 @@ describe('step-up.js — _fetchStepUp 흐름', () => {
     loadStepUp()
 
     const promise = win()._fetchStepUp('/api/backup/encrypted', { method: 'POST' })
-    await waitFor(() => !!doc().querySelector('.pin-prompt-input'), 'PIN 모달 표시')
-    doc().querySelector('.confirm-no').click()
+    await waitFor(() => !!doc().querySelector('.myhub-stepup-pin-input'), 'PIN 모달 표시')
+    doc().querySelector('.myhub-stepup-no').click()
     const res = await promise
 
     expect(res.status).toBe(403)
@@ -157,7 +157,7 @@ describe('step-up.js — _fetchStepUp 흐름', () => {
     loadStepUp()
     const res = await win()._fetchStepUp('/api/backup/encrypted', { method: 'POST' })
     expect(res.status).toBe(403)
-    expect(doc().querySelector('.pin-prompt-input')).toBeNull()
+    expect(doc().querySelector('.myhub-stepup-pin-input')).toBeNull()
   })
 })
 

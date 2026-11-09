@@ -15,42 +15,85 @@
 <script src="/vendor/lucide/lucide.min.js"></script>
 </head>
 <body class="browser-body">
-<header class="g-nav browser-chrome">
+<header class="g-nav">
   <a href="/" class="brand-logo" aria-label="MyHub 홈"><img src="/icon-192.png" alt="JN" style="height:26px;width:auto;display:block;"></a>
-  <div class="browser-tabs" id="browserTabs"></div>
-  <button type="button" class="browser-newtab" id="browserNewTab" aria-label="새 탭"><i data-lucide="plus"></i></button>
   <div class="spacer"></div>
+  <span class="ver" id="clock"></span>
 </header>
 
-<div class="browser-toolbar">
-  <div class="browser-address-wrap">
-    <i data-lucide="lock" class="browser-address-lock"></i>
-    <input id="browserAddress" type="text" placeholder="주소 입력" autocomplete="off" spellcheck="false">
+<div class="bw-layout">
+  <div class="bw-tabstrip" id="bwTabstrip">
+    <div class="bw-tabs" id="bwTabs"></div>
+    <button type="button" class="bw-icon-btn bw-newtab" id="bwNewTabBtn" aria-label="새 탭"><i data-lucide="plus"></i></button>
+    <button type="button" class="bw-icon-btn bw-tabs-overflow" id="bwTabsOverflow" aria-label="탭 목록" hidden><i data-lucide="chevron-down"></i></button>
+    <div class="bw-tabs-menu" id="bwTabsMenu" hidden></div>
   </div>
-  <button type="button" class="browser-start-btn" id="browserStartBtn">브라우저 시작</button>
-</div>
 
-<main class="browser-main">
-  <section id="browserStart">
-    <div class="browser-start-inner">
-      <div class="browser-notice-card">
-        <h1>실제 브라우저</h1>
-        <p>원격 브라우저에서 실제 페이지를 엽니다. 무료 한도는 <strong>하루 10분 · 1회 2분</strong>이고 매일 <strong>09:00</strong>에 초기화돼요.</p>
-        <p class="browser-notice" id="browserNotice" role="alert"></p>
-      </div>
-      <h2 class="browser-section-title">즐겨찾기</h2>
-      <div class="browser-favs" id="browserFavs"></div>
-      <h2 class="browser-section-title">최근 방문</h2>
-      <div class="browser-recents" id="browserRecents"></div>
+  <div class="bw-toolbar">
+    <div class="bw-navgroup">
+      <button type="button" class="bw-icon-btn" id="bwBackBtn" aria-label="뒤로"><i data-lucide="chevron-left"></i></button>
+      <button type="button" class="bw-icon-btn" id="bwFwdBtn" aria-label="앞으로"><i data-lucide="chevron-right"></i></button>
+      <button type="button" class="bw-icon-btn" id="bwReloadBtn" aria-label="새로고침"><i data-lucide="rotate-cw"></i></button>
     </div>
-  </section>
-  <iframe id="browserFrame" title="원격 브라우저" style="display:none;"></iframe>
-  <div id="browserPill" style="display:none;">
-    <span class="browser-pill-dot"></span>
-    <span>남은 시간 <strong id="browserPillTime">2:00</strong></span>
-    <button type="button" id="browserPillEnd">종료</button>
+    <div class="bw-url-wrap">
+      <input id="bwUrl" type="text" placeholder="주소 입력" autocomplete="off" spellcheck="false">
+    </div>
+    <div class="bw-trailgroup">
+      <button type="button" class="bw-icon-btn" id="bwShareBtn" aria-label="공유"><i data-lucide="share"></i></button>
+      <button type="button" class="bw-icon-btn" id="bwHomeBtn" aria-label="시작 페이지"><i data-lucide="home"></i></button>
+    </div>
   </div>
-</main>
+
+  <div class="bw-stage">
+    <section class="bw-home" id="bwHome">
+      <div class="bw-start-card">
+        <div class="bw-start-ic"><i data-lucide="monitor"></i></div>
+        <div class="bw-start-text">
+          <p class="bw-start-title">실제 브라우저</p>
+          <p class="bw-start-desc">원격 Chrome이라 로그인·영상까지 그대로 열려요. 무료 한도는 하루 10분, 한 번에 2분이에요. 한도에 닿으면 세션이 자동으로 끝나고, 남은 시간은 위쪽 알약 표시에서 확인할 수 있어요. 한도는 매일 오전 9시에 다시 채워져요.</p>
+        </div>
+        <button type="button" class="bw-start-btn bw-start-big">브라우저 시작</button>
+      </div>
+      <h2 class="bw-section-title">즐겨찾기</h2>
+      <div class="bw-favs" id="bwFavs">
+        <button type="button" class="bw-fav" data-url="https://www.naver.com"><span class="bw-fav-tile bw-fav-naver">N</span><span class="bw-fav-name">NAVER</span></button>
+        <button type="button" class="bw-fav" data-url="https://www.google.com"><span class="bw-fav-tile bw-fav-google">G</span><span class="bw-fav-name">Google</span></button>
+        <button type="button" class="bw-fav" data-url="https://www.youtube.com"><span class="bw-fav-tile bw-fav-youtube"><i data-lucide="play"></i></span><span class="bw-fav-name">YouTube</span></button>
+        <button type="button" class="bw-fav" data-url="https://chatgpt.com"><span class="bw-fav-tile bw-fav-gpt"><i data-lucide="sparkles"></i></span><span class="bw-fav-name">ChatGPT</span></button>
+        <button type="button" class="bw-fav" data-url="https://github.com"><span class="bw-fav-tile bw-fav-github"><span class="bw-fav-word">Git</span></span><span class="bw-fav-name">GitHub</span></button>
+        <button type="button" class="bw-fav" data-url="https://ko.wikipedia.org"><span class="bw-fav-tile bw-fav-wiki">W</span><span class="bw-fav-name">위키백과</span></button>
+      </div>
+      <h2 class="bw-section-title">최근 방문</h2>
+      <div class="bw-recents" id="bwRecents">
+        <div id="bwRecentsList"></div>
+      </div>
+    </section>
+    <iframe class="bw-frame" id="bwLiveFrame" title="원격 브라우저" hidden></iframe>
+    <div class="bw-elsewhere" id="bwElsewhere" hidden>
+      <div class="bw-elsewhere-card">
+        <p class="bw-elsewhere-msg" id="bwElsewhereMsg"></p>
+        <div class="bw-elsewhere-btns">
+          <button type="button" class="bw-elsewhere-go" id="bwElsewhereGo">탭으로 이동</button>
+          <button type="button" class="bw-elsewhere-sub" id="bwElsewhereHere">여기서 열기</button>
+        </div>
+      </div>
+    </div>
+    <div class="bw-pill" id="bwPill" hidden>
+      <span class="bw-pill-dot"></span>
+      <span id="bwLiveMsg"></span>
+      <span class="bw-pill-time" id="bwLiveTime">2:00</span>
+      <button type="button" id="bwLiveEnd">종료</button>
+    </div>
+    <div class="bw-notice-card" id="bwNoticeCard" hidden>
+      <p id="bwNoticeMsg"></p>
+      <button type="button" id="bwNoticeClose">확인</button>
+    </div>
+    <div class="bw-starting" id="bwStarting" hidden>
+      <div class="bw-spinner"></div>
+      <p>원격 브라우저를 시작하고 있어요</p>
+    </div>
+  </div>
+</div>
 
 <script src="/nav.js"></script>
 <script src="/js/assistant-bridge.js"></script>

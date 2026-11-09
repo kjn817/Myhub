@@ -1,111 +1,443 @@
-/* MyHub 브라우저 — Safari 미니멀 (D-20 최종).
- * 주소 캡슐 높이 36px·너비 창 폭 50%(220~640px), 탭 스트립은 창 바 안으로,
- * 시작 페이지 콘텐츠 폭 768px·즐겨찾기 타일 64px. */
-
-.browser-body { margin: 0; display: flex; flex-direction: column; height: 100dvh; background: #fff; }
-
-.browser-chrome { gap: 8px; }
-.browser-tabs {
-  display: flex; align-items: flex-end; gap: 4px; min-width: 0; overflow-x: auto;
-  scrollbar-width: none; flex: 0 1 auto; max-width: 46%;
+/* 브라우저 앱 Safari형 미니멀 구성: 둥근 주소창 + 시작 페이지 + 원격 화면
+ * 수치는 스펙 시트 기준: 툴바 52pt·주소 캡슐 36pt/너비 50%
+ * (220~640pt)·배경 #E7E7E7 (Glamshot, Safari 26 스펙), 나머지 세부 치수는
+ * macos-26-design(공식 Figma 추출). 없는 크기는 공개 스펙에 없어
+ * 사용자가 제공한 실제 Tahoe 캡처(image-93)를 기준으로 맞춘다. */
+.bw-layout {
+  display: flex;
+  flex-direction: column;
+  height: calc(100dvh - var(--topnav-h, 52px));
+  min-height: 0;
+  background: linear-gradient(180deg, #f7f8fa 0%, #eef1f5 100%);
 }
-.browser-tabs::-webkit-scrollbar { display: none; }
-.browser-tab {
-  display: flex; align-items: center; gap: 7px; padding: 6px 9px;
-  background: rgba(0,0,0,.05); border-radius: 9px 9px 0 0; cursor: pointer;
-  max-width: 190px; min-width: 0; user-select: none;
+/* 탭 스트립 (트랙 H 후속, Safari형) — 단독 실행 때만 전용이다.
+   창 모드에서는 탭이 창 제목 바(myhub:browser-tabs 채널)로 수렴하고
+   몸이 짧아지면 탭 행이 접힌다 (browser.js의 탭 게시 참조). 활성
+   탭 아래 주소창 줄과 같은 면(반투명 흰색)으로 이어진다. 탭이
+   넘칠 때는 목록 버튼(bwTabsOverflow)으로 접는다. */
+.bw-tabstrip[hidden] { display: none; }
+.bw-tabstrip {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+  padding: 6px 10px 0;
+  box-sizing: border-box;
 }
-.browser-tab.is-active { background: #fff; box-shadow: 0 -1px 6px rgba(0,0,0,.06); }
-.browser-tab-fav { width: 14px; height: 14px; flex: 0 0 14px; }
-.browser-tab-title {
-  font-size: 12px; font-weight: 600; color: #27272a;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+.bw-tabs {
+  display: flex;
+  gap: 4px;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
 }
-.browser-tab-close {
-  border: 0; background: none; cursor: pointer; display: flex; padding: 2px;
-  border-radius: 5px; color: #71717a; flex: 0 0 auto;
+.bw-tab {
+  flex: 1 1 0;
+  min-width: 104px;
+  max-width: 200px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 6px 0 10px;
+  border: none;
+  border-radius: 8px 8px 0 0;
+  background: rgba(15, 23, 42, 0.05);
+  color: #4b5563;
+  font-size: 12.5px;
+  font-family: inherit;
+  cursor: pointer;
+  box-sizing: border-box;
 }
-.browser-tab-close:hover { background: rgba(0,0,0,.08); }
-.browser-tab-close svg { width: 12px; height: 12px; }
-.browser-newtab {
-  border: 0; background: none; cursor: pointer; display: flex; padding: 6px;
-  border-radius: 8px; color: #3f3f46; flex: 0 0 auto;
+.bw-tab:hover { background: rgba(15, 23, 42, 0.09); }
+.bw-tab.is-active { background: rgba(255, 255, 255, 0.88); color: #111827; font-weight: 600; }
+.bw-tab.is-active:hover { background: rgba(255, 255, 255, 0.88); }
+.bw-tab-fav {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+  background: rgba(15, 23, 42, 0.09);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10.5px;
+  font-weight: 700;
+  color: #374151;
 }
-.browser-newtab:hover { background: rgba(0,0,0,.06); }
-.browser-newtab svg { width: 16px; height: 16px; }
-
-.browser-toolbar {
-  display: flex; align-items: center; justify-content: center; gap: 10px;
-  padding: 8px 14px; border-bottom: 1px solid rgba(0,0,0,.06); background: #fbfbfc;
+.bw-tab-fav svg { width: 11px; height: 11px; }
+.bw-tab-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left;
 }
-.browser-address-wrap {
-  display: flex; align-items: center; gap: 7px;
-  width: 50%; min-width: 220px; max-width: 640px; height: 36px;
-  background: rgba(0,0,0,.055); border-radius: 999px; padding: 0 14px;
+.bw-tab-live {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: #51cf66;
 }
-.browser-address-wrap:focus-within { background: #fff; box-shadow: 0 0 0 2px #a5c8f0; }
-.browser-address-lock { width: 13px; height: 13px; color: #71717a; flex: 0 0 13px; }
-.browser-address-wrap input {
-  flex: 1; border: 0; background: none; outline: none; font-size: 13.5px; min-width: 0;
-  text-align: center; color: #18181b;
+.bw-tab-close {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  line-height: 1;
+  color: #9aa0a6;
 }
-.browser-address-wrap input::placeholder { color: #8e8e93; }
-.browser-start-btn {
-  border: 0; background: #a5c8f0; color: #12315e; font-weight: 700; cursor: pointer;
-  height: 36px; padding: 0 16px; border-radius: 999px; font-size: 13px; white-space: nowrap;
+.bw-tab-close:hover { background: rgba(15, 23, 42, 0.12); color: #374151; }
+.bw-tabs-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 10px;
+  z-index: 30;
+  min-width: 180px;
+  max-width: 260px;
+  background: #fff;
+  border-radius: 10px;
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.18);
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
 }
-.browser-start-btn:disabled { opacity: .55; cursor: default; }
-
-.browser-main { flex: 1; position: relative; min-height: 0; display: flex; flex-direction: column; }
-#browserStart { flex: 1; overflow-y: auto; }
-.browser-start-inner { max-width: 768px; margin: 0 auto; padding: 30px 20px 40px; }
-.browser-notice-card {
-  background: #f5f9ff; border: 1px solid #dbeafe; border-radius: 16px; padding: 18px 20px;
+.bw-tabs-menu[hidden] { display: none; }
+.bw-tabs-menu-item {
+  border: none;
+  background: none;
+  text-align: left;
+  font-size: 13px;
+  font-family: inherit;
+  color: #1f2937;
+  padding: 7px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
-.browser-notice-card h1 { font-size: 17px; margin: 0 0 6px; }
-.browser-notice-card p { font-size: 13px; color: #3f3f46; margin: 4px 0; line-height: 1.55; }
-.browser-notice { color: #b45309; font-weight: 600; min-height: 1em; }
-.browser-notice:empty { min-height: 0; }
-.browser-section-title { font-size: 13px; font-weight: 700; color: #52525b; margin: 26px 0 10px; }
-.browser-favs { display: flex; gap: 40px; flex-wrap: wrap; }
-.browser-fav {
-  border: 0; background: none; cursor: pointer; display: flex; flex-direction: column;
-  align-items: center; gap: 7px; padding: 0; width: 64px;
+.bw-tabs-menu-item:hover { background: rgba(15, 23, 42, 0.06); }
+.bw-tabs-menu-item.is-active { font-weight: 700; }
+.bw-newtab, .bw-tabs-overflow { align-self: center; }
+.bw-toolbar {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 52px;
+  box-sizing: border-box;
+  padding: 0 14px;
+  background: rgba(255, 255, 255, 0.88);
+  border-bottom: 1px solid rgba(15, 23, 42, 0.06);
 }
-.browser-fav-tile {
-  width: 64px; height: 64px; border-radius: 16px; color: #fff;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 22px; font-weight: 800; box-shadow: 0 4px 14px rgba(0,0,0,.14);
+.bw-navgroup, .bw-trailgroup {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: none;
 }
-.browser-fav:hover .browser-fav-tile { filter: brightness(1.08); }
-.browser-fav-name { font-size: 11.5px; color: #3f3f46; font-weight: 600; }
-.browser-recents { display: flex; flex-direction: column; gap: 2px; }
-.browser-recent {
-  border: 0; background: none; cursor: pointer; text-align: left;
-  display: flex; flex-direction: column; gap: 1px; padding: 8px 10px; border-radius: 10px;
+.bw-trailgroup { margin-left: auto; }
+.bw-icon-btn {
+  flex: none;
+  width: 32px;
+  height: 32px;
+  border: none;
+  background: none;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #3c4043;
+  cursor: pointer;
+  padding: 0;
 }
-.browser-recent:hover { background: rgba(0,0,0,.045); }
-.browser-recent-title { font-size: 13.5px; font-weight: 600; color: #18181b; }
-.browser-recent-url { font-size: 12px; color: #8e8e93; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.browser-recents-empty { font-size: 13px; color: #8e8e93; padding: 6px 2px; }
-
-#browserFrame { flex: 1; width: 100%; border: 0; }
-
-#browserPill {
-  position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%);
-  display: flex; align-items: center; gap: 9px;
-  background: rgba(24,24,27,.92); color: #fff; border-radius: 999px;
-  padding: 8px 10px 8px 14px; font-size: 12.5px; box-shadow: 0 10px 30px rgba(0,0,0,.3);
+.bw-icon-btn:hover:not(:disabled) { background: rgba(15, 23, 42, 0.06); }
+.bw-icon-btn:disabled { color: #c3c9d1; cursor: default; }
+.bw-icon-btn svg { width: 17px; height: 17px; }
+.bw-url-wrap {
+  flex: none;
+  /* I-13: 확정 설계 수치 — 창 폭의 50%, 최소 220px·최대 640px (모바일에서도 220px 아래로 줄지 않는다).
+     좌우 그룹이 있어도 슬라이더 캡슐 중앙은 창 중앙과 수렴하지 않게
+     툴바 기준 절대 가운데로 둔다 (Safari와 같은 방식). */
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  width: clamp(220px, 50%, 640px);
+  min-width: 220px;
+  max-width: 640px;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  height: 36px;
+  border-radius: 999px;
+  background: rgba(231, 231, 231, 0.9);
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.06);
+}
+.bw-url-wrap input {
+  flex: 1 1 auto;
+  border: none;
+  background: none;
+  outline: none;
+  font-size: 13.5px;
+  color: #1f2937;
+  text-align: center;
+  min-width: 0;
+}
+.bw-url-wrap input::placeholder { color: #9aa0a6; }
+.bw-url-wrap input:disabled { color: #9aa0a6; }
+.bw-start-btn {
+  flex: none;
+  border: none;
+  border-radius: 999px;
+  background: #4dabf7;
+  color: #fff;
+  font-weight: 600;
+  cursor: pointer;
+}
+.bw-start-btn:hover:not(:disabled) { background: #339af0; }
+.bw-start-btn:disabled { background: #a5d8ff; cursor: default; }
+.bw-start-btn[hidden] { display: none; }
+.bw-start-big { padding: 11px 20px; font-size: 14.5px; }
+.bw-stage {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.bw-home {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  width: 100%;
+  /* 시작 페이지 콘텐츠 폭 상한 수치 768px */
+  max-width: 768px;
+  margin: 0 auto;
+  padding: 26px 26px 40px;
+  box-sizing: border-box;
+}
+.bw-home[hidden] { display: none; }
+.bw-start-card {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  background: #fff;
+  border-radius: 20px;
+  padding: 20px 22px;
+  box-shadow: 0 2px 12px rgba(15, 23, 42, 0.06);
+  margin-bottom: 30px;
+}
+.bw-start-ic {
+  flex: none;
+  width: 46px;
+  height: 46px;
+  border-radius: 14px;
+  background: rgba(77, 171, 247, 0.14);
+  color: #1971c2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.bw-start-ic svg { width: 23px; height: 23px; }
+.bw-start-text { flex: 1 1 auto; min-width: 0; }
+.bw-start-title { font-size: 17px; font-weight: 700; color: #202124; margin: 0 0 3px; }
+.bw-start-desc { font-size: 13px; color: #5f6368; margin: 0; line-height: 1.45; }
+.bw-section-title { font-size: 20px; font-weight: 700; color: #202124; margin: 0 0 14px; }
+.bw-favs {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
+  gap: 18px 12px;
+  margin-bottom: 30px;
+}
+.bw-fav {
+  border: none;
+  background: none;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 7px;
+  padding: 0;
+}
+.bw-fav-tile {
+  /* 즐겨찾기 타일 기준 수치 64px */
+  width: 64px;
+  height: 64px;
+  border-radius: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 26px;
+  font-weight: 700;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.1);
+  transition: transform 0.12s ease;
+}
+.bw-fav:hover .bw-fav-tile { transform: translateY(-2px); }
+.bw-fav-tile svg { width: 24px; height: 24px; }
+.bw-fav-word { font-size: 19px; letter-spacing: -0.5px; }
+.bw-fav-name { font-size: 13px; color: #3c4043; }
+.bw-fav-naver { background: #03c75a; color: #fff; }
+.bw-fav-google { background: #fff; color: #4285f4; }
+.bw-fav-youtube { background: #ff0033; color: #fff; }
+.bw-fav-gpt { background: #111111; color: #fff; }
+.bw-fav-github { background: #24292f; color: #fff; }
+.bw-fav-wiki { background: #fff; color: #202124; font-family: Georgia, 'Times New Roman', serif; }
+.bw-recents { display: flex; flex-direction: column; gap: 8px; }
+.bw-recent {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  border: none;
+  background: rgba(255, 255, 255, 0.8);
+  border-radius: 12px;
+  padding: 11px 15px;
+  cursor: pointer;
+  text-align: left;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.05);
+}
+.bw-recent:hover { background: #fff; }
+.bw-recent-host { font-size: 13.5px; font-weight: 600; color: #1f2937; flex: none; }
+.bw-recent-url { font-size: 12.5px; color: #9aa0a6; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 다른 곳이 세션을 소유 중일 때 그 위에 뜨는 안내 (동시 1개 제한) */
+.bw-elsewhere {
+  position: absolute;
+  inset: 0;
   z-index: 5;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 12vh 20px 20px;
+  box-sizing: border-box;
 }
-.browser-pill-dot { width: 8px; height: 8px; border-radius: 50%; background: #4ade80; }
-#browserPill button {
-  border: 0; background: rgba(255,255,255,.16); color: #fff; cursor: pointer;
-  padding: 5px 12px; border-radius: 999px; font-size: 12.5px; font-weight: 700;
+.bw-elsewhere[hidden] { display: none; }
+.bw-elsewhere-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  background: #fff;
+  border-radius: 20px;
+  padding: 24px 26px;
+  box-shadow: 0 2px 12px rgba(15, 23, 42, 0.08);
+  max-width: 420px;
+  text-align: center;
 }
-#browserPill button:hover { background: rgba(255,255,255,.28); }
-
-@media (max-width: 767px) {
-  .browser-address-wrap { width: 100%; }
-  .browser-tabs { max-width: 34%; }
+.bw-elsewhere-msg { margin: 0; font-size: 14px; color: #1f2937; line-height: 1.55; }
+.bw-elsewhere-btns { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.bw-elsewhere-go {
+  border: none;
+  border-radius: 999px;
+  background: #4dabf7;
+  color: #fff;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  padding: 11px 20px;
+  font-size: 14.5px;
+}
+.bw-elsewhere-go:hover { background: #339af0; }
+.bw-elsewhere-sub {
+  border: none;
+  background: none;
+  color: #5f6368;
+  font-size: 12.5px;
+  font-family: inherit;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.bw-frame { position: absolute; inset: 0; width: 100%; height: 100%; border: none; background: #fff; }
+.bw-frame[hidden] { display: none; }
+.bw-pill {
+  position: absolute;
+  left: 50%;
+  bottom: 14px;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 8px 7px 14px;
+  border-radius: 999px;
+  background: rgba(28, 28, 30, 0.85);
+  color: #fff;
+  font-size: 12.5px;
+  backdrop-filter: blur(8px);
+  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.25);
+  white-space: nowrap;
+}
+.bw-pill[hidden] { display: none; }
+.bw-pill-dot { width: 7px; height: 7px; border-radius: 999px; background: #51cf66; flex: none; }
+.bw-pill-time { color: rgba(255, 255, 255, 0.65); font-variant-numeric: tabular-nums; }
+.bw-pill button {
+  border: none;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.18);
+  color: #fff;
+  font-size: 12.5px;
+  font-weight: 600;
+  padding: 4px 11px;
+  cursor: pointer;
+}
+.bw-pill button:hover { background: rgba(255, 255, 255, 0.3); }
+.bw-notice-card {
+  position: absolute;
+  left: 50%;
+  top: 38%;
+  transform: translate(-50%, -50%);
+  width: calc(100% - 48px);
+  max-width: 330px;
+  background: #fff;
+  border-radius: 18px;
+  box-shadow: 0 10px 34px rgba(15, 23, 42, 0.18);
+  padding: 22px 20px 16px;
+  text-align: center;
+}
+.bw-notice-card[hidden] { display: none; }
+.bw-starting {
+  position: absolute;
+  left: 50%;
+  top: 38%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  text-align: center;
+}
+.bw-starting[hidden] { display: none; }
+.bw-starting p { margin: 0; font-size: 14px; color: #5f6368; }
+.bw-spinner {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 3px solid rgba(15, 23, 42, 0.12);
+  border-top-color: #4dabf7;
+  animation: bw-spin 0.8s linear infinite;
+}
+@keyframes bw-spin { to { transform: rotate(360deg); } }
+.bw-notice-card p { margin: 0 0 14px; font-size: 14px; color: #1f2937; line-height: 1.5; }
+.bw-notice-card button {
+  border: none;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.06);
+  color: #1f2937;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 7px 18px;
+  cursor: pointer;
+}
+@media (max-width: 640px) {
+  .bw-start-card { flex-wrap: wrap; }
+  .bw-start-big { width: 100%; }
+  .bw-home { padding: 18px 16px 32px; }
+  .bw-tab { min-width: 72px; padding: 0 4px 0 8px; }
+  .bw-toolbar { padding: 0 8px; gap: 6px; }
+  .bw-icon-btn { width: 28px; height: 28px; }
 }

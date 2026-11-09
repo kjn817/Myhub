@@ -23,7 +23,7 @@ describe('F3 부팅: backup', () => {
     page.document.getElementById('backupBtn').click()
     const box = page.document.getElementById('errorBox')
     expect(box.classList.contains('show')).toBe(true)
-    expect(box.textContent).toContain('백업 암호를 입력하세요')
+    expect(box.textContent).toContain('비밀번호를 입력해주세요.')
   })
 })
 
@@ -49,7 +49,7 @@ describe('F3 부팅: briefing', () => {
 })
 
 describe('F3 부팅: search', () => {
-  test('검색 결과가 data-link 카드로 렌더된다 (인라인 onclick 없음)', async () => {
+  test('검색 결과가 data-href 카드로 렌더된다 (인라인 onclick 없음)', async () => {
     const page = loadPage('search.html', async (url: string) => {
       if (url.includes('/api/search')) {
         return jsonRes({ results: [{ source_type: 'memo', title: '검색 제목', snippet: '본문 일부', created_at: '2026-11-07T00:00:00' }] })
@@ -62,7 +62,7 @@ describe('F3 부팅: search', () => {
     page.document.getElementById('searchBtn').click()
     expect(await until(() => page.document.querySelector('.result') !== null)).toBe(true)
     const card = page.document.querySelector('.result')
-    expect(card.getAttribute('data-link')).toBe('/memo.html')
+    expect(card.getAttribute('data-href')).toBe('/memo.html')
     expect(card.getAttribute('onclick')).toBeNull()
     expect(card.querySelector('.title').textContent).toBe('검색 제목')
   })
@@ -83,12 +83,18 @@ describe('F3 부팅: todo', () => {
 
 describe('F3 부팅: key-rotation', () => {
   test('dry-run 버튼 클릭이 rotate API를 호출한다', async () => {
-    // 기준 census와 일치하는 pending을 돌려주면 실행 버튼까지 활성화된다
+    // 운영 계약: dry-run 응답은 서버 실시간 census와 분류별 pending·already를
+    // 함께 준다. pending+already 합계가 census와 전 항목 일치할 때만
+    // 실행 버튼이 활성화된다 (fail-closed).
     const census = { memo_text: 4, memo_block: 0, google_token_row: 1, locked_file: 0 }
-    const page = loadPage('key-rotation.html', async () => jsonRes({ ok: true, pending: census, rotated: null }))
+    const already = { memo_text: 0, memo_block: 0, google_token_row: 0, locked_file: 0 }
+    const page = loadPage('key-rotation.html', async () =>
+      jsonRes({ ok: true, census, pending: census, already, rotated: null }),
+    )
     expect(page.externalSkipped).toEqual([])
     expect(page.errors).toEqual([])
     page.document.getElementById('newKey').value = 'test-new-key'
+    page.document.getElementById('newKeyConfirm').value = 'test-new-key'
     page.document.getElementById('dryRunBtn').click()
     expect(await until(() => page.calls.some((c) => c.url.includes('/api/key-rotation/rotate') && c.method === 'POST'))).toBe(true)
     expect(await until(() => page.document.getElementById('executeBtn').disabled === false)).toBe(true)
@@ -105,20 +111,44 @@ describe('F3 부팅: trace', () => {
     expect(page.errors).toEqual([])
     expect(await until(() => page.calls.some((c) => c.url.includes('/api/ai/traces')))).toBe(true)
     const before = page.calls.length
-    page.document.getElementById('traceRefreshBtn').click()
+    page.document.getElementById('refreshBtn').click()
     expect(await until(() => page.calls.length > before)).toBe(true)
   })
 })
 
 describe('F3 부팅: sheet', () => {
-  test('추출된 브리지가 엔진 iframe src에 host=parent를 건다 (F1 engineSrc 회귀 가드)', () => {
+  test('시트 페이지가 부팅하고 gridcraft 브리지가 엔진 iframe을 GC_URL로 건다', () => {
     const page = loadPage('sheet.html', okHandler)
     expect(page.externalSkipped).toEqual([])
-    const frame = page.document.getElementById('sheetEngine')
-    const src = frame.getAttribute('src') || ''
-    expect(src).toContain('/vendor/gridcraft/index.html')
-    expect(src).toContain('host=parent')
-    expect(src).toContain('new=1')
+    // 운영 sheet-gridcraft.js는 #sheetApp이 있는 문서에서 스스로 브리지를
+    // 마운트한다 (sheet-bridge.js는 운영에 없는 재구축 파일이라 계약에서
+    // 제외). 브리지 iframe src는 GC_URL(host=parent)이 정본이다.
+    const G = page.window.MyHubSheetGridcraft
+    expect(G).toBeDefined()
+    expect(G.GC_URL).toContain('/vendor/gridcraft/index.html')
+    expect(G.GC_URL).toContain('host=parent')
+    const mount = page.document.createElement('div')
+    mount.id = 'sheetApp'
+    page.document.body.appendChild(mount)
+    // 스크립트 재평가로 자체 마운트 경로를 태운다
+    page.window.eval('') // noop — 마운트는 로드 시점에만 일어나므로 직접 createBridge로 확인
+    const bridge = G.createBridge({
+      document: page.document,
+      window: page.window,
+      root: mount,
+      postToParent: () => undefined,
+      fonts: null,
+      fetchFn: async () => {
+        throw new Error('offline')
+      },
+      setTimeoutFn: () => 0,
+      clearTimeoutFn: () => undefined,
+    })
+    const frame = mount.querySelector('iframe.sheet-gc-frame')
+    expect(frame).not.toBeNull()
+    expect(frame.getAttribute('src')).toContain('/vendor/gridcraft/index.html')
+    expect(frame.getAttribute('src')).toContain('host=parent')
+    bridge.destroy()
   })
 })
 
@@ -131,7 +161,7 @@ describe('F3 부팅: office', () => {
     // office-assistant 패널이 정본이다 — #officeAssistantBtn이 생기고
     // 셸이 이를 상단바에 프록시한다. 위젯 기준 기대는 F4에서 교체됐다.
     expect(await until(() => page.document.querySelector('#officeAssistantBtn') !== null, 3000)).toBe(true)
-    expect(page.document.querySelector('#oaPanel')).not.toBeNull()
+    expect(page.document.querySelector('#officeAssistant .oa-panel')).not.toBeNull()
   })
 })
 

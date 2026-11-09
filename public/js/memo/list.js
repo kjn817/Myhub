@@ -7,9 +7,11 @@ async function load() {
   if (q) params.set('q', q);
   if (activeTag) params.set('tag', activeTag);
   if (activeDate) params.set('date', activeDate);
-  const memos = await fetch('/api/memo?' + params).then(r => r.json());
+  const rawMemos = await fetch('/api/memo?' + params).then(r => r.json()).catch(() => null);
+  // 깨진 응답(배열 아님·네트워크 오류)이 오면 오류가 아닌 빈 목록으로 degrade
+  if (!Array.isArray(rawMemos)) console.warn('메모 목록 응답이 올바르지 않아 빈 목록으로 표시합니다');
+  const memos = Array.isArray(rawMemos) ? rawMemos : [];
   cachedMemos = memos;
-  $('count').textContent = memos.length ? memos.length + '개' : '';
   const list = $('list');
   $('empty').style.display = memos.length ? 'none' : 'block';
   list.innerHTML = '';
@@ -29,6 +31,7 @@ async function load() {
   Promise.all(memos.filter(m => m.file_count).map(async (m) => {
     try {
       const files = await fetch(`/api/memo/${m.id}/files`).then(r => r.json());
+      if (!Array.isArray(files)) return; // 깨진 응답은 파일 배열 없이 degrade
       const fileMap = {};
       files.forEach(f => { fileMap[f.id] = f; });
       memoFileMap[m.id] = fileMap;
@@ -119,7 +122,7 @@ function updateMemoFiles(memoId, files) {
               setTimeout(() => URL.revokeObjectURL(url), 1000);
             } catch {
               // 잠긴 파일은 게이트 403 페이지를 새 탭으로 여는 폴백이 무의미하다.
-              if (f.is_locked) { alert('파일을 열 수 없어요. PIN 확인이 필요합니다.'); return; }
+              if (f.is_locked) { toast('파일이 열 수 없어요. PIN 확인이 필요합니다.'); return; }
               window.open(srcUrl, '_blank');
             }
           };
@@ -171,7 +174,7 @@ function renderCards(withFiles, q) {
     d.textContent = m.created_at || '';
     var t = document.createElement('div');
     t.className = 'memo-text';
-    t.textContent = String(m.text || '');
+    t.textContent = plainPreview(m.text || '');
     t.style.overflowWrap = 'break-word';
     t.style.wordBreak = 'break-word';
     t.style.display = '-webkit-box';
@@ -188,37 +191,39 @@ function renderCards(withFiles, q) {
   }
   if (typeof refreshIcons === 'function') refreshIcons();
 }
-// HTML 엔티티 디코딩 — 서버 lib/memo-title.ts decodeHtmlEntities와 같은 규칙.
-function decodeHtmlEntities(s) {
-  const named = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ' };
-  return String(s || '').replace(/&(#x?[0-9a-fA-F]+|[a-zA-Z][a-zA-Z0-9]*);/g, (whole, body) => {
-    if (body[0] === '#') {
-      const hex = body[1] === 'x' || body[1] === 'X';
-      const code = parseInt(body.slice(hex ? 2 : 1), hex ? 16 : 10);
-      if (Number.isFinite(code) && code >= 0 && code <= 0x10ffff) {
-        try { return String.fromCodePoint(code); } catch (e) { return whole; }
-      }
-      return whole;
-    }
-    const v = named[body.toLowerCase()];
-    return v !== undefined ? v : whole;
-  });
+// 빈 미리보기: 서식 태그와 마크다운 이스케이프를 벗긴 표시용 텍스트.
+// 카드별 목록(renderCards)의 원본째 그대로 차이가 태그가 호출하는데 문제의
+// 등 경로로 함께 만든다 (라이브 검증 2026-11-04에서 등 제목만 고정하는
+// 카드 경로가 여는 것을 확인).
+function plainPreview(text) {
+  return String(text)
+    .replace(/<[^>]*>/g, '')
+    .replace(/!\[([^\]]*)\]\(file:\d+\)/g, '[이미지]')
+    .replace(/!\[([^\]]*)\]\(pending:\d+\)/g, '[이미지]')
+    // 본문 텍스트의 마크다운 이스케이프(\( 등)는 자체 드롭다운에서
+    // 테이블로 보여준다 (CommonMark 구분자 조합만 본문 등 C:\temp처럼
+    // 기간 등 백슬래시가 건드리지 않는다)
+    .replace(/\\([!-/:-@\[-`{-~])/g, '$1');
 }
-// 제목 도출 순서 계약 (서버 lib/memo-title.ts와 동일): 태그 제거 → 엔티티
-// 디코딩 → 이미지 마커 치환 → 첫 줄 선택 → 60자 절단 → 마크다운 정리.
-// 절단을 태그 제거보다 먼저 하면 긴 태그가 중간에서 잘려 닫는 '>'가 사라지고
-// 태그 원문이 제목에 그대로 노출된다 (2026-11-08 운영 점검 결함).
 function rowTitle(text) {
-  const plain = decodeHtmlEntities(String(text || '').replace(/<[^>]*>/g, ''))
-    .replace(/!\[([^\]]*)\]\((?:file|pending):\d+\)/g, '[이미지]');
-  const line = (plain.split('\n').find(l => l.trim()) || '').slice(0, 60);
+  // 태그와 얼룩 제거 전에 본문 전체에서 먼저 벗기는 등 뒤에 벗기면
+  // 60자 경계에서 나눠 태그(<span style="font-size:1픽셀)가 그대로
+  // 호출한다 (2026-11-03 사용자 보고). 태그만 넣는 첫 줄에 건너뛰고
+  // 실제 내용이 넣는 줄을 제목으로 삼는다.
+  const plain = plainPreview(text);
+  const line = (plain.split('\n').find(l => l.trim()) || '').slice(0, 60)
+    // 의도된 발산 (2026-11-08 결정 유지): 목록 제목만 엔티티 디코딩·공백 정규화.
+    // 서버 extractMemoTitle·통합 검색은 원본 계약(원문 절단)을 유지한다.
+    .replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"').replace(/&#39;/g, "'")
+    .replace(/&amp;/g, '&')
+    .replace(/\s+/g, ' ');
   return line
     .replace(/~~([^~]+)~~/g, '$1')
     .replace(/^#{1,6}\s+/, '')
     .replace(/(\*\*|__)([\s\S]*?)\1/g, '$2')
     .replace(/(^|[\s(])\*([^*\n]+)\*/g, '$1$2')
     .replace(/^\s*(?:[-+]|\d+[.)]|>)\s+/, '')
-    .replace(/\s+/g, ' ')
     .trim() || '(빈 메모)';
 }
 function renderRows(memos) {
@@ -274,11 +279,14 @@ function closePane(id, silent) {
   const p = document.querySelector(`.pane[data-pane="${id}"]`);
   if (p) p.remove();
   if (!silent) { syncRowSelection(); updatePanesVisibility(); }
+  // 창 반 제목을 함께 등 기준으로 다시 게시한다 (pane.js 정의)
+  if (typeof notifyMemoDocTitle === 'function') notifyMemoDocTitle();
 }
 function closeAllPanes() {
   hideImgResize();
   hideImgTools();
   document.querySelectorAll('.pane').forEach(p => p.remove());
+  if (typeof notifyMemoDocTitle === 'function') notifyMemoDocTitle();
 }
 // 71차: 위젯에서 호출할 수 있도록 window에 노출
 window.closePane = closePane;

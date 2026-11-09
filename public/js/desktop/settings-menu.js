@@ -22,6 +22,7 @@
     var subEl = null;
     var modalEl = null;
     var subTimer = null;
+    var anchorEl = null; // 메뉴를 연 버튼 — 열린 동안 expanded 상태 유지 (운영 동작)
 
     // 창 질감 저장값 복원
     try {
@@ -39,6 +40,11 @@
       closeSub();
       if (menuEl && menuEl.parentNode) menuEl.parentNode.removeChild(menuEl);
       menuEl = null;
+      if (anchorEl) {
+        anchorEl.classList.remove('is-open');
+        anchorEl.removeAttribute('aria-expanded');
+        anchorEl = null;
+      }
       doc.removeEventListener('pointerdown', onDocDown, true);
       doc.removeEventListener('keydown', onKey, true);
     }
@@ -241,6 +247,11 @@
 
     function toggle(anchor) {
       if (menuEl) { close(); return; }
+      anchorEl = anchor || null;
+      if (anchorEl) {
+        anchorEl.classList.add('is-open');
+        anchorEl.setAttribute('aria-expanded', 'true');
+      }
       menuEl = el('div', 'myhub-settings-menu');
       menuEl.setAttribute('role', 'menu');
       mainItems().forEach(function (it) {

@@ -1,3 +1,5 @@
+// 통합 검색 페이지 로직 등 CSP enforce를 위해 search.html의 인라인 스크립트에서 추출 (2026-11-01)
+// 결과 항목의 속성클릭 핸들러는 로 data-href + 컨테이너 이벤트 위임으로 전환한다.
 let activeFilter = 'all';
 const typeNames = { memo: '메모', chat: '대화', schedule: '일정', todo: '할 일' };
 const typeLinks = { memo: '/memo.html', chat: '/chat.html', schedule: '/schedule.html', todo: '/todo.html' };
@@ -37,7 +39,7 @@ function renderResults(results) {
     return;
   }
   el.innerHTML = results.map(r => `
-    <div class="result" data-link="${typeLinks[r.source_type]}">
+    <div class="result" data-href="${typeLinks[r.source_type]}">
       <div class="type">${typeNames[r.source_type]} · ${escapeHtml(r.created_at?.slice(0, 10) || '')}</div>
       <div class="title">${escapeHtml(r.title)}</div>
       <div class="snippet">${escapeHtml(r.snippet?.slice(0, 100) || '')}</div>
@@ -45,14 +47,12 @@ function renderResults(results) {
   `).join('');
 }
 
+document.getElementById('results').addEventListener('click', (e) => {
+  const item = e.target.closest('.result');
+  if (item && item.dataset.href) location.href = item.dataset.href;
+});
 document.getElementById('searchBtn').addEventListener('click', doSearch);
 document.getElementById('q').addEventListener('keypress', e => {
   if (e.key === 'Enter') doSearch();
 });
-if (window.lucide) lucide.createIcons();
-// 결과 카드 클릭 이동 — script-src-attr 'none'이라 인라인 onclick을 쓸 수 없어
-// data-link + 위임 리스너로 처리한다.
-document.getElementById('results').addEventListener('click', (e) => {
-  const card = e.target.closest('.result[data-link]');
-  if (card) location.href = card.dataset.link;
-});
+lucide.createIcons();

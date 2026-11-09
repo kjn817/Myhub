@@ -15,33 +15,24 @@
 <script src="/vendor/lucide/lucide.min.js" defer></script>
 </head>
 <body class="dt-body">
-<div id="dt-loading" aria-hidden="true">
-  <img class="dt-loading-mark" src="/jn-logo.png" alt="">
-  <div class="dt-loading-bar"><span></span></div>
-</div>
-
-<header id="dt-topbar">
-  <span id="dt-jn">JN</span>
-  <span id="dt-app-title">데스크톱</span>
+<header class="g-nav">
+  <a href="/" class="brand-logo" aria-label="MyHub 홈"><img src="/icon-192.png" alt="JN" style="height:26px;width:auto;display:block;"></a>
+  <span id="dt-active-title"></span>
   <div id="dt-app-actions"></div>
-  <div class="dt-bar-spacer"></div>
+  <div id="dt-office-tabs"></div>
+  <div class="spacer"></div>
   <div id="dt-bar-assistant"></div>
-  <button id="dt-profile" type="button" aria-label="내 프로필"><img src="/avatars/rumi.webp" alt=""></button>
-  <button id="dt-gear" type="button" aria-label="설정"><i data-lucide="settings"></i></button>
-  <span id="dt-clock"></span>
+  <span class="ver" id="clock"></span>
 </header>
-<div id="dt-hotstrip" aria-hidden="true"></div>
 
-<main id="dt-surface">
-  <div id="dt-wallpaper"></div>
-  <div id="dt-icons"></div>
-  <div id="dt-widgets"></div>
-  <div id="dt-root"></div>
-  <div id="dt-wallpaper-cap"></div>
-</main>
+<div id="dt-wallpaper"></div>
+<div id="dt-wp-caption"></div>
+<div id="dt-icons"></div>
+<div id="dt-widgets"></div>
+<main id="dt-root"></main>
+<div id="dt-mission"></div>
 
-<nav id="dt-taskbar" aria-label="독"></nav>
-<div id="dt-subchat"></div>
+<nav id="dt-dock" aria-label="독"></nav>
 
 <script src="/js/file-icons.js"></script>
 <script src="/js/desktop/state.js"></script>
@@ -50,11 +41,13 @@
 <script src="/js/desktop/dock.js"></script>
 <script src="/js/desktop/desktop-icons.js"></script>
 <script src="/js/desktop/widgets.js"></script>
+<script src="/js/desktop/drop-upload.js"></script>
 <script src="/js/desktop/menu.js"></script>
-<script src="/js/desktop/settings-menu.js"></script>
+<script src="/js/desktop/menubar.js"></script>
 <script src="/js/desktop/wallpaper.js"></script>
 <script src="/js/desktop/subchat.js"></script>
 <script src="/js/desktop/version-guard.js"></script>
+<script src="/nav.js"></script>
 <script src="/js/desktop/main.js"></script>
 </body>
 </html>

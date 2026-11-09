@@ -215,8 +215,12 @@ memoApp.post('/', async (c) => {
   let text = ''
   let uploadFiles: File[] = []
   if (contentType.includes('multipart/form-data')) {
-    const body = await c.req.parseBody()
-    text = String(body['text'] ?? '')
+    // all: 같은 'files' 필드의 다중 파일을 배열로 받아야 한다 — 기본 파싱은
+    // 마지막 값만 남겨 먼저 온 파일이 조용히 버려진다 (routes-files와 동일 결함).
+    const body = await c.req.parseBody({ all: true })
+    // text는 스칼라 필드: 중복 전송(계약 밖) 시 배열이 되므로 첫 값으로 정규화한다.
+    const rawText = body['text']
+    text = String((Array.isArray(rawText) ? rawText[0] : rawText) ?? '')
     const f = body['files']
     const arr = Array.isArray(f) ? f : f ? [f] : []
     uploadFiles = arr.filter((x): x is File => x instanceof File)

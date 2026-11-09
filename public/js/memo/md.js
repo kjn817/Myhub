@@ -1,7 +1,14 @@
 /* ================= 3. HTML ↔ 마크다운 ================= */
-// 텍스트 노드 이스케이프
+// 텍스트 노드 이스케이프 등 구조를 실제로 끼는 것만 만든다.
+// 괄호·파이프·백슬래시·별표 이스케이프하면 안된다: 렌더러가
+// 테이블 제목 같은 당시 드롭다운 \값 그대로 놓고,atypes는 자체를
+// 이스케이프하면 특수 반복 등 개별 확인됨 (2026-11-03 사용자 보고
+// 3건 중 2번). 파이프는 표 본문에서만 깨지므로 tableToMd가 따로 만들고,
+// 물결표 취소선 등(~~)일 때만 만든다.
 function escMd(s) {
-  return String(s).replace(/\\/g, '\\\\').replace(/([*_~`|[\]()])/g, '\\$1');
+  return String(s)
+    .replace(/~~/g, '\\~\\~')
+    .replace(/([*_`[\]])/g, '\\$1');
 }
 function escapeBlockStart(s) {
   return s.replace(/^(#{1,6}(?=\s)|>\s?|[*+-](?=\s)|\d+\.(?=\s))/, '\\$1');
@@ -34,7 +41,7 @@ function inlineNodeToMd(n, ctx) {
       const fid = n.getAttribute('data-fid');
       const rawAlt = n.getAttribute('alt') || '이미지';
       const w = n.style && n.style.width ? parseInt(n.style.width, 10) : 0;
-      const alt = escMd(rawAlt).replace(/\]/g, '\\]') + (w > 0 ? '|' + w : '');
+      const alt = escMd(rawAlt) + (w > 0 ? '|' + w : '');
       if (fid) return `![${alt}](file:${fid})`;
       const pidx = n.getAttribute('data-pidx');
       if (pidx !== null && pidx !== undefined) return `![${alt}](pending:${pidx})`;
@@ -44,13 +51,25 @@ function inlineNodeToMd(n, ctx) {
       if (n.type === 'checkbox') return ''; // 리스트에서 별도 처리
       return '';
     case 'SPAN': {
+      // 스타일 허용은 속성 단위로 파싱한다 등 안전 정규화 /color\s*:/의
+      // 'background-color:' 안의 'color:'도 걸려 형광펜(배경색)을 지운다
+      // 등 굵은글씨로 변환되는 버그가 있었다 (2026-11-05 이슈 확정).
+      // 속성명을 허용 경계에서 정확히 나눠 color/background-color를
+      // 각각 보존하고, 빈 span의 합체 제한한다 (중첩 span의 반복 요청).
       const style = n.getAttribute('style') || '';
-      const color = /color\s*:\s*([^;]+)/i.exec(style);
-      const fs = /font-size\s*:\s*([^;]+)/i.exec(style);
-      let open = '', close = '';
-      if (color) { open += `<span style="color:${color[1].trim()}">`; close = '</span>' + close; }
-      if (fs) { open += `<span style="font-size:${fs[1].trim()}">`; close = '</span>' + close; }
-      return open ? `${open}${inner}${close}` : inner;
+      const props = {};
+      style.split(';').forEach(d => {
+        const i = d.indexOf(':');
+        if (i < 0) return;
+        const k = d.slice(0, i).trim().toLowerCase();
+        const v = d.slice(i + 1).trim();
+        if (k && v) props[k] = v;
+      });
+      const parts = [];
+      if (props['color']) parts.push('color:' + props['color']);
+      if (props['background-color']) parts.push('background-color:' + props['background-color']);
+      if (props['font-size']) parts.push('font-size:' + props['font-size']);
+      return parts.length ? `<span style="${parts.join(';')}">${inner}</span>` : inner;
     }
     default: return inner;
   }
@@ -93,7 +112,8 @@ function blockOrInline(n) {
 function tableToMd(t) {
   const rows = [...t.rows];
   if (!rows.length) return '';
-  const cell = (c) => inlineToMd(c).trim().replace(/\n+/g, ' ');
+  // 표 안의 파이프는 표 구조를 끼는 여기서만 이스케이프한다
+  const cell = (c) => inlineToMd(c).trim().replace(/\n+/g, ' ').replace(/\|/g, '\\|');
   let out = '';
   rows.forEach((tr, ri) => {
     const cells = [...tr.cells];
@@ -165,6 +185,14 @@ function editorIsEmpty(editor) {
   const { markdown, pendings } = serializeEditor(editor);
   return !markdown && !pendings.length && !editor.otherFiles.length;
 }
+// SEC-001과 같은 fail-closed 원칙 (채팅 renderMarkdown과 동일):
+// 아니라는게 로드하지 않은 상태에서 marked가 만든 HTML을 그대로
+// DOM을 넣으면 원본째 raw HTML(onerror 등)을 실행한다. DOMPurify가
+// 없을 때는 마크다운 렌더를 여기서 이스케이프 텍스트로 degrade
+// 한다 (2026-11-05 아침 배포에서 purify만 차단된 조건으로 씌움).
+function memoSanitizeAvailable() {
+  return typeof window.DOMPurify?.sanitize === 'function';
+}
 // 마크다운 → 에디터용 HTML (file:ID 마커를 실제 이미지로)
 function applyTableWidths(root) {
   root.querySelectorAll('span[data-tblw]').forEach(sp => {
@@ -218,7 +246,12 @@ function mdToEditable(md, fileMap) {
   } else {
     html = '<p>' + esc(withImgs).replace(/\n/g, '<br>') + '</p>';
   }
-  let out = window.DOMPurify ? DOMPurify.sanitize(html) : html;
+  if (!memoSanitizeAvailable()) {
+    // fail-closed degrade: 정제하지 않은 HTML을 편집기에 넣지 않고
+    // 원본 마크다운을 이스케이프 텍스트로 보여준다.
+    return '<p>' + esc(String(md)).replace(/\n/g, '<br>') + '</p>';
+  }
+  let out = DOMPurify.sanitize(html);
   // 태스크 리스트를 에디터용 형식으로 변환
   out = out.replace(/<ul>(\s*<li>\s*<input[^>]*type="checkbox"[^>]*>.*?<\/li>\s*)+<\/ul>/gs, (m) => {
     return m.replace(/<ul>/, '<ul class="task-list">')
@@ -247,7 +280,12 @@ function renderBodyHtml(text, fileMap, q) {
   } else {
     html = '<p>' + esc(src).replace(/\n/g, '<br>') + '</p>';
   }
-  return window.DOMPurify
-    ? DOMPurify.sanitize(html, { ADD_TAGS: ['u', 'mark'], ADD_ATTR: ['style', 'target'] })
-    : html;
+  if (!memoSanitizeAvailable()) {
+    // fail-closed degrade: 정제하지 않은 HTML을 반환하지 않는다.
+    // 제목 중 제거된 것은 하이라이트(<mark>)까지만 허용되며, 마지막에
+    // HTML 치환 없이 이스케이프 원본 텍스트로 렌더한다.
+    const plain = q ? highlight(text, q) : esc(String(text));
+    return '<p>' + plain.replace(/^#\s+.+\n\n?/, '').replace(/\n/g, '<br>') + '</p>';
+  }
+  return DOMPurify.sanitize(html, { ADD_TAGS: ['u', 'mark'], ADD_ATTR: ['style', 'target'] });
 }

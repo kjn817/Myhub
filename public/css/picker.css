@@ -1,43 +1,102 @@
-/* MyHub 파일 선택기 (오피스·Finder 공용) — 보관함에서 파일 고르기.
- *
- * 재구성 근거: office-picker.js가 쓰는 모달 계약 (.myhub-picker-*).
- * 공용 컴포넌트라 myhub- 접두사를 쓴다.
- */
+/* 열기/저장 패널 (office-picker.js) 공용 스타일 — office.html과
+ * finder.html이 함께 쓴다 (PDF 병합·추출도 Finder에서 패널을 쓴다).
+ * office.css에서 분리했으므로 패널 규칙은 여기에만 둔다. */
+/* ---- 열기/저장 패널 ---- */
+.office-picker-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: rgba(15, 23, 42, 0.42);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 18px;
+  box-sizing: border-box;
+}
+.office-picker-backdrop[hidden] { display: none; }
+.office-picker {
+  width: min(560px, 100%);
+  max-height: min(640px, 92vh);
+  display: flex;
+  flex-direction: column;
+  background: #ffffff;
+  border-radius: 16px;
+  box-shadow: 0 24px 64px rgba(15, 23, 42, 0.35);
+  overflow: hidden;
+}
+.office-picker-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 16px 10px;
+}
+.office-picker-head strong { font-size: 15.5px; color: #111827; }
+.office-picker-crumb {
+  display: flex; align-items: center; gap: 2px; flex-wrap: wrap;
+  padding: 0 16px 8px;
+  font-size: 13px;
+}
+.office-crumb-btn {
+  border: none; background: none; cursor: pointer; padding: 3px 7px;
+  border-radius: 7px; font-size: 13px; color: #1971c2; font-family: inherit; font-weight: 500;
+}
+.office-crumb-btn:hover { background: rgba(77, 171, 247, 0.12); }
+.office-crumb-sep { color: #c0c7cf; font-size: 12px; }
+.office-picker-list {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding: 4px 8px;
+  min-height: 180px;
+}
+.office-pick-row {
+  display: flex; align-items: center; gap: 10px; width: 100%;
+  padding: 7px 10px; border: none; border-radius: 9px; background: none;
+  cursor: pointer; font-family: inherit; text-align: left; box-sizing: border-box;
+}
+.office-pick-row:hover { background: rgba(15, 23, 42, 0.045); }
+.office-pick-row.is-selected { background: rgba(77, 171, 247, 0.18); }
+.office-pick-row .office-pick-icon { width: 26px; height: 26px; flex: none; display: inline-flex; }
+.office-pick-row .office-pick-icon svg { width: 100%; height: 100%; }
+.office-pick-name { font-size: 13.5px; color: #1f2937; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.office-pick-meta { font-size: 12px; color: #9ca3af; flex: none; margin-left: auto; font-variant-numeric: tabular-nums; }
+.office-pick-empty { padding: 28px 0; text-align: center; font-size: 13px; color: #9ca3af; }
+.office-picker-save {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 16px 0;
+}
+.office-picker-save[hidden] { display: none; }
+.office-picker-save label { font-size: 13px; color: #4b5563; flex: none; }
+.office-picker-save input {
+  flex: 1 1 auto; min-width: 0;
+  padding: 8px 11px; border-radius: 9px;
+  border: 1px solid rgba(15, 23, 42, 0.16);
+  font-size: 14px; font-family: inherit; color: #111827;
+}
+.office-picker-save input:focus { outline: 2px solid rgba(77, 171, 247, 0.55); border-color: transparent; }
+.office-picker-status { padding: 8px 16px 0; margin: 0; font-size: 12.5px; color: #e03131; }
+.office-picker-status:empty { display: none; }
+.office-picker-foot {
+  display: flex; justify-content: flex-end; gap: 8px;
+  padding: 12px 16px 16px;
+}
+/* 가져오기는 기본 선택(보기)과 분리된 경로 — 하단 왼쪽에 따로 둔다 */
+.office-pick-import { margin-right: auto; }
+.office-pick-import[hidden] { display: none; }
 
-.myhub-picker-overlay {
-  position: fixed; inset: 0; z-index: 95; display: none;
-  background: rgba(20,20,24,.45); backdrop-filter: blur(6px);
-  align-items: center; justify-content: center; padding: 20px;
+/* 패널·시작 화면 공용 버튼 (office.css에서 이동 — 패널 하단이 쓴다) */
+.office-primary-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 9px 18px; border: none; border-radius: 10px;
+  background: #171717; color: #ffffff; cursor: pointer;
+  font-size: 14px; font-weight: 600; font-family: inherit;
 }
-.myhub-picker-overlay.is-open { display: flex; }
-.myhub-picker {
-  background: #fff; border-radius: 16px; width: min(680px, 100%); height: min(560px, 100%);
-  display: flex; flex-direction: column; overflow: hidden;
-  box-shadow: 0 30px 80px rgba(0,0,0,.4);
+.office-primary-btn:hover { background: #2b2b2b; }
+.office-primary-btn[disabled] { opacity: 0.45; cursor: default; }
+.office-primary-btn svg { width: 16px; height: 16px; }
+.office-ghost-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 9px 16px; border-radius: 10px;
+  border: 1px solid rgba(15, 23, 42, 0.14); background: #ffffff; color: #374151;
+  cursor: pointer; font-size: 14px; font-weight: 500; font-family: inherit;
 }
-.myhub-picker-head {
-  display: flex; align-items: center; gap: 8px; padding: 11px 14px;
-  border-bottom: 1px solid rgba(0,0,0,.07); font-weight: 700; font-size: 14px;
-}
-.myhub-picker-head .spacer { flex: 1; }
-.myhub-picker-close { border: 0; background: none; cursor: pointer; display: flex; padding: 5px; border-radius: 7px; color: #52525b; }
-.myhub-picker-close svg { width: 17px; height: 17px; }
-.myhub-picker-path { padding: 7px 14px; font-size: 12.5px; color: #52525b; border-bottom: 1px solid rgba(0,0,0,.05); }
-.myhub-picker-list { flex: 1; overflow-y: auto; padding: 6px; }
-.myhub-picker-row {
-  display: flex; align-items: center; gap: 9px; width: 100%;
-  border: 0; background: none; cursor: pointer; text-align: left;
-  padding: 8px 10px; border-radius: 9px; font-size: 13.5px; color: #18181b;
-}
-.myhub-picker-row:hover { background: #eff6ff; }
-.myhub-picker-row svg { flex: 0 0 auto; }
-.myhub-picker-empty { padding: 40px 16px; text-align: center; color: #8e8e93; font-size: 13px; }
-.myhub-picker-foot {
-  display: flex; justify-content: flex-end; gap: 8px; padding: 10px 14px;
-  border-top: 1px solid rgba(0,0,0,.07);
-}
-.myhub-picker-foot button {
-  border: 1px solid rgba(0,0,0,.12); background: #fff; cursor: pointer;
-  padding: 7px 14px; border-radius: 9px; font-size: 13px; font-weight: 600;
-}
-.myhub-picker-foot .myhub-picker-ok { background: #a5c8f0; border-color: transparent; color: #12315e; }
+.office-ghost-btn:hover { background: rgba(15, 23, 42, 0.04); }
+.office-ghost-btn[disabled] { opacity: 0.45; cursor: default; }
+.office-ghost-btn svg { width: 16px; height: 16px; }
