@@ -317,10 +317,17 @@ describe('E2E 시나리오 팩 (miniflare)', () => {
   })
 
   describe('시나리오 3: AI 일정 생성 도구 경로 — 승인 후 정확히 1건', () => {
+    // 마커 경로는 과거 시각을 거부한다(rejectPast — 의도된 현행 동작).
+    // 고정 날짜는 그 날짜가 지나면 시한폭탄이 되므로 KST 모레 날짜로 잡는다.
+    const futureDay = (() => {
+      const d = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000 + 9 * 60 * 60 * 1000)
+      const p = (n: number) => String(n).padStart(2, '0')
+      return `${d.getUTCFullYear()}-${p(d.getUTCMonth() + 1)}-${p(d.getUTCDate())}`
+    })()
     const markerData = {
       title: 'E2E 가상 일정 치과 검진',
-      start_at: '2026-11-05T15:00',
-      end_at: '2026-11-05T16:00',
+      start_at: `${futureDay}T15:00`,
+      end_at: `${futureDay}T16:00`,
     }
     const markerText =
       `[SCHEDULE_CREATE]${JSON.stringify(markerData)}[/SCHEDULE_CREATE]`
@@ -337,7 +344,7 @@ describe('E2E 시나리오 팩 (miniflare)', () => {
       expect(await count('schedules')).toBe(before)
       expect(out.approvalRequests).toHaveLength(1)
       expect(out.approvalRequests[0].tool).toBe('SCHEDULE_CREATE')
-      expect(out.text).not.toContain('일정 등록했어')
+      expect(out.text).not.toContain('일정을 등록했습니다')
     })
 
     it('3b. 승인된 범위로 재실행하면 의도한 일정이 정확히 1건 생긴다', async () => {
@@ -351,7 +358,7 @@ describe('E2E 시나리오 팩 (miniflare)', () => {
           approvedScopeKeys: new Set([approvalScopeKey('SCHEDULE_CREATE', markerData)]),
         },
       )
-      expect(out.text).toContain('일정 등록했어')
+      expect(out.text).toContain('일정을 등록했습니다')
       expect(await count('schedules')).toBe(before + 1)
       const rows = await testDb()
         .prepare(
@@ -360,10 +367,11 @@ describe('E2E 시나리오 팩 (miniflare)', () => {
         .bind(markerData.title)
         .all<{ title: string; start_at: string; end_at: string; status: string }>()
       expect(rows.results).toHaveLength(1)
+      // 저장값은 M-11 정규화(초·오프셋 명시)를 거친 형태가 현행 계약이다.
       expect(rows.results[0]).toMatchObject({
         title: markerData.title,
-        start_at: markerData.start_at,
-        end_at: markerData.end_at,
+        start_at: `${futureDay}T15:00:00+09:00`,
+        end_at: `${futureDay}T16:00:00+09:00`,
         status: 'active',
       })
     })
@@ -379,7 +387,7 @@ describe('E2E 시나리오 팩 (miniflare)', () => {
           approvedScopeKeys: new Set([approvalScopeKey('SCHEDULE_CREATE', markerData)]),
         },
       )
-      expect(out.text).toContain('일정 등록에 실패했어')
+      expect(out.text).toContain('일정 등록에 실패했습니다')
       expect(await count('schedules')).toBe(before)
       const rows = await testDb()
         .prepare('SELECT COUNT(*) AS n FROM schedules WHERE title = ?')

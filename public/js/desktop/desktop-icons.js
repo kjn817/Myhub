@@ -1,397 +1,833 @@
-/* MyHub 바탕화면 아이콘 — 격자 스냅 배치 (D-14 최종 계약).
+/* MyHub 데스크톱 앱 바탕화면 아이콘 (desktop-icons.js)
  *
- * 재구성 근거: 아이콘은 왼쪽 위·행 우선 격자에 스냅한다 (2026-11-02 자유 배치
- * 폐기). 드롭 시 가장 가까운 셀, 차 있으면 가장 가까운 빈 셀(nearestFreeCell).
- * 저장 포맷 v8 — v<8 자유 좌표는 읽을 때 격자로 접힌다. 선택은 Set 모델,
- * 선택 중 하나를 끌면 그룹 전체 이동. 제거 영역(dt-remove-zone)은 최종
- * 상태에서 전면 제거됨 — 삭제는 우클릭 메뉴·독 휴지통 드롭으로만.
- * 휴지통 공유 키 'myhub.desktop.trash.v1' (독 배지·Finder 휴지통 보기가 함께 읽음).
- * 파일 타일은 file-icons htmlFor 사용, 모듈 부재 시 Lucide 폴백.
- *
- * 노출: window.MyHubDesktopIcons + module.exports
+ * 설계: docs/desktop-macos-redesign-20261101.md C단계 (사용자 검수 기준 2·3)
+ * - 아이콘의 격자 스냅 배치다 (2026-11-03 사용자 재지시: "완전 자유
+ *   말고, 아이콘처럼 같은 줄에 앱 맞게" 앱 2026-11-02의 완전 자유
+ *   배치를 단체한것): 드래그 중에서는 포인터를 그대로 앱이지만, 빼면
+ *   가장 가까운 앱 앱 붙는다. 그 앱 창 있으면 가장 가까운 빈
+ *   앱으로 간다 (겹침은 스냅 이상으로 해소). 격자 기준은 왼쪽 앱 앱
+ *   col 0의 왼쪽 앱 이이고, 기본 배치·정렬은 앱 우선(왼쪽·위을앱,
+ *   다음 줄)으로 채운다 ("정렬하면 앱 오른쪽으로 가장, 왼쪽이 정상"
+ *   앱 같은 재지시).
+ * - 정렬(arrange)은 사용자가 명시적으로 앱 앱만 앱는 자동 정렬이다
+ *   (배경 우클릭 메뉴의 설정에서 호출).
+ * - 아이콘 구성(어떤 아이콘이 바탕화면에 있는가)은 사용자가 바꾼다:
+ *   제거는 독의 내장함으로 드래그해 빼는 방식으로 일원화된다
+ *   (2026-11-06 지시 앱 드래그 중 내어하는 별도 제거 영역은 폐지),
+ *   아이콘 추가 패널에서 없는 아이콘을 다시 앱는다. 드래그로 앱 앱에
+ *   빼면 독에서 추가한다 (onDragToDock 콜백 앱 앱 관리자는 windows.js).
+ *   제거는 바탕화면 아이콘만 지운다 앱 앱(모듈) 자체의 설치 개념이 없어
+ *   사라지지 않고, 추가 패널에서 언제든 다시 앱을 앱 있다.
+ * - 배치·구성은 localStorage 'myhub.desktop.icons.v1'앱 앱한다
+ *   (v8 포맷: { version: 8, present: [id...], positions: {id:{x,y}} } 앱
+ *   v8의 격자 스냅 전환 마이그레이션을 추가한다: v<8 저장낯의 자유
+ *   좌표를 읽을 앱 가장 가까운 앱(창 있으면 가장 가까운 빈 앱)로
+ *   앱 번 앱어 넣는다. 좌표는 바탕화면 전체 레이어 기본. v5의
+ *   positions는 오른쪽 앱(앱 108) 기본이라 오른쪽 앱 거리 보존으로
+ *   x를 미 앱 앱. v스냅한다4는 cells {col,row}의 cellToXY로 연산한다).
+ * - 클릭은 선택, 더블클릭은 열기(모듈) 또는 이동(링크).
+ * 노출: window.MyHubDesktopIcons = { PREF_KEY, CELL_W, CELL_H, TILE,
+ *        gridDims, clampCell, nearestFreeCell, cellToXY, xyToCell,
+ *        snapXY, loadLayout, saveLayout, loadPresent, fileGlyph,
+ *        createManager }
  */
 (function () {
   'use strict';
 
-  var STORAGE_KEY = 'myhub.desktop.icons.v1';
-  var TRASH_KEY = 'myhub.desktop.trash.v1';
-  var FORMAT_VERSION = 8;
+  var PREF_KEY = 'myhub.desktop.icons.v1';
   var CELL_W = 96;
   var CELL_H = 108;
-  var ORIGIN_X = 14;
-  var ORIGIN_Y = 12;
+  var TILE = 60;
+  var ICON_H = TILE + 26;
+  var DRAG_THRESHOLD = 4;
 
-  var DEFAULT_APPS = ['finder', 'browser', 'memo', 'schedule', 'todo', 'chat',
-    'studio', 'excel', 'hangul', 'powerpoint', 'pdf'];
-
-  function cellToXY(cell) {
-    return { x: ORIGIN_X + cell.c * CELL_W, y: ORIGIN_Y + cell.r * CELL_H };
-  }
-
-  function xyToCell(x, y) {
+  function gridDims(areaW, areaH) {
     return {
-      c: Math.max(0, Math.round((x - ORIGIN_X) / CELL_W)),
-      r: Math.max(0, Math.round((y - ORIGIN_Y) / CELL_H)),
+      cols: Math.max(1, Math.floor(areaW / CELL_W)),
+      rows: Math.max(1, Math.floor(areaH / CELL_H)),
     };
   }
 
-  function cellKey(c, r) { return c + ',' + r; }
-
-  /** 셀이 정해지지 않은 항목의 기본 자리: 열이 차면 다음 열로 흐른다.
-   * maxRows(화면에 닿는 행 수)가 있으면 열 우선 흐름 배치, 없으면
-   * 구 계약(첫 열에 순서대로) — 2026-11-08 넘침 수정. */
-  function indexCell(idx, maxRows) {
-    if (typeof maxRows === 'number' && maxRows > 0) {
-      return { c: Math.floor(idx / maxRows), r: idx % maxRows };
-    }
-    return { c: 0, r: idx };
+  function clampCell(cell, dims) {
+    return {
+      col: Math.min(Math.max(0, cell.col | 0), dims.cols - 1),
+      row: Math.min(Math.max(0, cell.row | 0), dims.rows - 1),
+    };
   }
 
-  /** 열 우선 순서로 첫 빈 셀 (r < maxRows 범위 안에서만). */
-  function firstFlowFreeCell(occupied, maxRows) {
-    for (var c = 0; c < 64; c++) {
-      for (var r = 0; r < maxRows; r++) {
-        if (!occupied[cellKey(c, r)]) return { c: c, r: r };
+  function cellKey(cell) {
+    return cell.col + ',' + cell.row;
+  }
+
+  function nearestFreeCell(desired, occupied, dims) {
+    var start = clampCell(desired, dims);
+    if (!occupied.has(cellKey(start))) return start;
+    var maxRing = Math.max(dims.cols, dims.rows);
+    for (var ring = 1; ring <= maxRing; ring++) {
+      for (var dc = -ring; dc <= ring; dc++) {
+        for (var dr = -ring; dr <= ring; dr++) {
+          if (Math.max(Math.abs(dc), Math.abs(dr)) !== ring) continue;
+          var cand = { col: start.col + dc, row: start.row + dr };
+          if (cand.col < 0 || cand.row < 0 || cand.col >= dims.cols || cand.row >= dims.rows) continue;
+          if (!occupied.has(cellKey(cand))) return cand;
+        }
       }
     }
     return null;
   }
 
-  /** 원하는 셀에서 가장 가까운 빈 셀 (동심 확장 탐색). */
-  function nearestFreeCell(occupied, want) {
-    if (!occupied[cellKey(want.c, want.r)]) return { c: want.c, r: want.r };
-    for (var ring = 1; ring < 64; ring++) {
-      var best = null, bestDist = Infinity;
-      for (var dc = -ring; dc <= ring; dc++) {
-        for (var dr = -ring; dr <= ring; dr++) {
-          if (Math.max(Math.abs(dc), Math.abs(dr)) !== ring) continue;
-          var c = want.c + dc, r = want.r + dr;
-          if (c < 0 || r < 0) continue;
-          if (occupied[cellKey(c, r)]) continue;
-          var d = dc * dc + dr * dr;
-          if (d < bestDist) { bestDist = d; best = { c: c, r: r }; }
+  function cellToXY(cell, areaW) {
+    void areaW;
+    return {
+      x: cell.col * CELL_W + (CELL_W - TILE) / 2,
+      y: cell.row * CELL_H + 10,
+    };
+  }
+
+  function xyToCell(x, y, areaW, dims) {
+    void areaW;
+    var cx = x + TILE / 2;
+    var cy = y + TILE / 2;
+    var col = Math.round(cx / CELL_W - 0.5);
+    var row = Math.round(cy / CELL_H - 0.5);
+    return clampCell({ col: col, row: row }, dims);
+  }
+
+  function snapXY(pos, areaW, areaH) {
+    var dims = gridDims(areaW, areaH);
+    return cellToXY(xyToCell(pos.x, pos.y, areaW, dims), areaW);
+  }
+
+  function clampPosition(pos, a) {
+    var maxX = Math.max(0, a.w - TILE);
+    var maxY = Math.max(0, a.h - ICON_H);
+    return {
+      x: Math.min(Math.max(0, pos.x), maxX),
+      y: Math.min(Math.max(0, pos.y), maxY),
+    };
+  }
+
+  function boxesOverlap(p, q) {
+    return p.x < q.x + TILE && q.x < p.x + TILE && p.y < q.y + ICON_H && q.y < p.y + ICON_H;
+  }
+
+  // ---- 배치·구성 저장 ----
+  /**
+   * 저장낯이 없을 때의 기본 배치: 왼쪽 앞의 앱 우선으로 채우는 격자
+   * (아이콘 앱 화면의). 격자 전체(rows×cols)까지 수칙 앱만 왼쪽 앱
+   * 앱에 간격이 정확히 앱 보이지 영역 앱에 넣는다 (화면 바 금지).
+   */
+  function defaultPositions(items, areaW, areaH) {
+    var positions = {};
+    var dims = gridDims(areaW, areaH || 0);
+    var topY = 10;
+    var maxY = (areaH || 0) - ICON_H;
+    if (items.length > dims.rows * dims.cols && maxY > topY) {
+      var x = cellToXY({ col: 0, row: 0 }, areaW).x;
+      var step = (maxY - topY) / (items.length - 1);
+      items.forEach(function (item, i) {
+        positions[item.id] = { x: x, y: Math.round(topY + step * i) };
+      });
+      return positions;
+    }
+    items.forEach(function (item, i) {
+      var slot = { col: i % dims.cols, row: Math.floor(i / dims.cols) };
+      positions[item.id] = cellToXY(slot, areaW);
+    });
+    return positions;
+  }
+
+  function readStore(storage) {
+    var raw = null;
+    try {
+      raw = storage ? storage.getItem(PREF_KEY) : null;
+    } catch (e) {
+      raw = null;
+    }
+    if (!raw) return null;
+    try {
+      var parsed = JSON.parse(raw);
+      return parsed && typeof parsed === 'object' ? parsed : null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  /**
+   * 바탕화면에 있는 아이콘 id 목록. v2의 present를 따르고, 없으면(v1·
+   * 신규) 전체가 기본값이다. 모르는 id는 버리고 순서는 allItems 앱.
+   */
+  function loadPresent(storage, allItems) {
+    var all = allItems.map(function (i) { return i.id; });
+    var parsed = readStore(storage);
+    if (!parsed || !Array.isArray(parsed.present)) return all.slice();
+    var wanted = {};
+    parsed.present.forEach(function (id) { wanted[id] = true; });
+    // v3 마이그레이션: 파인더가 없든 시점에 구성하면 파인더를 포함한다
+    var savedV = parsed.version || 1;
+    if (savedV < 3 && all.indexOf('finder') >= 0) wanted.finder = true;
+    if (savedV < 4 && all.indexOf('browser') >= 0) wanted.browser = true;
+    // v7 마이그레이션: 오피스 앱 4종이 없든 시점에 구성하면 앱 번 포함한다
+    if (savedV < 7) {
+      ['excel', 'hangul', 'powerpoint', 'pdf'].forEach(function (id) {
+        if (all.indexOf(id) >= 0) wanted[id] = true;
+      });
+    }
+    return all.filter(function (id) { return wanted[id]; });
+  }
+
+  var LEGACY_STRIP_W = 108; // v5까지 아이콘 레이어의 오른쪽 앱의 앱
+  function loadLayout(storage, items, area) {
+    var a = area || { w: 0, h: 0 };
+    var positions = defaultPositions(items, a.w, a.h);
+    var parsed = readStore(storage);
+    var savedV = parsed ? (parsed.version || 0) : 0;
+    if (parsed && parsed.positions) {
+      var shiftX = savedV < 6 ? Math.max(0, a.w - LEGACY_STRIP_W) : 0;
+      items.forEach(function (item) {
+        var p = parsed.positions[item.id];
+        if (p && Number.isFinite(p.x) && Number.isFinite(p.y)) {
+          positions[item.id] = clampPosition({ x: p.x + shiftX, y: p.y }, a);
+        }
+      });
+    } else if (parsed && parsed.cells) {
+      items.forEach(function (item) {
+        var c = parsed.cells[item.id];
+        if (c && Number.isFinite(c.col) && Number.isFinite(c.row)) {
+          positions[item.id] = clampPosition(cellToXY({ col: c.col, row: c.row }, a.w), a);
+        }
+      });
+    }
+    if (parsed && savedV < 8) {
+      var dims = gridDims(a.w, a.h);
+      var occupied = new Set();
+      items.forEach(function (item) {
+        var pos = positions[item.id];
+        if (!pos) return;
+        var want = xyToCell(pos.x, pos.y, a.w, dims);
+        var cell = occupied.has(cellKey(want)) ? nearestFreeCell(want, occupied, dims) : want;
+        if (!cell) cell = want;
+        occupied.add(cellKey(cell));
+        positions[item.id] = clampPosition(cellToXY(cell, a.w), a);
+      });
+    }
+    return positions;
+  }
+
+  function saveStore(storage, positions, present) {
+    if (!storage) return;
+    try {
+      storage.setItem(PREF_KEY, JSON.stringify({ version: 8, present: present.slice(), positions: positions }));
+    } catch (e) {
+      console.warn('데스크톱 아이콘 저장 실패:', e);
+    }
+  }
+
+  function saveLayout(storage, positions) {
+    if (!storage) return;
+    try {
+      var parsed = readStore(storage);
+      var present = parsed && Array.isArray(parsed.present) ? parsed.present : Object.keys(positions);
+      storage.setItem(PREF_KEY, JSON.stringify({ version: 8, present: present, positions: positions }));
+    } catch (e) {
+      console.warn('데스크톱 아이콘 배치 저장 실패:', e);
+    }
+  }
+
+  // ---- 파일 아이콘 (Drive '바탕화면' 폴더의 파일) ----
+  function fileGlyph(item) {
+    var mime = String((item && item.mime) || '');
+    if (mime.indexOf('image/') === 0) return 'image';
+    if (mime.indexOf('audio/') === 0) return 'file-audio';
+    if (mime.indexOf('video/') === 0) return 'file-video';
+    if (mime === 'application/pdf') return 'file-text';
+    if (mime.indexOf('spreadsheet') >= 0 || mime.indexOf('ms-excel') >= 0) return 'file-spreadsheet';
+    var name = String((item && item.label) || '').toLowerCase();
+    var dot = name.lastIndexOf('.');
+    var ext = dot >= 0 ? name.slice(dot + 1) : '';
+    if (['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp', 'heic'].indexOf(ext) >= 0) return 'image';
+    if (['xls', 'xlsx', 'csv'].indexOf(ext) >= 0) return 'file-spreadsheet';
+    if (['pdf', 'hwp', 'hwpx', 'ppt', 'pptx', 'doc', 'docx', 'txt', 'md'].indexOf(ext) >= 0) return 'file-text';
+    if (['mp3', 'wav', 'm4a', 'flac'].indexOf(ext) >= 0) return 'file-audio';
+    if (['mp4', 'mov', 'webm', 'mkv'].indexOf(ext) >= 0) return 'file-video';
+    return 'file';
+  }
+
+  function fileIconsApi() {
+    if (typeof window !== 'undefined' && window.MyHubFileIcons) return window.MyHubFileIcons;
+    if (typeof globalThis !== 'undefined' && globalThis.MyHubFileIcons) return globalThis.MyHubFileIcons;
+    return null;
+  }
+
+  function createFileTile(doc, item) {
+    var tile = doc.createElement('span');
+    tile.className = 'dt-tile dt-tile-file';
+    tile.setAttribute('aria-hidden', 'true');
+    var icons = fileIconsApi();
+    if (icons) {
+      tile.classList.add('dt-tile-svg');
+      tile.innerHTML = icons.htmlFor({ name: item.label, mime: item.mime });
+    } else {
+      tile.innerHTML = '<i data-lucide="' + fileGlyph(item) + '"></i>';
+    }
+    return tile;
+  }
+
+  // ---- DOM 매니저 ----
+  function createManager(deps) {
+    deps = deps || {};
+    var layer = deps.layer;
+    if (!layer) throw new Error('createDesktopIcons: layer가 필요합니다');
+    var tilesApi = deps.tilesApi;
+    if (!tilesApi) throw new Error('createDesktopIcons: tilesApi가 필요합니다');
+    var doc = layer.ownerDocument || document;
+    var allItems = (deps.items || []).slice();
+    var storage = deps.storage || null;
+    var onOpen = typeof deps.onOpen === 'function' ? deps.onOpen : function () {};
+    var dockEl = deps.dockEl || null;
+    var onDragToDock = typeof deps.onDragToDock === 'function' ? deps.onDragToDock : null;
+    var surface = deps.surface || null;
+
+    function area() {
+      if (typeof deps.getArea === 'function') return deps.getArea();
+      return { w: layer.clientWidth || 0, h: layer.clientHeight || 0 };
+    }
+    function itemById(id) {
+      for (var i = 0; i < allItems.length; i++) if (allItems[i].id === id) return allItems[i];
+      return null;
+    }
+    function isFileItem(item) {
+      return !!item && item.kind === 'file';
+    }
+    function presentItems() {
+      return allItems.filter(function (i) { return present.indexOf(i.id) >= 0; });
+    }
+
+    var present = loadPresent(storage, allItems);
+    allItems.forEach(function (item) {
+      if (isFileItem(item) && present.indexOf(item.id) < 0) present.push(item.id);
+    });
+    var positions = loadLayout(storage, presentItems(), area());
+    var savedStore = readStore(storage);
+    var savedPositions = (savedStore && savedStore.positions) || {};
+    presentItems().forEach(function (item) {
+      if (isFileItem(item) && !savedPositions[item.id]) {
+        positions[item.id] = firstFreePosition();
+      }
+    });
+    var records = new Map(); // id -> { item, el }
+    var selection = new Set();
+    var selectedId = null;
+    var drag = null;
+    var band = null;
+    var destroyed = false;
+    var lastTap = null; // 더블탭 열기 추적 { id, time }
+    var lastFired = {}; // id -> 400ms 중복 가능
+
+    function fireOpen(item) {
+      if (!item) return;
+      var now = Date.now();
+      if (lastFired[item.id] && now - lastFired[item.id] < 400) return;
+      lastFired[item.id] = now;
+      if (item.href) window.location.assign(item.href);
+      else onOpen(item.id);
+    }
+
+    function persist() {
+      saveStore(storage, positions, present);
+    }
+
+    function positionIcon(id) {
+      var rec = records.get(id);
+      if (!rec || !positions[id]) return;
+      rec.el.style.left = positions[id].x + 'px';
+      rec.el.style.top = positions[id].y + 'px';
+    }
+
+    function firstFreePosition() {
+      var a = area();
+      var d = gridDims(a.w, a.h);
+      var taken = [];
+      present.forEach(function (id) { if (positions[id]) taken.push(positions[id]); });
+      for (var row = 0; row < d.rows; row++) {
+        for (var col = 0; col < d.cols; col++) {
+          var cand = clampPosition(cellToXY({ col: col, row: row }, a.w), a);
+          if (!taken.some(function (p) { return boxesOverlap(cand, p); })) return cand;
         }
       }
-      if (best) return best;
-    }
-    return { c: want.c, r: want.r };
-  }
-
-  function loadTrash(storage) {
-    try {
-      var raw = JSON.parse(storage.getItem(TRASH_KEY) || '[]');
-      return Array.isArray(raw) ? raw : [];
-    } catch (e) { return []; }
-  }
-
-  function saveTrash(storage, items) {
-    storage.setItem(TRASH_KEY, JSON.stringify(items));
-  }
-
-  /** 저장값을 v8 격자 포맷으로 접는다.
-   * opts.maxRows가 있으면 셀이 없는 항목을 열 우선 흐름으로 배치한다
-   * (한 열에 다 쌓아 화면 아래로 넘치던 결함 수정). 명시 셀은 그대로
-   * 존중한다 — 화면 밖 셀의 복구는 createIcons의 도달성 복구가 맡는다. */
-  function migrateItems(raw, opts) {
-    var maxRows = opts && typeof opts.maxRows === 'number' ? opts.maxRows : 0;
-    var items = [];
-    var occupied = {};
-    var list = [];
-    if (Array.isArray(raw)) list = raw;
-    else if (raw && Array.isArray(raw.items)) list = raw.items;
-    if (!list.length) {
-      DEFAULT_APPS.forEach(function (id) { list.push({ kind: 'app', id: id }); });
-    }
-    list.forEach(function (it, idx) {
-      if (!it || !it.id) return;
-      var cell;
-      if (it.cell && typeof it.cell.c === 'number') cell = { c: it.cell.c, r: it.cell.r };
-      else if (typeof it.x === 'number' && typeof it.y === 'number') cell = xyToCell(it.x, it.y);
-      else cell = indexCell(idx, maxRows);
-      cell = nearestFreeCell(occupied, cell);
-      occupied[cellKey(cell.c, cell.r)] = true;
-      items.push({
-        kind: it.kind === 'file' ? 'file' : 'app',
-        id: it.id, name: it.name || null, mime: it.mime || null,
-        cell: cell,
-      });
-    });
-    return items;
-  }
-
-  function loadItems(storage, opts) {
-    var raw = null;
-    try { raw = JSON.parse(storage.getItem(STORAGE_KEY) || 'null'); }
-    catch (e) { raw = null; }
-    return migrateItems(raw, opts);
-  }
-
-  function saveItems(storage, items) {
-    storage.setItem(STORAGE_KEY, JSON.stringify({ version: FORMAT_VERSION, items: items }));
-  }
-
-  function createIcons(deps) {
-    var layer = deps.layer;
-    var doc = layer.ownerDocument;
-    var storage = deps.storage;
-    var tiles = deps.tiles;
-
-    /* 화면에 닿는 행 수: 레이어 높이에서 독 존(실측 높이, 최소 72 + 여유
-     * 28)을 뺀 영역에 아이콘 실높이(약 80px)까지 들어가는 행 수.
-     * 레이어 높이를 모르면 0 (무제한 — 구 계약). */
-    function currentMaxRows() {
-      var h = layer.clientHeight || 0;
-      if (!h) return 0;
-      var tb = doc.getElementById('dt-taskbar');
-      var reserve = Math.max(tb ? tb.offsetHeight : 0, 72) + 28;
-      var rows = Math.floor((h - reserve - ORIGIN_Y - 80) / CELL_H) + 1;
-      return Math.max(1, rows);
-    }
-
-    var items = loadItems(storage, { maxRows: currentMaxRows() });
-    var selected = {}; // id → true (Set 모델)
-    var nodes = {};
-
-    function keyOf(item) { return item.kind + ':' + item.id; }
-
-    function persist() { saveItems(storage, items); }
-
-    /* 도달성 복구: 구 상태 그대로 저장된 화면 밖 셀(r >= maxRows)을 열
-     * 우선 첫 빈 셀로 끌어올린다. 닿는 셀은 사용자 배치라 그대로 둔다. */
-    (function repairOutOfReach() {
-      var mr = currentMaxRows();
-      if (!mr) return;
-      var occupied = {};
-      items.forEach(function (it) {
-        if (it.cell.r < mr) occupied[cellKey(it.cell.c, it.cell.r)] = true;
-      });
-      var changed = false;
-      items.forEach(function (it) {
-        if (it.cell.r < mr) return;
-        var cell = firstFlowFreeCell(occupied, mr);
-        if (!cell) return;
-        occupied[cellKey(cell.c, cell.r)] = true;
-        it.cell = cell;
-        changed = true;
-      });
-      if (changed) persist();
-    })();
-
-    function el(tag, cls) {
-      var e = doc.createElement(tag);
-      if (cls) e.className = cls;
-      return e;
-    }
-
-    function renderItem(item) {
-      var node = el('div', 'dt-icon');
-      node.dataset.key = keyOf(item);
-      var pos = cellToXY(item.cell);
-      node.style.left = pos.x + 'px';
-      node.style.top = pos.y + 'px';
-      var tileWrap = el('span', 'dt-icon-tile');
-      if (item.kind === 'file') {
-        tileWrap.classList.add('dt-tile-file');
-        var fi = deps.fileIcons;
-        if (fi) tileWrap.innerHTML = fi.htmlFor({ name: item.name, mime: item.mime });
-        else tileWrap.innerHTML = '<i data-lucide="file"></i>';
-      } else {
-        var tile = tiles.createTile(item.id, { document: doc });
-        if (tile) tileWrap.appendChild(tile);
+      for (var n = 0; n < 40; n++) {
+        var c2 = clampPosition({ x: 10 + n * 28, y: 10 + n * 28 }, a);
+        if (!taken.some(function (p) { return boxesOverlap(c2, p); })) return c2;
       }
-      node.appendChild(tileWrap);
-      var label = el('span', 'dt-icon-label');
-      label.textContent = item.kind === 'file' ? (item.name || item.id) : (deps.titleOf ? deps.titleOf(item.id) : item.id);
-      node.appendChild(label);
-      if (selected[keyOf(item)]) node.classList.add('is-selected');
-      attachPointer(node, item);
-      node.addEventListener('dblclick', function () { if (deps.onOpen) deps.onOpen(item); });
-      node.addEventListener('contextmenu', function (ev) {
-        ev.preventDefault();
-        if (deps.onContextMenu) deps.onContextMenu(item, ev, getSelectedItems());
+      return clampPosition({ x: cellToXY({ col: 0, row: 0 }, a.w).x, y: Math.max(10, a.h - ICON_H) }, a);
+    }
+
+    function buildIcon(item) {
+      var el = doc.createElement('button');
+      el.type = 'button';
+      el.className = 'dt-desk-icon';
+      el.dataset.module = item.id;
+      el.setAttribute('aria-label', item.label);
+      if (isFileItem(item)) {
+        el.classList.add('is-file');
+        el.dataset.fileId = String(item.fileId);
+        el.appendChild(createFileTile(doc, item));
+      } else {
+        el.appendChild(tilesApi.createTile(doc, item.id));
+      }
+      var label = doc.createElement('span');
+      label.className = 'dt-desk-label';
+      label.textContent = item.label;
+      el.appendChild(label);
+
+      el.addEventListener('pointerdown', function (e) {
+        if (e.preventDefault) e.preventDefault();
+        if (band) finishBand();
+        var inGroup = selection.has(item.id) && selection.size > 1;
+        if (!inGroup) select(item.id);
+        var ids = inGroup ? Array.from(selection) : [item.id];
+        var starts = {};
+        var els = {};
+        ids.forEach(function (id) {
+          var rec = records.get(id);
+          if (!rec || !positions[id]) return;
+          starts[id] = { x: positions[id].x, y: positions[id].y };
+          els[id] = rec.el;
+          rec.el.classList.add('is-dragging');
+        });
+        drag = {
+          id: item.id, ids: Object.keys(starts), starts: starts, els: els,
+          group: inGroup, pointerId: e.pointerId,
+          startX: e.clientX, startY: e.clientY, dx: 0, dy: 0,
+          moved: false, overRemove: false, overDock: false,
+        };
       });
-      nodes[keyOf(item)] = node;
-      return node;
+      el.addEventListener('dblclick', function () {
+        fireOpen(item);
+      });
+      el.addEventListener('contextmenu', function (e) {
+        e.preventDefault();
+        openIconMenu(item, e.clientX, e.clientY);
+      });
+      layer.appendChild(el);
+      records.set(item.id, { item: item, el: el });
+      positionIcon(item.id);
+      if (tilesApi.refreshIcons) tilesApi.refreshIcons();
     }
 
-    function render() {
-      layer.innerHTML = '';
-      nodes = {};
-      items.forEach(function (item) { layer.appendChild(renderItem(item)); });
-      tiles.refreshIcons(layer);
+    presentItems().forEach(buildIcon);
+
+    function applySelection() {
+      records.forEach(function (rec, rid) {
+        rec.el.classList.toggle('is-selected', selection.has(rid));
+      });
     }
 
-    function getSelectedItems() {
-      return items.filter(function (it) { return selected[keyOf(it)]; });
+    function select(id) {
+      selection = new Set([id]);
+      selectedId = id;
+      applySelection();
     }
 
-    function getSelectedIds() {
-      return getSelectedItems().map(function (it) { return it.id; });
+    function setSelection(ids, primaryId) {
+      selection = new Set(ids);
+      selectedId = primaryId || (ids.length ? ids[ids.length - 1] : null);
+      applySelection();
     }
 
     function clearSelection() {
-      selected = {};
-      Object.keys(nodes).forEach(function (k) { nodes[k].classList.remove('is-selected'); });
+      selection = new Set();
+      selectedId = null;
+      applySelection();
     }
 
-    function selectInRect(rect) {
+    function arrange() {
+      var a = area();
+      var d = gridDims(a.w, a.h);
+      var orderedIds = present.slice().sort(function (p, q) {
+        var pp = positions[p] || { x: 0, y: 0 };
+        var qp = positions[q] || { x: 0, y: 0 };
+        var pc = xyToCell(pp.x, pp.y, a.w, d);
+        var qc = xyToCell(qp.x, qp.y, a.w, d);
+        if (pc.row !== qc.row) return pc.row - qc.row;
+        if (pc.col !== qc.col) return pc.col - qc.col;
+        if (pp.y !== qp.y) return pp.y - qp.y;
+        return pp.x - qp.x;
+      });
       var changed = false;
-      items.forEach(function (item) {
-        var pos = cellToXY(item.cell);
-        var hit = pos.x + CELL_W > rect.x && pos.x < rect.x + rect.w &&
-          pos.y + CELL_H > rect.y && pos.y < rect.y + rect.h;
-        var k = keyOf(item);
-        if (hit && !selected[k]) { selected[k] = true; changed = true; }
-        if (changed && nodes[k]) nodes[k].classList.toggle('is-selected', !!selected[k]);
-      });
-      return getSelectedItems();
-    }
-
-    /* 포인터 드래그: transform으로 1:1 추종, 놓으면 격자 스냅.
-       선택된 것을 잡으면 그룹 전체가 함께 움직인다. */
-    function attachPointer(node, item) {
-      node.addEventListener('pointerdown', function (ev) {
-        if (ev.button !== 0) return;
-        var k = keyOf(item);
-        if (!ev.metaKey && !ev.ctrlKey) {
-          if (!selected[k]) { clearSelection(); selected[k] = true; node.classList.add('is-selected'); }
+      var overflow = orderedIds.length > d.rows * d.cols;
+      var colX = clampPosition(cellToXY({ col: 0, row: 0 }, a.w), a).x;
+      var topY = 10;
+      var maxY = Math.max(topY, a.h - (TILE + 26));
+      var stepY = orderedIds.length > 1 ? (maxY - topY) / (orderedIds.length - 1) : 0;
+      orderedIds.forEach(function (id, i) {
+        var np;
+        if (overflow) {
+          np = clampPosition({ x: colX, y: Math.round(topY + stepY * i) }, a);
         } else {
-          selected[k] = !selected[k];
-          node.classList.toggle('is-selected', !!selected[k]);
-          if (!selected[k]) return;
+          var slot = { col: i % d.cols, row: Math.floor(i / d.cols) };
+          np = clampPosition(cellToXY(slot, a.w), a);
         }
-        var group = getSelectedItems();
-        var startX = ev.clientX, startY = ev.clientY;
-        var moved = false;
-        var starts = group.map(function (it) {
-          var p = cellToXY(it.cell);
-          return { item: it, x: p.x, y: p.y, node: nodes[keyOf(it)] };
+        if (!positions[id] || positions[id].x !== np.x || positions[id].y !== np.y) changed = true;
+        positions[id] = np;
+        positionIcon(id);
+      });
+      if (changed) persist();
+    }
+
+    function addItem(id) {
+      var item = itemById(id);
+      if (!item || present.indexOf(id) >= 0) return;
+      present.push(id);
+      positions[id] = firstFreePosition();
+      buildIcon(item);
+      persist();
+    }
+
+    function registerItems(newItems) {
+      var added = [];
+      (newItems || []).forEach(function (item) {
+        if (!item || !item.id || itemById(item.id)) return;
+        allItems.push(item);
+        added.push(item.id);
+      });
+      return added;
+    }
+
+    function removeItem(id) {
+      var idx = present.indexOf(id);
+      if (idx < 0) return;
+      present.splice(idx, 1);
+      var rec = records.get(id);
+      if (rec) {
+        rec.el.remove();
+        records.delete(id);
+      }
+      delete positions[id];
+      selection.delete(id);
+      if (selectedId === id) selectedId = null;
+      persist();
+    }
+
+    function trashRemove(ids) {
+      var entries = [];
+      ids.slice().forEach(function (id) {
+        var item = itemById(id);
+        entries.push({ kind: 'icon', id: id, label: item ? item.label : id });
+        removeItem(id);
+      });
+      if (typeof deps.onTrashed === 'function') deps.onTrashed(entries);
+    }
+
+    // ---- 우클릭 메뉴 ----
+    var iconMenu = null;
+    function openIconMenu(item, x, y) {
+      var api = deps.menuApi || (typeof window !== 'undefined' ? window.MyHubDesktopMenu : null);
+      if (!api) return;
+      if (!iconMenu) {
+        iconMenu = api.createMenu(doc, {
+          refreshIcons: tilesApi.refreshIcons ? tilesApi.refreshIcons : undefined,
         });
-        function onMove(e2) {
-          var dx = e2.clientX - startX, dy = e2.clientY - startY;
-          if (!moved && Math.hypot(dx, dy) < 4) return;
-          moved = true;
-          starts.forEach(function (s) {
-            if (s.node) s.node.style.transform = 'translate(' + dx + 'px,' + dy + 'px)';
-          });
-          if (deps.onDragMove) deps.onDragMove(e2, group);
-        }
-        function onUp(e2) {
-          doc.removeEventListener('pointermove', onMove);
-          doc.removeEventListener('pointerup', onUp);
-          starts.forEach(function (s) { if (s.node) s.node.style.transform = ''; });
-          if (!moved) {
-            // 안 끌고 놓으면 잡은 것만 선택
-            clearSelection();
-            selected[k] = true;
-            node.classList.add('is-selected');
-            return;
-          }
-          if (deps.onDropCheck && deps.onDropCheck(e2, group)) { render(); return; }
-          var occupied = {};
-          items.forEach(function (it) {
-            if (group.indexOf(it) < 0) occupied[cellKey(it.cell.c, it.cell.r)] = true;
-          });
-          var mr = currentMaxRows();
-          starts.forEach(function (s) {
-            var want = xyToCell(s.x + (e2.clientX - startX), s.y + (e2.clientY - startY));
-            if (mr) want.r = Math.min(want.r, mr - 1);
-            var cell = nearestFreeCell(occupied, want);
-            occupied[cellKey(cell.c, cell.r)] = true;
-            s.item.cell = cell;
-          });
-          persist();
-          render();
-          if (deps.onChange) deps.onChange(items);
-        }
-        doc.addEventListener('pointermove', onMove);
-        doc.addEventListener('pointerup', onUp);
+      }
+      if (isFileItem(item)) {
+        iconMenu.open(x, y, [
+          {
+            label: '열기', icon: 'arrow-up-right',
+            onSelect: function () { fireOpen(item); },
+          },
+          { separator: true },
+          {
+            label: '내장함으로 이동', icon: 'trash-2', danger: true,
+            onSelect: function () {
+              if (typeof deps.onFileTrash === 'function') deps.onFileTrash(item);
+            },
+          },
+        ]);
+        return;
+      }
+      var targetIds = selection.has(item.id) && selection.size > 1
+        ? Array.from(selection)
+        : [item.id];
+      var menuItems = [
+        {
+          label: '열기', icon: 'arrow-up-right',
+          onSelect: function () { fireOpen(item); },
+        },
+      ];
+      if (onDragToDock) {
+        menuItems.push({
+          label: '독에 추가', icon: 'dock',
+          onSelect: function () {
+            targetIds.forEach(function (id) { onDragToDock(id); });
+          },
+        });
+      }
+      menuItems.push({ separator: true });
+      menuItems.push({
+        label: targetIds.length > 1 ? '내장함으로 이동 (' + targetIds.length + '개)' : '내장함으로 이동',
+        icon: 'trash-2', danger: true,
+        onSelect: function () { trashRemove(targetIds); },
       });
+      iconMenu.open(x, y, menuItems);
     }
 
-    function addItem(item) {
-      var occupied = {};
-      items.forEach(function (it) { occupied[cellKey(it.cell.c, it.cell.r)] = true; });
-      var mr = currentMaxRows();
-      var want = item.cell || null;
-      if (mr && want && want.r >= mr) want = null; // 화면 밖 셀은 흐름 배치로
-      var cell = want ? nearestFreeCell(occupied, want)
-        : (mr && firstFlowFreeCell(occupied, mr)) || nearestFreeCell(occupied, { c: 0, r: 0 });
-      items.push({ kind: item.kind || 'app', id: item.id, name: item.name || null, mime: item.mime || null, cell: cell });
-      persist(); render();
-      if (deps.onChange) deps.onChange(items);
+    // ---- 드래그 (이동/제거/독 추가) ----
+    function hitTest(el, x, y) {
+      if (!el || el.hidden) return false;
+      var r = el.getBoundingClientRect();
+      if (!r || (r.width === 0 && r.height === 0)) return false;
+      return x >= r.left && x <= r.right && y >= r.top && y <= r.bottom;
     }
 
-    function removeItems(targets) {
-      var keys = {};
-      targets.forEach(function (it) { keys[keyOf(it)] = true; });
-      items = items.filter(function (it) { return !keys[keyOf(it)]; });
-      persist(); render();
-      if (deps.onChange) deps.onChange(items);
+    function setDragTargets(s, x, y) {
+      var trashEl = typeof deps.getTrashEl === 'function' ? deps.getTrashEl() : deps.trashEl;
+      s.overTrash = hitTest(trashEl, x, y);
+      s.trashEl = trashEl || null;
+      s.overDock = onDragToDock ? hitTest(dockEl, x, y) : false;
+      if (dockEl) dockEl.classList.toggle('dt-dock-drop-hot', s.overDock && !s.overTrash);
+      if (s.trashEl) s.trashEl.classList.toggle('dt-trash-hot', s.overTrash);
     }
 
-    /** 휴지통으로 이동: 공유 키에 쌓고 바탕화면에서 제거한다. */
-    function trashItems(targets) {
-      var trash = loadTrash(storage);
-      targets.forEach(function (it) { trash.push(it); });
-      saveTrash(storage, trash);
-      removeItems(targets);
-      return trash.length;
+    function clearDragTargets() {
+      if (dockEl) dockEl.classList.remove('dt-dock-drop-hot');
+      var trashEl = typeof deps.getTrashEl === 'function' ? deps.getTrashEl() : deps.trashEl;
+      if (trashEl) trashEl.classList.remove('dt-trash-hot');
     }
 
-    /** 휴지통 항목 조회 (Finder 휴지통 보기가 공유 키와 함께 읽는 공용 경로). */
-    function getTrashItems() { return loadTrash(storage).slice(); }
-
-    /** 휴지통 전체 영구 삭제. */
-    function purgeAllTrash() { saveTrash(storage, []); }
-
-    /** 휴지통 단건 영구 삭제 (Finder 휴지통 보기의 삭제 처리). */
-    function purgeFromTrash(predicate) {
-      saveTrash(storage, loadTrash(storage).filter(function (it) { return !predicate(it); }));
+    function setDragPerf(on) {
+      void on;
     }
 
-    /** 휴지통에서 복원 (Finder 휴지통 보기·독 패널 공용 경로). */
-    function restoreFromTrash(predicate) {
-      var trash = loadTrash(storage);
-      var restored = [];
-      var kept = [];
-      trash.forEach(function (it) {
-        if (predicate(it)) restored.push(it); else kept.push(it);
+    function onPointerMove(e) {
+      if (band) {
+        if (band.pointerId !== undefined && e.pointerId !== undefined && e.pointerId !== band.pointerId) return;
+        updateBand(e.clientX, e.clientY);
+        return;
+      }
+      if (!drag) return;
+      if (drag.pointerId !== undefined && e.pointerId !== undefined && e.pointerId !== drag.pointerId) return;
+      drag.dx = e.clientX - drag.startX;
+      drag.dy = e.clientY - drag.startY;
+      if (Math.abs(drag.dx) > DRAG_THRESHOLD || Math.abs(drag.dy) > DRAG_THRESHOLD) drag.moved = true;
+      if (drag.moved) {
+        setDragPerf(true);
+        drag.ids.forEach(function (id) {
+          drag.els[id].style.transform = 'translate(' + drag.dx + 'px,' + drag.dy + 'px)';
+        });
+        setDragTargets(drag, e.clientX, e.clientY);
+      }
+    }
+
+    function onPointerUp(e) {
+      if (band) {
+        finishBand();
+        return;
+      }
+      if (!drag) return;
+      if (drag.pointerId !== undefined && e && e.pointerId !== undefined && e.pointerId !== drag.pointerId) return;
+      var s = drag;
+      drag = null;
+      setDragPerf(false);
+      s.ids.forEach(function (id) {
+        s.els[id].classList.remove('is-dragging');
+        s.els[id].style.transform = '';
       });
-      saveTrash(storage, kept);
-      restored.forEach(function (it) { addItem(it); });
-      return restored.length;
+      var toTrash = s.moved && s.overTrash;
+      var toDock = s.moved && s.overDock && !toTrash;
+      clearDragTargets();
+      if (toTrash) {
+        var appIds = s.ids.filter(function (id) {
+          var it = itemById(id);
+          return it && !isFileItem(it);
+        });
+        if (appIds.length) trashRemove(appIds);
+        if (appIds.length === s.ids.length) return;
+        toDock = false;
+      }
+      if (s.moved) {
+        var a = area();
+        var dims = gridDims(a.w, a.h);
+        var occupied = new Set();
+        present.forEach(function (id) {
+          if (s.ids.indexOf(id) >= 0 || !positions[id]) return;
+          occupied.add(cellKey(xyToCell(positions[id].x, positions[id].y, a.w, dims)));
+        });
+        s.ids.forEach(function (id) {
+          if (present.indexOf(id) < 0) return;
+          if (!s.starts[id]) return;
+          var raw = { x: s.starts[id].x + s.dx, y: s.starts[id].y + s.dy };
+          var want = xyToCell(raw.x, raw.y, a.w, dims);
+          var cell = occupied.has(cellKey(want)) ? nearestFreeCell(want, occupied, dims) : want;
+          if (!cell) cell = want;
+          occupied.add(cellKey(cell));
+          positions[id] = clampPosition(cellToXY(cell, a.w), a);
+        });
+        persist();
+      } else {
+        if (s.group) {
+          select(s.id);
+        }
+        var tapNow = Date.now();
+        if (lastTap && lastTap.id === s.id && tapNow - lastTap.time <= 350) {
+          lastTap = null;
+          fireOpen(itemById(s.id));
+        } else {
+          lastTap = { id: s.id, time: tapNow };
+        }
+      }
+      s.ids.forEach(function (id) { positionIcon(id); });
+      if (toDock && onDragToDock) {
+        s.ids.forEach(function (id) {
+          var it = itemById(id);
+          if (it && !isFileItem(it)) onDragToDock(id);
+        });
+      }
+    }
+
+    // ---- 영역 선택 (오버밴드) ----
+    function iconClientRect(id) {
+      var rec = records.get(id);
+      if (!rec) return null;
+      var r = typeof rec.el.getBoundingClientRect === 'function' ? rec.el.getBoundingClientRect() : null;
+      if (r && (r.width > 0 || r.height > 0)) {
+        return { left: r.left, top: r.top, right: r.right, bottom: r.bottom };
+      }
+      var lr = layer.getBoundingClientRect ? layer.getBoundingClientRect() : { left: 0, top: 0 };
+      var pos = positions[id] || { x: 0, y: 0 };
+      return {
+        left: (lr.left || 0) + pos.x, top: (lr.top || 0) + pos.y,
+        right: (lr.left || 0) + pos.x + TILE, bottom: (lr.top || 0) + pos.y + ICON_H,
+      };
+    }
+
+    function startBand(e) {
+      if (e.button !== undefined && e.button !== 0) return;
+      var additive = !!e.shiftKey;
+      band = {
+        pointerId: e.pointerId,
+        startX: e.clientX, startY: e.clientY,
+        base: additive ? new Set(selection) : new Set(),
+        el: null,
+      };
+      if (!additive) clearSelection();
+    }
+
+    function updateBand(x, y) {
+      if (!band) return;
+      if (!band.el) {
+        if (Math.abs(x - band.startX) < 3 && Math.abs(y - band.startY) < 3) return;
+        band.el = doc.createElement('div');
+        band.el.className = 'dt-select-band';
+        doc.body.appendChild(band.el);
+      }
+      var left = Math.min(band.startX, x);
+      var top = Math.min(band.startY, y);
+      var w = Math.abs(x - band.startX);
+      var h = Math.abs(y - band.startY);
+      band.el.style.left = left + 'px';
+      band.el.style.top = top + 'px';
+      band.el.style.width = w + 'px';
+      band.el.style.height = h + 'px';
+      var hits = [];
+      records.forEach(function (rec, id) {
+        var r = iconClientRect(id);
+        if (r && r.left < left + w && r.right > left && r.top < top + h && r.bottom > top) {
+          hits.push(id);
+        }
+      });
+      var merged = Array.from(band.base);
+      hits.forEach(function (id) { if (merged.indexOf(id) < 0) merged.push(id); });
+      setSelection(merged, hits.length ? hits[hits.length - 1] : null);
+    }
+
+    function finishBand() {
+      if (band && band.el) band.el.remove();
+      band = null;
+    }
+
+    function onSurfacePointerDown(e) {
+      if (destroyed) return;
+      if (e.target !== surface) return;
+      startBand(e);
+    }
+    if (surface) surface.addEventListener('pointerdown', onSurfacePointerDown);
+
+    function onWindowBlur() {
+      finishBand();
+    }
+    if (typeof window !== 'undefined') window.addEventListener('blur', onWindowBlur);
+
+    doc.addEventListener('pointermove', onPointerMove);
+    doc.addEventListener('pointerup', onPointerUp);
+    doc.addEventListener('pointercancel', onPointerUp);
+
+    function onResize() {
+      if (destroyed) return;
+      var a = area();
+      var changed = false;
+      present.forEach(function (id) {
+        if (!positions[id]) return;
+        var clamped = clampPosition(positions[id], a);
+        if (clamped.x !== positions[id].x || clamped.y !== positions[id].y) changed = true;
+        positions[id] = clamped;
+        positionIcon(id);
+      });
+      if (changed) persist();
+    }
+    if (typeof window !== 'undefined') window.addEventListener('resize', onResize);
+
+    if (tilesApi.refreshIcons) tilesApi.refreshIcons();
+
+    function destroy() {
+      destroyed = true;
+      setDragPerf(false);
+      finishBand();
+      if (surface) surface.removeEventListener('pointerdown', onSurfacePointerDown);
+      doc.removeEventListener('pointermove', onPointerMove);
+      doc.removeEventListener('pointerup', onPointerUp);
+      doc.removeEventListener('pointercancel', onPointerUp);
+      if (typeof window !== 'undefined') window.removeEventListener('blur', onWindowBlur);
+      if (typeof window !== 'undefined') window.removeEventListener('resize', onResize);
+      records.forEach(function (rec) { rec.el.remove(); });
+      records.clear();
     }
 
     return {
-      render: render,
-      getItems: function () { return items.slice(); },
+      getPositions: function () {
+        var out = {};
+        Object.keys(positions).forEach(function (k) { out[k] = { x: positions[k].x, y: positions[k].y }; });
+        return out;
+      },
+      getPresentIds: function () { return present.slice(); },
       addItem: addItem,
-      removeItems: removeItems,
-      trashItems: trashItems,
-      restoreFromTrash: restoreFromTrash,
-      getTrashItems: getTrashItems,
-      purgeAllTrash: purgeAllTrash,
-      purgeFromTrash: purgeFromTrash,
-      getSelectedItems: getSelectedItems,
-      getSelectedIds: getSelectedIds,
-      selectInRect: selectInRect,
+      registerItems: registerItems,
+      removeItem: removeItem,
+      arrange: arrange,
       clearSelection: clearSelection,
-      getTrashCount: function () { return loadTrash(storage).length; },
+      getSelectedId: function () { return selectedId; },
+      getSelectedIds: function () { return Array.from(selection); },
+      relayout: onResize,
+      destroy: destroy,
     };
   }
 
   var api = {
-    STORAGE_KEY: STORAGE_KEY, TRASH_KEY: TRASH_KEY,
-    FORMAT_VERSION: FORMAT_VERSION,
-    CELL_W: CELL_W, CELL_H: CELL_H,
-    cellToXY: cellToXY, xyToCell: xyToCell, nearestFreeCell: nearestFreeCell,
-    indexCell: indexCell, firstFlowFreeCell: firstFlowFreeCell,
-    loadTrash: loadTrash, saveTrash: saveTrash,
-    loadItems: loadItems, saveItems: saveItems, migrateItems: migrateItems,
-    createIcons: createIcons,
+    PREF_KEY: PREF_KEY,
+    CELL_W: CELL_W,
+    CELL_H: CELL_H,
+    TILE: TILE,
+    gridDims: gridDims,
+    clampCell: clampCell,
+    nearestFreeCell: nearestFreeCell,
+    cellToXY: cellToXY,
+    xyToCell: xyToCell,
+    snapXY: snapXY,
+    loadLayout: loadLayout,
+    saveLayout: saveLayout,
+    loadPresent: loadPresent,
+    fileGlyph: fileGlyph,
+    createManager: createManager,
   };
-
   if (typeof window !== 'undefined') window.MyHubDesktopIcons = api;
   if (typeof globalThis !== 'undefined') globalThis.MyHubDesktopIcons = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;

@@ -30,6 +30,9 @@ import * as path from 'path'
 const ROOT = path.resolve(__dirname, '..')
 const NAV_JS = fs.readFileSync(path.join(ROOT, 'public', 'nav.js'), 'utf-8')
 const STATE_JS = fs.readFileSync(path.join(ROOT, 'public', 'js', 'desktop', 'state.js'), 'utf-8')
+const TILES_JS = fs.readFileSync(path.join(ROOT, 'public', 'js', 'desktop', 'tiles.js'), 'utf-8')
+const MENU_JS = fs.readFileSync(path.join(ROOT, 'public', 'js', 'desktop', 'menu.js'), 'utf-8')
+const DOCK_JS = fs.readFileSync(path.join(ROOT, 'public', 'js', 'desktop', 'dock.js'), 'utf-8')
 const WINDOWS_JS = fs.readFileSync(path.join(ROOT, 'public', 'js', 'desktop', 'windows.js'), 'utf-8')
 const DESKTOP_HTML = fs.readFileSync(path.join(ROOT, 'public', 'desktop.html'), 'utf-8')
 
@@ -54,6 +57,14 @@ function loadStateApi(): any {
   return getWin().MyHubDesktopState
 }
 
+function loadDesktopGlobals(): void {
+  // 운영 로드 순서와 동일하게 전역을 먼저 세운다 (windows.js가 dock·tiles·
+  // menu 전역을 lazy 조회하므로 매니저 생성 전에 있어야 한다).
+  new Function('window', 'document', TILES_JS)(getWin(), getDoc())
+  new Function('window', 'document', MENU_JS)(getWin(), getDoc())
+  new Function('window', 'document', DOCK_JS)(getWin(), getDoc())
+}
+
 function loadWindowsApi(): any {
   const loader = new Function('window', 'document', WINDOWS_JS)
   loader(getWin(), getDoc())
@@ -75,22 +86,32 @@ let manager: any = null
 function setupShell() {
   const doc = getDoc()
   doc.body.innerHTML = `
+<header class="g-nav">
+  <a href="/" class="brand-logo">JN</a>
+  <span id="dt-active-title"></span>
+  <div id="dt-app-actions"></div>
+  <div id="dt-office-tabs"></div>
+  <div class="spacer"></div>
+  <div id="dt-bar-assistant"></div>
+  <span class="ver" id="clock"></span>
+</header>
+<div id="dt-wallpaper"></div>
+<div id="dt-wp-caption"></div>
+<div id="dt-icons"></div>
+<div id="dt-widgets"></div>
 <main id="dt-root"></main>
-<footer id="dt-taskbar">
-  <div class="dt-launchers"></div>
-  <div class="dt-task-sep"></div>
-  <div class="dt-task-windows"></div>
-</footer>`
-  return { root: doc.getElementById('dt-root'), taskbar: doc.getElementById('dt-taskbar') }
+<div id="dt-mission"></div>
+<nav id="dt-dock"></nav>`
+  return { root: doc.getElementById('dt-root'), taskbar: doc.getElementById('dt-dock') }
 }
 
 function makeManager(storage: MemoryStorage): any {
   const { root, taskbar } = setupShell()
   const stateApi = loadStateApi()
+  loadDesktopGlobals()
   const windowsApi = loadWindowsApi()
-  // 현행 배선(main.js)과 동일하게 상태 로드는 호출자가 하고 매니저에 주입한다.
-  // renderDock은 독 실행 표시의 경계 — 호출 인자를 모아 검증에 쓴다.
-  const dockCalls: any[] = []
+  const doc = getDoc()
+  // 운영 main.js와 같은 deps 계약으로 매니저를 만든다 (상태 로드는 호출자 몫).
   manager = windowsApi.createManager({
     root,
     taskbar,
@@ -98,9 +119,14 @@ function makeManager(storage: MemoryStorage): any {
     storage,
     getViewport: () => ({ ...VIEWPORT }),
     state: stateApi.load(storage, { ...VIEWPORT }),
-    renderDock: (info: any) => { dockCalls.push(info) },
+    activeTitleEl: doc.getElementById('dt-active-title'),
+    appActionsEl: doc.getElementById('dt-app-actions'),
+    officeTabsEl: doc.getElementById('dt-office-tabs'),
+    missionEl: doc.getElementById('dt-mission'),
+    navApi: getWin().MyHubNav || null,
+    wallpaperEl: doc.getElementById('dt-wallpaper'),
+    menuApi: getWin().MyHubDesktopMenu || null,
   })
-  manager._dockCalls = dockCalls
   return manager
 }
 
@@ -108,9 +134,15 @@ afterEach(() => {
   manager = null
 })
 
-function lastDockRunning(m: any): Record<string, boolean> {
-  const calls = m._dockCalls
-  return calls.length ? calls[calls.length - 1].running : {}
+// 독 실행 표시의 정본은 독 DOM 자체다 (windows.js가 dock.update로 동기화):
+// 실행 중 모듈은 .dt-dock-dot의 opacity가 '1'이고 버튼에 is-open이 붙는다.
+function lastDockRunning(_m?: any): Record<string, boolean> {
+  const out: Record<string, boolean> = {}
+  getDoc().querySelectorAll('.dt-dock-item').forEach((btn: any) => {
+    const dot = btn.querySelector('.dt-dock-dot')
+    if (dot && dot.style.opacity === '1') out[btn.dataset.module] = true
+  })
+  return out
 }
 
 function winEl(id: string): any {
@@ -163,7 +195,7 @@ describe('데스크톱 셸 — 창 생성과 keep-alive', () => {
     m.openModule('memo')
     const frameBefore = winEl('memo').querySelector('iframe.dt-frame')
 
-    winEl('memo').querySelector('.dt-light-min').click()
+    winEl('memo').querySelector('.dt-btn-min').click()
     m.openModule('memo') // 복원 (독 아이콘 클릭이 이 경로를 탄다)
 
     expect(winEl('memo').querySelector('iframe.dt-frame')).toBe(frameBefore)
@@ -176,7 +208,7 @@ describe('데스크톱 셸 — 최소화·복원·닫기', () => {
     const m = makeManager(storage)
     m.openModule('memo')
 
-    winEl('memo').querySelector('.dt-light-min').click()
+    winEl('memo').querySelector('.dt-btn-min').click()
 
     const el = winEl('memo') // DOM은 keep-alive로 남아 있어야 한다
     expect(el).not.toBeNull()
@@ -199,7 +231,7 @@ describe('데스크톱 셸 — 최소화·복원·닫기', () => {
     m.openModule('todo')
     expect(getDoc().querySelectorAll('.dt-window').length).toBe(2)
 
-    winEl('memo').querySelector('.dt-light-close').click()
+    winEl('memo').querySelector('.dt-btn-close').click()
 
     expect(winEl('memo')).toBeNull()
     expect(getDoc().querySelectorAll('.dt-window').length).toBe(1)
@@ -226,9 +258,9 @@ describe('데스크톱 셸 — 포커스와 드래그', () => {
     const sched = st.windows.find((w: any) => w.id === 'schedule')
     expect(st.activeId).toBe('memo')
     expect(memo.z).toBeGreaterThan(sched.z)
-    // zIndex는 상태 z에 셸 베이스(10)를 더한 값으로 렌더된다
-    expect(winEl('memo').style.zIndex).toBe(String(10 + memo.z))
-    expect(winEl('schedule').style.zIndex).toBe(String(10 + sched.z))
+    // zIndex는 상태 z 그대로 렌더된다 (windows.js 렌더 규칙)
+    expect(winEl('memo').style.zIndex).toBe(String(memo.z))
+    expect(winEl('schedule').style.zIndex).toBe(String(sched.z))
     expect(winEl('memo').classList.contains('is-active')).toBe(true)
     expect(winEl('schedule').classList.contains('is-active')).toBe(false)
   })
@@ -247,19 +279,22 @@ describe('데스크톱 셸 — 포커스와 드래그', () => {
     const m = makeManager(storage)
     m.openModule('memo')
     const before = { ...m.getState().windows[0] }
-    const bar = winEl('memo').querySelector('.dt-win-bar')
+    const bar = winEl('memo').querySelector('.dt-titlebar')
 
     pointer(bar, 'pointerdown', 200, 200)
     pointer(getDoc(), 'pointermove', 240, 230)
-    // 드래그 중: 요소 left/top만 따라가고 상태는 아직 확정되지 않는다
-    expect(winEl('memo').style.left).toBe(before.x + 40 + 'px')
-    expect(winEl('memo').style.top).toBe(before.y + 30 + 'px')
+    // 드래그 중: 운영 계약은 transform으로만 따라가고 left/top·상태는
+    // 확정되지 않는다 (windows.js onPointerMove의 move 분기)
+    expect(winEl('memo').style.transform).toBe('translate(40px,30px)')
+    expect(winEl('memo').style.left).toBe(before.x + 'px')
+    expect(winEl('memo').style.top).toBe(before.y + 'px')
     expect(m.getState().windows[0].x).toBe(before.x)
 
     pointer(getDoc(), 'pointerup', 240, 230)
     const after = m.getState().windows[0]
     expect(after.x).toBe(before.x + 40)
     expect(after.y).toBe(before.y + 30)
+    expect(winEl('memo').style.transform).toBe('')
     expect(winEl('memo').style.left).toBe(after.x + 'px')
     const saved = JSON.parse(storage.getItem(loadStateApi().STORAGE_KEY) as string)
     expect(saved.windows[0].x).toBe(after.x)
@@ -344,10 +379,12 @@ describe('nav.js — 설정 버튼과 데스크톱 진입', () => {
 })
 
 describe('desktop.html 배선', () => {
-  test('스크립트를 file-icons → state → tiles → windows → dock → … → main 순서로 로드하고 인라인 스크립트가 없다', () => {
+  test('스크립트를 file-icons → state → tiles → windows → dock → … → nav → main 순서로 로드하고 인라인 스크립트가 없다', () => {
     const idx = (s: string) => DESKTOP_HTML.indexOf(s)
-    // 셸은 nav.js를 쓰지 않는다 (상단바·설정은 셸 자체 구성)
-    expect(idx('src="/nav.js"')).toBe(-1)
+    // 운영 구성: 설정 메뉴는 nav.js가 담당하고(settings-menu.js는 운영에 없음),
+    // 창 관리자는 navApi로 nav.js를 쓴다.
+    expect(idx('src="/nav.js"')).toBeGreaterThan(-1)
+    expect(idx('settings-menu.js')).toBe(-1)
     const chain = [
       'src="/js/file-icons.js"',
       'src="/js/desktop/state.js"',
@@ -356,11 +393,13 @@ describe('desktop.html 배선', () => {
       'src="/js/desktop/dock.js"',
       'src="/js/desktop/desktop-icons.js"',
       'src="/js/desktop/widgets.js"',
+      'src="/js/desktop/drop-upload.js"',
       'src="/js/desktop/menu.js"',
-      'src="/js/desktop/settings-menu.js"',
+      'src="/js/desktop/menubar.js"',
       'src="/js/desktop/wallpaper.js"',
       'src="/js/desktop/subchat.js"',
       'src="/js/desktop/version-guard.js"',
+      'src="/nav.js"',
       'src="/js/desktop/main.js"',
     ]
     for (const srcAttr of chain) expect(idx(srcAttr)).toBeGreaterThan(-1)
@@ -369,7 +408,7 @@ describe('desktop.html 배선', () => {
     }
     expect(DESKTOP_HTML).toContain('href="/css/desktop.css"')
     expect(DESKTOP_HTML).toContain('id="dt-root"')
-    expect(DESKTOP_HTML).toContain('id="dt-taskbar"')
+    expect(DESKTOP_HTML).toContain('id="dt-dock"')
     // src 없는 <script> (인라인) 금지 — AGENTS.md 배포 전 esbuild 검증 대상
     expect(/<script(?![^>]*\bsrc=)[^>]*>/.test(DESKTOP_HTML)).toBe(false)
   })

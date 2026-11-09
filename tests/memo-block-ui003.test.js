@@ -205,9 +205,9 @@ describe('블록 해제 확인 관문: 커스텀 모달 고정 (정적)', () => 
     expect(BUNDLE).toContain("window._confirmAction('이 블록의 잠금을 해제할까요?', '해제')");
   });
 
-  test('_confirmAction은 confirm-overlay Promise 모달이고 _confirmDelete가 재사용한다', () => {
+  test('_confirmAction은 memo-confirm-overlay Promise 모달이고 _confirmDelete가 재사용한다', () => {
     expect(PANE).toContain('window._confirmAction = function');
-    expect(PANE).toContain("overlay.className = 'confirm-overlay'");
+    expect(PANE).toContain("overlay.className = 'memo-confirm-overlay'");
     expect(PANE).toContain("return window._confirmAction(msg, '삭제', true);");
     expect(BUNDLE).toContain('window._confirmAction = function');
   });
@@ -287,16 +287,16 @@ describe('블록 해제 흐름 실행 (jsdom, 배송 함수 본문)', () => {
 
     const done = unlockLockedBlockEl(span, 123);
     await tick();
-    const overlay = document.querySelector('.confirm-overlay');
+    const overlay = document.querySelector('.memo-confirm-overlay');
     expect(overlay).not.toBeNull();
     expect(overlay.textContent).toContain('이 블록의 잠금을 해제할까요?');
-    overlay.querySelector('.confirm-yes').click();
+    overlay.querySelector('.memo-confirm-yes').click();
     await tick(); await tick();
 
-    const pinInput = document.querySelector('.pin-prompt-input');
+    const pinInput = document.querySelector('.myhub-stepup-pin-input');
     expect(pinInput).not.toBeNull();
     pinInput.value = '123456';
-    pinInput.closest('.confirm-overlay').querySelector('.confirm-yes').click();
+    pinInput.closest('.myhub-stepup-overlay').querySelector('.myhub-stepup-yes').click();
     await done;
     await tick();
 
@@ -318,9 +318,9 @@ describe('블록 해제 흐름 실행 (jsdom, 배송 함수 본문)', () => {
     });
     const done = unlockLockedBlockEl(span, 123);
     await tick();
-    const overlay = document.querySelector('.confirm-overlay');
+    const overlay = document.querySelector('.memo-confirm-overlay');
     expect(overlay).not.toBeNull();
-    overlay.querySelector('.confirm-no').click();
+    overlay.querySelector('.memo-confirm-no').click();
     await done;
     expect(calls.length).toBe(0);
     expect(editor.querySelector('.locked-block')).not.toBeNull();

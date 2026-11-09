@@ -276,6 +276,56 @@ describe('파일 업로드·조회·교체', () => {
     expect(noFolder.status).toBe(404)
   })
 
+  // 회귀: parseBody 기본 파싱은 중복 'files' 키에서 마지막 값만 남긴다.
+  // 핸들러의 배열 순회·전 파일 검증이 있어도 도달할 수 없어 앞 파일이
+  // 조용히 버려졌던 결함의 재현·고정.
+  test('업로드: 파일 2개 + 폴더 지정 — 둘 다 그 폴더에 저장된다 (중복 키 소실 회귀)', async () => {
+    const db = makeDb()
+    const env = envOf(db)
+    const folderId = await seedFolder(db, '대상 폴더')
+    const r = await req(env, '/files', {
+      method: 'POST',
+      body: uploadForm([new File(['x'], 'a.txt'), new File(['yy'], 'b.txt')], String(folderId)),
+    })
+    expect(r.status).toBe(200)
+    expect(r.json.files.map((f: any) => f.filename)).toEqual(['a.txt', 'b.txt'])
+    const { results } = await db.prepare('SELECT filename, folder_id FROM drive_files ORDER BY id').all()
+    expect(results).toEqual([
+      { filename: 'a.txt', folder_id: folderId },
+      { filename: 'b.txt', folder_id: folderId },
+    ])
+  })
+
+  test('업로드: 파일 2개 폴더 미지정 — 둘 다 루트(folder_id NULL)에 저장된다', async () => {
+    const db = makeDb()
+    const env = envOf(db)
+    const r = await req(env, '/files', {
+      method: 'POST',
+      body: uploadForm([new File(['x'], 'a.txt'), new File(['yy'], 'b.txt')]),
+    })
+    expect(r.status).toBe(200)
+    expect(r.json.files).toHaveLength(2)
+    const { results } = await db.prepare('SELECT folder_id FROM drive_files ORDER BY id').all()
+    expect(results).toEqual([{ folder_id: null }, { folder_id: null }])
+  })
+
+  // 스칼라 정규화 계약: folder_id는 단일 값 필드다. 중복 전송(계약 밖 입력)에서는
+  // 첫 값을 쓰는 것으로 고정한다 — 배열이 Number()로 NaN이 되어 폴더 지정이
+  // 깨지는 일이 없어야 한다.
+  test('업로드: folder_id 중복 전송 시 첫 값을 쓴다 (스칼라 정규화 계약)', async () => {
+    const db = makeDb()
+    const env = envOf(db)
+    const folderId = await seedFolder(db, '첫 값 폴더')
+    const form = new FormData()
+    form.append('files', new File(['x'], 'a.txt'))
+    form.append('folder_id', String(folderId))
+    form.append('folder_id', 'root')
+    const r = await req(env, '/files', { method: 'POST', body: form })
+    expect(r.status).toBe(200)
+    const row = await fileRow(db, r.json.files[0].id)
+    expect(row.folder_id).toBe(folderId)
+  })
+
   test('업로드 10MB 초과는 어떤 파일도 저장하지 않고 400', async () => {
     const db = makeDb()
     const env = envOf(db)

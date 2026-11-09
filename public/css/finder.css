@@ -1,187 +1,779 @@
-/* MyHub Finder — Mac 스타일 목록 (D-15 v3 계약)
- * 열 헤더 정렬·줄무늬 행·파란 선택·하단 경로+상태 한 줄. */
-
-.finder-layout { display: flex; height: calc(100dvh - var(--topnav-h, 52px)); min-height: 0; }
-
+/* 파인더 — macOS Finder식 목록 브라우저 (사이드바 + 목록) */
+/* 통합 창 셸 (2026-11-06 스펙): 플로팅 카드가 아닌 사이드바가 창 왼쪽
+   에 붙은 풀높이 면이고 본문도 카드가 아니다. 사이드바 머티리얼
+   행은 창 바의 왼쪽 구간과 같은 값을 써야 사이드바 면 바로 위에
+   행의 그림이 뜬다. 기하 정보는 docs/FINDER-GEOMETRY.md 기준이며,
+   겹치는 핵심 공통 값(열·머티리얼·아이콘 슬롯)은 shell.css 토큰을
+   단일 출처로 (규칙 R-4). */
+.finder-layout {
+  /* 열 너비 정의의 단일 출처 (기준 G-11): 헤더와 행이 함께 참조해
+     두 그리드 열너비가 같은 값을 쓴다. */
+  --finder-cols: minmax(180px, 1fr) 168px 76px 104px;
+  display: flex;
+  height: calc(100dvh - var(--topnav-h, 52px));
+  min-height: 0;
+  padding: 0;
+  gap: 0;
+  box-sizing: border-box;
+  background: #fff;
+}
 .finder-side {
-  width: 207px; flex: 0 0 207px; padding: 12px 8px; overflow-y: auto;
-  background: #edf1f7; border-right: 1px solid rgba(0,0,0,.06);
-  display: flex; flex-direction: column; gap: 1px;
+  width: var(--finder-side-w);
+  flex: none;
+  padding: 14px 10px;
+  background: var(--finder-side-material);
+  border: none;
+  border-right: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 0;
+  box-shadow: none;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow-y: auto;
+  /* 스크롤바 비표시 (macOS 오버레이 방식, 2026-11-06 스펙에서 재차 최종
+     정리): 스크롤은 유지하고 바만 숨긴다. */
+  scrollbar-width: none;
+  -ms-overflow-style: none;
 }
-.finder-side-badge {
-  margin-left: auto; min-width: 19px; height: 19px; padding: 0 6px;
-  border-radius: 999px; background: rgba(10,132,255,.18); color: #0a5fd7;
-  font-size: 11px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center;
+.finder-side::-webkit-scrollbar { display: none; }
+.finder-side-title {
+  padding: 4px 8px 6px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: #9ca3af;
 }
-.finder-side-usage { margin-top: auto; }
-.finder-side-title { font-size: 11px; font-weight: 700; color: #8e8e93; padding: 10px 8px 4px; }
 .finder-side-item {
-  display: flex; align-items: center; gap: 8px; width: 100%;
-  border: 0; background: none; cursor: pointer; text-align: left;
-  padding: 6px 8px; border-radius: 8px; font-size: 13px; color: #1d1d1f;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 8px;
+  border: none;
+  background: none;
+  border-radius: 7px;
+  font-size: 13.5px;
+  color: #1f2937;
+  cursor: pointer;
+  text-align: left;
 }
-.finder-side-item svg { width: 16px; height: 16px; color: #0a84ff; flex: 0 0 16px; }
-.finder-side-item:hover { background: rgba(0,0,0,.05); }
-.finder-side-item.is-active { background: rgba(10,132,255,.16); color: #0a5fd7; font-weight: 600; }
-#sideFavorites { display: flex; flex-direction: column; gap: 1px; }
-.finder-side-usage { font-size: 11px; color: #8e8e93; padding: 4px 8px; }
-
-.finder-main { flex: 1; display: flex; flex-direction: column; min-width: 0; background: #fff; }
-.finder-main.is-dragover { outline: 2px solid #a5c8f0; outline-offset: -2px; }
+.finder-side-item svg { width: 16px; height: 16px; color: #5b6b7c; flex: none; }
+.finder-side-item:hover { background: rgba(15, 23, 42, 0.05); }
+.finder-side-item.is-active { background: rgba(25, 113, 194, 0.13); font-weight: 600; }
+.finder-side-item.is-active svg { color: #1971c2; }
+.finder-side-count { margin-left: auto; font-size: 12px; color: #9ca3af; }
+.finder-side-usage { padding: 0 8px 2px 32px; margin-top: -2px; font-size: 11.5px; color: #9ca3af; }
+.finder-main {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  background: #fff;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  overflow: hidden;
+}
+/* 자체 툴바 행은 본문 첫 행으로 유지되고 배경이 창 바 머티리얼과 같은
+   면이면 "그 위에 뜬"이 아니라 그 면의 연속으로 보인다 */
 .finder-toolbar {
-  display: flex; align-items: center; gap: 4px; padding: 6px 10px;
-  border-bottom: 1px solid rgba(0,0,0,.06);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  background: rgba(244, 244, 246, 0.9);
+  border-bottom: 1px solid rgba(15, 23, 42, 0.07);
 }
-.finder-nav-btn {
-  border: 0; background: none; cursor: pointer; padding: 5px; border-radius: 7px;
-  display: inline-flex; color: #3f3f46;
+/* 창 바가 이를 호스팅하면(예 채팅) 자체 툴바 행은 사라진다 — 컨트롤은
+   호스팅된 창 바의 한 줄 속에 든다 (트랙 H). 단독 페이지에서는
+   호스팅이 전혀 없으므로 이 규칙이 걸리지 않는다. */
+.finder-toolbar.myhub-hosted { display: none; }
+.finder-toolbar strong { font-size: 15px; font-weight: 700; white-space: nowrap; }
+.finder-nav-btns {
+  display: flex; gap: 0; flex: none;
+  background: rgba(15, 23, 42, 0.05);
+  border-radius: 999px;
+  padding: 2px;
 }
-.finder-nav-btn:hover { background: rgba(0,0,0,.06); }
-.finder-nav-btn svg { width: 17px; height: 17px; }
-.finder-path { display: flex; align-items: center; gap: 2px; font-size: 13px; min-width: 0; overflow: hidden; }
-.finder-path button {
-  border: 0; background: none; cursor: pointer; padding: 4px 7px; border-radius: 6px;
-  font-size: 13px; color: #3f3f46; white-space: nowrap;
+.finder-navbtn {
+  width: 28px; height: 24px;
+  display: flex; align-items: center; justify-content: center;
+  border: none; background: none; border-radius: 999px;
+  color: #374151; cursor: pointer;
 }
-.finder-path button:hover { background: rgba(0,0,0,.06); }
-.finder-path .is-current, .finder-path button.is-current { font-weight: 700; color: #18181b; }
-.finder-path-sep { color: #a1a1aa; }
-.finder-toolbar .spacer { flex: 1; }
-.finder-empty-trash {
-  border: 0; background: none; color: #dc2626; cursor: pointer; font-size: 12.5px;
-  padding: 5px 9px; border-radius: 7px;
+.finder-navbtn svg { width: 18px; height: 18px; }
+.finder-navbtn:hover:not([disabled]) { background: rgba(15, 23, 42, 0.06); }
+.finder-navbtn[disabled] { color: #c3c9d1; cursor: default; }
+.finder-tools { display: flex; align-items: center; gap: 4px; margin-left: auto; flex: none; }
+.finder-seg {
+  display: flex;
+  background: rgba(15, 23, 42, 0.06);
+  border-radius: 999px;
+  padding: 2px;
+  gap: 2px;
 }
-.finder-empty-trash:hover { background: rgba(220,38,38,.08); }
-
-.finder-list { flex: 1; overflow-y: auto; min-height: 0; }
-.finder-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-.finder-table thead th {
-  position: sticky; top: 0; z-index: 1; background: #fbfbfc;
-  text-align: left; font-weight: 600; color: #52525b; font-size: 12px;
-  padding: 7px 10px; border-bottom: 1px solid rgba(0,0,0,.08); cursor: pointer; user-select: none;
+.finder-seg button {
+  width: 26px; height: 22px;
+  display: flex; align-items: center; justify-content: center;
+  border: none; background: none; border-radius: 999px;
+  color: #6b7280; cursor: pointer;
 }
-.finder-table tbody td { padding: 3.5px 10px; border-bottom: 1px solid rgba(0,0,0,.04); vertical-align: middle; }
-.finder-table tbody tr:nth-child(even) { background: #fafafa; }
-.finder-table tbody tr.finder-row { cursor: default; }
-.finder-table tbody tr.finder-row.is-selected { background: #0a84ff; color: #fff; }
-.finder-table tbody tr.finder-row.is-selected td { border-bottom-color: transparent; }
-.finder-cell-name { display: flex; align-items: center; gap: 8px; font-weight: 500; }
-.finder-cell-name svg { flex: 0 0 auto; }
-/* file-icons 인라인 SVG(문서 페이지 도형)는 행 높이로 커지지 않게 22px로 고정 */
-.finder-cell-name > svg { width: 22px; height: 22px; flex: 0 0 22px; }
-.finder-cell-name > span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.finder-row-icon { width: 22px; height: 22px; color: #71717a; }
-.finder-row-icon-folder { color: #e8b93e; fill: #ffd60a; }
-.finder-cell-loc { color: #71717a; }
-tr.is-selected .finder-cell-loc { color: rgba(255,255,255,.85); }
-.finder-empty { padding: 48px 20px; text-align: center; color: #8e8e93; font-size: 13px; }
-
-.finder-statusbar {
-  padding: 5px 12px; border-top: 1px solid rgba(0,0,0,.06);
-  font-size: 12px; color: #52525b; background: #fbfbfc;
+.finder-seg button svg { width: 14px; height: 14px; }
+.finder-seg button.is-active { background: #fff; color: #111827; box-shadow: 0 1px 2px rgba(15, 23, 42, 0.14); }
+.finder-toolbtn {
+  height: 28px; min-width: 28px; padding: 0 7px;
+  display: inline-flex; align-items: center; justify-content: center; gap: 5px;
+  border: 1px solid rgba(15, 23, 42, 0.07); background: rgba(255, 255, 255, 0.85); border-radius: 999px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+  color: #374151; font-size: 12.5px; font-family: inherit; cursor: pointer;
+}
+.finder-toolbtn svg { width: 15px; height: 15px; }
+.finder-toolbtn:hover { background: #fff; }
+.finder-toolbtn[hidden] { display: none; }
+.finder-search {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 11px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.05);
+  color: #6b7280;
+  flex: none;
+}
+.finder-search svg { width: 14px; height: 14px; }
+.finder-search input {
+  border: none;
+  background: none;
+  outline: none;
+  font-size: 13px;
+  width: 130px;
+  color: #1f2937;
+}
+/* 컬럼 헤더 (맥 Finder 목록 보기) */
+.finder-head {
+  display: grid;
+  grid-template-columns: var(--finder-cols);
+  align-items: stretch;
+  margin: 0 var(--finder-inset);
+  padding: 0 var(--finder-inset);
+  box-sizing: border-box;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.09);
+  background: #fbfbfc;
+  flex: none;
+}
+.finder-head[hidden] { display: none; }
+.finder-col {
+  display: flex; align-items: center; gap: 3px;
+  padding: 5px 8px;
+  border: none; background: none;
+  font-size: 12px; font-family: inherit; color: #4b5563;
+  cursor: pointer; text-align: left;
+  border-right: 1px solid rgba(15, 23, 42, 0.05);
+}
+/* 이름 열 레이블은 행의 이름 텍스트 시작점과 정렬한다 (기준 G-09,
+   image-150): 행에서 이름 텍스트는 아이콘 슬롯(아이콘 실제 24 +
+   간격 7 = 31px) 뒤에 시작하므로, 헤더 레이블도 같은 슬롯만큼
+   띄어 같은 자리에서 시작해야 레이블과 이름이 한 줄로 보인다.
+   슬롯 값은 --finder-name-slot 토큰이 정본이고 행 아이콘과의
+   간격 경로 시작도 같은 토큰을 공유한다. 종전의 padding-left: 0
+   (레이블=아이콘 왼쪽 끝, image-116)은 이름 텍스트 시작과 31px
+   어긋난 상태였다. */
+.finder-col-name { padding-left: var(--finder-name-slot); }
+.finder-col:last-child { border-right: none; }
+.finder-col:hover { background: rgba(15, 23, 42, 0.04); }
+.finder-col-size, .finder-cell-size { justify-content: flex-end; text-align: right; }
+.finder-col-arrow { font-size: 10px; color: #6b7280; }
+.finder-list { flex: 1 1 auto; overflow-y: auto; padding: 6px var(--finder-inset); position: relative; }
+/* 컬럼 정렬 거터 짝 (데스크톱 전용): 헤더(.finder-head)와 목록은 스크롤
+   컨테이너 밖에 있어, 클래식 스크롤바(Windows)가 목록 폭을 스크롤바
+   폭만큼 줄이면 수정…너비 차이가 그대로 드러난다 (해설의 수치대로
+   하면: 거터 15px 예약 시 헤더 폭이 행 폭보다 +15px). 목록과 헤더가
+   같은 거터를 상시 예약하면 두 그리드의 열이 항상 일치하고, 스크롤바가
+   생겨도 행이 옆으로 한 픽셀도 움직이지 않게 된다. 모바일(≤640px)은
+   헤더 가로 스크롤 동기화(transform) 체제를 제외한다. */
+@media (min-width: 641px) {
+  .finder-list { scrollbar-gutter: stable; }
+  .finder-head { overflow-y: hidden; scrollbar-gutter: stable; }
+}
+.finder-row {
+  display: grid;
+  grid-template-columns: var(--finder-cols);
+  align-items: center;
+  width: 100%;
+  min-height: 30px;
+  padding: 2px var(--finder-inset);
+  border: none;
+  border-radius: 8px;
+  background: none;
+  cursor: pointer;
+  text-align: left;
+  color: #1f2937;
+  position: relative;
+  font-size: 13px;
+  box-sizing: border-box;
+}
+.finder-row:nth-child(even) { background: rgba(15, 23, 42, 0.025); }
+/* 날짜 그룹이 있으면 헤더가 자식으로 붙어 nth-child가 어긋난다 —
+   그룹 모드에서는 렌더가 붙이는 is-alt만으로 번갈아 표시를 유지한다. */
+.finder-list.is-grouped .finder-row:nth-child(even) { background: none; }
+.finder-list.is-grouped .finder-row.is-alt { background: rgba(15, 23, 42, 0.025); }
+.finder-list.is-grouped .finder-row.is-selected { background: #1971c2; }
+.finder-group-head {
+  padding: 16px 8px 5px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #6b7280;
+}
+.finder-group-head:first-child { padding-top: 8px; }
+.finder-row:hover { background: rgba(77, 171, 247, 0.1); }
+.finder-row.is-selected { background: #1971c2; color: #fff; }
+.finder-row.is-selected .finder-cell { color: rgba(255, 255, 255, 0.85); }
+.finder-row-main {
+  display: flex; align-items: center; gap: 1px var(--finder-icon-gap); min-width: 0;
+  /* 경로 줄(.finder-row-path)이 있는 행만 두 줄이 된다 — 아이콘+
+     이름은 말줄임으로 한 줄에 들어가므로 행소는 접히지 않는다 */
+  flex-wrap: wrap;
+}
+.finder-row-icon {
+  flex: none;
+  width: var(--finder-icon-w);
+  height: var(--finder-icon-w);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #1971c2;
+}
+.finder-cell { font-size: 12.5px; color: #4b5563; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 0 8px; font-variant-numeric: tabular-nums; }
+.finder-row-actions {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  gap: 2px;
+  opacity: 0;
+  pointer-events: none;
+  background: inherit;
+}
+.finder-row:hover .finder-row-actions,
+.finder-row:focus-within .finder-row-actions { opacity: 1; pointer-events: auto; }
+.finder-row.is-selected .finder-act { color: rgba(255, 255, 255, 0.9); }
+.finder-row.is-selected .finder-act:hover { background: rgba(255, 255, 255, 0.18); color: #fff; }
+/* 아이콘(그리드) 보기 */
+.finder-list.is-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, 104px);
+  gap: 6px;
+  padding: 12px;
+  align-content: start;
+}
+.finder-list.is-grid .finder-row {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 12px 6px 9px;
+  border-radius: 10px;
+  min-height: 0;
+}
+.finder-list.is-grid .finder-row:nth-child(even) { background: none; }
+.finder-list.is-grid .finder-row:hover { background: rgba(77, 171, 247, 0.1); }
+.finder-list.is-grid .finder-row.is-selected { background: #1971c2; }
+.finder-list.is-grid .finder-row-main { flex-direction: column; gap: 6px; }
+.finder-list.is-grid .finder-row-icon { width: 52px; height: 52px; }
+.finder-list.is-grid .finder-row-icon svg { width: 46px; height: 46px; }
+.finder-list.is-grid .finder-row-icon svg.lucide { width: 34px; height: 34px; }
+.finder-list.is-grid .finder-row-name {
+  flex: none;
+  font-size: 12px;
+  text-align: center;
+  white-space: normal;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  word-break: break-all;
+}
+.finder-list.is-grid .finder-cell,
+.finder-list.is-grid .finder-row-actions { display: none; }
+/* 컨텍스트 메뉴 */
+.finder-ctx {
+  position: fixed;
+  z-index: 200;
+  min-width: 208px;
+  padding: 5px;
+  background: rgba(250, 250, 252, 0.92);
+  backdrop-filter: blur(14px);
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  border-radius: 10px;
+  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.22);
+}
+.finder-ctx-item {
   display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  width: 100%;
+  padding: 5px 9px;
+  border: none; background: none; border-radius: 6px;
+  font-size: 13px; font-family: inherit; color: #111827;
+  cursor: pointer; text-align: left;
+}
+.finder-ctx-item:hover:not([disabled]) { background: #1971c2; color: #fff; }
+.finder-ctx-item.is-danger { color: #d43a3a; }
+.finder-ctx-item.is-danger:hover:not([disabled]) { background: #d43a3a; color: #fff; }
+.finder-ctx-item[disabled] { color: #9ca3af; cursor: default; }
+.finder-ctx-check { font-size: 11px; }
+.finder-ctx-sep { height: 1px; margin: 5px 8px; background: rgba(15, 23, 42, 0.1); }
+/* 브랜드 파일 아이콘(file-icons.js SVG)은 자체 행을 가지므로 배경
+   하이트를 갖지 않고 22px로 보여준다. Lucide 폴백 글리프는 종전 크기. */
+.finder-row-icon svg { width: 22px; height: 22px; }
+.finder-row-icon svg.lucide { width: 16px; height: 16px; }
+.finder-row-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 13.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* 전역 검색 결과 행의 소속 경로를 이름 아래 작은 크기 글자로 (아이콘
+   열만큼 띄어 이름 텍스트 왼쪽 끝을 맞춘다). 경로는 이름 줄
+   안에서만 말줄임하고, 행의 다른 열에는 영향을 주지 않는다. */
+.finder-row-path {
+  flex: 0 1 calc(100% - var(--finder-name-slot));
+  margin-left: var(--finder-name-slot);
+  min-width: 0;
+  font-size: 11.5px;
+  color: #9ca3af;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.finder-row.is-selected .finder-row-path { color: rgba(255, 255, 255, 0.75); }
+.finder-list.is-grid .finder-row-path { display: none; }
+/* 하단 바 통합 (2026-11-06 사용자 지시): 경로와 상태(항목 선택)를
+   별도 두 줄이 아니라 한 줄로 — 경로는 왼쪽, 상태는 오른쪽 같은 줄. */
+.finder-bottombar {
+  display: flex;
+  align-items: center;
+  flex: none;
+  border-top: 1px solid rgba(15, 23, 42, 0.07);
+  background: #fbfbfc;
+  min-height: 27px;
+}
+.finder-status { padding: 4px 12px; margin: 0 0 0 auto; font-size: 12.5px; color: #9ca3af; text-align: right; white-space: nowrap; flex: none; }
+.finder-status:empty { display: none; }
+/* 뷰어 상태는 하단 바가 아니라 본문 위에 겹치는 알림으로만 띄운다 —
+   문서 화면에 한 줄이 즉시 추가되는 레이아웃 금지 (사용자 지시
+   2026-11-04, PPT 캡처). 미저장 표시도 창 제목이 대신 담당한다. */
+.finder-status-overlay {
+  position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%);
+  margin: 0; padding: 6px 14px; border-radius: 999px;
+  background: rgba(17, 24, 39, 0.88); color: #f9fafb;
+  font-size: 12.5px; line-height: 1.45; white-space: nowrap;
+  pointer-events: none; z-index: 70;
+  box-shadow: 0 6px 20px rgba(15, 23, 42, 0.25);
+}
+.finder-status-overlay[hidden] { display: none; }
+@media (max-width: 640px) {
+  /* 좁은 폭에서는 사이드바를 아이콘 레일로 축소한다 (레이블·개수·용량
+     문구를 숨기고 아이콘만 두어 항목 이름은 title로 둔다). 148px 고정
+     폭이 본문의 절반 가까이를 먹어 목록 폭이 사라지는 문제 (2026-11-04
+     실측 감사)로 교정. */
+  .finder-side { width: var(--finder-rail-w); padding: 10px 6px; }
+  .finder-side-title, .finder-side-usage { display: none; }
+  .finder-side-item { justify-content: center; padding: 8px 0; }
+  .finder-side-item span { display: none; }
+  /* 내부: 데스크톱 창 폭(≥500px)이 본문 폭보다 넓어 overflow:hidden이
+     걸려 AI 정리·검색행에 닿지 못했다 (2026-11-05 실측 평가). 좁은 창
+     에서는 줄바꿈을 허용해 제목을 말줄임으로 줄여 접고, 정렬은
+     아이콘만 남기며, 검색행은 아래줄 전체 폭을 쓴다. 모든 도구가
+     가로 스크롤 없이 닿는 것이 목적이다. */
+  .finder-toolbar { flex-wrap: wrap; row-gap: 6px; padding: 8px 10px; }
+  .finder-toolbar strong {
+    flex: 1 1 auto; min-width: 0;
+    overflow: hidden; text-overflow: ellipsis;
+  }
+  .finder-tools { flex: none; }
+  #finderSortBtn span { display: none; }
+  .finder-search { order: 4; flex: 1 1 100%; }
+  .finder-search input { flex: 1 1 auto; width: auto; min-width: 0; }
+  .finder-layout { padding: 0; gap: 0; }
+  /* 목록 열 합계(이름 유연열+수정일 168+크기 76+종류 104 ≈ 500px)가
+     본문보다 넓으면 가로 스크롤로 끝까지 다 볼 수 있게 한다.
+     컬럼 헤더는 목록 밖에 있어 finder.js가 스크롤과 동기화해 민다. */
+  .finder-list { overflow-x: auto; }
+  .finder-head { min-width: 500px; }
+  .finder-list:not(.is-grid):not(.is-apps) .finder-row { min-width: 500px; }
 }
 
-/* ---------- 도구모음: 보기 전환·정렬·검색 ---------- */
-.finder-view-toggle {
-  display: inline-flex; gap: 2px; padding: 2px; margin-left: 8px;
-  background: rgba(0,0,0,.06); border-radius: 9px;
+/* 응용 프로그램 보기 — 큰 타일 격자 */
+.finder-list.is-apps {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, 100px);
+  gap: 6px;
+  padding: 16px;
+  align-content: start;
 }
-.finder-view-toggle button {
-  border: 0; background: none; cursor: pointer; padding: 4px 9px; border-radius: 7px;
-  display: inline-flex; color: #52525b;
+.finder-app-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 7px;
+  padding: 12px 6px 9px;
+  border: none;
+  background: none;
+  border-radius: 12px;
+  cursor: pointer;
+  font-family: inherit;
 }
-.finder-view-toggle button svg { width: 15px; height: 15px; }
-.finder-view-toggle button.is-active { background: #fff; color: #18181b; box-shadow: 0 1px 4px rgba(0,0,0,.14); }
-.finder-toolbar-search { display: inline-flex; align-items: center; }
-.finder-toolbar-search[hidden] { display: none; }
-.finder-toolbar-search input {
-  border: 1px solid rgba(0,0,0,.12); background: #f4f4f5; border-radius: 999px;
-  padding: 5px 12px; font-size: 12.5px; width: 170px; outline: none;
+.finder-app-tile:hover { background: rgba(77, 171, 247, 0.1); }
+.finder-app-tile:focus-visible { outline: 2px solid #1971c2; outline-offset: -2px; }
+.finder-app-icon { width: 54px; height: 54px; display: flex; align-items: center; justify-content: center; }
+.finder-app-icon svg { width: 54px; height: 54px; }
+.finder-app-icon svg.lucide { width: 36px; height: 36px; color: #4dabf7; }
+.finder-app-label {
+  font-size: 12px;
+  color: #1f2937;
+  text-align: center;
+  line-height: 1.25;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  word-break: break-all;
 }
-.finder-toolbar-search input:focus { background: #fff; border-color: #a5c8f0; }
 
-/* ---------- 격자 보기 ---------- */
-.finder-grid {
-  display: grid; grid-template-columns: repeat(auto-fill, 96px); gap: 6px;
-  padding: 14px; align-content: start;
+/* 파인더 v2 — 올리기·내려받기 액션 (2026-11-02) */
+.finder-upload-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: none;
+  border-radius: 8px;
+  background: rgba(77, 171, 247, 0.16);
+  color: #1971c2;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
 }
-.finder-grid-item {
-  border: 0; background: none; cursor: default; padding: 10px 4px 8px; border-radius: 10px;
-  display: flex; flex-direction: column; align-items: center; gap: 7px; font-size: 12px; color: #1d1d1f;
+.finder-upload-btn svg { width: 14px; height: 14px; }
+.finder-upload-btn[hidden] { display: none; }
+.finder-path[hidden] { display: none; }
+.finder-act {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: none;
+  border-radius: 7px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #6b7280;
+  cursor: pointer;
 }
-.finder-grid-item:hover { background: rgba(0,0,0,.04); }
-.finder-grid-item.is-selected { background: rgba(10,132,255,.16); }
-.finder-grid-icon-wrap { display: flex; width: 44px; height: 44px; align-items: center; justify-content: center; }
-.finder-grid-icon-wrap > svg { width: 44px; height: 44px; }
-.finder-grid-icon { width: 44px; height: 44px; color: #71717a; }
-.finder-grid-name {
-  max-width: 92px; text-align: center; line-height: 1.3; word-break: break-all;
-  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+.finder-act:hover { background: rgba(15, 23, 42, 0.07); color: #1f2937; }
+.finder-act svg { width: 15px; height: 15px; }
+.finder-act.is-armed {
+  width: auto;
+  padding: 0 9px;
+  background: #ffe3e3;
+  color: #c92a2a;
+  font-size: 12px;
+  font-weight: 700;
 }
 
-/* ---------- 뷰어 ---------- */
-#finderViewer {
-  position: fixed; inset: 0; z-index: 90; display: none;
-  background: rgba(20,20,24,.45); backdrop-filter: blur(6px);
-  align-items: center; justify-content: center; padding: 22px;
+/* 파인더 v3 — 경로 크럼 (2026-11-02) */
+/* 하단 경로 줄 통합 하단 바(.finder-bottombar)의 왼쪽 영역 */
+.finder-path {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  padding: 4px 10px;
+  font-size: 12px;
+  color: #6b7280;
+  overflow-x: auto;
+  flex: 1 1 auto;
+  min-width: 0;
 }
-#finderViewer.is-open { display: flex; }
-.fv-window {
-  background: #fff; border-radius: 16px; width: min(980px, 100%); height: min(760px, 100%);
-  display: flex; flex-direction: column; overflow: hidden;
-  box-shadow: 0 30px 80px rgba(0,0,0,.4);
+.finder-crumb {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: none;
+  background: none;
+  color: #6b7280;
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+  padding: 2px 5px;
+  border-radius: 5px;
+  white-space: nowrap;
 }
-#fvChrome {
-  display: flex; align-items: center; gap: 8px; padding: 9px 12px;
-  border-bottom: 1px solid rgba(0,0,0,.07); background: #fbfbfc;
-}
-#fvName { font-size: 13.5px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-#fvChrome .spacer { flex: 1; }
-#fvSave {
-  border: 0; background: #a5c8f0; color: #12315e; font-weight: 700; cursor: pointer;
-  padding: 6px 14px; border-radius: 8px; font-size: 13px;
-}
-#fvClose { border: 0; background: none; cursor: pointer; display: flex; padding: 5px; border-radius: 7px; color: #52525b; }
-#fvClose svg { width: 17px; height: 17px; }
-#fvBody { flex: 1; overflow: auto; min-height: 0; position: relative; }
-.fv-loading, .fv-empty { padding: 48px 20px; text-align: center; color: #8e8e93; font-size: 13px; }
-.fv-note { padding: 8px 14px; font-size: 12px; color: #92400e; background: #fffbeb; }
-.fv-text { width: 100%; height: 100%; border: 0; padding: 16px; font: 13px/1.6 ui-monospace, Menlo, monospace; resize: none; outline: none; }
-.fv-image { max-width: 100%; max-height: 100%; display: block; margin: 0 auto; }
-.fv-doc { padding: 28px 34px; font-size: 14px; line-height: 1.7; }
-.fv-sheet { display: flex; flex-direction: column; height: 100%; }
-.fv-sheet-tabs { display: flex; gap: 4px; padding: 8px 10px 0; }
-.fv-sheet-tabs button {
-  border: 1px solid rgba(0,0,0,.1); border-bottom: 0; background: #f4f4f5; cursor: pointer;
-  padding: 5px 12px; border-radius: 8px 8px 0 0; font-size: 12.5px;
-}
-.fv-sheet-tabs button.is-active { background: #fff; font-weight: 700; }
-.fv-sheet-grid { flex: 1; overflow: auto; }
-.fv-sheet-grid table { border-collapse: collapse; font-size: 12.5px; }
-.fv-sheet-grid th, .fv-sheet-grid td { border: 1px solid rgba(0,0,0,.09); padding: 4px 8px; white-space: nowrap; }
-.fv-sheet-grid th { background: #f4f4f5; }
-.fv-slides { padding: 18px; display: flex; flex-direction: column; gap: 14px; background: #f4f4f5; min-height: 100%; }
-.fv-slide { background: #fff; border-radius: 10px; padding: 18px 20px; box-shadow: 0 2px 10px rgba(0,0,0,.08); position: relative; }
-.fv-slide-no { position: absolute; top: 8px; right: 12px; font-size: 11px; color: #a1a1aa; }
-.fv-slide p { margin: 2px 0; font-size: 13.5px; }
-.fv-pdf { height: 100%; display: flex; flex-direction: column; }
-.fv-pdf-frame { flex: 1; width: 100%; border: 0; }
+.finder-crumb:hover { background: rgba(15, 23, 42, 0.06); }
+.finder-crumb.is-current { color: #111827; font-weight: 600; cursor: default; }
+.finder-crumb.is-current:hover { background: none; }
+.finder-crumb-icon { display: inline-flex; color: #4dabf7; }
+.finder-crumb-icon svg { width: 13px; height: 13px; }
+.finder-crumb-sep { color: #b6bcc5; font-size: 11px; }
 
-/* 공용 우클릭 메뉴 (myhub- 접두사) */
-.myhub-context-menu {
-  position: fixed; z-index: 120; min-width: 180px; padding: 5px;
-  background: rgba(255,255,255,.97); border: 1px solid rgba(0,0,0,.09); border-radius: 12px;
-  box-shadow: 0 14px 40px rgba(0,0,0,.22); display: flex; flex-direction: column;
+/* 파인더 뷰어/편집기 (2026-11-02) */
+.finder-viewer {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: #fff;
+  display: flex;
+  flex-direction: column;
 }
-.myhub-context-item {
-  border: 0; background: none; text-align: left; padding: 7px 10px; border-radius: 7px;
-  font-size: 13px; cursor: pointer; color: #18181b;
+.finder-viewer[hidden] { display: none; }
+.finder-viewer-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.08);
 }
-.myhub-context-item:hover { background: #eff6ff; }
-.myhub-context-item-danger { color: #dc2626; }
+.finder-viewer-head strong { font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.finder-viewer-note { font-size: 12px; color: #868e96; flex: 1 1 auto; min-width: 0; }
+.finder-viewer-actions { display: flex; align-items: center; gap: 6px; flex: none; }
+.finder-viewer-actions a.finder-upload-btn { text-decoration: none; }
+.finder-viewer-body { flex: 1 1 auto; overflow: auto; padding: 10px 14px; }
+/* 임베드형 화면(시트 iframe·한글 편집기·PDF)은 본문의 남은 높이를 꽉
+   채운다. 고정 vh 높이면 창이 작을 때 편집영역 아래가 빈다 (2026-11-02
+   사용자 캡처: 워크북이 창 높이 중간에서 끝남). 핸들러가 화면에 마우스를
+   대면 fv-fill을 붙이고, 코어는 파일이 큰 파일만 골라 붙인다. */
+.finder-viewer-body.fv-fill { display: flex; flex-direction: column; }
+.finder-viewer-body.fv-fill .fv-sheet-frame,
+.finder-viewer-body.fv-fill .fv-hwp-editor,
+.finder-viewer-body.fv-fill .fv-frame { flex: 1 1 auto; min-height: 0; height: auto; }
+/* 슬라이드 최소 리더 패치: fv-fill(패딩 0·flex) 안에서도 카드 목록이
+   자기 영역에서 스크롤하고 여백을 그대로 유지한다 (DeckCraft 화면과 교환) */
+.finder-viewer-body.fv-fill .fv-slide-reader { flex: 1 1 auto; min-height: 0; overflow: auto; padding: 10px 14px; }
+.fv-image { max-width: 100%; height: auto; display: block; margin: 0 auto; }
+.fv-frame { width: 100%; height: 100%; min-height: 70vh; border: none; }
+.fv-textarea {
+  width: 100%;
+  height: 100%;
+  min-height: 60vh;
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  border-radius: 8px;
+  padding: 10px;
+  font: 13px/1.6 ui-monospace, monospace;
+  color: #1f2937;
+  resize: vertical;
+  box-sizing: border-box;
+}
+.fv-grid { border-collapse: collapse; }
+.fv-grid td { border: 1px solid rgba(15, 23, 42, 0.1); padding: 0; }
+.fv-grid input {
+  border: none;
+  background: none;
+  outline: none;
+  padding: 5px 7px;
+  font-size: 13px;
+  min-width: 90px;
+  color: #1f2937;
+}
+.fv-grid input:focus { background: rgba(77, 171, 247, 0.12); }
+.fv-pre { font: 13.5px/1.7 inherit; white-space: pre-wrap; word-break: break-word; margin: 0; }
+.fv-doc { font-size: 14px; line-height: 1.7; }
+.fv-message { color: #868e96; font-size: 13.5px; padding: 24px 0; text-align: center; }
 
-@media (max-width: 767px) {
-  .finder-side { width: 158px; flex-basis: 158px; }
-  .finder-table thead th:nth-child(2), .finder-table tbody td:nth-child(2) { display: none; }
+/* OS 파일 드롭: 드래그 중 목적지 폴더 항목 강조 (drop-upload.js) */
+.finder-row.dt-drop-target-hot {
+  background: rgba(77, 171, 247, 0.25);
+  box-shadow: inset 0 0 0 2px rgba(37, 99, 235, 0.55);
 }
+/* 내부 드래그 이동: 사이드바 폴더·경로 크럼도 같은 강조를 쓴다.
+   끌려온 행 자신은 반투명으로 표시한다. */
+.finder-side-item.dt-drop-target-hot,
+.finder-crumb.dt-drop-target-hot {
+  background: rgba(77, 171, 247, 0.25);
+  box-shadow: inset 0 0 0 2px rgba(37, 99, 235, 0.55);
+}
+.finder-row.is-dragging { opacity: 0.45; }
+
+/* 스펙 모듈군 (3B): HWP 렌더·편집, 시트 임베드, 슬라이드 리더 */
+/* 전체 고정 배너는 사용자 지시로 전면 제거한다 (2026-11-02) — 규칙도
+   함께 지운다. */
+
+/* 접기 핸들: 텍스트 없는 둥근 아이콘 버튼 (미니멀 플랫) */
+.fv-fold-btn { color: #6b7280; }
+.fv-chevron {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-right: 1.7px solid currentColor;
+  border-bottom: 1.7px solid currentColor;
+  pointer-events: none;
+}
+.fv-chevron-up { transform: rotate(-135deg); margin-top: 4px; }
+.fv-chevron-down { transform: rotate(45deg); margin-bottom: 4px; }
+
+/* 단일 화면 접기: 접힌 상태에서는 좁은 도구 바만 남긴다
+   (비서 바 접기는 office.css, 시트 리본은 sheet.html 안에서 처리) */
+.finder-viewer.fv-chrome-folded .fv-foldable { display: none; }
+
+/* 저장 버튼의 상태 표시를 겸한다 (코어 saveState: idle/dirty/saving/saved) */
+#fvSave .fv-save-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 5px;
+  border-radius: 50%;
+  background: #f08c00;
+  vertical-align: 1px;
+}
+#fvSave.is-saved { color: #2b8a3e; }
+.fv-hwp-tools { display: flex; gap: 6px; margin-bottom: 10px; }
+.fv-hwp-tools button {
+  padding: 5px 12px;
+  border: 1px solid rgba(15, 23, 42, 0.14);
+  border-radius: 8px;
+  background: #ffffff;
+  font: 500 13px inherit;
+  cursor: pointer;
+}
+.fv-hwp-pages { display: flex; flex-direction: column; gap: 16px; }
+.fv-hwp-page {
+  background: #ffffff;
+  border: 1px solid rgba(15, 23, 42, 0.1);
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.08);
+  /* 지연 렌더 자리표시: 첫 페이지가 렌더되면 JS가 실제 종횡비로
+     바꾸어넣는다 (기본값은 A4 세로 비율) */
+  aspect-ratio: 1 / 1.414;
+}
+.fv-hwp-page:has(svg) { aspect-ratio: auto; }
+.fv-hwp-page svg { display: block; width: 100%; height: auto; }
+.fv-hwp-editor { height: 72vh; border: 1px solid rgba(15, 23, 42, 0.1); }
+.fv-hwp-editor iframe { width: 100%; height: 100%; border: none; display: block; }
+.fv-sheet-frame { width: 100%; height: 72vh; border: none; display: block; }
+.fv-slide {
+  background: #ffffff;
+  border: 1px solid rgba(15, 23, 42, 0.1);
+  border-radius: 10px;
+  padding: 16px 18px;
+  margin-bottom: 14px;
+}
+.fv-slide-title { margin: 0 0 8px; font-size: 13px; color: #868e96; }
+.fv-slide-text { margin: 0 0 6px; font-size: 14.5px; line-height: 1.6; }
+.fv-slide-img { max-width: 100%; height: auto; display: block; margin: 8px 0; }
+
+/* ---- PDF 전용 뷰어 (finder-format-pdf.js) ---- */
+.fv-pdf-tools {
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+  padding: 8px 10px; border-bottom: 1px solid rgba(15, 23, 42, 0.09);
+  background: #fbfcfe;
+}
+.fv-pdf-state { font-size: 12.5px; color: #6b7280; margin-right: auto; font-variant-numeric: tabular-nums; }
+.fv-pdf-op {
+  padding: 5px 10px; border-radius: 8px; cursor: pointer;
+  border: 1px solid rgba(15, 23, 42, 0.14); background: #fff;
+  font-size: 12.5px; font-family: inherit; color: #1f2937;
+}
+.fv-pdf-op:hover { background: rgba(77, 171, 247, 0.1); }
+.fv-pdf-panel {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  padding: 8px 10px; border-bottom: 1px solid rgba(15, 23, 42, 0.09);
+  background: #fff8e6; font-size: 13px; color: #4b3f13;
+}
+.fv-pdf-panel[hidden] { display: none; }
+.fv-pdf-panel button {
+  padding: 5px 10px; border-radius: 8px; cursor: pointer;
+  border: 1px solid rgba(15, 23, 42, 0.16); background: #fff;
+  font-size: 12.5px; font-family: inherit; color: #1f2937;
+}
+.fv-pdf-range {
+  width: 64px; padding: 5px 7px; border-radius: 8px;
+  border: 1px solid rgba(15, 23, 42, 0.16); font-size: 13px; font-family: inherit;
+}
+
+/* ── Finder AI 정리 패널 (finder-organize.js) ── */
+.fo-panel {
+  position: fixed; right: 16px; bottom: 16px; z-index: 60; width: min(420px, calc(100vw - 32px));
+  max-height: 70vh; overflow: auto; background: #fff; border-radius: 16px;
+  border: 1px solid rgba(15, 23, 42, 0.12); box-shadow: 0 12px 32px rgba(15, 23, 42, 0.18);
+  padding: 14px 16px;
+}
+.fo-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.fo-close {
+  padding: 5px 10px; border-radius: 8px; border: 1px solid rgba(15, 23, 42, 0.14);
+  background: #f8fafc; font-family: inherit; font-size: 12px; cursor: pointer;
+}
+.fo-body { font-size: 13px; color: #1e293b; }
+.fo-summary { color: #475569; margin: 0 0 8px; }
+.fo-item { display: flex; gap: 8px; align-items: flex-start; padding: 6px 0; border-top: 1px solid rgba(15, 23, 42, 0.06); }
+.fo-error { color: #b45309; font-size: 12px; }
+.fo-empty { color: #64748b; }
+.fo-apply {
+  margin-top: 10px; padding: 8px 14px; border-radius: 10px; border: 1px solid #bfdbfe;
+  background: #dbeafe; font-weight: 600; font-family: inherit; font-size: 13px; cursor: pointer;
+}
+.fo-apply:disabled { opacity: 0.5; }
+.fo-result { margin-top: 8px; color: #334155; }
+
+/* 임베드 화면(시트·한글 편집기·PDF)은 뷰어 본문 가로폭에 꽉 차게 뜬다
+   (2026-11-03). 본문 패딩과 편집기 둘레가 함께 있으면 그 안에
+   프레임이 또 있는 것처럼 보이는 이중 문서 영역이 하나로 이어지게
+   여백·둘레를 없앤다. 문서형 화면(텍스트·이미지·렌더 보기)은
+   기존 패딩을 유지한다. */
+.finder-viewer-body.fv-fill { padding: 0; }
+.finder-viewer-body.fv-fill .fv-hwp-editor { border: none; }
+
+/* ---- 커스텀 다이얼로그 (이름 변경·폴더 내용 비우기) ----
+   다이얼로그 prompt/confirm을 대체한다. 모양은 새 파일의 공용
+   패널(office-picker)과 같은 결(모서리 radius 16·같은 그림자)로
+   맞춰 클래스 충돌을 피하며 finder- 접두사를 단다. */
+.finder-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  background: rgba(15, 23, 42, 0.42);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 18px;
+  box-sizing: border-box;
+}
+.finder-dialog-backdrop[hidden] { display: none; }
+.finder-dialog {
+  width: min(380px, 100%);
+  background: #ffffff;
+  border-radius: 16px;
+  box-shadow: 0 24px 64px rgba(15, 23, 42, 0.35);
+  padding: 18px 18px 14px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.finder-dialog-title { font-size: 15.5px; color: #111827; }
+.finder-dialog-msg { margin: 0; font-size: 13.5px; line-height: 1.55; color: #374151; }
+.finder-dialog-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 9px 11px;
+  border: 1px solid rgba(15, 23, 42, 0.18);
+  border-radius: 10px;
+  font: inherit;
+  font-size: 14px;
+  color: #111827;
+  outline: none;
+}
+.finder-dialog-input:focus { border-color: #4dabf7; box-shadow: 0 0 0 3px rgba(77, 171, 247, 0.22); }
+.finder-dialog-foot { display: flex; justify-content: flex-end; gap: 8px; margin-top: 2px; }
+.finder-dialog-btn {
+  padding: 8px 16px;
+  border-radius: 10px;
+  border: 1px solid rgba(15, 23, 42, 0.14);
+  background: #ffffff;
+  font-family: inherit;
+  font-size: 13.5px;
+  color: #1f2937;
+  cursor: pointer;
+}
+.finder-dialog-btn:hover { background: rgba(15, 23, 42, 0.04); }
+.finder-dialog-btn.is-primary { background: #2b2b2b; border-color: #2b2b2b; color: #ffffff; font-weight: 600; }
+.finder-dialog-btn.is-primary:hover { background: #1f1f1f; }
+.finder-dialog-btn.is-primary.is-danger { background: #dc2626; border-color: #dc2626; }
+.finder-dialog-btn.is-primary.is-danger:hover { background: #b91c1c; }

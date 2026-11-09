@@ -35,9 +35,11 @@ function wrapSelectionStyle(style) {
   }
 }
 
-const PALETTE = ['#DC2626','#EA580C','#F59E0B','#CA8A04','#84CC16','#16A34A','#10B981','#14B8A6','#06B6D4','#0EA5E9','#2563EB','#4F46E5','#7C3AED','#A855F7','#DB2777','#EC4899','#F43F5E','#1F2937','#4B5563','#9CA3AF'];
-const HIGHLIGHTS = ['#FEF08A','#FDE68A','#FECACA','#FED7AA','#FDE68A','#D9F99D','#BBF7D0','#A7F3D0','#99F6E4','#BAE6FD','#BFDBFE','#C7D2FE','#DDD6FE','#E9D5FF','#FBCFE8','#F9A8D4','#FECDD3','#E5E7EB','#D1D5DB','#F3F4F6'];
-const SIZES = [['9pt','9pt'],['10pt','10pt'],['12pt','12pt'],['14pt','14pt'],['18pt','18pt'],['24pt','24pt']];
+// 줄 간 블록레벨 마크업 고정 함수 (2026-11-05 에디터 추출 E3 절
+// Apple 하이라이트 고정·Bear와 이제는 같은 방향). 자체(memo_update)는
+// 서식 안내와 같은 조합 이다: 굵은글씨 6개, 형광펜 4개(파스텔).
+const PALETTE = ['#DC2626','#CA8A04','#16A34A','#2563EB','#7C3AED','#1F2937'];
+const HIGHLIGHTS = ['#FEF08A','#D9F99D','#FBCFE8','#BAE6FD'];
 
 function closePops(bar) {
   bar.querySelectorAll('.pop').forEach(p => {
@@ -214,7 +216,26 @@ function insertTableRc(editor, rows, cols) {
   execCmd('insertHTML', html);
 }
 
-// 마크다운 블록 자동 변환 (#, -, 1., [], >)
+// 현재 블록은 코드 블록(pre>code)으로 변환 등 타입의 변환(```)와
+// 스타일 메모(toolbar.js)가 공유한다. 목록 항목이면 목록 전체를
+// 텍스트를 코드로 올린다 (li만 따로 목록 구조가 깨진다).
+function convertBlockToPre(block, sel) {
+  let target = block;
+  if (target && target.tagName === 'LI') target = target.parentElement || target;
+  if (!target || target.tagName === 'PRE') return;
+  const pre = document.createElement('pre');
+  const code = document.createElement('code');
+  code.textContent = target.textContent || '';
+  pre.appendChild(code);
+  target.replaceWith(pre);
+  if (sel) {
+    const r = document.createRange();
+    r.selectNodeContents(code);
+    r.collapse(false);
+    sel.removeAllRanges(); sel.addRange(r);
+  }
+}
+// 마크다운 블록 자동 변환 (#, -, 1., [], >, ```, ---)
 function mdBlockConvert(el) {
   const sel = window.getSelection();
   if (!sel.rangeCount || !sel.getRangeAt(0).collapsed) return;
@@ -224,6 +245,23 @@ function mdBlockConvert(el) {
   if (!p || !el.contains(p) || p.tagName === 'LI') return;
   const text = p.textContent.replace(/\u00a0/g, ' ');
   let m;
+  // 코드 서식: ``` (+공백) 등 코드 블록 (E3: 만들 방법뿐 없는 것)
+  if (/^```\s+$/.test(text)) {
+    p.innerHTML = ''; // 마지막 자체는 코드 내용이 아니다
+    convertBlockToPre(p, sel);
+    return;
+  }
+  // 구분선: --- (+공백) 등 hr + 빈 문단 (긴머리 패턴보다 먼저 검사)
+  if (/^-{3,}\s+$/.test(text)) {
+    const hr = document.createElement('hr');
+    const np = document.createElement('p');
+    np.innerHTML = '<br>';
+    p.replaceWith(hr, np);
+    const r = document.createRange();
+    r.setStart(np, 0); r.collapse(true);
+    sel.removeAllRanges(); sel.addRange(r);
+    return;
+  }
   // 헤딩: # , ## , ###
   if ((m = text.match(/^(#{1,3})\s+$/))) {
     const level = m[1].length;
@@ -352,6 +390,30 @@ function updateToolbarActive(el, toolbar) {
       } catch (e) { console.warn('queryCommandState 실패:', e); }
     }
   });
+  // 스타일 드롭다운 레벨 + 체크리스트 버튼 상태: 커서가 있는 블록의
+  // 스타일을 바꿔가며 알려준다 (상태 표시 부분 요소, E3).
+  const styleLabel = toolbar.querySelector('.style-label');
+  const checkBtn = toolbar.querySelector('button[title="체크리스트"]');
+  const sel = window.getSelection();
+  if (sel.rangeCount && el.contains(sel.anchorNode)) {
+    const node = sel.anchorNode;
+    const elNode = node.nodeType === 3 ? node.parentElement : node;
+    const block = elNode && elNode.closest ? elNode.closest('h1,h2,h3,blockquote,pre,li,p') : null;
+    let label = '본문';
+    let inTask = false;
+    if (block) {
+      const t = block.tagName;
+      if (t === 'H1') label = '제목 1';
+      else if (t === 'H2') label = '제목 2';
+      else if (t === 'H3') label = '제목 3';
+      else if (t === 'BLOCKQUOTE') label = '인용';
+      else if (t === 'PRE') label = '코드 블록';
+      const list = block.closest ? block.closest('ul,ol') : null;
+      if (list && list.classList.contains('task-list')) { label = '체크리스트'; inTask = true; }
+    }
+    if (styleLabel) styleLabel.textContent = label;
+    if (checkBtn) checkBtn.classList.toggle('active', inTask);
+  }
 }
 
 // 에디터 배선: 툴바 show/hide, 붙여넣기/드래그, 선택 추적

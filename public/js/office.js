@@ -1,873 +1,915 @@
-/* MyHub 오피스 호스트 — 앱 라우팅·파일 메뉴·접기·제목 채널.
+/* MyHub 오피스 호스트 (office.js) — Excel·한글 2020·PowerPoint·PDF
  *
- * 재구성 근거:
- * - 시작 화면은 hidden 기본값 (깜빡임 차단). app 지정 시 autoNew로 편집기 직행,
- *   PPT·PDF도 빈 문서 직행 (PDF는 templates/blank.pdf를 새 문서로 연다).
- * - 열기·저장은 각 앱의 [파일] 메뉴 안에서만. 파일명은 셸 창 제목줄에 게시하고
- *   수정 시 주황 점을 함께 알린다 ('myhub:doc-title' + dirty).
- * - 단일 표면 접기 모델: 상단 영역을 접으면 뷰어, 펼치면 에디터. 접기 셰브론은
- *   메뉴 줄의 가장 우측 끝에 혼자 둔다 (2026-11-03 06:52 정본).
- * - 탭(홈·삽입…)은 엔진 내장 탭이 정본 — 셸·호스트가 탭 행을 만들지 않는다.
- * - 인쇄 (D-23): 시스템 인쇄 즉시 실행, 다운로드 경로 없음. 한글은 클릭 시점에
- *   창을 먼저 확보해 팝업 차단을 피한다.
- * - 최근 파일 최대 8개 (로컬, office-memory).
- * - Finder 열기 핸드셰이크: 'myhub:open-file' 수신 → 적용 후 ack.
+ * ?app=로 종류를 정한다. 앱을 지정하면 시작 화면 없이 빈 문서로 바로 연다
+ * 진입한다(autoNew 도 사용자 지시 2026-11-03: PPT·PDF는 한글·한글처럼
+ * 마감). 에서는 [파일 열기] 를 Finder로 경로 탐색 패널로 파일을 골라
+ * 열고, 기존 3B 뷰어 코어(finder-viewer.js + finder-format-*.js)를
+ * 그대로 사용하므로 같은 문서 DOM 계약(#finderViewer/#fv*)를
+ * office.html에 복제돼있으므로 base_version·409 안내·충돌본 편집기와
+ * 동일하게 동작한다. 이 호스트 모두가 편집 호스트 앱이다.
+ *
+ * 새로 만들기: Excel는 빈 워크북으로 열고, 한글은 엔진이 검증한 빈
+ * hwpx 서식(public/templates/blank.hwpx 파일로 hwpxlib BlankFileMaker 구조,
+ * rhwp 코어 로드 + Studio 정품 게이트 통과분)를 바이트로 넣어 편집기로
+ * 연다. PDF는 빈 1페이지 서식(public/templates/blank.pdf 파일 pdf-lib로
+ * 생성한 A4 빈 페이지를)바이트로 넣는다 는. PowerPoint서식 파일 없이
+ * DeckCraft 호스트의 새 문서 모드로 시작한다 (finder-format-slide의
+ * isNew 경로). 첫 호스트 모두가 코어의 createSave 이 "다른 이름으로
+ * 저장"(폴더 선택 + 이름 입력 뒤 POST 생성 뒤 폴더 참조로 version
+ * 올리기)로 처리한다.
+ *
+ * 파일 열기 핸드셰이크: Finder로 부모 창이 연 파일을 뷰어가 아니라
+ * 이 앱으로 실행하게 한다 (부모 창 공유로 postMessage 'myhub:open-file',
+ * 단독 실행하면 ?file= 쿼리). 준비 알림 'myhub:office-ready'를 확인
+ * 'myhub:open-file-ack'로 전달 중이라는 뜻이다 (Finder 핸드셰이크 중독).
+ *
+ * 앱 메모리 (전임 localStorage, 서버 정합 없음):
+ * - 최근 파일 최대 8개 (까지) 폴더 시작 화면에서 다시 열기
+ * - 마지막 폴더 열기 저장/패널의 시작 위치 유지
+ * - 이어서 열기 때 마지막 파일을 시작 화면에 제안만 한다 (자동 실행 X)
+ * - 내용 캐시 키 version(storage_key)가 같은 파일을 content 요구 없이
+ *   캐시 바이트로 연다 (목록 응답의 version과 대조)
+ *
+ * 노출: window.MyHubOffice = { APPS, parseAppKey, createApp }
  */
 (function () {
   'use strict';
 
-  var APPS = {
-    excel: { title: 'Excel', engine: '/sheet.html', newName: '제목 없음.xlsx' },
-    hangul: { title: '한글', engine: '/rhwp-studio/index.html', newName: '제목 없음.hwpx' },
-    powerpoint: { title: 'PowerPoint', engine: '/vendor/deckcraft/index.html', newName: '제목 없음.pptx' },
-    pdf: { title: 'PDF', engine: '/vendor/pdfcraft/index.html', newName: '새 문서.pdf' },
-  };
-
-  var state = {
-    app: null,
-    file: null, // {id, name, version}
-    dirty: false,
-    folded: false,
-    engineReady: false,
-    pendingFile: null,
-    engineLoadedFor: null, // 벤더 엔진 iframe에 이미 실린 앱 (재로드 방지)
-  };
-
-  /* 벤더 엔진(deckcraft·pdfcraft)을 직접 임베드하는 앱인지.
-   * 이 엔진들은 ?file= 파라미터가 아니라 ready 이후 postMessage로 파일을
-   * 받고(deckcraft:open/pdfcraft:open), 저장도 각자 프로토콜로 회신한다.
-   * 규약 정본: engine-rebuild/crafts/{deckcraft,pdfcraft}의 host 브리지. */
-  function isVendorApp() {
-    return state.app === 'powerpoint' || state.app === 'pdf';
+  // 동적 로딩 URL는 공용 헬퍼(asset-url.js)가 배포 버전을 붙인다
+  // (N-06 버전 없는 는 URL그대로 immutable 캐시에 고정될 수 있다).
+  // 헬퍼가 없는 환경(테스트 등)에서는 원본 URL 그대로다.
+  function versionedAssetUrl(url) {
+    var h = typeof window !== 'undefined' ? window.MyHubAssetUrl : null;
+    return typeof h === 'function' ? h(url) : url;
   }
 
-  var vendorSaveRequested = false; // 저장 요청 대기 중이면 비요청 저장 핸들러가 양보
-  var vendorOpSeq = 0;
-
-  var els = {};
-  var F = window.MyHubOfficeFetch;
-  var M = window.MyHubOfficeMemory;
-
-  function $(id) { return document.getElementById(id); }
-  function bridge() { return window.MyHubBridge || null; }
-
-  function publishTitle() {
-    var b = bridge();
-    if (!b) return;
-    var name = state.file ? state.file.name : (APPS[state.app] ? APPS[state.app].newName : '오피스');
-    b.post({ type: 'myhub:doc-title', title: name, dirty: state.dirty });
-    if (els.docName) els.docName.textContent = name;
-  }
-
-  function engineUrl() {
-    var cfg = APPS[state.app];
-    var base = cfg.engine;
-    var sep = base.indexOf('?') >= 0 ? '&' : '?';
-    if (base.indexOf('/vendor/') === 0) {
-      // 벤더 엔진(PPT·PDF)은 ?host=parent로만 부팅한다. 파일은 ready 이후
-      // postMessage로 전달한다 — ?file=<id>를 붙이면 deckcraft는 무시하고
-      // pdfcraft는 그 문자열을 URL로 fetch하려다 실패하므로 붙이지 않는다.
-      // Excel은 sheet.html 래퍼가 자체적으로 host=parent를 붙인다.
-      return base + sep + 'host=parent';
-    }
-    if (state.file && state.file.id) return base + sep + 'file=' + encodeURIComponent(state.file.id);
-    return base + sep + 'new=1';
-  }
-
-  function loadEngine() {
-    if (isVendorApp() && state.engineLoadedFor === state.app) {
-      // 같은 벤더 엔진이 이미 떠 있으면 재로드하지 않고 파일만 다시 전달한다.
-      if (state.engineReady) deliverVendorFile();
-      return;
-    }
-    if (state.app === 'hangul' && hwp.editor) {
-      // 이미 연결된 스튜디오에는 파일만 다시 전달한다 (벤더 앱과 같은 정책).
-      hwpDeliverFile();
-      return;
-    }
-    if (state.app !== 'hangul') hwpTeardown();
-    state.engineLoadedFor = state.app;
-    state.engineReady = false;
-    vendorFontsPushed = false;
-    els.engine.src = engineUrl();
-    if (state.app === 'hangul') hwpConnect();
-    clearTimeout(loadEngine._timer);
-    loadEngine._timer = setTimeout(function () {
-      if (!state.engineReady && els.engineFail) els.engineFail.style.display = '';
-    }, 8000);
-  }
-
-  /* ---------- 한글(rhwp-studio) 호스트 브리지 ----------
-   * 스튜디오는 postMessage로 ready를 보내지 않는다. 임베드 프로토콜
-   * (vendor/rhwp-editor의 EditorTransport — rhwp-connect 핸드셰이크 →
-   * rhwp-connected, 이후 RPC)이 유일한 준비·열기·저장 경로다. 재구축
-   * 초기본에는 이 연결 자체가 없어 준비 신호가 영원히 오지 않았고,
-   * 저장은 스튜디오가 듣지 않는 myhub:office-save-request로 빠져 있었다. */
-  var hwp = { transport: null, editor: null, connecting: false, offChanged: null };
-
-  function hwpTeardown() {
-    if (hwp.offChanged) { try { hwp.offChanged(); } catch (e) { console.warn('[office] offChanged 해제 실패 (이미 해제됨)', e); } hwp.offChanged = null; }
-    if (hwp.transport) { try { hwp.transport.destroy(); } catch (e) { console.warn('[office] transport 파괴 실패 (이미 파괴됨)', e); } }
-    hwp.transport = null;
-    hwp.editor = null;
-    hwp.connecting = false;
-  }
-
-  function hwpMarkReady() {
-    state.engineReady = true;
-    flushReadyWaiters();
-    if (els.engineFail) els.engineFail.style.display = 'none';
-    if (state.pendingFile) {
-      var f = state.pendingFile;
-      state.pendingFile = null;
-      setFile(f);
-    }
-  }
-
-  function hwpDeliverFile() {
-    if (!hwp.editor || !state.file || !state.file.id || !F) return;
-    var targetId = state.file.id;
-    var targetName = state.file.name;
-    F.loadFile(targetId).then(function (out) {
-      return out.blob.arrayBuffer();
-    }).then(function (buf) {
-      if (!hwp.editor || !state.file || state.file.id !== targetId) return null;
-      return hwp.editor.loadFile(buf, targetName, { skipUnsavedGuard: true }).then(function () {
-        state.dirty = false;
-        publishTitle();
-      });
-    }).catch(function (e) { console.warn('한글 파일 전달 실패:', e); });
-  }
-
-  function hwpConnect() {
-    if (hwp.connecting || hwp.editor) return;
-    hwp.connecting = true;
-    var frame = els.engine;
-    var studioUrl = frame.src;
-    function attempt(n) {
-      return Promise.all([
-        import('/vendor/rhwp-editor/transport.js'),
-        import('/vendor/rhwp-editor/index.js'),
-      ]).then(function (mods) {
-        var transport = new mods[0].EditorTransport(frame, studioUrl, { handshakeTimeoutMs: 4000 });
-        hwp.transport = transport;
-        return transport.connect().then(function () {
-          var editor = new mods[1].RhwpEditor(frame, transport);
-          return editor._waitReady().then(function () { return editor; });
-        });
-      }).catch(function (e) {
-        if (hwp.transport) { try { hwp.transport.destroy(); } catch (err) { console.warn('[office] 재시도 전 transport 정리 실패', err); } hwp.transport = null; }
-        if (n >= 4) throw e;
-        return new Promise(function (r) { setTimeout(r, 700); }).then(function () { return attempt(n + 1); });
-      });
-    }
-    function start() {
-      attempt(0).then(function (editor) {
-        hwp.editor = editor;
-        hwp.connecting = false;
-        try {
-          hwp.offChanged = editor.onDocumentChanged(function () {
-            if (!state.dirty) { state.dirty = true; publishTitle(); }
-          });
-        } catch (e) { console.warn('[office] 변경 이벤트 구독 실패 — dirty는 저장 흐름으로만 관리', e); }
-        hwpMarkReady();
-        hwpDeliverFile();
-      }).catch(function (e) {
-        hwp.connecting = false;
-        console.warn('한글 엔진 연결 실패:', e);
-      });
-    }
-    // createEditor와 같은 순서: iframe load 뒤에 핸드셰이크한다.
-    // 스튜디오 리스너가 서기 전에 보낸 connect 메시지는 유실된다.
-    if (frame.contentDocument && frame.contentDocument.readyState === 'complete') start();
-    else frame.addEventListener('load', start, { once: true });
-  }
-
-  var PPTX_MIME = 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
+  var XLSX_MIME =
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+  var PPTX_MIME =
+    'application/vnd.openxmlformats-officedocument.presentationml.presentation';
   var PDF_MIME = 'application/pdf';
 
-  function bufToBase64(buf) {
-    var u8 = buf instanceof Uint8Array ? buf : new Uint8Array(buf);
-    var s = '';
-    var CHUNK = 0x8000;
-    for (var i = 0; i < u8.length; i += CHUNK) {
-      s += String.fromCharCode.apply(null, u8.subarray(i, i + CHUNK));
+  var APPS = {
+    excel: {
+      title: 'Excel', iconKind: 'excel', exts: ['xlsx', 'xls', 'csv'],
+      canSave: true, canCreate: true, newExt: '.xlsx', newMime: XLSX_MIME,
+      newTitle: '제목 없음.xlsx',
+      // 시작 화면 없이 빈 워크북으로 바로 진입한다 (실제 작업
+      // 동작 뒤 사용자 지시 2026-11-03, 와 같은 스위치).
+      autoNew: true,
+      desc: '본체의 스프레드시트를 열고 편집합니다. 수식은 수식 그대로 계산됩니다.',
+    },
+    hangul: {
+      title: '한글 2020', iconKind: 'hangul', exts: ['hwp', 'hwpx'],
+      canSave: true, canCreate: true, newExt: '.hwpx',
+      newMime: 'application/hwp+zip', newTitle: '제목 없음.hwpx',
+      templateUrl: '/templates/blank.hwpx',
+      // 시작 화면 없이 빈 문서로 바로 진입한다 (실제 한글 동작 뒤
+      // 사용자 지시 2026-11-02). 보기/편집은 단일 표면 접기 모델과 맞는다.
+      autoNew: true,
+      desc: '본체의 한글 문서를 보고 편집합니다.',
+    },
+    powerpoint: {
+      title: 'PowerPoint', iconKind: 'powerpoint', exts: ['pptx', 'ppt'],
+      canSave: true, canCreate: true, newExt: '.pptx', newMime: PPTX_MIME,
+      newTitle: '제목 없음.pptx',
+      // 한글·한글과 같은 마감 (사용자 지시 2026-11-03): 시작 화면 없이
+      // 빈 프레젠테이션으로 바로 진입한다. 빈 문서 시작은 DeckCraft
+      // 호스트의 새 문서 모드가 맞는다 (서식 파일 없음).
+      autoNew: true,
+      desc: '본체의 프레젠테이션을 전용 편집기로 보고 편집합니다.',
+    },
+    pdf: {
+      title: 'PDF', iconKind: 'pdf', exts: ['pdf'],
+      canSave: true, canCreate: true, newExt: '.pdf', newMime: PDF_MIME,
+      newTitle: '제목 없음.pdf',
+      templateUrl: '/templates/blank.pdf',
+      // 한글·한글과 같은 마감 (사용자 지시 2026-11-03): 시작 화면 없이
+      // 빈 1페이지 PDF로 바로 진입한다.
+      autoNew: true,
+      desc: '본체의 PDF를 전용 편집기로 봅니다. 주석·양식 입력 도구와 페이지 조작(회전·삭제·추출·병합)을 합니다.',
+    },
+  };
+
+  function parseAppKey(search) {
+    var key = '';
+    try {
+      key = new URLSearchParams(String(search || '')).get('app') || '';
+    } catch (e) {
+      key = '';
     }
-    return btoa(s);
+    return APPS[key] ? key : 'excel';
   }
 
-  /* 벤더 엔진에 현재 파일을 연다 (ready 이후에만 의미가 있다).
-   * 기존 파일: 보관함 바이트를 deckcraft:open/pdfcraft:open으로 전달.
-   * 새 PDF: 빈 템플릿 바이트를 열어 편집 시작점으로 삼는다.
-   * 새 PPT: host 모드의 빈 프레젠테이션이 시작점이라 보낼 것이 없다. */
-  function deliverVendorFile() {
-    if (!isVendorApp()) return;
-    var frame = els.engine;
-    if (!frame || !frame.contentWindow) return;
-    var openType = state.app === 'powerpoint' ? 'deckcraft:open' : 'pdfcraft:open';
-    if (state.file && state.file.id) {
-      if (!F) return;
-      var targetId = state.file.id;
-      var targetName = state.file.name;
-      F.loadFile(targetId).then(function (out) {
-        return out.blob.arrayBuffer();
-      }).then(function (buf) {
-        if (frame.contentWindow && state.file && state.file.id === targetId) {
-          frame.contentWindow.postMessage({ type: openType, name: targetName, bytes: buf }, window.location.origin, [buf]);
-        }
-      }).catch(function (e) { console.warn('파일 전달 실패:', e); });
-    } else if (state.app === 'pdf') {
-      fetch('/templates/blank.pdf').then(function (r) { return r.arrayBuffer(); }).then(function (buf) {
-        if (frame.contentWindow) {
-          frame.contentWindow.postMessage({ type: openType, name: APPS.pdf.newName, bytes: buf }, window.location.origin, [buf]);
-        }
-      }).catch(function (e) { console.warn('빈 PDF 전달 실패:', e); });
-    }
-  }
+  /**
+   * deps = { doc, fetchFn, storage, search, viewerFactory?, iconsApi? }
+   * doc에서 office.html의 요소들을 id로 찾는다 (없는 요소는 건너뜀).
+   */
+  function createApp(deps) {
+    deps = deps || {};
+    var doc = deps.doc || document;
+    var baseFetch =
+      deps.fetchFn ||
+      function (url, opts) {
+        return fetch(url, opts);
+      };
+    var storage = deps.storage || null;
+    var icons = deps.iconsApi ||
+      (typeof window !== 'undefined' ? window.MyHubFileIcons : null);
+    var appKey = parseAppKey(deps.search !== undefined ? deps.search : (typeof window !== 'undefined' ? window.location.search : ''));
+    var app = APPS[appKey];
+    // 자동 새 문서 진입은 실제 부모가 APPS 플래그를 보고 명시적으로
+    // 켤 때만 일어나도록 (한다 createApp테스트가 를 직접 불러도 꺾임)
+    var autoNew = deps.autoNew === true;
 
-  /* DeckCraft 웹 빌드는 CJK 폰트를 내장하지 않는다 — 한국어 글리프는
-   * 호스트가 Drive '폰트' 폴더의 폰트 바이트를 deckcraft:fonts로 밀 때만
-   * 그려진다 (엔진 fonts 크레이트·host.rs 규약). 재구축 초기본에는 이
-   * 푸시가 없어 문서 한글이 전부 .notdef(네모)로 깨졌다. PdfCraft는
-   * fonts 규약이 없어 대상이 아니다. */
-  var vendorFontsPushed = false;
-  function pushVendorFonts() {
-    if (vendorFontsPushed || state.app !== 'powerpoint') return;
-    vendorFontsPushed = true;
-    if (!window.MyHubFonts || !window.MyHubFonts.ready) return;
-    window.MyHubFonts.ready.then(function () {
-      var list = window.MyHubFonts.list() || [];
-      return Promise.all(list.map(function (f) {
-        return fetch(f.url).then(function (r) { return r.arrayBuffer(); }).then(function (bytes) {
-          return { family: f.name, weight: f.weight, style: f.style, bytes: bytes };
-        }).catch(function () { return null; });
-      }));
-    }).then(function (entries) {
-      var fonts = entries.filter(Boolean);
-      var frame = els.engine;
-      if (fonts.length && frame && frame.contentWindow) {
-        frame.contentWindow.postMessage({ type: 'deckcraft:fonts', fonts: fonts }, window.location.origin);
-      }
-    }).catch(function (e) { console.warn('[office] 폰트 전달 실패 — 폰트 없이도 엔진은 동작한다', e); });
-  }
+    var el = function (id) { return doc.getElementById(id); };
+    var startEl = el('officeStart');
+    var openBtn = el('officeOpenBtn');
+    var newBtn = el('officeNewBtn');
+    var closeBtn = el('officeCloseBtn');
+    var progressEl = el('officeProgress');
+    var progressFill = el('officeProgressFill');
+    var progressLabel = el('officeProgressLabel');
 
-  /* 폰트 적용 뒤에는 이미 그려진 플레이스홀더가 남을 수 있어, 프레임을
-   * 300ms 캡했다 풀어 재레이아웃을 유도한다 (Finder 표면 실측 해법). */
-  function nudgeEngineRelayout() {
-    var frame = els.engine;
-    if (!frame) return;
-    frame.style.maxWidth = 'calc(100% - 1px)';
-    frame.style.maxHeight = 'calc(100% - 1px)';
-    setTimeout(function () {
-      frame.style.maxWidth = '';
-      frame.style.maxHeight = '';
-    }, 300);
-  }
+    var viewer = null;
+    var current = null; // { fileId, name, mime, version, folderId, folderName, isNew }
+    var opening = false;
+    var openingFile = null; // 지금 열고 있는 파일 (같은 파일 중복 열기 판정)
+    var queuedOpen = null; // 열기 진행 중에 도착한 파일 열기 요청 (유실 방지)
+    var queuedOpenWaiters = [];
+    var saveState = 'idle'; // 코어 저장 상태 기계의 마지막 상태 (제목 줄 표시용)
 
-  function setFile(file, opts) {
-    opts = opts || {};
-    state.file = file;
-    state.dirty = false;
-    if (file && file.id && M) {
-      M.pushRecent(localStorage, { id: file.id, name: file.name, app: state.app });
-    }
-    publishTitle();
-    if (!opts.skipEngine) loadEngine();
-  }
-
-  function newDocument() {
-    setFile({ id: null, name: APPS[state.app].newName, version: null });
-  }
-
-  function openFromPicker() {
-    if (!window.MyHubOfficePicker) return;
-    window.MyHubOfficePicker.openPicker({ title: '보관함에서 열기' }).then(function (file) {
-      if (file) setFile({ id: file.id, name: file.name, version: file.version || null });
-    });
-  }
-
-  function base64ToBlob(b64, type) {
-    var bin = atob(b64);
-    var bytes = new Uint8Array(bin.length);
-    for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-    return new Blob([bytes], { type: type || 'application/octet-stream' });
-  }
-
-  function requestEngineExport() {
-    if (state.app === 'powerpoint') return requestVendorExport('deckcraft');
-    if (state.app === 'pdf') return requestVendorExport('pdfcraft');
-    if (state.app === 'hangul') {
-      // 스튜디오는 RPC로만 내보낸다 (exportHwp/exportHwpx).
-      if (!hwp.editor) return Promise.reject(new Error('엔진 준비 안 됨'));
-      var isHwp = !!state.file && /\.hwp$/i.test(state.file.name || '');
-      var exporting = isHwp ? hwp.editor.exportHwp() : hwp.editor.exportHwpx();
-      return exporting.then(function (bytes) {
-        return {
-          data: bufToBase64(bytes),
-          mime: isHwp ? 'application/octet-stream' : 'application/vnd.hancom.hwpx',
-        };
-      });
-    }
-    return new Promise(function (resolve, reject) {
-      var frame = els.engine;
-      if (!frame || !frame.contentWindow) { reject(new Error('엔진 없음')); return; }
-      var timer = setTimeout(function () {
-        window.removeEventListener('message', onMsg);
-        reject(new Error('엔진 응답 없음'));
-      }, 15000);
-      function onMsg(ev) {
-        if (ev.origin !== window.location.origin) return;
-        if (ev.source !== frame.contentWindow) return;
-        var d = ev.data;
-        if (d && d.type === 'myhub:office-export') {
-          clearTimeout(timer);
-          window.removeEventListener('message', onMsg);
-          if (d.error) reject(new Error(d.error));
-          else resolve(d);
+    // ---------- 문서 제목 동기 (창 제목줄이 정보) ----------
+    // 파일명이 앱 이름이 아닌 데스크톱 창의 제목줄 신호등이(있는 바
+    // 바)에 오른다. iframe들은 postMessage가 기존 통신 패턴이고, 창 바
+    // 독립 실행에서는 문서 제목(브라우저 탭)을 최소 읽기로 고른다.
+    // 변경 있음은 제목 앞의 점으로만 앱으로 알린다.
+    function notifyDocTitle() {
+      var payload = {
+        name: current ? current.name || null : null,
+        dirty: saveState === 'dirty',
+      };
+      if (typeof deps.onDocTitle === 'function') {
+        try {
+          deps.onDocTitle(payload);
+        } catch (e) {
+          console.warn('문서 제목 동기 실패:', e);
         }
       }
-      window.addEventListener('message', onMsg);
-      frame.contentWindow.postMessage({ type: 'myhub:office-save-request' }, window.location.origin);
-    });
-  }
-
-  /* 벤더 엔진 저장 왕복.
-   * - deckcraft: deckcraft:request-save → deckcraft:save {name, bytes: ArrayBuffer}
-   *   | deckcraft:save-failed {error}
-   * - pdfcraft: request-save 수신 규약이 없다. 대신 메뉴 명령
-   *   pdfcraft:menu-command {command: 'file.save'}를 보내면 앱의 저장
-   *   명령이 실행돼 pdfcraft:save {name, bytes}가 돌아온다. */
-  function requestVendorExport(kind) {
-    return new Promise(function (resolve, reject) {
-      var frame = els.engine;
-      if (!frame || !frame.contentWindow) { reject(new Error('엔진 없음')); return; }
-      var saveType = kind + ':save';
-      var failType = kind + ':save-failed';
-      vendorSaveRequested = true;
-      var timer = setTimeout(function () { cleanup(); reject(new Error('엔진 응답 없음')); }, 15000);
-      function cleanup() {
-        clearTimeout(timer);
-        window.removeEventListener('message', onMsg);
-        vendorSaveRequested = false;
-      }
-      function onMsg(ev) {
-        if (ev.origin !== window.location.origin) return;
-        if (ev.source !== frame.contentWindow) return;
-        var d = ev.data;
-        if (!d) return;
-        if (d.type === saveType && d.bytes) {
-          cleanup();
-          resolve({
-            data: bufToBase64(d.bytes),
-            mime: kind === 'pdfcraft' ? PDF_MIME : PPTX_MIME,
-            name: d.name,
-          });
-        } else if (d.type === failType) {
-          cleanup();
-          reject(new Error(d.error || '엔진 저장 실패'));
-        }
-      }
-      window.addEventListener('message', onMsg);
-      if (kind === 'deckcraft') {
-        frame.contentWindow.postMessage({ type: 'deckcraft:request-save' }, window.location.origin);
-      } else {
-        frame.contentWindow.postMessage({ type: 'pdfcraft:menu-command', command: 'file.save' }, window.location.origin);
-      }
-    });
-  }
-
-  /* 엔진 안에서 사용자가 직접 저장했을 때 오는 비요청 저장분도 보관함에
-   * 반영한다. 단, 엔진의 내보내기(PDF·이미지 등)는 문서 파일과 확장자가
-   * 달라 이 경로로 덮지 않는다 — host 모드에서 내보내기는 별도 소비자가 없다. */
-  function persistUnsolicitedSave(d) {
-    if (!F || !d.bytes) return;
-    var isPpt = state.app === 'powerpoint';
-    var name = String(d.name || '');
-    var extOk = isPpt ? /\.(pptx|deckcraft)$/i.test(name) : /\.pdf$/i.test(name);
-    if (!extOk) return;
-    var blob = new Blob([d.bytes], { type: isPpt ? PPTX_MIME : PDF_MIME });
-    if (state.file && state.file.id) {
-      F.saveFile(state.file.id, blob, state.file.version, state.file.name).then(function (out) {
-        if (out && !out.conflict) {
-          state.file.version = out.version;
-          state.dirty = false;
-          publishTitle();
-        }
-      }).catch(function (e) { console.warn('엔진 자체 저장 반영 실패:', e); });
-    } else {
-      F.createFile(state.file ? state.file.name : name, blob).then(function (created) {
-        setFile({ id: created.id, name: created.name || name, version: created.version || null }, { skipEngine: true });
-        state.dirty = false;
-        publishTitle();
-      }).catch(function (e) { console.warn('엔진 자체 저장 반영 실패:', e); });
-    }
-  }
-
-  /* 한글: 보관함 저장이 확정된 뒤 스튜디오에 통지해 dirty·자동복구
-   * 드래프트를 정리한다 (notify-saved-v1). 실패해도 저장은 이미 끝났다. */
-  function afterSaveNotify(name) {
-    if (state.app === 'hangul' && hwp.editor) {
-      hwp.editor.notifySaved(name).catch(function (e) { console.debug('스튜디오 저장 통지 실패:', e); });
-    }
-  }
-
-  function save(saveAs) {
-    return requestEngineExport().then(function (exp) {
-      var blob = base64ToBlob(exp.data, exp.mime);
-      var name = state.file ? state.file.name : APPS[state.app].newName;
-      if (saveAs) {
-        var asked = window.prompt('다른 이름으로 저장', name);
-        if (!asked) return { skipped: true };
-        name = asked;
-      }
-      if (state.file && state.file.id && !saveAs) {
-        return F.saveFile(state.file.id, blob, state.file.version, name).then(function (out) {
-          if (out.conflict) {
-            window.alert('다른 곳에서 먼저 바뀐 파일이에요. 새로고침 후 다시 시도해 주세요. (409)');
-            return out;
+      if (typeof window !== 'undefined') {
+        if (window.parent && window.parent !== window) {
+          try {
+            window.parent.postMessage(
+              { type: 'myhub:doc-title', name: payload.name, dirty: payload.dirty },
+              window.location.origin,
+            );
+          } catch (e) {
+            console.warn('창 제목 동기 실패:', e);
           }
-          state.file.version = out.version;
-          state.dirty = false;
-          publishTitle();
-          afterSaveNotify(name);
-          return out;
+        }
+        // I-11: 단독 실행에서는 브라우저 탭이 제목줄을 고르므로, 같은
+        // 계약(파일명 + 미저장 점)을 탭 제목에도 반영한다.
+        doc.title = payload.name
+          ? (payload.dirty ? '● ' : '') + payload.name + ' · ' + app.title
+          : app.title + ' · MyHub';
+      }
+    }
+
+    // ---------- 저장소 (앱 메모리) ----------
+    function storeGet(key, fallback) {
+      if (!storage) return fallback;
+      try {
+        var raw = storage.getItem(key);
+        if (!raw) return fallback;
+        var parsed = JSON.parse(raw);
+        return parsed === null || parsed === undefined ? fallback : parsed;
+      } catch (e) {
+        console.warn('오피스 앱 메모리 읽기 실패:', e);
+        return fallback;
+      }
+    }
+    function storeSet(key, value) {
+      if (!storage) return;
+      try {
+        storage.setItem(key, JSON.stringify(value));
+      } catch (e) {
+        console.warn('오피스 앱 메모리 쓰기 실패:', e);
+      }
+    }
+    // ---------- 내용 캐시 + 진행 표시 fetch (office-fetch.js가 전임) ----------
+    var fetchApi = null;
+    function getFetchApi() {
+      if (fetchApi) return fetchApi;
+      var factory = deps.fetchFactory ||
+        (typeof window !== 'undefined' && window.MyHubOfficeFetch
+          ? window.MyHubOfficeFetch.createOfficeFetch
+          : null);
+      if (!factory) {
+        // 모듈이 없으면 진행·캐시 없이 기본 fetch로 동작한다
+        return {
+          fetch: baseFetch,
+          expectVersion: function () {},
+          invalidate: function () {},
+        };
+      }
+      fetchApi = factory({
+        fetchFn: baseFetch,
+        onProgress: function (p) {
+          if (p.phase === 'download') {
+            if (p.total) showProgress('받는 중 ' + Math.round((p.got / p.total) * 100) + '%', (p.got / p.total) * 100);
+            else showProgress('받는 중…', null);
+          } else if (p.phase === 'parse') {
+            showProgress('여는 중…', null);
+          }
+        },
+      });
+      return fetchApi;
+    }
+
+    function showProgress(label, pct) {
+      if (!progressEl) return;
+      progressEl.hidden = false;
+      if (progressLabel) progressLabel.textContent = label || '';
+      if (progressFill) {
+        if (pct === null || pct === undefined) {
+          progressFill.classList.add('is-indeterminate');
+          progressFill.style.width = '';
+        } else {
+          progressFill.classList.remove('is-indeterminate');
+          progressFill.style.width = Math.min(100, Math.max(0, pct)) + '%';
+        }
+      }
+    }
+    function hideProgress() {
+      if (progressEl) progressEl.hidden = true;
+    }
+
+    // ---------- 뷰어 (3B 코어 재사용) ----------
+    function getViewer() {
+      if (viewer) return viewer;
+      var factory = deps.viewerFactory ||
+        (typeof window !== 'undefined' && window.MyHubFinderViewer
+          ? window.MyHubFinderViewer.createViewer
+          : null);
+      if (!factory) throw new Error('뷰어 코어가 없습니다');
+      viewer = factory({
+        doc: doc,
+        fetchFn: getFetchApi().fetch,
+        // 오피스 앱 공통: 단일 표면 접기 (열면 뷰어·접으면 에디터)
+        chromeFold: true,
+        // 한글은 앱 창 바 더블로이 가 toggle-collapse(Studio 아니라)
+        // 계약이라 코어 접기(표면 전환)를 플로팅 버튼과 계속 맞는다.
+        // 페이지 앱 코어 접기가 창 바 더블로이으로 연다.
+        foldHostTabs: appKey === 'hangul',
+        // 미니멀 접기: 앱 자체 헤더·접기 버튼이 없다 앱 열기·뷰어 가
+        // 표면을 [파일] 메뉴가 맡고, 접힌 상태는 제목줄 앱으로만
+        // 표시한다.
+        minimalChrome: true,
+        onSaveStateChange: function (state) {
+          saveState = state;
+          notifyDocTitle();
+        },
+        onSaved: function () {
+          // 우리 호스트으로 내용을 받아뒀으니 캐시를 버린다 (전역 리로드 X)
+          if (current && current.fileId) getFetchApi().invalidate(current.fileId);
+        },
+        createSave: createSaveFlow,
+      });
+      return viewer;
+    }
+
+    function updateChrome() {
+      // 파일명은 창 제목줄 이 곳에만 오른다 (notifyDocTitle) 가 이 안에
+      // 같은 이름의 앱 화면 제목 영역과 나란히 겹친다 (사용자 피드백).
+      if (closeBtn) closeBtn.hidden = !current;
+      if (startEl) startEl.hidden = !!current;
+      // 닫힌 문서가 없으면 오피스 앱 도 빈손이다 (방송 작업 2) 앱
+      // 뷰어 호스트가 문서가 닫힐 때 엔진 상태로 다시 채운다.
+      if (!current && typeof window !== 'undefined' && window.MyHubOfficeTabs) {
+        window.MyHubOfficeTabs.setState(appKey, null);
+      }
+      // 빠른 실행 가능성: 문서를 열면 호스트를 올리고, 접으면 닫힌
+      // (뷰어 호스트 몫 앱 undo/redo/print/search 앱 앱 별도).
+      // 접기는 빠른 실행 동작이 아니라 전용 채널(myhub:office-fold)로
+      // 맞는다 (2026-11-06 방송 교정 트랙): 앱 앞에서는 창 바
+      // 더블로이, 단독 실행에서는 표면 자체 접기 버튼(#fvFoldBtn)가
+      // 같은 코어 접기를 구동한다. 한글만 앱 toggle-collapse 계약.
+      if (
+        typeof window !== 'undefined' &&
+        window.MyHubOfficeTabs &&
+        typeof window.MyHubOfficeTabs.setQuick === 'function'
+      ) {
+        if (current) {
+          window.MyHubOfficeTabs.setQuick(appKey, { save: true });
+        } else {
+          // 문서가 접히면 앱 앱의 빠른 실행 패널을 닫힌다 (뷰어
+          // 호스트가 접힌 undo/redo/print/search 포함 앱 주요 버튼을
+          // 제목 줄에 합칠 때).
+          window.MyHubOfficeTabs.setQuick(appKey, {
+            save: false,
+            undo: false,
+            redo: false,
+            print: false,
+            search: false,
+          });
+        }
+      }
+      notifyDocTitle();
+    }
+
+    function openFile(file) {
+      if (!file || !file.fileId) return Promise.resolve(false);
+      if (opening) {
+        // 진행 중이거나 대기 중인 것과 같은 파일이면 중복 실행만
+        // 막는다 (열기 패널 연속 확정 뒤).
+        if (openingFile && openingFile.fileId === file.fileId) return Promise.resolve(false);
+        if (queuedOpen && queuedOpen.fileId === file.fileId) return Promise.resolve(false);
+        // 다른 열기(자동 새 문서가 붙은 뒤)가 진행 중이면 요청을
+        // 버리지 않고 대기열에 넣는다. Finder가 파일을 내기
+        // 핸드셰이크는 앱 붙임 직후에 도착하는데, autoNew는 빈 문서
+        // 열기와 겹치면 종전에는 요청이 조용히 사라져 "가끔만 남고
+        // 빈 문서"가 맞다 (2026-11-04 세션 보고의 근본 원인).
+        var superseded = queuedOpenWaiters;
+        queuedOpenWaiters = [];
+        superseded.forEach(function (w) {
+          w(false);
+        });
+        queuedOpen = file;
+        return new Promise(function (resolve) {
+          queuedOpenWaiters.push(resolve);
         });
       }
-      return F.createFile(name, blob).then(function (created) {
-        setFile({ id: created.id, name: created.name || name, version: created.version || null }, { skipEngine: true });
-        state.dirty = false;
-        publishTitle();
-        afterSaveNotify(name);
-        return { ok: true };
+      return runOpenFile(file);
+    }
+
+    /* 열기가 끝날 때까지 대기열을 확인해 이어 연다 */
+    function finishOpening() {
+      opening = false;
+      openingFile = null;
+      if (!queuedOpen) return;
+      var file = queuedOpen;
+      queuedOpen = null;
+      var waiters = queuedOpenWaiters;
+      queuedOpenWaiters = [];
+      openFile(file).then(function (r) {
+        waiters.forEach(function (w) {
+          w(r);
+        });
       });
-    }).catch(function (e) {
-      console.debug('저장 실패:', e);
-      window.alert('저장에 실패했어요.');
-      return { ok: false };
-    });
-  }
+    }
 
-  function printDoc() {
-    if (state.app === 'hangul') {
-      // 클릭 시점에 창을 먼저 확보한다 (팝업 차단 회피)
-      var w = window.open('about:blank', '_blank');
-      var url = '/rhwp-studio/print.html' + (state.file && state.file.id ? '?file=' + encodeURIComponent(state.file.id) : '?new=1');
-      if (w) w.location.href = url;
-      else window.alert('팝업이 차단됐어요. 팝업을 허용한 뒤 다시 시도해 주세요.');
-      return;
-    }
-    var frame = els.engine;
-    if (frame && frame.contentWindow) {
-      frame.contentWindow.postMessage({ type: 'myhub:office-print' }, window.location.origin);
-      try { frame.contentWindow.focus(); } catch (e) { console.debug('인쇄 포커스 실패:', e); }
-    }
-  }
-
-  function toggleFold() {
-    state.folded = !state.folded;
-    document.body.classList.toggle('office-folded', state.folded);
-    if (els.foldBtn) {
-      els.foldBtn.innerHTML = '<i data-lucide="' + (state.folded ? 'chevron-down' : 'chevron-up') + '"></i>';
-      if (window.lucide) { try { window.lucide.createIcons(); } catch (e) { console.debug('셰브론 갱신 실패:', e); } }
-    }
-    var frame = els.engine;
-    if (frame && frame.contentWindow) {
-      frame.contentWindow.postMessage({ type: 'myhub:office-fold', folded: state.folded }, window.location.origin);
-    }
-    var b = bridge();
-    if (b) {
-      b.declareContext();
-      b.post({ type: 'myhub:win-chevron', label: state.folded ? '도구 펼치기' : '도구 접기' });
-    }
-  }
-
-  /* 창 제목줄 도구 게시: 셰브론(접기) + 좌측 저장·인쇄·실행취소·다시실행 + 우측 문서 내 검색 */
-  function publishWinTools() {
-    var b = bridge();
-    if (!b) return;
-    b.post({ type: 'myhub:win-chevron', label: state.folded ? '도구 펼치기' : '도구 접기' });
-    b.post({
-      type: 'myhub:win-tools-left',
-      tools: [
-        { id: 'save', icon: 'save', title: '저장' },
-        { id: 'print', icon: 'printer', title: '인쇄' },
-        { id: 'undo', icon: 'undo-2', title: '실행 취소' },
-        { id: 'redo', icon: 'redo-2', title: '다시 실행' },
-      ],
-    });
-    b.post({
-      type: 'myhub:win-tools',
-      tools: [{ id: 'search', icon: 'search', label: '문서 내 검색', title: '문서 내 검색' }],
-    });
-  }
-
-  function sendEngineOp(action) {
-    if (isVendorApp()) { translateVendorAction(action); return; }
-    var frame = els.engine;
-    if (frame && frame.contentWindow) {
-      frame.contentWindow.postMessage({ type: 'myhub:office-op', action: action }, window.location.origin);
-    }
-  }
-
-  function vendorExec(commands) {
-    var frame = els.engine;
-    if (frame && frame.contentWindow) {
-      vendorOpSeq += 1;
-      frame.contentWindow.postMessage(
-        { type: 'deckcraft:exec', tag: 'myhub-op-' + vendorOpSeq, commands: commands },
-        window.location.origin
+    function runOpenFile(file) {
+      opening = true;
+      openingFile = file;
+      if (openBtn) openBtn.disabled = true;
+      getFetchApi().expectVersion(file.fileId, file.version);
+      showProgress('받는 중…', null);
+      var v;
+      try {
+        v = getViewer();
+      } catch (e) {
+        finishOpening();
+        if (openBtn) openBtn.disabled = false;
+        hideProgress();
+        return Promise.resolve(false);
+      }
+      // v.open의 동기 throw가 있으면 opening을 영원히 고정한다 앱
+      // 호출 자체를 then 안에 넣어 걸로 바꾼다.
+      return Promise.resolve()
+        .then(function () {
+          return v.open({ fileId: file.fileId, name: file.name, mime: file.mime, version: file.version });
+        })
+        .then(
+        function () {
+          finishOpening();
+          if (openBtn) openBtn.disabled = false;
+          hideProgress();
+          current = {
+            fileId: file.fileId, name: file.name, mime: file.mime || '',
+            version: file.version || null,
+            folderId: file.folderId === undefined ? null : file.folderId,
+            folderName: file.folderName || '', isNew: false,
+          };
+          closedHandled = false;
+          updateChrome();
+          getMemory().record(current);
+          return true;
+        },
+        function () {
+          finishOpening();
+          if (openBtn) openBtn.disabled = false;
+          hideProgress();
+          return false;
+        },
       );
     }
-  }
 
-  function vendorMenuCommand(command, params) {
-    var frame = els.engine;
-    if (frame && frame.contentWindow) {
-      var msg = { type: 'pdfcraft:menu-command', command: command };
-      if (params) msg.params = params;
-      frame.contentWindow.postMessage(msg, window.location.origin);
+    function newDocument() {
+      if (!app.canCreate || opening) return Promise.resolve(false);
+      opening = true;
+      showProgress('여는 중…', null);
+      // 서식 파일(앱)한글 의 빈문서 바이트를 먼저 받아서 넣는다. 서식파일을
+      // 못 받으면 문서를 열지 않는 앱 빈 껍데기만 첫 창하지 않는다.
+      var bytesReady = app.templateUrl
+        ? Promise.resolve()
+            .then(function () {
+              return baseFetch(versionedAssetUrl(app.templateUrl));
+            })
+            .then(function (res) {
+              if (!res || !res.ok) throw new Error('template http ' + (res && res.status));
+              return res.arrayBuffer();
+            })
+        : Promise.resolve(null);
+      return bytesReady
+        .then(function (bytes) {
+          // getViewer/open의 동기 throw가 있으면 opening를 고정하므로
+          // 호출을 then 안에 넣어 걸로 바꾼다 (openFile과 같은 이유).
+          return getViewer().open({
+            fileId: 0, name: app.newTitle, mime: app.newMime, version: null,
+            bytes: bytes || undefined,
+          });
+        })
+        .then(
+          function () {
+            finishOpening();
+            hideProgress();
+            current = {
+              fileId: 0, name: app.newTitle, mime: app.newMime, version: null,
+              folderId: null, folderName: '', isNew: true,
+            };
+            closedHandled = false;
+            updateChrome();
+            return true;
+          },
+          function () {
+            finishOpening();
+            hideProgress();
+            // 자동 진입이 실패했으면 시작 화면을 내보내거나 한다
+            // (문서가 열려 있으면 updateChrome가 그대로 감춘 화면)
+            updateChrome();
+            return false;
+          },
+        );
     }
-  }
 
-  /* 비서 패널·호스트 도구 연산을 벤더 엔진 규약으로 번역한다.
-   * - PowerPoint: SlideOp({id, params})는 deckcraft 명령 id와 동형이라
-   *   deckcraft:exec로 그대로 보낸다. 단 'slide' 파라미터는 엔진 명령에
-   *   없어(현재 슬라이드 기준) 떼어 낸다. undo/redo는 exec의 edit.*로,
-   *   find는 exec 대응 명령이 없어 보내지 않는다.
-   * - PDF: undo/redo/find와 페이지 연산은 pdfcraft:menu-command로 보낸다.
-   *   페이지 연산은 메뉴 명령이 현재 페이지/선택 기준이라 page 파라미터는
-   *   참고로만 실어 보낸다. overlay_text는 대응 메뉴 명령이 없어 제외. */
-  function translateVendorAction(action) {
-    if (!action || typeof action !== 'object') return;
-    var ops = Array.isArray(action.ops) ? action.ops : [action];
-    if (state.app === 'powerpoint') {
-      var commands = [];
-      ops.forEach(function (op) {
-        if (!op || typeof op !== 'object') return;
-        if (op.op === 'undo') commands.push({ id: 'edit.undo', params: {} });
-        else if (op.op === 'redo') commands.push({ id: 'edit.redo', params: {} });
-        else if (op.op === 'find') { /* deckcraft exec에 find 명령 없음 */ }
-        else if (typeof op.id === 'string') {
-          var params = {};
-          var src = op.params || {};
-          Object.keys(src).forEach(function (k) { if (k !== 'slide') params[k] = src[k]; });
-          commands.push({ id: op.id, params: params });
-        }
-      });
-      if (commands.length) vendorExec(commands);
-    } else if (state.app === 'pdf') {
-      ops.forEach(function (op) {
-        if (!op || typeof op !== 'object') return;
-        if (op.op === 'undo') vendorMenuCommand('edit.undo');
-        else if (op.op === 'redo') vendorMenuCommand('edit.redo');
-        else if (op.op === 'find') vendorMenuCommand('edit.find');
-        else if (op.type === 'rotate_page') vendorMenuCommand('page.rotate', { page: op.page });
-        else if (op.type === 'delete_page') vendorMenuCommand('page.delete', { page: op.page });
-        else if (op.type === 'extract_pages') vendorMenuCommand('page.extract', { from: op.from, to: op.to });
-      });
-    }
-  }
-
-  /* ---------- 파일·편집 메뉴 ---------- */
-
-  var openMenuEl = null;
-  var openMenuBackdrop = null;
-  var openMenuAnchor = null;
-  function closeMenus() {
-    if (openMenuEl && openMenuEl.parentNode) openMenuEl.parentNode.removeChild(openMenuEl);
-    if (openMenuBackdrop && openMenuBackdrop.parentNode) openMenuBackdrop.parentNode.removeChild(openMenuBackdrop);
-    openMenuEl = null;
-    openMenuBackdrop = null;
-    openMenuAnchor = null;
-    document.removeEventListener('pointerdown', onMenuDown, true);
-    document.removeEventListener('keydown', onMenuKey, true);
-  }
-  function onMenuDown(ev) {
-    // 배경막이 있으면 닫힘은 배경막의 click이 담당한다 (pointerdown에서
-    // 먼저 닫으면 click이 앵커로 재타기팅돼 메뉴가 다시 열리는 문제가 있다).
-    if (!openMenuEl || openMenuBackdrop) return;
-    if (!openMenuEl.contains(ev.target)) closeMenus();
-  }
-  function onMenuKey(ev) { if (ev.key === 'Escape') closeMenus(); }
-
-  function showMenu(anchor, items) {
-    closeMenus();
-    var menu = document.createElement('div');
-    menu.className = 'myhub-menu';
-    items.forEach(function (item) {
-      if (item.separator) {
-        var sep = document.createElement('div');
-        sep.className = 'myhub-menu-sep';
-        menu.appendChild(sep);
+    // 문서를 접은 뒤의 화면: 자동 새 문서 앱(한글·한글)의 시작 화면으로
+    // 돌아가지 않고 빈 문서를 새로 연다. 그 앱 앱 시작 화면으로.
+    function handleClosed() {
+      current = null;
+      if (autoNew && app.canCreate) {
+        newDocument();
         return;
       }
-      var b = document.createElement('button');
-      b.type = 'button';
-      b.className = 'myhub-menu-item';
-      b.textContent = item.label;
-      b.disabled = !!item.disabled;
-      b.addEventListener('click', function () { closeMenus(); if (item.onSelect) item.onSelect(); });
-      menu.appendChild(b);
-    });
-    // 배경막: 엔진 iframe 위를 포함한 전면을 덮어, iframe 영역 클릭도
-    // 부모 문서가 받아 닫을 수 있게 한다 (iframe은 부모로 이벤트를
-    // 전파하지 않아 pointerdown 감지만으로는 그 영역이 누락된다).
-    var backdrop = document.createElement('div');
-    backdrop.className = 'myhub-menu-backdrop';
-    backdrop.addEventListener('click', function () { closeMenus(); });
-    document.body.appendChild(backdrop);
-    document.body.appendChild(menu);
-    var r = anchor.getBoundingClientRect();
-    menu.style.left = r.left + 'px';
-    menu.style.top = (r.bottom + 4) + 'px';
-    openMenuEl = menu;
-    openMenuBackdrop = backdrop;
-    openMenuAnchor = anchor;
-    document.addEventListener('pointerdown', onMenuDown, true);
-    document.addEventListener('keydown', onMenuKey, true);
-  }
+      updateChrome();
+      getMemory().render();
+    }
 
-  function fileMenuItems() {
-    var items = [
-      { label: '새로 만들기', onSelect: newDocument },
-      { label: '보관함에서 열기', onSelect: openFromPicker },
-      { separator: true },
-      { label: '저장', onSelect: function () { save(false); } },
-      { label: '다른 이름으로 저장', onSelect: function () { save(true); } },
-      { separator: true },
-      { label: '인쇄', onSelect: printDoc },
-    ];
-    var recents = M ? M.loadRecents(localStorage) : [];
-    if (recents.length) {
-      items.push({ separator: true });
-      recents.forEach(function (r) {
-        items.push({
-          label: '최근: ' + r.name,
-          onSelect: function () {
-            if (r.app && r.app !== state.app) {
-              window.location.href = '/office.html?app=' + r.app + '&file=' + encodeURIComponent(r.id);
-            } else {
-              setFile({ id: r.id, name: r.name, version: null });
-            }
-          },
-        });
+    // 닫힘 처리 단 한번만: 코어 close()의 루트 이벤트(myhub:viewer-close)를
+    // 아래 closeCurrent를 직접 호출해 겹쳐서 중복 실행하지 않는다.
+    // 문서를 새로 열 때마다 다시 무장한다.
+    var closedHandled = true;
+    function onViewerClosed() {
+      if (closedHandled) return;
+      closedHandled = true;
+      handleClosed();
+    }
+
+    function closeCurrent() {
+      if (viewer) viewer.close();
+      onViewerClosed();
+    }
+
+    // ---------- 다른 이름으로 저장 (새 문서의 첫 저장) ----------
+    function createSaveFlow(blob, file, ctx) {
+      return openPicker('save', { initialName: file.name }).then(function (sel) {
+        if (!sel) {
+          ctx.setStatus('문서를 취소했습니다');
+          return false;
+        }
+        var fd = new FormData();
+        fd.append('files', blob, sel.name);
+        if (sel.folderId) fd.append('folder_id', String(sel.folderId));
+        return Promise.resolve()
+          .then(function () {
+            return baseFetch('/api/drive/files', { method: 'POST', body: fd });
+          })
+          .then(function (res) {
+            if (!res || !res.ok) throw new Error('create http ' + (res && res.status));
+            return res.json();
+          })
+          .then(function (body) {
+            var saved = body && body.files && body.files[0];
+            if (!body || !body.ok || !saved) throw new Error('create shape');
+            // 파일을 열어 서버가 생성한다 앱 id·이름이 즉시 확정한다.
+            // 여기서 실패로 보고하면 사용자가 재시도해 중복 파일이
+            // 생긴다. 생성 응답에는 version이 없어 폴더 참조로
+            // storage_key를 올리는데, 그건 최선 노력이다: 실패하면
+            // version을 빈 채로 갖고(다음 호스트 base_version 없는
+            // 재저장 PUT) 저장 자체를 성공으로 보고한다.
+            file.fileId = saved.id;
+            file.name = sel.name;
+            file.version = null;
+            return listFolder(sel.folderId)
+              .then(function (listing) {
+                var row = (listing.files || []).filter(function (f) { return f.id === saved.id; })[0];
+                if (row) file.version = row.version || null;
+              })
+              .catch(function (err) {
+                // 올리기 실패는 저장 성공을 삼키지 않는다 앱 오직 조용히
+                // 삼키지 않고 진단 흔적을 남긴다 (다음 호스트
+                // base_version 없는 재저장 PUT를 낸다).
+                file.adoptError = String((err && err.message) || err);
+              })
+              .then(function () {
+                current = {
+                  fileId: saved.id, name: sel.name, mime: file.mime || '',
+                  version: file.version,
+                  folderId: sel.folderId, folderName: sel.folderName || '', isNew: false,
+                };
+                // 올리기에 이름이 쓸 수 없기가 아니라 창 제목줄로 간다
+                updateChrome();
+                getMemory().record(current);
+                return true;
+              });
+          })
+          .catch(function () {
+            ctx.setStatus('저장에 실패했습니다');
+            return false;
+          });
       });
     }
-    return items;
-  }
 
-  function editMenuItems() {
-    function send(action) { sendEngineOp(action); }
-    return [
-      { label: '실행 취소', onSelect: function () { send({ op: 'undo' }); } },
-      { label: '다시 실행', onSelect: function () { send({ op: 'redo' }); } },
-      { separator: true },
-      { label: '문서 내 검색', onSelect: function () { send({ op: 'find' }); } },
-    ];
-  }
-
-  /* ---------- 엔진·셸 메시지 ---------- */
-
-  window.addEventListener('message', function (ev) {
-    if (ev.origin !== window.location.origin) return;
-    var d = ev.data;
-    if (!d || typeof d.type !== 'string') return;
-    var fromEngine = els.engine && ev.source === els.engine.contentWindow;
-    if (fromEngine && (d.type === 'myhub:engine-ready' || d.type === 'deckcraft:ready' || d.type === 'pdfcraft:ready')) {
-      state.engineReady = true;
-      flushReadyWaiters();
-      if (els.engineFail) els.engineFail.style.display = 'none';
-      if (d.type === 'deckcraft:ready') pushVendorFonts();
-      if (state.app === 'pdf') {
-        var b = bridge();
-        if (b) b.post({ type: 'myhub:pdf-ready' });
-      }
-      if (state.pendingFile) {
-        var f = state.pendingFile;
-        state.pendingFile = null;
-        setFile(f);
-      } else if (isVendorApp()) {
-        deliverVendorFile();
-      }
-    } else if (fromEngine && d.type === 'myhub:office-dirty') {
-      state.dirty = !!d.dirty;
-      publishTitle();
-    } else if (fromEngine && d.type === 'deckcraft:fonts-applied') {
-      if (d.faces > 0) nudgeEngineRelayout();
-    } else if (fromEngine && (d.type === 'deckcraft:dirty' || d.type === 'pdfcraft:dirty')) {
-      state.dirty = !!d.dirty;
-      publishTitle();
-    } else if (fromEngine && (d.type === 'deckcraft:save' || d.type === 'pdfcraft:save')) {
-      // 저장 요청 대기 중이면 requestVendorExport가 소비한다. 그 외는
-      // 엔진 안에서 직접 저장한 것이므로 보관함에 반영한다.
-      if (!vendorSaveRequested) persistUnsolicitedSave(d);
-    } else if (d.type === 'myhub:open-file' && d.file && ev.source === window.parent) {
-      state.pendingFile = { id: d.file.id, name: d.file.name, version: null };
-      if (state.engineReady || !state.app) {
-        var pf = state.pendingFile;
-        state.pendingFile = null;
-        setFile(pf);
-      }
-      var bb = bridge();
-      if (bb) bb.post({ type: 'myhub:open-file-ack' });
-    } else if (d.type === 'myhub:win-chevron-click' && ev.source === window.parent) {
-      toggleFold();
-    } else if (d.type === 'myhub:win-tool' && ev.source === window.parent) {
-      if (d.id === 'save') save(false);
-      else if (d.id === 'print') printDoc();
-      else if (d.id === 'undo') sendEngineOp({ op: 'undo' });
-      else if (d.id === 'redo') sendEngineOp({ op: 'redo' });
-      else if (d.id === 'search') sendEngineOp({ op: 'find' });
-    } else if (d.type === 'myhub:pdf-save' && ev.source === window.parent) {
-      // Finder 뷰어의 저장 위임: 엔진 내보내기를 받아 뷰어에 결과를 돌려준다
-      requestEngineExport().then(function (exp) {
-        var blob = base64ToBlob(exp.data, exp.mime);
-        if (!state.file || !state.file.id) return { skipped: true };
-        return F.saveFile(state.file.id, blob, state.file.version, state.file.name);
-      }).then(function (out) {
-        var b2 = bridge();
-        if (b2) b2.post({ type: 'myhub:pdf-save-result', conflict: !!(out && out.conflict) });
-      }).catch(function () {
-        var b3 = bridge();
-        if (b3) b3.post({ type: 'myhub:pdf-save-result', conflict: false });
-      });
-    }
-  });
-
-  /* ---------- 시작 ---------- */
-
-  function showStart() {
-    if (els.start) els.start.style.display = '';
-    if (els.surface) els.surface.style.display = 'none';
-    var grid = $('officeStartGrid');
-    if (grid) {
-      grid.innerHTML = '';
-      Object.keys(APPS).forEach(function (key) {
-        var b = document.createElement('button');
-        b.type = 'button';
-        b.className = 'office-start-card';
-        b.textContent = APPS[key].title;
-        b.addEventListener('click', function () {
-          window.location.href = '/office.html?app=' + key;
+    // ---------- 열기/저장 패널 (office-picker.js가 전임) ----------
+    var K_FOLDER = 'myhub.office.' + appKey + '.lastFolder.v1';
+    function listFolder(id) {
+      return Promise.resolve()
+        .then(function () {
+          return baseFetch('/api/drive/list' + (id ? '?folder=' + id : ''));
+        })
+        .then(function (res) {
+          if (!res || !res.ok) throw new Error('list http ' + (res && res.status));
+          return res.json();
         });
-        grid.appendChild(b);
-      });
     }
-  }
-
-  /* ---------- 비서 (노바 패널 + 앱 세션) ----------
-   * 패널·instruct 흐름은 office-assistant.js가, 문서 스냅샷·연산 적용은
-   * office-sessions.js가 맡는다. 여기서는 둘을 잇는 host를 제공한다. */
-  var readyWaiters = [];
-  function flushReadyWaiters() {
-    var waiters = readyWaiters.splice(0, readyWaiters.length);
-    waiters.forEach(function (resolve) { resolve(); });
-  }
-  function whenEngineReady() {
-    if (state.engineReady) return Promise.resolve();
-    return new Promise(function (resolve) { readyWaiters.push(resolve); });
-  }
-
-  function wireAssistant() {
-    if (!window.MyHubOfficeAssistant || !window.MyHubOfficeSessions) return;
-    var host = {
-      app: state.app,
-      getState: function () {
-        return {
-          app: state.app,
-          fileName: state.file ? state.file.name : (APPS[state.app] ? APPS[state.app].newName : '문서'),
-          fileId: state.file ? state.file.id : null,
-          dirty: state.dirty,
-        };
-      },
-      getFile: function () { return state.file; },
-      isDirty: function () { return state.dirty; },
-      engineFrame: function () { return els.engine; },
-      officeFetch: function () { return F; },
-      hwpEditor: function () { return hwp.editor; },
-      setFileVersion: function (v) { if (state.file) state.file.version = v; },
-      markDirty: function () { state.dirty = true; publishTitle(); },
-      reloadFile: function () { loadEngine(); },
-      openFile: function (id, name) {
-        setFile({ id: id, name: name, version: null });
-        state.dirty = false;
-        loadEngine();
-        publishTitle();
-        return whenEngineReady();
-      },
-      newDocument: function () { newDocument(); return Promise.resolve(); },
-      whenEngineReady: whenEngineReady,
-      setDocName: function (name) {
-        if (state.file) state.file.name = name;
-        publishTitle();
-      },
-      kordoc: function () {
-        return import('/vendor/kordoc/kordoc.bundle.js').then(function (mod) {
-          return mod.default || mod;
+    var pickerInstance = null;
+    function openPicker(mode, opts) {
+      if (!pickerInstance) {
+        var factory = deps.pickerFactory ||
+          (typeof window !== 'undefined' && window.MyHubOfficePicker
+            ? window.MyHubOfficePicker.createPicker
+            : null);
+        if (!factory) return Promise.resolve(null);
+        pickerInstance = factory({
+          doc: doc,
+          listFolder: listFolder,
+          icons: icons,
+          exts: app.exts,
+          appKey: appKey,
+          newTitle: app.newTitle,
+          newExt: app.newExt || '',
+          loadLastFolder: function () { return storeGet(K_FOLDER, null); },
+          saveLastFolder: function (v) { storeSet(K_FOLDER, v); },
+          importFile: importDriveFile,
         });
+      }
+      return pickerInstance.open(mode, opts);
+    }
+
+    // 일명 "이 기계에서 가져오기": 기계 파일을 보관함 폴더로 올린다.
+    // 파일 생성 POST는 createSaveFlow와 같은 계약(files 파트 + folder_id).
+    function importDriveFile(file, folderId) {
+      var fd = new FormData();
+      fd.append('files', file, file.name);
+      if (folderId) fd.append('folder_id', String(folderId));
+      return Promise.resolve()
+        .then(function () {
+          return baseFetch('/api/drive/files', { method: 'POST', body: fd });
+        })
+        .then(function (res) {
+          if (!res || !res.ok) throw new Error('import http ' + (res && res.status));
+          return res.json();
+        })
+        .then(function (body) {
+          var saved = body && body.files && body.files[0];
+          if (!body || !body.ok || !saved) throw new Error('import shape');
+          return { id: saved.id, filename: saved.filename || file.name };
+        });
+    }
+
+    // ---------- 그림 삽입 (엔진 상태에서 찾아보기 전임) ----------
+    // 그림 선택은 기본 경로를 언제든 본체이든 앱 엔진이 OS 파일
+    // 선택기를 열지 않고 호스트 일괄을 연다. 기계에서 새로 가져온
+    // 경우만 일괄 안의 분리된 가져오기(importFile)가 맞는다.
+    // 옵션의 정보는 office-picker.js가 호출하는 공용 값이다 (Finder
+    // 호스트와 같은 값 앱 허용 그림 형식을 한글에서만 관리한다).
+    // 일괄 모듈이 없으면 그림 삽입 자체가 성립하지 않으므로, 그 경우
+    // 아래 리스트는 열기를 시도하지 않는다.
+    var PICTURE_PICK_OPTS =
+      typeof window !== 'undefined' && window.MyHubOfficePicker
+        ? window.MyHubOfficePicker.PICTURE_PICK_OPTS
+        : null;
+    // 미디어 삽입 (DeckCraft의 오디오·비디오·파일 찾아보기 가) 전임
+    // 그림과 같은 계약으로 목적별 형식 필터가 다르다. 확장자 집합은
+    // 엔진(DeckCraft web)의 선택기 필터가 정보이다.
+    var MEDIA_PICK_OPTS = {
+      audio: {
+        exts: ['wav', 'mp3', 'm4a', 'aac', 'flac', 'ogg', 'opus', 'aif', 'aiff'],
+        title: '오디오 삽입',
+        confirmLabel: '삽입',
+        importable: true,
+        accept: 'audio/*',
+      },
+      video: {
+        exts: ['mp4', 'm4v', 'mov', 'webm'],
+        title: '비디오 삽입',
+        confirmLabel: '삽입',
+        importable: true,
+        accept: 'video/*',
+      },
+      theme: {
+        exts: ['thmx', 'pptx', 'potx', 'ppsx'],
+        title: '파일 선택',
+        confirmLabel: '적용',
+        importable: true,
+        accept: '',
       },
     };
-    var session = window.MyHubOfficeSessions.create(host);
-    window.MyHubOfficeAssistant.attach({ host: host, session: session });
-  }
-
-  function init() {
-    els = {
-      engine: $('officeEngine'),
-      engineFail: $('officeEngineFail'),
-      start: $('officeStart'),
-      surface: $('officeSurface'),
-      docName: $('officeDocName'),
-      foldBtn: $('officeFoldBtn'),
-    };
-    var params = new URLSearchParams(window.location.search);
-    state.app = params.get('app');
-    var fileId = params.get('file');
-
-    var fileBtn = $('officeFileBtn');
-    if (fileBtn) fileBtn.addEventListener('click', function () { showMenu(fileBtn, fileMenuItems()); });
-    var editBtn = $('officeEditBtn');
-    if (editBtn) editBtn.addEventListener('click', function () { showMenu(editBtn, editMenuItems()); });
-    if (els.foldBtn) els.foldBtn.addEventListener('click', toggleFold);
-
-    wireAssistant();
-
-    /* 벤더 앱의 비서 패널 연산은 office-assistant가 그대로 흘리는
-     * myhub:office-op를 엔진이 듣지 못한다. 브리지에 번역 핸들러를 따로
-     * 걸어 deckcraft:exec / pdfcraft:menu-command로 직접 보낸다.
-     * (Excel은 sheet.html이 myhub:office-op를 받아 번역하므로 제외.) */
-    var bb0 = bridge();
-    if (bb0 && (state.app === 'powerpoint' || state.app === 'pdf')) {
-      bb0.onUiAction(function (action) { translateVendorAction(action); });
-    }
-
-    if (!state.app || !APPS[state.app]) {
-      showStart();
-      return;
-    }
-    publishWinTools();
-    if (M) M.setLastApp(localStorage, state.app);
-    if (els.start) els.start.style.display = 'none'; // 시작 화면은 hidden 기본값
-    if (fileId) {
-      if (F) {
-        F.loadMeta(fileId).then(function (meta) {
-          setFile({ id: fileId, name: meta.name || '문서', version: meta.version || null });
-        }).catch(function () {
-          setFile({ id: fileId, name: '문서', version: null });
+    function fetchPictureBytes(fileId) {
+      return Promise.resolve()
+        .then(function () {
+          return baseFetch('/api/drive/files/' + fileId + '/content');
+        })
+        .then(function (res) {
+          if (!res || !res.ok) throw new Error('picture http ' + (res && res.status));
+          return res.arrayBuffer();
+        })
+        .catch(function () {
+          return null; // 실패하면 엔진에 보내지 않는다 앱 상태는 닫힌 채널로 둔다
         });
-      } else {
-        setFile({ id: fileId, name: '문서', version: null });
-      }
-    } else {
-      newDocument(); // autoNew: 편집기 직행
     }
-    publishTitle();
-  }
 
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', init);
-  } else {
+    // ---------- 앱 메모리 (office-memory.js가 전임) ----------
+    var memoryInstance = null;
+    function getMemory() {
+      if (memoryInstance) return memoryInstance;
+      var factory = deps.memoryFactory ||
+        (typeof window !== 'undefined' && window.MyHubOfficeMemory
+          ? window.MyHubOfficeMemory.createMemory
+          : null);
+      if (!factory) {
+        return { record: function () {}, render: function () {}, openRecent: function () { return Promise.resolve(false); } };
+      }
+      memoryInstance = factory({
+        doc: doc,
+        storage: storage,
+        appKey: appKey,
+        icons: icons,
+        listFolder: listFolder,
+        openFile: openFile,
+      });
+      return memoryInstance;
+    }
+
+    // ---------- 배선 ----------
+    // 오피스 앱 앱 (방송 작업 2): 뷰어 호스트가 엔진 앱 상태를 받아
+    // 넣으면 office-tabs.js가 상단 행에 앱더블로이를 그려고, 클릭이 다시
+    // 뷰어 호스트의 명령 채널로 돌아간다. 앱 연동(myhub:office-tabs
+    // postMessage)는 office-tabs.js가 맞는다.
+    var tabsEl = el('officeTabs');
+    if (tabsEl && typeof window !== 'undefined' && window.MyHubOfficeTabs) {
+      // 배치 주의: #finderViewer는 position:fixed 전체화면 오버레이
+      // (z-60)앱 페이지 흐름의 앱 행 그 앱에 깔려 클릭이 앱 없다 앱
+      // 행을 뷰어 루트 앱, 본문(fvBody) 바로 앞으로 앱 문서 표면을
+      // 위로 만든다. 문서가 없을 때(앱)는 뷰어뿐이므로 앱으로 앱도
+      // 함께 사라지는 것이 맞다.
+      var fvBodyEl = el('fvBody');
+      if (fvBodyEl && fvBodyEl.parentNode) {
+        fvBodyEl.parentNode.insertBefore(tabsEl, fvBodyEl);
+      }
+      window.MyHubOfficeTabs.mount({
+        doc: doc,
+        win: typeof window !== 'undefined' ? window : null,
+        appKey: appKey,
+        rootEl: tabsEl,
+      });
+      // 빠른 실행 (제목 줄): 호스트 앱 앱 공통으로 앱 앱이 맞는다 앱
+      // 미니멀 접기는 명시 저장 경로를 Ctrl+S를 코어 앱 핸들러로
+      // 그대로 앱에 보낸다 (뷰어 코어의 저장 경로 단일과 유지).
+      // 옛 office-tabs(캐시)가 앞에 붙은 붙임이 끊기지않게 가용한다.
+      if (typeof window.MyHubOfficeTabs.onQuick === 'function') {
+        window.MyHubOfficeTabs.onQuick(appKey, function (action) {
+        if (action === 'save') {
+          if (!current) return false;
+          var View =
+            typeof window !== 'undefined' ? window : doc.defaultView;
+          if (!View || typeof View.KeyboardEvent !== 'function') return false;
+          doc.dispatchEvent(
+            new View.KeyboardEvent('keydown', {
+              key: 's',
+              ctrlKey: true,
+              bubbles: true,
+            }),
+          );
+          return true;
+        }
+        return false;
+      });
+      }
+    }
+    function refreshIcons() {
+      try {
+        if (typeof window !== 'undefined' && window.lucide) window.lucide.createIcons();
+      } catch (e) {
+        console.warn('오피스 아이콘 새로고침 실패:', e);
+      }
+    }
+    function init() {
+      doc.title = app.title + ' · MyHub';
+      var appName = el('officeAppName');
+      if (appName) appName.textContent = app.title;
+      var brandName = el('officeBrandName');
+      if (brandName) brandName.textContent = app.title;
+      var brandIcon = el('officeBrandIcon');
+      if (brandIcon && icons) brandIcon.innerHTML = icons.svgFor(app.iconKind);
+      var startIcon = el('officeStartIcon');
+      if (startIcon && icons) startIcon.innerHTML = icons.svgFor(app.iconKind);
+      var startName = el('officeStartName');
+      if (startName) startName.textContent = app.title;
+      var startDesc = el('officeStartDesc');
+      if (startDesc) startDesc.textContent = app.desc;
+      // 새로 만들기: 만든 뒤 있는 앱만 보인다 현재 (이 앱 앱
+      // 모두 만든 뒤 있다 가 canCreate꺾인 앱 앱 예의 앱 않는다).
+      var startNew = el('officeStartNew');
+      if (app.canCreate) {
+        if (newBtn) newBtn.hidden = false;
+        if (startNew) startNew.hidden = false;
+      }
+      if (openBtn) openBtn.addEventListener('click', function () {
+        openPicker('open').then(function (file) { if (file) openFile(file); });
+      });
+      // 문서가 닫힌 때 다른 파일을 여는 경로는 앱 자체 메뉴(한글
+      // Studio 파일 메뉴 등)의 Finder가 앱 뷰어의 [파일 열기] 버튼을
+      // 앱지 않는다 (사용자 지시: 앱 앱 버튼 제거).
+      var startOpen = el('officeStartOpen');
+      if (startOpen) startOpen.addEventListener('click', function () {
+        openPicker('open').then(function (file) { if (file) openFile(file); });
+      });
+      if (newBtn) newBtn.addEventListener('click', newDocument);
+      if (startNew) startNew.addEventListener('click', newDocument);
+      if (closeBtn) closeBtn.addEventListener('click', closeCurrent);
+      // 뷰어 닫힘·열기 요청은 코어 루트 이벤트로 따라간다 앱 어느
+      // 표면(플로팅 크롬·시트 메뉴·PDF 도구줄)의 접기/열기가
+      // 앱 상태가 같은 경로로 나뉜다.
+      var viewerRootEl = el('finderViewer');
+      if (viewerRootEl) {
+        viewerRootEl.addEventListener('myhub:viewer-close', onViewerClosed);
+        viewerRootEl.addEventListener('myhub:request-open', function () {
+          openPicker('open').then(function (file) { if (file) openFile(file); });
+        });
+        // 그림 삽입 전임: 고른 그림을 바이트로 deliver로 표면에 알린
+        // 이유. 취소하면 deliver를 부르지 않는다 앱 엔진 상태는
+        // 이유 없는 것을 취소로 안다 (열기 전임과 같은 계약).
+        viewerRootEl.addEventListener('myhub:request-picture', function (e) {
+          var deliver = e && e.detail && e.detail.deliver;
+          if (typeof deliver !== 'function' || !PICTURE_PICK_OPTS) return;
+          openPicker('open', PICTURE_PICK_OPTS).then(function (sel) {
+            if (!sel) return;
+            return fetchPictureBytes(sel.fileId).then(function (bytes) {
+              if (bytes) deliver(sel.name, bytes);
+            });
+          });
+        });
+        // 미디어 삽입 전임 (DeckCraft 오디오·비디오·파일): 목적별
+        // 일괄 옵션을 연다는 앱 그림 삽입과 다르고, 바이트를
+        // deliver로 알려주는 계약이 같다. 취소하면 deliver를 부르지
+        // 않는다.
+        viewerRootEl.addEventListener('myhub:request-media', function (e) {
+          var detail = (e && e.detail) || {};
+          var deliver = detail.deliver;
+          if (typeof deliver !== 'function') return;
+          var opts = MEDIA_PICK_OPTS[detail.purpose];
+          if (!opts) return;
+          openPicker('open', opts).then(function (sel) {
+            if (!sel) return;
+            return fetchPictureBytes(sel.fileId).then(function (bytes) {
+              if (bytes) deliver(sel.name, bytes);
+            });
+          });
+        });
+      }
+      updateChrome();
+      getMemory().render();
+      refreshIcons();
+      if (autoNew && app.canCreate) {
+        // 한글·한글 앱: 시작 화면을 거치지 않고 빈 문서로 바로 진입한다.
+        // 시작 화면은 마크업에서 hidden로 시작하므로 그 앱이 없고,
+        // 자동 진입이 실패하면 updateChrome가 내보낸다.
+        if (startEl) startEl.hidden = true;
+        newDocument();
+      }
+    }
     init();
+
+    return {
+      appKey: appKey,
+      notifyDocTitle: notifyDocTitle,
+      openFile: openFile,
+      newDocument: newDocument,
+      openPicker: openPicker,
+      openRecent: function (entry) { return getMemory().openRecent(entry); },
+      closeCurrent: closeCurrent,
+      getCurrent: function () { return current; },
+    };
+  }
+
+  var api = { APPS: APPS, parseAppKey: parseAppKey, createApp: createApp };
+  if (typeof window !== 'undefined') window.MyHubOffice = api;
+  if (typeof globalThis !== 'undefined') globalThis.MyHubOffice = api;
+  if (typeof module !== 'undefined' && module.exports) module.exports = api;
+
+  // 단독 실행 열기 판정: ?file=<id>(&name=&mime=&folder=&folderName=)
+  // Finder 단독 실행에서 오피스 파일을 앱 앱 앱 으로 바로 이어주는
+  // 경로다. 숫자가 아닌 file 값은 열기 판정으로 인정하지 않는다.
+  function parseOpenTarget(search) {
+    var params;
+    try {
+      params = new URLSearchParams(String(search || ''));
+    } catch (e) {
+      return null;
+    }
+    var raw = params.get('file');
+    if (!raw) return null;
+    var fileId = Number(raw);
+    if (!isFinite(fileId) || fileId <= 0) return null;
+    var folderRaw = params.get('folder');
+    var folderId = folderRaw ? Number(folderRaw) : null;
+    return {
+      fileId: fileId,
+      name: params.get('name') || '',
+      mime: params.get('mime') || '',
+      version: params.get('version') || null,
+      folderId: isFinite(folderId) && folderId ? folderId : null,
+      folderName: params.get('folderName') || '',
+    };
+  }
+
+  api.parseOpenTarget = parseOpenTarget;
+
+  // 실제 페이지에서만 자동 붙임한다 (테스트는 createApp를 직접 부른다)
+  if (typeof window !== 'undefined' && typeof document !== 'undefined' && document.getElementById('officeStart')) {
+    // 비서 반(office-assistant.js)가 현재 문서·앱 문서 만들기에 접근한다
+    var bootKey = parseAppKey(window.location.search);
+    var bootTarget = parseOpenTarget(window.location.search);
+    var bootApp = createApp({
+      doc: document,
+      storage: window.localStorage || null,
+      search: window.location.search,
+      // 열기 판정이 있으면 빈 문서를 만들지 않고 그 파일부터 연다
+      autoNew: !bootTarget && APPS[bootKey].autoNew === true,
+    });
+    window.MyHubOfficeApp = bootApp;
+    if (bootTarget) bootApp.openFile(bootTarget);
+    // 데스크톱 창 앱: Finder가 내기 파일 열기를 같은 핸드셰이크로
+    // 받는다 (ready 앱 open-file 앱 ack). 앱 ready 앱 요청을 보냈다가
+    // 다시 전한다.
+    if (window.parent && window.parent !== window) {
+      window.addEventListener('message', function (e) {
+        if (e.origin !== window.location.origin) return;
+        var d = e.data;
+        if (!d) return;
+        // 임의 제목 덮어쓰기 요청: 앱이 load 완료 완료 앱에 알린 파일명이 임의
+        // load 처리로 지정된 경우만 현재 제목 통신으로 치유한다
+        // (2026-11-06 image-117 앱 바탕에 앱 이름만 남던 결합).
+        if (d.type === 'myhub:request-doc-title') {
+          bootApp.notifyDocTitle();
+          return;
+        }
+        if (d.type !== 'myhub:open-file') return;
+        bootApp.openFile({
+          fileId: d.fileId,
+          name: d.name,
+          mime: d.mime,
+          version: d.version || null,
+          folderId: d.folderId === undefined ? null : d.folderId,
+          folderName: d.folderName || '',
+        });
+        try {
+          window.parent.postMessage(
+            { type: 'myhub:open-file-ack', app: bootKey, fileId: d.fileId },
+            window.location.origin,
+          );
+        } catch (err) {
+          console.warn('파일 열기 확인 전송 실패:', err);
+        }
+      });
+      try {
+        window.parent.postMessage(
+          { type: 'myhub:office-ready', app: bootKey },
+          window.location.origin,
+        );
+      } catch (err) {
+        console.warn('오피스 준비 알림 실패:', err);
+      }
+    }
   }
 })();
-

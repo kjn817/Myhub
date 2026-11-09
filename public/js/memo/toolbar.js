@@ -1,23 +1,6 @@
-
 function buildToolbarButtons(bar, editor) {
-  // 스테이징 전용 진단 패널 (TRACE 로그를 DOM에 표시)
-  let diagPanel = document.getElementById('memo-trace-panel');
-  if (!diagPanel) {
-    diagPanel = document.createElement('div');
-    diagPanel.id = 'memo-trace-panel';
-    diagPanel.style.cssText = 'position:fixed;bottom:10px;right:10px;background:#000;color:#0f0;font-family:monospace;font-size:11px;padding:8px;max-width:400px;max-height:200px;overflow:auto;z-index:9999;display:none;';
-    document.body.appendChild(diagPanel);
-  }
-  const traceLog = (msg) => {
-    console.log(msg);
-    diagPanel.style.display = 'block';
-    const line = document.createElement('div');
-    line.textContent = new Date().toISOString().slice(11, 19) + ' ' + msg;
-    diagPanel.appendChild(line);
-    // 최대 50줄 유지
-    while (diagPanel.children.length > 50) diagPanel.removeChild(diagPanel.firstChild);
-  };
-
+  // (2026-11-05 E5: 스테이징 전용 TRACE 로그 패널·traceLog를 이번 번호에서
+  // 제거한다 등 서식 버튼의 프로 끝나면 개발 로그가 화면에 남지 않는다.)
   const btn = (label, title, fn) => {
     const b = document.createElement('button');
     b.type = 'button';
@@ -26,22 +9,15 @@ function buildToolbarButtons(bar, editor) {
     b.setAttribute('aria-label', title);
     b.addEventListener('mousedown', (e) => e.preventDefault()); // 선택 유지
     b.addEventListener('click', () => {
-      traceLog('[TRACE-01] 버튼 클릭 이벤트 진입: ' + title);
-      try {
-        restoreSel(editor);
-        traceLog('[TRACE-02] restoreSel 완료');
-      } catch (e) {
-        traceLog('[TRACE-02-ERR] restoreSel 실패: ' + e.message);
-      }
+      try { restoreSel(editor); } catch (e) { console.warn('선택 영역 복원 실패:', e); }
       closePops(bar);
       try {
         const result = fn(editor);
-        traceLog('[TRACE-03] fn() 호출됨, Promise: ' + (result instanceof Promise));
         if (result instanceof Promise) {
-          result.catch(e => traceLog('[TRACE-03-ERR] 비동기 오류: ' + e.message));
+          result.catch(e => console.warn('내부 동작 실패:', e));
         }
       } catch (e) {
-        traceLog('[TRACE-03-ERR] fn() 동기 오류: ' + e.message);
+        console.warn('내부 동작 실패:', e);
       }
       editor.el.focus();
     });
@@ -77,21 +53,21 @@ function buildToolbarButtons(bar, editor) {
       range = editor.savedRange.cloneRange();
     }
     if (!range || range.collapsed) {
-      alert('잠글 텍스트를 먼저 선택해주세요.');
+      toast('잠금 텍스트를 먼저 선택해주세요.');
       return;
     }
     const memoId = window.currentEditingMemoId;
     if (!memoId) {
-      alert('메모를 먼저 저장한 후에 블록을 잠글 수 있습니다.');
+      toast('메모를 먼저 만든 뒤에 블록에 잠금 등 안내합니다.');
       return;
     }
     const selectedText = range.toString();
     if (!selectedText.trim()) {
-      alert('잠글 텍스트를 선택해주세요.');
+      toast('잠금 텍스트를 선택해주세요.');
       return;
     }
     if (selectedText.length > 5000) {
-      alert('선택한 텍스트가 너무 깁니다. (최대 5000자)');
+      toast('선택한 텍스트가 너무 깁니다. (최대 5000자)');
       return;
     }
     // 순서 1) 저장: 서버 lock-block(D-3)은 저장된 본문에 선택 텍스트가
@@ -101,7 +77,7 @@ function buildToolbarButtons(bar, editor) {
     const hasPendingsEarly = (editor.blobMap && editor.blobMap.size > 0)
       || (editor.otherFiles && editor.otherFiles.length > 0);
     if (hasPendingsEarly) {
-      alert('첨부 업로드가 끝나지 않았어요. 먼저 저장한 뒤 블록을 잠가주세요.');
+      toast('첨부 업로드가 끝나지 않았어요. 먼저 만들기를 끝낸 블록에 잠가주세요.');
       return;
     }
     if (typeof serializeEditor === 'function') {
@@ -115,13 +91,13 @@ function buildToolbarButtons(bar, editor) {
           body: JSON.stringify({ text: curText })
         });
         if (!saveRes.ok) {
-          alert('블록 잠금 전에 본문 저장에 실패했습니다. 저장 버튼을 눌러주세요.');
+          toast('블록 잠금 전에 본문 내용에 실패했어요. 다시 버튼을 눌러주세요.');
           return;
         }
         if (typeof memoCache !== 'undefined' && memoCache[memoId]) memoCache[memoId].text = curText;
         if (typeof memoTexts !== 'undefined') memoTexts[memoId] = curText;
       } catch (e) {
-        alert('블록 잠금 전에 본문 저장에 실패했습니다. 저장 버튼을 눌러주세요.');
+        toast('블록 잠금 전에 본문 내용에 실패했어요. 다시 버튼을 눌러주세요.');
         return;
       }
     }
@@ -139,19 +115,19 @@ function buildToolbarButtons(bar, editor) {
       clearTimeout(timeoutId);
       if (!res.ok) {
         const errData = await res.json().catch(() => ({}));
-        alert('블록 잠금 실패: ' + (errData.error === 'block_not_in_text'
+        toast('블록 잠금 실패: ' + (errData.error === 'block_not_in_text'
           ? '선택한 내용이 저장된 본문과 달라요. 저장 후 다시 시도해주세요.'
-          : (errData.error || '서버 오류')));
+          : friendlyError(errData, '잠시 후 다시 시도해 주세요.')));
         return;
       }
       data = await res.json();
     } catch (e) {
-      if (e.name === 'AbortError') alert('블록 잠금 요청 시간이 초과되었습니다. (10초)');
-      else alert('블록 잠금 실패: ' + e.message);
+      if (e.name === 'AbortError') toast('블록 잠금 요청 시간이 초과됐습니다. (10초)');
+      else toast('블록 잠금 실패: ' + friendlyError(e, '잠시 후 다시 시도해 주세요.'));
       return;
     }
     if (!data.ok || !data.blockId) {
-      alert('블록 잠금 실패: ' + (data.error || '알 수 없는 오류'));
+      toast('블록 잠금 실패: ' + friendlyError(data, '잠시 후 다시 시도해 주세요.'));
       return;
     }
     // 플레이스홀더 삽입: 인라인 span (div-in-p 재구성 회피), 편집 불가 원자 요소
@@ -173,7 +149,7 @@ function buildToolbarButtons(bar, editor) {
       sel.addRange(after);
     } catch (domErr) {
       console.error('DOM 업데이트 실패:', domErr);
-      alert('화면 갱신에 실패했습니다. 새로고침해주세요.');
+      toast('오류 갱신이 실패했어요. 새로고침해주세요.');
       return;
     }
     editor.el.dispatchEvent(new Event('input', { bubbles: true }));
@@ -197,11 +173,11 @@ function buildToolbarButtons(bar, editor) {
           if (typeof memoCache !== 'undefined' && memoCache[memoId]) memoCache[memoId].text = finalText;
           if (typeof memoTexts !== 'undefined') memoTexts[memoId] = finalText;
         } else {
-          alert('블록은 잠겼지만 본문 저장에 실패했습니다. 저장 버튼을 눌러주세요.');
+          toast('블록이 잠기지 본문 내용에 실패했어요. 다시 버튼을 눌러주세요.');
         }
       } catch (e) {
         console.warn('블록 잠금 본문 반영 실패:', e);
-        alert('블록은 잠겼지만 본문 저장에 실패했습니다. 저장 버튼을 눌러주세요.');
+        toast('블록이 잠기지 본문 내용에 실패했어요. 다시 버튼을 눌러주세요.');
       }
     }
   });
@@ -229,75 +205,295 @@ function buildToolbarButtons(bar, editor) {
           restoreSel(editor);
         }
       };
-      if (kind === 'color' || kind === 'highlight') {
-        const colors = kind === 'color' ? PALETTE : HIGHLIGHTS;
-        const prop = kind === 'color' ? 'color:' : 'background-color:';
-        colors.forEach(c => {
-          const sw = document.createElement('button');
-          sw.type = 'button'; sw.className = 'sw'; sw.style.background = c;
-          sw.setAttribute('aria-label', c);
-          sw.addEventListener('click', () => { restoreSaved(); wrapSelectionStyle(prop + c); closePops(bar); editor.el.focus(); });
-          pop.appendChild(sw);
-        });
-        if (kind === 'highlight') {
-          const none = document.createElement('button');
-          none.type = 'button'; none.className = 'sz'; none.textContent = '없음';
-          none.addEventListener('click', () => { restoreSaved(); wrapSelectionStyle('background-color:transparent'); closePops(bar); editor.el.focus(); });
-          pop.appendChild(none);
-        }
-      } else {
-        const customRow = document.createElement('div');
-        customRow.className = 'sz-custom';
-        const customInput = document.createElement('input');
-        customInput.type = 'text';
-        customInput.placeholder = '12pt';
-        customInput.setAttribute('aria-label', '직접 입력 (예: 12pt)');
-        customInput.addEventListener('keydown', (e) => {
-          if (e.key === 'Enter') {
-            e.preventDefault();
-            let v = customInput.value.trim();
-            if (!v) return;
-            if (/^\d+(\.\d+)?$/.test(v)) v += 'pt';
-            restoreSaved(); wrapSelectionStyle('font-size:' + v);
-            closePops(bar);
-            editor.el.focus();
-          }
-          e.stopPropagation();
-        });
-        customInput.addEventListener('mousedown', (e) => e.stopPropagation());
-        const customBtn = document.createElement('button');
-        customBtn.type = 'button'; customBtn.className = 'sz'; customBtn.textContent = '적용';
-        customBtn.addEventListener('mousedown', (e) => e.stopPropagation());
-        customBtn.addEventListener('click', () => {
-          let v = customInput.value.trim();
-          if (!v) return;
-          if (/^\d+(\.\d+)?$/.test(v)) v += 'pt';
-          restoreSaved(); wrapSelectionStyle('font-size:' + v);
-          closePops(bar);
-          editor.el.focus();
-        });
-        customRow.append(customInput, customBtn);
-        pop.appendChild(customRow);
-        SIZES.forEach(([label, size]) => {
-          const sz = document.createElement('button');
-          sz.type = 'button'; sz.className = 'sz'; sz.textContent = label;
-          sz.addEventListener('click', () => { restoreSaved(); wrapSelectionStyle('font-size:' + size); closePops(bar); editor.el.focus(); });
-          pop.appendChild(sz);
-        });
+      // E3: 행간 고정 함수만 (굵은글씨 6 · 형광펜 4). pt 크기 단위의 배지 등
+      // 크기 계열의 스타일(본문·제목 1~3)은 대행한다.
+      const colors = kind === 'color' ? PALETTE : HIGHLIGHTS;
+      const prop = kind === 'color' ? 'color:' : 'background-color:';
+      colors.forEach(c => {
+        const sw = document.createElement('button');
+        sw.type = 'button'; sw.className = 'sw'; sw.style.background = c;
+        sw.setAttribute('aria-label', c);
+        sw.addEventListener('click', () => { restoreSaved(); wrapSelectionStyle(prop + c); closePops(bar); editor.el.focus(); });
+        pop.appendChild(sw);
+      });
+      if (kind === 'highlight') {
+        const none = document.createElement('button');
+        none.type = 'button'; none.className = 'sz'; none.textContent = '없음';
+        none.addEventListener('click', () => { restoreSaved(); wrapSelectionStyle('background-color:transparent'); closePops(bar); editor.el.focus(); });
+        pop.appendChild(none);
       }
       bar.appendChild(pop);
     });
     return b;
   };
 
+  // ---- 스타일 드롭다운 (E3): 본문·제목 1~3인용·코드 블록·구분선 ----
+  // 만들 방법뿐 없는 코드 블록·구분선을 크기별 만들 등 넣을 생기고,
+  // 버튼 레벨의 현재 블록 스타일을 표시한다 (updateToolbarActive).
+  const currentBlock = (ed) => {
+    const sel = window.getSelection();
+    if (!sel.rangeCount) return null;
+    const node = sel.anchorNode;
+    if (!node || !ed.el.contains(node)) return null;
+    const elNode = node.nodeType === 3 ? node.parentElement : node;
+    return elNode && elNode.closest ? elNode.closest('p,div,h1,h2,h3,blockquote,pre,li') : null;
+  };
+  const applyQuoteToggle = (ed) => {
+    restoreSel(ed);
+    const sel = window.getSelection();
+    if (!sel.rangeCount) return;
+    const node = sel.anchorNode;
+    const block = node.nodeType === 3 ? node.parentElement : node;
+    const bq = block.closest ? block.closest('blockquote') : null;
+    if (bq && ed.el.contains(bq)) {
+      // 내부 인용 셀이면 해제: 내용은 꺼내고 blockquote 제거
+      const parent = bq.parentNode;
+      while (bq.firstChild) parent.insertBefore(bq.firstChild, bq);
+      parent.removeChild(bq);
+    } else {
+      execCmd('formatBlock', 'blockquote');
+    }
+    ed.el.focus();
+  };
+  const applyBlockStyle = (ed, style) => {
+    restoreSel(ed);
+    if (style === 'quote') { applyQuoteToggle(ed); return; }
+    if (style === 'pre') {
+      const block = currentBlock(ed);
+      const sel = window.getSelection();
+      if (block) convertBlockToPre(block, sel);
+      ed.el.focus();
+      return;
+    }
+    if (style === 'hr') {
+      const block = currentBlock(ed);
+      const hr = document.createElement('hr');
+      const np = document.createElement('p');
+      np.innerHTML = '<br>';
+      if (block && block !== ed.el && ed.el.contains(block)) block.after(hr, np);
+      else ed.el.append(hr, np);
+      const sel = window.getSelection();
+      const r = document.createRange();
+      r.setStart(np, 0); r.collapse(true);
+      sel.removeAllRanges(); sel.addRange(r);
+      ed.el.dispatchEvent(new Event('input', { bubbles: true }));
+      ed.el.focus();
+      return;
+    }
+    execCmd('formatBlock', style);
+    ed.el.focus();
+  };
+  const styleBtn = (() => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'style-btn';
+    b.title = '문단 스타일';
+    b.setAttribute('aria-label', '문단 스타일');
+    b.innerHTML = '<span class="style-label">본문</span><i data-lucide="chevron-down"></i>';
+    b.addEventListener('mousedown', (e) => e.preventDefault());
+    b.addEventListener('click', () => {
+      restoreSel(editor);
+      if (bar.querySelector('.pop')) { closePops(bar); return; }
+      const pop = document.createElement('div');
+      pop.className = 'pop pop-list';
+      pop.addEventListener('mousedown', (e) => e.preventDefault());
+      const items = [
+        ['본문', 'p'], ['제목 1', 'h1'], ['제목 2', 'h2'], ['제목 3', 'h3'],
+        ['인용', 'quote'], ['코드 블록', 'pre'], ['구분선', 'hr'],
+      ];
+      items.forEach(([label, style]) => {
+        const it = document.createElement('button');
+        it.type = 'button'; it.className = 'sz pop-item pop-style-' + style;
+        it.textContent = label;
+        it.addEventListener('click', () => {
+          closePops(bar);
+          applyBlockStyle(editor, style);
+          // 스타일 레벨의 selectionchange에서 갱신하지만, 적용 직후에는
+          // 선택한 그대로 이벤트가 없을 수 있다 도 즉시 다시 쏜다.
+          if (typeof updateToolbarActive === 'function') updateToolbarActive(editor.el, bar);
+          editor.el.dispatchEvent(new Event('input', { bubbles: true }));
+        });
+        pop.appendChild(it);
+      });
+      bar.appendChild(pop);
+    });
+    return b;
+  })();
+
+  // ---- 체크리스트 잠금 (E3): 목록이면 체크 전환, 아니면 문단을 변환 ----
+  const toggleChecklist = (ed) => {
+    restoreSel(ed);
+    const sel = window.getSelection();
+    if (!sel.rangeCount) return;
+    const node = sel.anchorNode;
+    const elNode = node.nodeType === 1 ? node : node.parentElement;
+    const li = elNode && elNode.closest ? elNode.closest('li') : null;
+    const list = li ? li.parentElement : null;
+    if (list && (list.tagName === 'UL' || list.tagName === 'OL') && ed.el.contains(list)) {
+      if (list.classList.contains('task-list')) {
+        list.classList.remove('task-list');
+        list.querySelectorAll(':scope > li').forEach(item => {
+          item.classList.remove('task-item');
+          const cb = item.querySelector(':scope > input[type="checkbox"]');
+          if (cb) cb.remove();
+          const span = item.querySelector(':scope > span');
+          if (span) { while (span.firstChild) item.appendChild(span.firstChild); span.remove(); }
+        });
+      } else {
+        list.classList.add('task-list');
+        list.querySelectorAll(':scope > li').forEach(item => {
+          item.classList.add('task-item');
+          if (!item.querySelector(':scope > input[type="checkbox"]')) {
+            const cb = document.createElement('input');
+            cb.type = 'checkbox'; cb.tabIndex = -1;
+            const span = document.createElement('span');
+            while (item.firstChild) span.appendChild(item.firstChild);
+            item.append(cb, span);
+          }
+        });
+      }
+      ed.el.dispatchEvent(new Event('input', { bubbles: true }));
+      ed.el.focus();
+      return;
+    }
+    const block = currentBlock(ed);
+    if (!block || block === ed.el || block.tagName === 'LI') return;
+    const ul = document.createElement('ul');
+    ul.className = 'task-list';
+    const item = document.createElement('li');
+    item.className = 'task-item';
+    const cb = document.createElement('input');
+    cb.type = 'checkbox'; cb.tabIndex = -1;
+    const span = document.createElement('span');
+    span.innerHTML = block.innerHTML || '<br>';
+    item.append(cb, span);
+    ul.appendChild(item);
+    block.replaceWith(ul);
+    const r = document.createRange();
+    r.selectNodeContents(span); r.collapse(true);
+    sel.removeAllRanges(); sel.addRange(r);
+    ed.el.dispatchEvent(new Event('input', { bubbles: true }));
+    ed.el.focus();
+  };
+
+  // ---- 선택 영역 AI 액션 (범위 3-1: 편집 중 AI) ----
+  // 서버 /api/memo/ai-assist가 잠긴 메모·비밀정보를 자체 차단한다.
+  // 커서는 잠긴 블록 플레이스홀더 선택한 건너뛴 경우를 먼저 만든다
+  // (플레이스홀더 빈칸 없지만 마지막·안내 문구는 AI에 보내지 않는다).
+  const AI_ERROR_MESSAGES = {
+    locked_memo: '잠긴 메모에서는 AI를 쓸 수 없어요',
+    restricted_memo: '민감도가 높은 메모에서는 AI를 쓸 수 없어요',
+    secret_detected: '카드번호 같은 비밀정보가 포함되어 있어 AI로 보낼 수 없어요',
+    locked_block_included: '잠긴 블록이 포함되어 있어 AI를 쓸 수 없어요',
+    text_too_long: '선택한 내용이 너무 길어요 (최대 4000자)',
+    empty_text: '먼저 텍스트를 선택해주세요',
+  };
+  const runAiAssist = async (ed, action) => {
+    restoreSel(ed);
+    const sel = window.getSelection();
+    if (!sel.rangeCount) return;
+    const range = sel.getRangeAt(0);
+    if (range.collapsed || !ed.el.contains(range.commonAncestorContainer)) {
+      toast('AI로 붙인 텍스트를 먼저 선택해주세요');
+      return;
+    }
+    const frag = range.cloneContents();
+    if (frag.querySelector && frag.querySelector('.locked-block')) {
+      toast('잠긴 블록이 포함되어 있어 AI를 쓸 수 없어요');
+      return;
+    }
+    const text = range.toString();
+    if (!text.trim()) { toast('AI로 붙인 텍스트를 먼저 선택해주세요'); return; }
+    if (ed.memoId && typeof memoCache !== 'undefined' && memoCache[ed.memoId] && memoCache[ed.memoId].is_locked) {
+      toast('잠긴 메모에서는 AI를 쓸 수 없어요');
+      return;
+    }
+    const saved = range.cloneRange();
+    toast('AI가 작업하고 있어요', 4000);
+    let data = null;
+    try {
+      const res = await fetch('/api/memo/ai-assist', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ memoId: ed.memoId || null, text, action }),
+      });
+      data = await res.json().catch(() => null);
+      if (!res.ok || !data || !data.ok) {
+        toast((data && AI_ERROR_MESSAGES[data.error]) || 'AI 작업이 실패했어요');
+        return;
+      }
+    } catch (e) {
+      console.warn('AI 액션 요청 실패:', e);
+      toast('AI 작업이 실패했어요');
+      return;
+    }
+    const result = String(data.result || '').trim();
+    if (!result) { toast('AI 작업이 실패했어요'); return; }
+    if (action === 'title') {
+      const title = result.replace(/^#+\s*/, '').split('\n')[0].trim();
+      if (ed.titleInput) {
+        ed.titleInput.value = title;
+        toast('제목을 뽑았어요');
+      } else if (ed.el.id === 'composerRich' && typeof renderComposerTitle === 'function') {
+        composerTitle = title;
+        renderComposerTitle();
+        toast('제목을 뽑았어요');
+      } else {
+        toast('제목 적용: ' + title, 4000);
+      }
+      ed.el.focus();
+      return;
+    }
+    // 결과(마크다운)를 HTML로 바꿔 선택 영역과 교체한다
+    if (!saved.startContainer.isConnected) { toast('선택 영역이 바뀌어서 적용하지 못했어요'); return; }
+    sel.removeAllRanges();
+    sel.addRange(saved);
+    execCmd('insertHTML', mdToEditable(result, {}));
+    ed.el.dispatchEvent(new Event('input', { bubbles: true }));
+    ed.el.focus();
+    toast('적용했어요');
+  };
+  const aiBtn = (() => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.title = 'AI 액션';
+    b.setAttribute('aria-label', 'AI 액션');
+    b.innerHTML = '<i data-lucide="sparkles"></i>';
+    b.addEventListener('mousedown', (e) => e.preventDefault());
+    b.addEventListener('click', () => {
+      restoreSel(editor);
+      if (bar.querySelector('.pop')) { closePops(bar); return; }
+      const pop = document.createElement('div');
+      pop.className = 'pop pop-list';
+      pop.addEventListener('mousedown', (e) => e.preventDefault());
+      const items = [
+        ['다듬기', 'polish'], ['요약', 'summarize'],
+        ['제목 뽑기', 'title'], ['체크리스트로 변환', 'checklist'],
+      ];
+      items.forEach(([label, action]) => {
+        const it = document.createElement('button');
+        it.type = 'button'; it.className = 'sz pop-item';
+        it.textContent = label;
+        it.addEventListener('click', () => { closePops(bar); runAiAssist(editor, action); });
+        pop.appendChild(it);
+      });
+      bar.appendChild(pop);
+    });
+    return b;
+  })();
+
   bar.append(
     btn('<i data-lucide="undo-2"></i>', '되돌리기', () => execCmd('undo')),
     btn('<i data-lucide="redo-2"></i>', '다시 실행', () => execCmd('redo')),
     sep(),
+    styleBtn,
     btn('<i data-lucide="bold"></i>', '굵게', () => execCmd('bold')),
     btn('<i data-lucide="italic"></i>', '기울임', () => execCmd('italic')),
     btn('<i data-lucide="underline"></i>', '밑줄', () => execCmd('underline')),
     btn('<i data-lucide="strikethrough"></i>', '취소선', () => execCmd('strikeThrough')),
+    sep(),
+    popupBtn('<i data-lucide="highlighter"></i>', '형광펜', 'highlight'),
+    popupBtn('<i data-lucide="palette"></i>', '글자색', 'color'),
     sep(),
 
     btn('<i data-lucide="list"></i>', '글머리 기호', (ed) => {
@@ -316,78 +512,11 @@ function buildToolbarButtons(bar, editor) {
         execCmd('insertOrderedList');
       }
     }),
-    btn('<i data-lucide="indent"></i>', '들여쓰기', (ed) => {
-      restoreSel(ed);
-      const sel = window.getSelection();
-      if (!sel.rangeCount) return;
-      const range = sel.getRangeAt(0);
-      const node = range.commonAncestorContainer;
-      const block = node.nodeType === 3 ? node.parentElement : node;
-      let target = block.closest('p, div, li');
-      // 에디터 자체가 잡히거나 블록이 없으면: 현재 내용을 p로 감싸기
-      if (!target || target === ed.el) {
-        // 선택 영역이 있으면 그 부분을, 없으면 현재 블록을 p로 감싸기
-        if (!range.collapsed) {
-          execCmd('formatBlock', 'p');
-          target = sel.anchorNode.nodeType === 3
-            ? sel.anchorNode.parentElement.closest('p')
-            : sel.anchorNode.closest('p');
-        } else {
-          // 빈 에디터면 그냥 p 생성
-          execCmd('insertHTML', '<p>\u200B</p>');
-          const p = ed.el.querySelector('p:last-child');
-          if (p) {
-            const r = document.createRange();
-            r.selectNodeContents(p);
-            r.collapse(false);
-            sel.removeAllRanges();
-            sel.addRange(r);
-            target = p;
-          }
-        }
-      }
-      if (target && target !== ed.el) {
-        const cur = parseInt(target.style.marginLeft || '0', 10);
-        target.style.marginLeft = (cur + 40) + 'px';
-      }
-    }),
-    btn('<i data-lucide="outdent"></i>', '내어쓰기', (ed) => {
-      restoreSel(ed);
-      const sel = window.getSelection();
-      if (!sel.rangeCount) return;
-      const range = sel.getRangeAt(0);
-      const node = range.commonAncestorContainer;
-      const block = node.nodeType === 3 ? node.parentElement : node;
-      const target = block.closest('p, div, li') || block;
-      if (target && target !== ed.el) {
-        const cur = parseInt(target.style.marginLeft || '0', 10);
-        target.style.marginLeft = Math.max(0, cur - 40) + 'px';
-      }
-    }),
-    btn('<i data-lucide="quote"></i>', '인용', (ed) => {
-      restoreSel(ed);
-      const sel = window.getSelection();
-      if (!sel.rangeCount) return;
-      const node = sel.anchorNode;
-      const block = node.nodeType === 3 ? node.parentElement : node;
-      const bq = block.closest('blockquote');
-      if (bq) {
-        // 이미 인용 안이면 해제: 내용을 꺼내고 blockquote 제거
-        const parent = bq.parentNode;
-        while (bq.firstChild) parent.insertBefore(bq.firstChild, bq);
-        parent.removeChild(bq);
-      } else {
-        execCmd('formatBlock', 'blockquote');
-      }
-      ed.el.focus();
-    }),
-
+    btn('<i data-lucide="list-checks"></i>', '체크리스트', (ed) => toggleChecklist(ed)),
     btn('<i data-lucide="table"></i>', '표 삽입', () => openTablePicker(bar, editor)),
     btn('<i data-lucide="link"></i>', '링크', (ed) => openLinkDialog(bar, ed)),
     sep(),
-    popupBtn('<i data-lucide="palette"></i>', '글자색', 'color'),
-    popupBtn('<i data-lucide="highlighter"></i>', '형광펜', 'highlight'),
-    popupBtn('<i data-lucide="a-large-small"></i>', '글자 크기', 'size'),
+    aiBtn,
     btn('<i data-lucide="eraser"></i>', '서식 지우기', (ed) => {
       restoreSel(ed);
       const unwrap = (el) => {
@@ -433,6 +562,10 @@ function buildToolbarButtons(bar, editor) {
 }
 
 // 표 크기 그리드 피커 (Notion/TipTap식)
+
+// toolbar.js에서 분리 (2026-11-01 단일 파일 분해): 블록 잠금 해제 공용 포함 (UI-003).
+// memo-bundle.js로 함께 번호순으로 위임 함수 공유 방식과 기존과 동일하다.
+
 // ---- 블록 잠금 해제 공용 헬퍼 (UI-003) ----
 // 해제 API 호출 + step-up PIN 재시도. fetchLockWithPin은 pane.js의 전역 함수로,
 // 번들 로드 후 클릭 시점에는 항상 존재한다. 없으면(단독 로드 등) 일반 fetch로 폴백.
@@ -441,7 +574,7 @@ function buildToolbarButtons(bar, editor) {
 // locked_blocks 제거 UPDATE가 실패하면 {ok:true, html, warning:'unlock_pending'}을
 // 돌려준다 — 복호문은 왔지만 암호문 블록이 DB에 남아 있는 부분 성공이다.
 // 이를 무경고 성공으로 처리하면 호출자가 플레이스홀더/마커를 평문으로 교체·저장해
-// blockId가 UI에서 사라지고, 암호문 사본만 DB에 영구 잔류한다(고아 암호문).
+// blockId가 UI에서 들어온 암호문 원본 DB의 상단 드롭한다(곳은 암호문).
 // 그래서 여기서 1회 자동 재시도한다: 재시도에서 블록이 이미 제거됐으면 404가
 // 오는데, 그 경우 첫 응답의 html로 완전 성공으로 간주한다. 재시도 후에도
 // warning이 남으면 그대로 호출자에게 전달하고, 호출자는 플레이스홀더/마커를
@@ -483,7 +616,7 @@ async function unlockLockedBlockEl(el, memoId) {
   try {
     const { data } = await requestUnlockBlock(memoId, blockId);
     if (data.ok && data.warning === 'unlock_pending') {
-      alert('서버에서 암호문 블록을 제거하지 못해 해제를 보류했어요.\n블록은 잠긴 상태로 유지됩니다. 다시 시도해주세요.');
+      toast('서버에서 암호문 블록을 제거하지 못해 해제를 보류했어요.\n블록은 잠긴 상태로 유지됩니다. 다시 시도해주세요.');
       return;
     }
     if (data.ok && typeof data.html === 'string') {
@@ -491,11 +624,11 @@ async function unlockLockedBlockEl(el, memoId) {
       el.replaceWith(document.createTextNode(data.html));
       if (parent) parent.dispatchEvent(new Event('input', { bubbles: true }));
     } else if (data.code === 'PIN_REQUIRED' || data.code === 'PIN_INVALID') {
-      alert('PIN 확인이 필요합니다. 다시 시도해주세요.');
+      toast('PIN 확인이 필요합니다. 다시 시도해주세요.');
     } else {
-      alert('잠금 해제 실패: ' + (data.error || '알 수 없는 오류'));
+      toast('잠금 해제 실패: ' + friendlyError(data, '잠시 후 다시 시도해 주세요.'));
     }
   } catch (e) {
-    alert('잠금 해제 실패: ' + e.message);
+    toast('잠금 해제 실패: ' + friendlyError(e, '잠시 후 다시 시도해 주세요.'));
   }
 }

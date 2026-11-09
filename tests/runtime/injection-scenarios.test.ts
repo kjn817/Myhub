@@ -275,7 +275,7 @@ describe('인젝션 시나리오 (miniflare, 실코드 + 실D1, 모델 출력은
         { userRequest: '삭제' },
       )
       expect(await memoRow(targetId)).not.toBeNull()
-      expect(out.text).toContain('승인이 필요해서 실행하지 않았어')
+      expect(out.text).toContain('(이 작업은 승인이 필요해 실행하지 않았습니다. 채팅에서 다시 요청해 주세요)')
       expect(out.approvalRequests ?? []).toHaveLength(0)
     })
 
@@ -311,7 +311,7 @@ describe('인젝션 시나리오 (miniflare, 실코드 + 실D1, 모델 출력은
         { conversationId: 9205, userRequest: '삭제 승인함', approvedScopeKeys: new Set([key]) },
       )
       expect(await memoRow(targetId)).toBeNull()
-      expect(out.text).toContain('삭제했어')
+      expect(out.text).toContain('메모를 삭제했습니다.')
     })
   })
 

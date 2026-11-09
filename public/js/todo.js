@@ -1,8 +1,4 @@
-// 할 일 페이지 로직 (todo.html 인라인에서 추출 — TODO_CSP script-src 'self' enforce 대응)
-// 위젯 초기화와 refreshAfterAI는 원래 인라인 블록에 있던 것을 함께 옮겼다.
-window.refreshAfterAI = function() { if (typeof loadTodos === "function") loadTodos(); else location.reload(); };
-if (window.AssistantWidget) AssistantWidget.init({ personaId: "scheduler", personaName: "캘리", avatar: "/avatars/cali.webp" });
-
+// 할일 페이지 로직 등 파일 길이 규칙 줄(500를)위해 의 todo.html인라인 를 IIFE동등 처럼 순간 (2026-11-01)
 (function () {
   'use strict';
   var $ = function (id) { return document.getElementById(id); };
@@ -31,6 +27,37 @@ if (window.AssistantWidget) AssistantWidget.init({ personaId: "scheduler", perso
     return '<span class="due' + (overdue ? ' over' : '') + '">' + esc(s) + '</span>';
   }
 
+  // I-09 배선 서버 (2026-11-05): 오 류의 공통 오류 문구 맵
+  // (public/js/common/error-messages.js의 friendlyErrorMessage)를 거쳐
+  // 표시 한다 등 자체(decrypt_failed코드"서버 오류 (500)" 등)화 면에
+  // 내지 않고 코드로만 남긴다. 맵 스크립트가 없을 때도 자체 코드 패턴을
+  // 읽고 대관 문구를 낸다 (chat.js와 같은 fail-safe). 'unauth' 표시
+  // 표시 변환 전에 노출된 원본 message로 확정하므로 여기다 넣지 않는다.
+  function friendlyError(input, fallback) {
+    var fn = (typeof window !== 'undefined') ? window.friendlyErrorMessage : undefined;
+    if (typeof fn === 'function') {
+      try { return fn(input, fallback); } catch (e) { console.warn('오류 문구 변환 실패:', e); }
+    }
+    var raw = '';
+    if (typeof input === 'string') raw = input;
+    else if (input && typeof input === 'object') {
+      raw = (input.error && typeof input.error === 'object' ? (input.error.code || input.error.message || '') : '')
+        || (typeof input.error === 'string' ? input.error : '')
+        || input.code || input.message || '';
+    }
+    if (typeof raw === 'string' && raw) {
+      var t = raw.trim();
+      if (/^http_\d{3}$/i.test(t) || /^서버 오류\s*\(\d{3}\)$/.test(t)
+        || /^[a-z][a-z0-9]*(_[a-z0-9]+)+$/.test(t) || /^[A-Z][A-Z0-9]*(_[A-Z0-9]+)+$/.test(t)
+        || /^[A-Z]{2,}$/.test(t)) {
+        console.warn('[MyHub] 오류 코드:', t);
+        return fallback;
+      }
+      return raw;
+    }
+    return fallback;
+  }
+
   async function api(path, method, body) {
     var res = await fetch('/api/todo' + path, {
       method: method || 'GET',
@@ -38,7 +65,60 @@ if (window.AssistantWidget) AssistantWidget.init({ personaId: "scheduler", perso
       body: body ? JSON.stringify(body) : undefined,
     });
     if (res.status === 401) { location.href = '/login.html'; throw new Error('unauth'); }
-    return res.json();
+    var data = null;
+    try { data = await res.json(); } catch (e) { console.warn('일시 응답 파싱 실패:', e); data = null; }
+    // HTTP 오류{ok:false}성공 으로 취급하지 않는다 (일정 등 api와 동일 규칙).
+    // 실패를 실패면 입력소실 상태 차이로 남기므로 노출된 그대로 throw고정한다.
+    if (!res.ok || (data && data.ok === false)) {
+      throw new Error((data && data.error) || ('서버 오류 (' + res.status + ')'));
+    }
+    return data;
+  }
+
+  // 커스텀 확인 모달 (브라우저 confirm 대체 - 자동 테스트 값은, 일정 성공과 동일 패턴)
+  function confirmDelete(msg) {
+    return new Promise(function (resolve) {
+      var overlay = document.createElement('div');
+      overlay.className = 'todo-confirm-overlay';
+      overlay.innerHTML =
+        '<div class="todo-confirm-modal">' +
+          '<p>' + esc(msg) + '</p>' +
+          '<div class="todo-confirm-btns">' +
+            '<button class="todo-confirm-no">취소</button>' +
+            '<button class="todo-confirm-yes danger">삭제</button>' +
+          '</div>' +
+        '</div>';
+      document.body.appendChild(overlay);
+      var cleanup = function () {
+        overlay.remove();
+        document.removeEventListener('keydown', onKeydown);
+      };
+      var onKeydown = function (e) {
+        if (e.key === 'Escape') { cleanup(); resolve(false); }
+      };
+      document.addEventListener('keydown', onKeydown);
+      overlay.querySelector('.todo-confirm-no').onclick = function () { cleanup(); resolve(false); };
+      overlay.querySelector('.todo-confirm-yes').onclick = function () { cleanup(); resolve(true); };
+      overlay.onclick = function (e) { if (e.target === overlay) { cleanup(); resolve(false); } };
+    });
+  }
+
+  // 할 일 고정 (브라우저 alert 대체 등 일정 등 showSchedNotice와 같은 패턴)
+  var noticeTimer = null;
+  function showNotice(text) {
+    var el = $('todoNotice');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'todoNotice';
+      el.className = 'todo-notice';
+      el.setAttribute('role', 'alert');
+      document.body.appendChild(el);
+    }
+    el.textContent = text;
+    // 처음 프레임에 .show를 붙여도 등장 너비(transition)가 걸린다
+    requestAnimationFrame(function () { el.classList.add('show'); });
+    if (noticeTimer) clearTimeout(noticeTimer);
+    noticeTimer = setTimeout(function () { el.classList.remove('show'); }, 6000);
   }
 
   async function loadAll() {
@@ -48,8 +128,6 @@ if (window.AssistantWidget) AssistantWidget.init({ personaId: "scheduler", perso
     cache.done = (d.todos || []);
     $('cntPending').textContent = cache.pending.length || '';
     $('cntDone').textContent = cache.done.length || '';
-    var total = cache.pending.length + cache.done.length;
-    $('headCount').textContent = total ? total + '개' : '';
     render();
   }
 
@@ -137,46 +215,30 @@ if (window.AssistantWidget) AssistantWidget.init({ personaId: "scheduler", perso
       due_at: $('fDue').value || null,
       priority: Number($('fPri').value),
     };
-    if (editingId) { await api('/' + editingId, 'PUT', body); }
-    else { await api('/create', 'POST', body); }
+    try {
+      if (editingId) { await api('/' + editingId, 'PUT', body); }
+      else { await api('/create', 'POST', body); }
+    } catch (e) {
+      // 실패 등 모달을 다시 닫고 입력은 유지한다
+      if (e.message !== 'unauth') showNotice('저장 실패: ' + friendlyError(e, '잠시 후 다시 시도해 주세요.'));
+      return;
+    }
     closeModal();
-    await loadAll();
-  }
-
-  /* 삭제 확인은 인페이지 모달로 한다. 네이티브 confirm()은 셸 iframe·자동
-   * 해제 환경에서 false로 조용히 떨어져 삭제가 무반응이 되는 결함이 있었다
-   * (F2 스튜디오·일정과 같은 전례 — F4에서 할 일도 같은 방식으로 교체). */
-  function confirmDelete(title) {
-    return new Promise(function (resolve) {
-      var back = document.createElement('div');
-      back.className = 'modal-back open';
-      back.innerHTML =
-        '<div class="modal">' +
-          '<h3>삭제할까요?</h3>' +
-          '<p class="confirm-msg"></p>' +
-          '<div class="modal-acts">' +
-            '<button type="button" class="m-btn ghost">취소</button>' +
-            '<button type="button" class="m-btn danger">삭제</button>' +
-          '</div>' +
-        '</div>';
-      back.querySelector('.confirm-msg').textContent = '"' + (title || '이 항목') + '"을(를) 삭제합니다.';
-      document.body.appendChild(back);
-      function done(v) {
-        back.remove();
-        resolve(v);
-      }
-      back.querySelector('.m-btn.ghost').addEventListener('click', function () { done(false); });
-      back.querySelector('.m-btn.danger').addEventListener('click', function () { done(true); });
-      back.addEventListener('click', function (e) { if (e.target === back) done(false); });
-    });
+    await loadAll().catch(function (e) { if (e.message !== 'unauth') console.error(e); });
   }
 
   async function quickAdd() {
     var v = $('quickInput').value.trim();
     if (!v) return;
-    await api('/create', 'POST', { title: v });
+    try {
+      await api('/create', 'POST', { title: v });
+    } catch (e) {
+      // 실패 등 입력창을 비우지 않는다 (예고 소실 방지)
+      if (e.message !== 'unauth') showNotice('저장 실패: ' + friendlyError(e, '잠시 후 다시 시도해 주세요.'));
+      return;
+    }
     $('quickInput').value = '';
-    await loadAll();
+    await loadAll().catch(function (e) { if (e.message !== 'unauth') console.error(e); });
   }
 
   // ---------- 드래그 정렬 ----------
@@ -210,7 +272,16 @@ if (window.AssistantWidget) AssistantWidget.init({ personaId: "scheduler", perso
     ids.forEach(function (id, i) { order[id] = i; });
     arr.sort(function (a, b) { return (order[a.id] == null ? 9999 : order[a.id]) - (order[b.id] == null ? 9999 : order[b.id]); });
     render();
-    api('/reorder', 'PUT', { ids: ids }).catch(function () { loadAll(); });
+    api('/reorder', 'PUT', { ids: ids }).catch(function (err) {
+      var msg = '순서 저장 실패: ' + friendlyError(err, '잠시 후 다시 시도해 주세요.');
+      // 실패를 알리고, 화면 순서를 서버 상태로 되돌 린다
+      loadAll().then(function () {
+        showNotice(msg + ' 등 원래 순서로 되돌렸어요');
+      }).catch(function (e) {
+        console.warn('수정 실패 등 목록 갱신 실패:', e);
+        showNotice(msg);
+      });
+    });
   }
 
   // --- 데스크톱: HTML5 DnD ---
@@ -360,22 +431,33 @@ if (window.AssistantWidget) AssistantWidget.init({ personaId: "scheduler", perso
     var id = Number(row.dataset.id);
     // 행 클릭 = 토글 (버튼이 아닌 경우)
     if (!btn) {
-      await api('/' + id + '/toggle', 'POST');
-      await loadAll();
+      try {
+        await api('/' + id + '/toggle', 'POST');
+        await loadAll();
+      } catch (err) {
+        if (err.message !== 'unauth') showNotice('변경 실패: ' + friendlyError(err, '잠시 후 다시 시도해 주세요.'));
+      }
       return;
     }
     var act = btn.dataset.act;
     e.stopPropagation();
     if (act === 'toggle') {
-      await api('/' + id + '/toggle', 'POST');
-      await loadAll();
+      try {
+        await api('/' + id + '/toggle', 'POST');
+        await loadAll();
+      } catch (err) {
+        if (err.message !== 'unauth') showNotice('변경 실패: ' + friendlyError(err, '잠시 후 다시 시도해 주세요.'));
+      }
     } else if (act === 'edit') {
       openModal(id);
     } else if (act === 'del') {
-      var target = cache.pending.concat(cache.done).find(function (x) { return x.id === id; });
-      if (await confirmDelete(target ? target.title : '')) {
-        await api('/' + id, 'DELETE');
-        await loadAll();
+      if (await confirmDelete('삭제할까요?')) {
+        try {
+          await api('/' + id, 'DELETE');
+          await loadAll();
+        } catch (err) {
+          if (err.message !== 'unauth') showNotice('삭제 실패: ' + friendlyError(err, '잠시 후 다시 시도해 주세요.'));
+        }
       }
     }
   });
@@ -395,7 +477,29 @@ if (window.AssistantWidget) AssistantWidget.init({ personaId: "scheduler", perso
   });
   $('fTitle').addEventListener('keydown', function (e) { if (e.key === 'Enter') saveModal(); });
 
+  // AI가 등 일을 바꿔 등 노출된 등 전체 새로고침 없이 목록만 다시 불러온다
+  window.refreshAfterAI = function () {
+    loadAll().catch(function (e) { if (e.message !== 'unauth') console.error(e); });
+  };
+
+  /* 창 상단 메뉴바 정의 (공유: js/desktop/windows.js 상단 주석).
+     상태 탭 선택 checked표시로 현재 필터를 표시한다. 정렬된
+     등 칸에 없는 기능(드래그 수정만 있다)이라 넣지 않는다. */
+  window.MyHubMenus = [
+    {
+      label: '할 일',
+      items: [{ label: '새 할 일', target: '#addBtn' }],
+    },
+    {
+      label: '보기',
+      items: [
+        { label: '진행중', checked: function () { return curStatus === 'pending'; }, target: '.tab[data-status="pending"]' },
+        { label: '완료', checked: function () { return curStatus === 'done'; }, target: '.tab[data-status="done"]' },
+        { label: '전체', checked: function () { return curStatus === 'all'; }, target: '.tab[data-status="all"]' },
+      ],
+    },
+  ];
+
   refreshIcons();
   loadAll().catch(function (e) { if (e.message !== 'unauth') console.error(e); });
 })();
-  window.refreshAfterAI = function() { if (typeof loadTodos === "function") loadTodos(); else location.reload(); };

@@ -208,8 +208,12 @@ driveApp.delete('/folders/:id', async (c) => {
 })
 
 driveApp.post('/files', async (c) => {
-  const body = await c.req.parseBody()
-  const rawFolder = body['folder_id']
+  // all: 같은 'files' 필드의 다중 파일을 배열로 받아야 한다 — 기본 파싱은
+  // 마지막 값만 남겨 먼저 온 파일이 조용히 버려진다 (메모 첨부와 동일 결함).
+  const body = await c.req.parseBody({ all: true })
+  // folder_id는 스칼라 필드: 중복 전송(계약 밖) 시 배열이 되므로 첫 값으로 정규화한다.
+  const rawFolderField = body['folder_id']
+  const rawFolder = Array.isArray(rawFolderField) ? rawFolderField[0] : rawFolderField
   const folderId = rawFolder === undefined || rawFolder === '' || rawFolder === 'root' ? null : Number(rawFolder)
   if (folderId !== null) {
     if (!Number.isInteger(folderId) || folderId <= 0) return c.json({ ok: false, error: 'bad folder' }, 400)

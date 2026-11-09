@@ -84,6 +84,21 @@ function wireEditor(el, toolbar, pinToolbar, opts) {
       execCmd('removeFormat');
       return;
     }
+    // ``` + Enter 등 코드 블록 (스페이스바로 발동하는 mdBlockConvert와 같은 변환)
+    if (e.key === 'Enter' && !e.shiftKey) {
+      const sel0 = window.getSelection();
+      if (sel0.rangeCount && sel0.getRangeAt(0).collapsed) {
+        const n0 = sel0.anchorNode;
+        const b0 = n0.nodeType === 3 ? n0.parentElement : n0;
+        const p0 = b0.closest ? b0.closest('p,div') : null;
+        if (p0 && el.contains(p0) && p0.textContent.replace(/\u00a0/g, ' ') === '```') {
+          e.preventDefault();
+          p0.innerHTML = '';
+          convertBlockToPre(p0, sel0);
+          return;
+        }
+      }
+    }
     // 인용 블록에서 빈 상태로 Enter → 인용 탈출
     if (e.key === 'Enter' && !e.shiftKey) {
       const sel = window.getSelection();
@@ -250,6 +265,170 @@ function wireEditor(el, toolbar, pinToolbar, opts) {
   return editor;
 }
 /* 표 도구: 열 너비 드래그 + 행/열/표 편집 */
+/* 이미지 리사이즈 핸들 (에디터 전용) */
+let imgResize = null;
+function hideImgResize() {
+  if (imgResize && imgResize.resizing) return;
+  if (imgResize) {
+    imgResize.handle.remove();
+    imgResize.badge.remove();
+    if (imgResize.presets) imgResize.presets.remove();
+    imgResize = null;
+  }
+  window.removeEventListener('scroll', hideImgResize);
+}
+function showImgResize(editor, img) {
+  hideImgResize();
+  const handle = document.createElement('div');
+  handle.className = 'img-handle';
+  handle.setAttribute('aria-label', '이미지 크기 조절');
+  const badge = document.createElement('div');
+  badge.className = 'img-wbadge';
+  // 크기 프리셋 (E4): 드래그 미세 조정을 허용하고 25/50/100/원본 중 번에
+  const presets = document.createElement('div');
+  presets.className = 'img-presets';
+  [['25%', 0.25], ['50%', 0.5], ['100%', 1], ['원본', 0]].forEach(([label, ratio]) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = label;
+    b.setAttribute('aria-label', '이미지 크기 ' + label);
+    b.addEventListener('mousedown', (e) => e.preventDefault());
+    b.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (ratio === 0) {
+        img.style.width = ''; img.style.maxWidth = ''; img.style.height = '';
+      } else {
+        const maxW = editor.el.clientWidth || 600;
+        img.style.width = Math.round(maxW * ratio) + 'px';
+        img.style.maxWidth = '100%';
+        img.style.height = 'auto';
+      }
+      // input 이벤트는 에디터의 hideImgResize를 부르므로, 직접 신호를
+      // 보내지 등 선택 표시(핸들·프리셋)를 등 크기로 다시 그린다.
+      editor.el.dispatchEvent(new Event('input', { bubbles: true }));
+      showImgResize(editor, img);
+    });
+    presets.appendChild(b);
+  });
+  document.body.append(handle, badge, presets);
+  const place = () => {
+    const r = img.getBoundingClientRect();
+    handle.style.left = (r.right - 6 + window.scrollX) + 'px';
+    handle.style.top = (r.bottom - 6 + window.scrollY) + 'px';
+    badge.textContent = Math.round(r.width) + 'px';
+    badge.style.left = (r.right + 8 + window.scrollX) + 'px';
+    badge.style.top = (r.bottom - 10 + window.scrollY) + 'px';
+    presets.style.left = (r.left + window.scrollX) + 'px';
+    presets.style.top = (r.bottom + 8 + window.scrollY) + 'px';
+  };
+  place();
+  imgResize = { handle, badge, presets };
+  window.addEventListener('scroll', hideImgResize, { passive: true });
+  // 더블클릭 등 원본 크기로
+  img.addEventListener('dblclick', () => {
+    img.style.width = ''; img.style.maxWidth = ''; img.style.height = '';
+    place();
+  });
+  handle.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    hideImgTools();
+    const startX = e.clientX;
+    const startW = img.getBoundingClientRect().width;
+    const maxW = editor.el.clientWidth || 600;
+    if (!img.style.width) {
+      img.style.width = Math.round(startW) + 'px';
+      img.style.maxWidth = '100%';
+      img.style.height = 'auto';
+    }
+    let dragged = false;
+    imgResize.resizing = true;
+    const move = (ev) => {
+      dragged = true;
+      const w = Math.max(48, Math.min(maxW, startW + (ev.clientX - startX)));
+      img.style.width = Math.round(w) + 'px';
+      img.style.maxWidth = '100%';
+      img.style.height = 'auto';
+      place();
+    };
+    const up = () => {
+      document.removeEventListener('pointermove', move);
+      document.removeEventListener('pointerup', up);
+      document.removeEventListener('pointercancel', up);
+      imgResize.resizing = false;
+      if (dragged) {
+        // 드래그 직후 click은 핸들을 열리게 않도록 1회 억제
+        const suppress = (ce) => { ce.stopPropagation(); window.removeEventListener('click', suppress, true); };
+        window.addEventListener('click', suppress, true);
+        setTimeout(() => window.removeEventListener('click', suppress, true), 300);
+      }
+      editor.el.dispatchEvent(new Event('input', { bubbles: true }));
+    };
+    document.addEventListener('pointermove', move);
+    document.addEventListener('pointerup', up);
+    document.addEventListener('pointercancel', up);
+  });
+}
+
+function restoreSel(editor) {
+  editor.el.focus();
+  if (editor.savedRange) {
+    // UI-003/MEMO-001 핸들러: 저장된 Range를 그대로 사용하지 않는다.
+    // - 분리(detached)에게 에디터 밖을 가리키는 stale Range는 복원하지 않는다
+    //   (stale Range를 addRange가 렌더러 확인 가능 A와, 등 버튼이 공유하는 경로로).
+    // - addRange에는 반드시 clone을 넘긴다 (저장본 자체를 Selection에 넘기면
+    //   Range가 Selection 쪽으로 이동·변경 다음 복원에서는 사용할 수 없다).
+    const saved = editor.savedRange;
+    const startNode = saved.startContainer;
+    if (!startNode || !startNode.isConnected || !editor.el.contains(startNode)) return;
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    try { sel.addRange(saved.cloneRange()); } catch (e) { console.warn('선택 영역 복원 실패:', e); }
+  }
+}
+// 에디터에 파일 붙이기: 이미지는 본문 커서 위치에, 나머지는 첨부 칩으로
+function handleEditorFiles(editor, fileList) {
+  const MAX_SIZE = 10 * 1024 * 1024;
+  const files = [...fileList].filter(f => f.size > 0);
+  if (!files.length) return;
+  // 10MB 초과 파일은 선택 지점에서 차단
+  const valid = [];
+  for (const f of files) {
+    if (f.size > MAX_SIZE) {
+      toast(`"${f.name}"은 10MB를 초과해서 첨부가 안 돼요`, 5000);
+    } else {
+      valid.push(f);
+    }
+  }
+  if (!valid.length) return;
+  editor.el.focus();
+  restoreSel(editor);
+  // 선택 영역이 없으면 맨 뒤에 붙임
+  const sel = window.getSelection();
+  if (!sel.rangeCount || !editor.el.contains(sel.anchorNode)) {
+    const r = document.createRange();
+    r.selectNodeContents(editor.el);
+    r.collapse(false);
+    sel.removeAllRanges();
+    sel.addRange(r);
+  }
+  for (const f of valid) {
+    if (isImage(f.type, f.name)) {
+      const url = URL.createObjectURL(f);
+      editor.blobMap.set(url, f);
+      execCmd('insertHTML', `<img src="${url}" data-pending="1" alt="${esc(f.name)}">`);
+      execCmd('insertParagraph'); // 이미지 뒤에 빈 줄
+    } else {
+      editor.otherFiles.push(f);
+      refreshOtherFiles(editor);
+    }
+  }
+}
+
+
+// editor-core.js에서 분리 (2026-11-01 단일 파일 분해): 등 도구 배경.
+// memo-bundle.js로 함께 번호순으로 위임 함수 공유 방식과 기존과 동일하다.
+
 function wireTableTools(el) {
   let tblBar = null;
   let resizeState = null;
@@ -373,133 +552,4 @@ function wireTableTools(el) {
     }
   });
 }
-/* 이미지 리사이즈 핸들 (에디터 전용) */
-let imgResize = null;
-function hideImgResize() {
-  if (imgResize && imgResize.resizing) return;
-  if (imgResize) {
-    imgResize.handle.remove();
-    imgResize.badge.remove();
-    imgResize = null;
-  }
-  window.removeEventListener('scroll', hideImgResize);
-}
-function showImgResize(editor, img) {
-  hideImgResize();
-  const handle = document.createElement('div');
-  handle.className = 'img-handle';
-  handle.setAttribute('aria-label', '이미지 크기 조절');
-  const badge = document.createElement('div');
-  badge.className = 'img-wbadge';
-  document.body.append(handle, badge);
-  const place = () => {
-    const r = img.getBoundingClientRect();
-    handle.style.left = (r.right - 6 + window.scrollX) + 'px';
-    handle.style.top = (r.bottom - 6 + window.scrollY) + 'px';
-    badge.textContent = Math.round(r.width) + 'px';
-    badge.style.left = (r.right + 8 + window.scrollX) + 'px';
-    badge.style.top = (r.bottom - 10 + window.scrollY) + 'px';
-  };
-  place();
-  imgResize = { handle, badge };
-  window.addEventListener('scroll', hideImgResize, { passive: true });
-  // 더블클릭 → 원본 크기로
-  img.addEventListener('dblclick', () => {
-    img.style.width = ''; img.style.maxWidth = ''; img.style.height = '';
-    place();
-  });
-  handle.addEventListener('pointerdown', (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    hideImgTools();
-    const startX = e.clientX;
-    const startW = img.getBoundingClientRect().width;
-    const maxW = editor.el.clientWidth || 600;
-    if (!img.style.width) {
-      img.style.width = Math.round(startW) + 'px';
-      img.style.maxWidth = '100%';
-      img.style.height = 'auto';
-    }
-    let dragged = false;
-    imgResize.resizing = true;
-    const move = (ev) => {
-      dragged = true;
-      const w = Math.max(48, Math.min(maxW, startW + (ev.clientX - startX)));
-      img.style.width = Math.round(w) + 'px';
-      img.style.maxWidth = '100%';
-      img.style.height = 'auto';
-      place();
-    };
-    const up = () => {
-      document.removeEventListener('pointermove', move);
-      document.removeEventListener('pointerup', up);
-      document.removeEventListener('pointercancel', up);
-      imgResize.resizing = false;
-      if (dragged) {
-        // 드래그 직후 click이 핸들을 숨기지 않도록 1회 억제
-        const suppress = (ce) => { ce.stopPropagation(); window.removeEventListener('click', suppress, true); };
-        window.addEventListener('click', suppress, true);
-        setTimeout(() => window.removeEventListener('click', suppress, true), 300);
-      }
-      editor.el.dispatchEvent(new Event('input', { bubbles: true }));
-    };
-    document.addEventListener('pointermove', move);
-    document.addEventListener('pointerup', up);
-    document.addEventListener('pointercancel', up);
-  });
-}
 
-function restoreSel(editor) {
-  editor.el.focus();
-  if (editor.savedRange) {
-    // UI-003/MEMO-001 하드닝: 저장된 Range를 그대로 재사용하지 않는다.
-    // - 분리(detached)됐거나 에디터 밖을 가리키는 stale Range는 복원하지 않는다
-    //   (stale Range의 addRange가 렌더러 정지 가설 A였고, 전 버튼이 공유하는 경로다).
-    // - addRange에는 반드시 clone을 넘긴다 (저장본 자체를 Selection에 넘기면
-    //   Range가 Selection 쪽으로 이동·변경돼 다음 복원에서 재사용할 수 없다).
-    const saved = editor.savedRange;
-    const startNode = saved.startContainer;
-    if (!startNode || !startNode.isConnected || !editor.el.contains(startNode)) return;
-    const sel = window.getSelection();
-    sel.removeAllRanges();
-    try { sel.addRange(saved.cloneRange()); } catch (e) { console.warn('선택 영역 복원 실패:', e); }
-  }
-}
-// 에디터에 파일 넣기: 이미지는 본문 커서 위치에, 나머지는 첨부 칩으로
-function handleEditorFiles(editor, fileList) {
-  const MAX_SIZE = 10 * 1024 * 1024;
-  const files = [...fileList].filter(f => f.size > 0);
-  if (!files.length) return;
-  // 10MB 초과 파일은 선택 시점에 차단
-  const valid = [];
-  for (const f of files) {
-    if (f.size > MAX_SIZE) {
-      toast(`"${f.name}"은 10MB를 초과해서 첨부할 수 없어요`, 5000);
-    } else {
-      valid.push(f);
-    }
-  }
-  if (!valid.length) return;
-  editor.el.focus();
-  restoreSel(editor);
-  // 선택 영역이 없으면 맨 뒤에 삽입
-  const sel = window.getSelection();
-  if (!sel.rangeCount || !editor.el.contains(sel.anchorNode)) {
-    const r = document.createRange();
-    r.selectNodeContents(editor.el);
-    r.collapse(false);
-    sel.removeAllRanges();
-    sel.addRange(r);
-  }
-  for (const f of valid) {
-    if (isImage(f.type, f.name)) {
-      const url = URL.createObjectURL(f);
-      editor.blobMap.set(url, f);
-      execCmd('insertHTML', `<img src="${url}" data-pending="1" alt="${esc(f.name)}">`);
-      execCmd('insertParagraph'); // 이미지 뒤에 빈 줄
-    } else {
-      editor.otherFiles.push(f);
-      refreshOtherFiles(editor);
-    }
-  }
-}

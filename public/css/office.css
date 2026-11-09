@@ -1,119 +1,327 @@
-/* MyHub 오피스 호스트 — 메뉴 줄 + 엔진 표면.
- * 재구성 근거: 파일명은 창 제목줄(셸)이 정본이라 호스트 안 이름은 보조 표시.
- * 접기 셰브론은 메뉴 줄 가장 우측 끝에 혼자. 색은 MyHub 머티리얼 유지. */
+/* MyHub 오피스 셸 (office.css) — Excel·한글 2020·PowerPoint·PDF 공용 셸.
+   뷰어 셸은 finder.css의 .finder-viewer/.fv-*를 그대로 사용하고,
+   여기에는 셸 뼈대(툴바·시작 화면·최근 패널·진행 표시)만 둔다. */
 
-.office-body { margin: 0; display: flex; flex-direction: column; height: 100dvh; background: #fff; }
-/* 임베드(데스크톱 창)에서는 메뉴 줄을 숨긴다 — 파일·편집은 셸 상단바로,
-   접기는 창 제목줄 셰브론으로, 문서명은 창 제목으로 게시된다. */
-html.myhub-embedded .office-menubar { display: none; }
-.office-menubar {
-  display: flex; align-items: center; gap: 2px; padding: 4px 10px;
-  border-bottom: 1px solid rgba(0,0,0,.07); background: #fbfbfc;
-  height: 38px; flex: 0 0 38px;
+.office-app-name { font-size: 14px; font-weight: 600; color: #1f2937; }
+.office-main {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 14px 16px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: calc(100vh - 52px);
+  box-sizing: border-box;
 }
-.office-menu-btn {
-  border: 0; background: none; cursor: pointer; padding: 6px 12px; border-radius: 8px;
-  font-size: 13.5px; font-weight: 600; color: #27272a;
-}
-.office-menu-btn:hover { background: rgba(0,0,0,.06); }
-.office-doc-name {
-  margin-left: 10px; font-size: 13px; font-weight: 700; color: #3f3f46;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-}
-.office-menubar .spacer { flex: 1; }
-.office-fold-btn {
-  border: 0; background: none; cursor: pointer; display: flex; padding: 6px;
-  border-radius: 8px; color: #52525b;
-}
-.office-fold-btn:hover { background: rgba(0,0,0,.06); }
-.office-fold-btn svg { width: 17px; height: 17px; }
 
-#officeSurface { flex: 1; position: relative; min-height: 0; }
-#officeEngine { width: 100%; height: 100%; border: 0; display: block; background: #fff; }
-#officeEngineFail {
-  position: absolute; inset: 0; display: flex; flex-direction: column;
-  align-items: center; justify-content: center; gap: 4px;
-  color: #52525b; font-size: 14px; background: #fbfbfc; text-align: center;
+/* ---- 툴바 ---- */
+/* 최상위 툴바 행 배경이 창 바 머티리얼과 같은 값이면 "그 위에 뜬"이 아니라
+   그 면의 연속으로 보이게 한다 (통합 셸 스펙 B안) */
+.office-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  background: rgba(244, 244, 246, 0.9);
+  border-radius: 10px;
+  padding: 8px 12px;
 }
-.office-engine-fail-sub { font-size: 12.5px; color: #8e8e93; margin: 0; }
+.office-brand-icon { display: inline-flex; width: 34px; height: 34px; }
+.office-brand-icon svg { width: 100%; height: 100%; }
+.office-brand-name { font-size: 16px; color: #111827; }
+.office-toolbar-actions { display: flex; gap: 6px; flex: none; margin-left: auto; }
+.office-toolbar .finder-upload-btn[disabled] { opacity: 0.45; cursor: default; }
 
-#officeStart { flex: 1; padding: 48px 24px; overflow-y: auto; }
-#officeStart h1 { font-size: 22px; margin: 0 0 20px; }
-.office-start-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; max-width: 720px; }
-.office-start-card {
-  border: 1px solid rgba(0,0,0,.1); background: #fff; border-radius: 14px;
-  padding: 26px 14px; font-size: 15px; font-weight: 700; cursor: pointer; color: #18181b;
+/* ---- 진행 표시 ---- */
+.office-progress {
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
-.office-start-card:hover { background: #eff6ff; border-color: #a5c8f0; }
+.office-progress[hidden] { display: none; }
+.office-progress-track {
+  flex: 1 1 auto;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(15, 23, 42, 0.1);
+  overflow: hidden;
+}
+.office-progress-fill {
+  height: 100%;
+  width: 0;
+  border-radius: 2px;
+  background: #4dabf7;
+  transition: width 0.15s ease;
+}
+.office-progress-fill.is-indeterminate {
+  width: 40%;
+  animation: officeProgressSlide 1.1s ease-in-out infinite;
+}
+@keyframes officeProgressSlide {
+  0% { transform: translateX(-110%); }
+  100% { transform: translateX(280%); }
+}
+.office-progress-label { font-size: 12.5px; color: #6b7280; flex: none; font-variant-numeric: tabular-nums; }
 
-/* 접힌 상태(뷰어): 메뉴 줄만 남기고 표면은 보기 전용 표식으로 */
-body.office-folded .office-menubar { background: #f4f4f5; }
+/* ---- 시작 화면 ---- */
+.office-start {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 8px;
+  padding: 32px 16px;
+}
+.office-start[hidden] { display: none; }
+.office-start-icon { width: 76px; height: 76px; }
+.office-start-icon svg { width: 100%; height: 100%; filter: drop-shadow(0 6px 16px rgba(15, 23, 42, 0.18)); }
+.office-start-name { font-size: 24px; margin: 6px 0 0; color: #111827; }
+.office-start-desc { font-size: 13.5px; color: #6b7280; margin: 0; max-width: 460px; line-height: 1.6; }
+.office-start-actions { display: flex; gap: 8px; margin-top: 14px; flex-wrap: wrap; justify-content: center; }
+.office-resume {
+  margin-top: 22px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border: 1px solid rgba(15, 23, 42, 0.1);
+  border-radius: 12px;
+  background: rgba(77, 171, 247, 0.07);
+}
+.office-resume[hidden] { display: none; }
+.office-resume-label { font-size: 12px; font-weight: 600; color: #1971c2; flex: none; }
+.office-resume-btn {
+  border: none; background: none; cursor: pointer; padding: 0;
+  font-size: 13.5px; font-weight: 500; color: #1f2937; font-family: inherit;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 340px;
+}
+.office-resume-btn:hover { text-decoration: underline; }
 
-/* 공용 메뉴 (myhub- 접두사) */
-.myhub-menu-backdrop {
-  position: fixed; inset: 0; z-index: 129; background: transparent;
+.office-recent { margin-top: 26px; width: min(520px, 100%); text-align: left; }
+.office-recent[hidden] { display: none; }
+.office-recent-title { font-size: 12.5px; color: #9ca3af; margin: 0 0 6px; font-weight: 600; }
+.office-recent-row {
+  display: flex; align-items: center; gap: 10px; width: 100%;
+  padding: 7px 10px; border: none; border-radius: 9px; background: none;
+  cursor: pointer; font-family: inherit; text-align: left;
 }
-.myhub-menu {
-  position: fixed; z-index: 130; min-width: 210px; padding: 5px;
-  background: rgba(255,255,255,.97); border: 1px solid rgba(0,0,0,.09); border-radius: 12px;
-  box-shadow: 0 14px 40px rgba(0,0,0,.22); display: flex; flex-direction: column;
-}
-.myhub-menu-item {
-  border: 0; background: none; text-align: left; padding: 7px 10px; border-radius: 7px;
-  font-size: 13px; cursor: pointer; color: #18181b; white-space: nowrap;
-}
-.myhub-menu-item:hover:not(:disabled) { background: #eff6ff; }
-.myhub-menu-item:disabled { color: #a1a1aa; }
-.myhub-menu-sep { height: 1px; background: rgba(0,0,0,.08); margin: 4px 6px; }
+.office-recent-row:hover { background: rgba(15, 23, 42, 0.045); }
+.office-recent-row .office-recent-icon { width: 24px; height: 24px; flex: none; display: inline-flex; }
+.office-recent-row .office-recent-icon svg { width: 100%; height: 100%; }
+.office-recent-name { font-size: 13.5px; color: #1f2937; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.office-recent-meta { font-size: 12px; color: #9ca3af; flex: none; margin-left: auto; font-variant-numeric: tabular-nums; }
 
-/* 노바 문서 비서 패널 (office-assistant.js) */
-.oa-panel {
-  position: fixed; top: 0; right: 0; bottom: 0; width: min(380px, 92vw);
-  background: #fff; border-left: 1px solid rgba(0,0,0,.09);
-  box-shadow: -12px 0 32px rgba(0,0,0,.12); z-index: 120;
-  display: flex; flex-direction: column;
-  transform: translateX(105%); transition: transform .22s ease;
+/* ---- 오피스 탭 줄 (단일 작업 2 — 설계 확정 2026-11-06) ----
+   리본 탭은 상단 바가 아니라 창 안 리본 영역 최상위 줄이 소유
+   한다 (MS Office for Mac 정본, image-120). 제목 줄 바는 아래
+   위젯 스트립으로 붙고, 선택 탭만 흰색으로 아래 콘텐츠 면과
+   이어져 보여야 탭 행이 어긋난 다른 행이 아니라 MyHub 머티리얼
+   (반투명 스트립 + 탭 활성 면 + 파스텔 블루 액센트)을 따른다.
+   메뉴(kind 'menu')는 이 상단바를 호스팅하므로 임베드에서는 이
+   행에 그리지 않는다 (office-tabs.js). 엔진 안의 자체 탭 행은
+   꺼져 있어 이 행이 유일한 탭 행이다. 접기 버튼은 행의 가장
+   오른쪽 끝에 알약으로 둔다 (리본 도구 접기 ≠ 화면 접기와 별개). */
+.office-tabs {
+  display: flex; align-items: flex-end; gap: 2px;
+  padding: 4px 4px 0;
+  background: #f4f5f7;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+  overflow-x: auto;
+  scrollbar-width: none;
 }
-.oa-panel.open { transform: translateX(0); }
-.oa-head {
-  display: flex; align-items: center; gap: 10px; padding: 12px 14px;
-  border-bottom: 1px solid rgba(0,0,0,.07);
+.office-tabs::-webkit-scrollbar { display: none; }
+.office-tabs[hidden] { display: none; }
+.office-tab {
+  flex: none;
+  padding: 6px 12px 7px;
+  border: none; border-radius: 6px 6px 0 0;
+  background: none;
+  font: 500 13px inherit; color: #4b5563;
+  cursor: pointer; white-space: nowrap;
 }
-.oa-head .aw-avatar-img { width: 30px; height: 30px; border-radius: 50%; object-fit: cover; }
-.oa-head-text { display: flex; flex-direction: column; line-height: 1.25; }
-.oa-head-text strong { font-size: 14px; }
-.oa-head-text span { font-size: 11px; color: #71717a; }
-.oa-close {
-  margin-left: auto; border: 0; background: none; font-size: 20px; line-height: 1;
-  cursor: pointer; color: #52525b; padding: 4px 6px;
+.office-tab:hover { background: rgba(15, 23, 42, 0.06); color: #111827; }
+.office-tab.is-active { background: #fff; color: #111827; font-weight: 700; box-shadow: inset 0 -2px 0 #4dabf7; }
+/* 화면 접기는 화면 자체 버튼(#fvFoldBtn)과 알약·임베드 공통으로
+   맞춘다 (2026-11-06 스펙 확정): 제목 줄 접기 버튼은(창 레이아웃이
+   만든 컨트롤, 게시만 하고 동작하지 않음)를 제거하면, 임베드
+   에서 이 버튼이 남긴 규칙을 함께 지운다 — 접기 컨트롤은
+   화면마다 정확히 하나만 남는다. */
+.office-tab-file { font-weight: 600; color: #1f2937; }
+/* 묶음 구분 (PDF: 메뉴 | 모드 탭) — 버튼이 아닌 것과의 세로줄 */
+.office-tab-sep { flex: none; width: 1px; height: 16px; margin: 0 5px; background: rgba(15, 23, 42, 0.18); }
+/* 로컬 메뉴 드롭다운이 열려 있는 동안만 트리거 표시 (menuLocal) */
+.office-tab.is-open { background: rgba(15, 23, 42, 0.1); color: #111827; }
+.office-tab-fold {
+  flex: none; margin-left: auto;
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 26px; height: 26px;
+  border: none; border-radius: 6px; background: none;
+  color: #6b7280; cursor: pointer;
 }
-.oa-msgs { flex: 1; overflow-y: auto; padding: 14px; display: flex; flex-direction: column; gap: 8px; }
-.oa-msg {
-  max-width: 88%; padding: 9px 12px; border-radius: 14px; font-size: 13.5px;
-  line-height: 1.55; white-space: pre-wrap; word-break: break-word;
+.office-tab-fold:hover { background: rgba(15, 23, 42, 0.06); }
+.office-tab-chevron {
+  box-sizing: border-box; width: 7px; height: 7px;
+  border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor;
+  display: block;
 }
-.oa-msg.assistant { background: #f4f6fb; align-self: flex-start; border-bottom-left-radius: 4px; }
-.oa-msg.user { background: #dbeafe; align-self: flex-end; border-bottom-right-radius: 4px; }
-.oa-memo-list { border-top: 1px solid rgba(0,0,0,.07); max-height: 180px; overflow-y: auto; padding: 8px; }
+.office-tab-chevron-up { transform: translateY(2px) rotate(225deg); }
+.office-tab-chevron-down { transform: translateY(-2px) rotate(45deg); }
+
+/* ---- 뷰어 (finder 셸 사용, 오피스에서는 남은 높이를 채운다) ---- */
+.office-viewer { flex: 1 1 auto; min-height: 0; }
+
+
+@media (max-width: 640px) {
+  .office-main { padding: 10px 10px 18px; }
+  .office-resume-btn { max-width: 200px; }
+}
+
+/* ── 뷰어 플로팅 셸 (미니멀 구성) ──
+   뷰어 헤드 바는 없다. 접기 버튼과 닫기만 문서 오른쪽 위에 떠
+   있는 작은 알약 모양으로 둔다 — 문서 화면은 맨 위부터 시작한다. */
+.fv-float-chrome {
+  position: absolute; top: 10px; right: 12px; z-index: 5;
+  display: flex; align-items: center; gap: 2px;
+  padding: 2px; border-radius: 10px;
+  background: rgba(255, 255, 255, 0.82);
+  backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+  box-shadow: 0 1px 6px rgba(15, 23, 42, 0.14);
+}
+/* 자체 셸 크롬(시트·PDF·한글)에서는 코어 접기버튼을 hidden으로 숨긴다 해도
+   display:flex가 [hidden] 기본 규칙을 이기면 깨져 보이고 문서 오른쪽
+   위에 자체 접기 버튼과 겹치므로 명시적으로 다시 되돌린다 */
+.fv-float-chrome[hidden] { display: none; }
+.fv-fold-slot { display: inline-flex; }
+.fv-fold-slot:empty { display: none; }
+
+/* ── 오피스 비서 (office-assistant.js) ──
+   비서는 큰 창 스트립이 아니라 메인 상단바에서 작동한다 (사용자
+   지시): 상단바의 [노바 비서] 버튼(창 안에서는 노이 시스템 상단바로
+   프록시한다)를 누르면 상단바 아래로 패널이 펼쳐진다. 임베드에서는
+   --topnav-h가 0이라 창 내용 맨 위에서 펼쳐진다. */
+/* 비서 진입은 메모·일정 모듈 비서 진입과 같은 아바타 (사용자
+   지시 2026-11-03): 메인 상단바 오른쪽 아바타로 열고, 누르면 비서
+   패널(서브 창)이 열린다. 아이콘+글자 버튼은 쓰지 않는다. */
+.office-assistant-btn {
+  background: none; border: none; cursor: pointer; padding: 4px;
+  border-radius: 50%; display: inline-flex; align-items: center; justify-content: center;
+  transition: transform 0.15s;
+}
+.office-assistant-btn:hover { transform: scale(1.08); }
+.office-assistant-btn img {
+  width: 28px; height: 28px; border-radius: 50%; object-fit: cover;
+  border: 1.5px solid #e5e5e5; display: block;
+}
+/* 독립 실행 폴백 진입 버튼 — 뷰어가 상단바를 못쓸 때만 뜬다.
+   순번은 같은 아바타로 통일한다. */
+.office-assistant-float {
+  position: fixed; right: 16px; bottom: 16px; z-index: 80;
+  width: 46px; height: 46px; padding: 0; border: none; border-radius: 50%;
+  background: none; box-shadow: 0 6px 20px rgba(15, 23, 42, 0.25);
+  cursor: pointer; overflow: hidden;
+}
+.office-assistant-float[hidden] { display: none; }
+.office-assistant-float img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.office-assistant {
+  position: fixed; z-index: 70;
+  top: calc(var(--topnav-h, 34px) + max(env(safe-area-inset-top), 8px) + 6px);
+  left: 10px; right: 10px;
+  max-width: 860px; margin: 0 auto;
+  padding: 12px 14px; max-height: min(52vh, 480px); overflow: auto;
+  background: #fff; border: 1px solid rgba(15, 23, 42, 0.1); border-radius: 14px;
+  box-shadow: 0 14px 40px rgba(15, 23, 42, 0.18);
+}
+.office-assistant[hidden] { display: none; }
+.oa-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.oa-title { font-weight: 700; font-size: 13px; color: #0f172a; }
+.oa-state { font-size: 12px; color: #64748b; }
+.oa-reply { font-size: 13px; color: #1e293b; white-space: pre-wrap; line-height: 1.55; }
+.oa-reply:empty { display: none; }
+.oa-findings { list-style: none; margin: 6px 0 0; padding: 0; }
+.oa-findings:empty { display: none; }
+.oa-finding { font-size: 12px; padding: 4px 8px; border-radius: 8px; margin-top: 4px; background: #f1f5f9; color: #334155; }
+.oa-finding-error { background: #fef2f2; color: #b91c1c; }
+.oa-finding-warn { background: #fffbeb; color: #92400e; }
+.oa-row { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+.oa-input {
+  flex: 1 1 220px; padding: 8px 10px; border-radius: 10px;
+  border: 1px solid rgba(15, 23, 42, 0.16); font-size: 13px; font-family: inherit;
+}
+.oa-btn {
+  padding: 8px 12px; border-radius: 10px; border: 1px solid rgba(15, 23, 42, 0.14);
+  background: #f8fafc; font-size: 13px; font-family: inherit; cursor: pointer; color: #0f172a;
+}
+.oa-btn:disabled { opacity: 0.5; cursor: default; }
+.oa-send { background: #dbeafe; border-color: #bfdbfe; font-weight: 600; }
+.oa-panel { margin-top: 10px; border-top: 1px solid rgba(15, 23, 42, 0.08); padding-top: 10px; }
+.oa-panel[hidden] { display: none; }
+.oa-memo-list { display: flex; flex-direction: column; gap: 4px; margin-top: 8px; }
 .oa-memo-item {
-  display: block; width: 100%; text-align: left; border: 0; background: none;
-  padding: 8px 10px; border-radius: 8px; font-size: 13px; cursor: pointer;
+  text-align: left; padding: 8px 10px; border-radius: 8px; border: 1px solid rgba(15, 23, 42, 0.1);
+  background: #fff; font-size: 13px; font-family: inherit; cursor: pointer;
 }
-.oa-memo-item:hover { background: #eff6ff; }
-.oa-memo-empty { padding: 10px; font-size: 13px; color: #71717a; }
-.oa-foot { border-top: 1px solid rgba(0,0,0,.07); padding: 10px; display: flex; flex-direction: column; gap: 8px; }
-.oa-memo-btn {
-  align-self: flex-start; border: 1px solid rgba(0,0,0,.12); background: #fff;
-  border-radius: 999px; padding: 6px 12px; font-size: 12.5px; cursor: pointer;
+.oa-empty { font-size: 12px; color: #64748b; }
+.oa-mail-view { margin-top: 8px; font-size: 13px; }
+.oa-mail-line { font-weight: 600; margin-bottom: 4px; }
+.oa-mail-body { white-space: pre-wrap; color: #334155; margin-bottom: 8px; line-height: 1.55; }
+.oa-panel .oa-input { width: 100%; box-sizing: border-box; margin-bottom: 6px; }
+
+/* ---- 공용 메뉴 드롭다운 (menu.js createMenu) ----
+   단독 실행에서는 오피스 행이 그리드 드롭다운형으로, 렌더가 만든
+   .dt-ctx-menu 계열은 desktop.css와 같은 값으로 둔다 (렌더·뷰어
+   공용의 정본 — 통합 단계에서 shell.css로 모을 수 있다). */
+.dt-ctx-menu {
+  position: fixed;
+  z-index: 120;
+  min-width: 180px;
+  max-width: min(430px, 94vw);
+  max-height: min(74vh, 600px);
+  overflow-y: auto;
+  padding: 5px;
+  border-radius: 10px;
+  background: rgba(250, 250, 252, 0.82);
+  backdrop-filter: blur(24px) saturate(1.6);
+  -webkit-backdrop-filter: blur(24px) saturate(1.6);
+  border: 1px solid rgba(15, 23, 42, 0.1);
+  box-shadow: 0 14px 38px rgba(15, 23, 42, 0.28);
 }
-.oa-memo-btn:hover { background: #eff6ff; }
-.oa-input-row { display: flex; gap: 8px; }
-.oa-input-row input {
-  flex: 1; border: 1px solid rgba(0,0,0,.14); border-radius: 10px;
-  padding: 9px 12px; font-size: 13.5px; font-family: inherit;
+.dt-ctx-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 9px;
+  border: none;
+  background: none;
+  border-radius: 6px;
+  font-size: 13px;
+  color: #1f2937;
+  cursor: pointer;
+  text-align: left;
 }
-.oa-input-row button {
-  border: 0; background: #18181b; color: #fff; border-radius: 10px;
-  padding: 9px 14px; font-size: 13px; font-weight: 600; cursor: pointer;
+.dt-ctx-item:hover { background: #0a84ff; color: #fff; }
+.dt-ctx-item.is-danger { color: #dc2626; }
+.dt-ctx-item.is-danger:hover { background: #dc2626; color: #fff; }
+.dt-ctx-item svg { width: 14px; height: 14px; flex: none; }
+.dt-ctx-item.is-active { background: #0a84ff; color: #fff; }
+.dt-ctx-item.is-danger.is-active { background: #dc2626; color: #fff; }
+.dt-ctx-item.is-disabled { color: #9ca3af; cursor: default; }
+.dt-ctx-item.is-disabled:hover, .dt-ctx-item.is-disabled.is-active { background: none; color: #9ca3af; }
+.dt-ctx-check { width: 16px; flex: none; display: inline-flex; align-items: center; }
+.dt-ctx-check svg { width: 13px; height: 13px; }
+.dt-ctx-label { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dt-ctx-sub {
+  flex: 0 1 auto; min-width: 0; max-width: 190px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-size: 11.5px; color: #6b7280;
 }
-#officeAssistantBtn .aw-avatar-img { width: 26px; height: 26px; border-radius: 50%; object-fit: cover; display: block; }
+.dt-ctx-item:hover .dt-ctx-sub, .dt-ctx-item.is-active .dt-ctx-sub { color: rgba(255, 255, 255, .8); }
+.dt-ctx-item.is-disabled .dt-ctx-sub { color: #9ca3af; }
+.dt-ctx-shortcut { flex: none; font-size: 12px; color: #9ca3af; }
+.dt-ctx-item:hover .dt-ctx-shortcut, .dt-ctx-item.is-active .dt-ctx-shortcut { color: rgba(255, 255, 255, .8); }
+.dt-ctx-item .dt-ctx-arrow { flex: none; width: 6px; height: 6px; margin-left: auto; border-right: 1.5px solid #9ca3af; border-bottom: 1.5px solid #9ca3af; transform: rotate(-45deg); }
+.dt-ctx-item.is-active .dt-ctx-arrow { border-right-color: #fff; border-bottom-color: #fff; }
+.dt-ctx-heading { padding: 7px 9px 3px; font-size: 11px; font-weight: 700; color: #6b7280; }
+.dt-ctx-sep { height: 1px; margin: 5px 8px; background: rgba(15, 23, 42, 0.12); }

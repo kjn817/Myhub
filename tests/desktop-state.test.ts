@@ -63,32 +63,34 @@ describe('상수와 모듈 정의 (설계 4절)', () => {
     expect(S.TITLE_GRIP).toBe(48)
   })
 
-  test('모듈 12종의 id·url·기본 크기·글리프가 설계 표와 일치한다', () => {
+  test('모듈 12종의 id·url·기본 크기·글리프가 운영 표와 일치한다', () => {
+    // 운영 원본 state.js의 MODULES가 정본이다 (순서 = 독 카탈로그 순서).
+    // 글리프는 오피스 4종만 들고, 나머지는 tiles.js TILE_DEFS가 소유한다.
     expect(S.MODULES).toEqual([
-      { id: 'finder', title: 'Finder', url: '/finder.html', defW: 920, defH: 620, glyph: 'folder' },
-      { id: 'memo', title: '메모', url: '/memo.html', defW: 880, defH: 620, glyph: 'notebook-pen' },
-      { id: 'schedule', title: '일정', url: '/schedule.html', defW: 880, defH: 620, glyph: 'calendar' },
-      { id: 'todo', title: '할 일', url: '/todo.html', defW: 640, defH: 560, glyph: 'list-checks' },
-      { id: 'chat', title: 'AI 채팅', url: '/chat.html', defW: 720, defH: 620, glyph: 'messages-square' },
-      { id: 'browser', title: '브라우저', url: '/browser.html', defW: 1080, defH: 700, glyph: 'compass' },
+      { id: 'finder', title: 'Finder', url: '/finder.html', defW: 920, defH: 620 },
+      { id: 'browser', title: '브라우저', url: '/browser.html', defW: 1080, defH: 700 },
+      { id: 'memo', title: '메모', url: '/memo.html', defW: 880, defH: 620 },
+      { id: 'schedule', title: '일정', url: '/schedule.html', defW: 880, defH: 620 },
+      { id: 'todo', title: '할 일', url: '/todo.html', defW: 640, defH: 560 },
+      { id: 'chat', title: 'AI 채팅', url: '/chat.html', defW: 720, defH: 620 },
+      { id: 'studio', title: 'AI 스튜디오', url: '/agent.html', defW: 1180, defH: 720 },
+      { id: 'backup', title: '백업', url: '/backup.html', defW: 880, defH: 640 },
       { id: 'excel', title: 'Excel', url: '/office.html?app=excel', defW: 1180, defH: 720, glyph: 'table' },
       { id: 'hangul', title: '한글 2020', url: '/office.html?app=hangul', defW: 1080, defH: 720, glyph: 'file-text' },
       { id: 'powerpoint', title: 'PowerPoint', url: '/office.html?app=powerpoint', defW: 1080, defH: 700, glyph: 'presentation' },
-      { id: 'pdf', title: 'PDF', url: '/office.html?app=pdf', defW: 980, defH: 700, glyph: 'file' },
-      { id: 'studio', title: 'AI 스튜디오', url: '/agent.html', defW: 1180, defH: 720, glyph: 'sparkles' },
-      { id: 'backup', title: '백업', url: '/backup.html', defW: 880, defH: 640, glyph: 'archive' },
+      { id: 'pdf', title: 'PDF', url: '/office.html?app=pdf', defW: 980, defH: 700, glyph: 'file-text' },
     ])
   })
 
   test('emptyState는 빈 창 목록·activeId null·zCounter 0·스페이스 1개다', () => {
+    // 운영 원본: 스페이스는 객체가 아니라 번호 목록이다.
     expect(S.emptyState()).toEqual({
       version: 2,
       windows: [],
       activeId: null,
       zCounter: 0,
-      spaces: [{ id: 'space-1', name: '데스크톱 1' }],
-      activeSpaceId: 'space-1',
-      spaceCounter: 1,
+      spaces: [1],
+      activeSpace: 1,
     })
   })
 })

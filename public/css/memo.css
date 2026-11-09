@@ -38,12 +38,6 @@ html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
   html::-webkit-scrollbar, body::-webkit-scrollbar { display: none; width: 0; }
   .wrap { max-width: 700px; margin: 0 auto; padding: 0 16px 64px; }
 
-  header.top { display: flex; align-items: center; gap: 4px; padding: 22px 4px 14px; }
-  header.top a.back { color: var(--dim); text-decoration: none; font-size: 24px; padding: 6px 12px 6px 0; }
-  header.top a.back:hover { color: var(--text); }
-  header.top h1 { font-size: 24px; font-weight: 800; letter-spacing: -0.5px; }
-  header.top .count { margin-left: auto; font-size: 13px; color: var(--dim); }
-
   /* 검색 + 필터 토글 */
   .search { position: sticky; top: 0; z-index: 20; background: linear-gradient(var(--bg) 80%, transparent); padding: 8px 0 10px; }
   .search-row { display: flex; gap: 8px; }
@@ -159,18 +153,75 @@ html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
   .task-list .task-item input:checked + span { text-decoration: line-through; opacity: 0.6; }
   .pop .sw { width: 30px; height: 30px; border-radius: 0; border: 1px solid var(--border); cursor: pointer; }
   .pop .sz { border: 1px solid var(--border); background: #fff; border-radius: 0; padding: 8px 12px; cursor: pointer; font-size: 14px; color: var(--text); }
+  /* 목록형 팝 (스타일 드롭다운·AI 액션): 세로로 길고 항목도 길게 */
+  .pop.pop-list { flex-direction: column; flex-wrap: nowrap; gap: 2px; min-width: 168px; padding: 6px; }
+  .pop .pop-item { border: none; background: transparent; text-align: left; padding: 7px 10px; border-radius: var(--radius); }
+  .pop .pop-item:hover { background: var(--card-2); }
+  .pop .pop-style-h1 { font-size: 19px; font-weight: 700; }
+  .pop .pop-style-h2 { font-size: 16.5px; font-weight: 700; }
+  .pop .pop-style-h3 { font-size: 15px; font-weight: 700; }
+  .pop .pop-style-pre { font-family: ui-monospace, monospace; font-size: 13px; }
+  /* 스타일 버튼: 현재 블록 스타일 레이블 + 드롭다운 */
+  .toolbar button.style-btn { gap: 4px; padding: 0 8px; font-size: 13.5px; font-weight: 600; color: var(--text); }
+  .toolbar button.style-btn .lucide { width: 13px; height: 13px; }
+  /* 편집 표의 첫 행 = 헤더 시각 구분 (보기의 th와 동일하게) */
+  .rich table tr:first-child td { background: var(--card-2); font-weight: 700; }
+  /* 보기 체크리스트 완료 항목 (편집 .task-list와 같은 규칙을 보기에) */
+  .md li:has(> input[type="checkbox"]:checked),
+  .md li:has(> p > input[type="checkbox"]:checked) { color: var(--dim); text-decoration: line-through; }
+  .md input[type="checkbox"] { cursor: pointer; }
+  /* 이미지 크기 프리셋 바 (E4) */
+  .img-presets {
+    position: absolute; z-index: 60; display: flex; gap: 2px;
+    background: rgba(31,41,55,0.85); padding: 4px; animation: pop .15s ease;
+  }
+  .img-presets button {
+    background: transparent; border: none; color: #fff; font-size: 12px;
+    padding: 4px 8px; cursor: pointer; white-space: nowrap;
+  }
+  .img-presets button:hover { background: rgba(255,255,255,0.15); }
+  /* 이미지 캡션 편집 팝 (E4) */
+  .img-caption-pop {
+    position: absolute; z-index: 70; display: flex; gap: 6px;
+    background: #fff; border: 1px solid var(--border); padding: 8px;
+    box-shadow: 0 8px 24px rgba(31,41,55,0.12); animation: pop .15s ease;
+  }
+  .img-caption-pop input {
+    width: 220px; border: 1px solid var(--border-input); border-radius: var(--radius);
+    padding: 6px 8px; font-size: 13.5px; outline: none; font-family: inherit;
+  }
+  .img-caption-pop input:focus { border-color: var(--accent); }
+  .img-caption-pop button {
+    border: 1px solid var(--border); background: var(--card-2); border-radius: var(--radius);
+    padding: 6px 12px; cursor: pointer; font-size: 13px; color: var(--text);
+  }
+  /* 보기 이미지 캡션 */
+  .md figure.img-figure { margin: 8px 0; }
+  .md figure.img-figure img { margin: 0; }
+  .md figcaption { font-size: 12.5px; color: var(--dim); text-align: center; margin-top: 4px; }
+  /* AI 태그 제안 행 (새 메모) */
+  .tag-suggest {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
+    margin-top: 12px; padding-top: 10px; border-top: 1px dashed var(--border);
+  }
+  .tag-suggest[hidden] { display: none; }
+  .tag-suggest-label { font-size: 12.5px; color: var(--dim); margin-right: 2px; }
 
-  /* WYSIWYG 에디터 */
+  /* WYSIWYG 에디터 — 타이포는 .rich(편집)와 .md(보기)가 두 벌의 규칙을
+     공유한다 (E1: 편집 화면 = 읽는 화면). 본문 16px/1.75, 제목 26/21/18,
+     문단 간격 8px이 단일 기준이다. */
   .rich {
-    min-height: 80px; font-size: 15px; line-height: 1.7; outline: none;
+    min-height: 80px; font-size: 16px; line-height: 1.75; outline: none;
     word-break: break-word; cursor: text; border-radius: 0; padding: 2px;
     overflow: visible;
   }
+  .rich p { margin: 8px 0; }
+  .rich li { margin: 3px 0; }
   #composerRich { min-height: 240px; max-height: 510px; overflow-y: auto; scrollbar-width: none; }
   #composerRich::-webkit-scrollbar { display: none; }
   .title-input {
     width: 100%; border: 1px solid transparent; outline: none; background: transparent;
-    font-size: 17px; font-weight: 700; letter-spacing: -0.2px;
+    font-size: 20px; font-weight: 700; letter-spacing: -0.2px;
     color: var(--text); padding: 6px 8px; margin: 0 -8px 4px; font-family: inherit;
     border-radius: var(--radius);
   }
@@ -204,7 +255,7 @@ html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
   .rich blockquote {
     margin: 8px 0; padding: 2px 8px 2px 4px;
     position: relative; color: var(--text);
-    line-height: 1.6;
+    line-height: 1.75;
   }
   .rich blockquote::before {
     content: '\201C';
@@ -220,12 +271,17 @@ html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
     color: #000; line-height: 1;
     margin-left: 2px; vertical-align: -2px;
   }
-  .rich h1 { font-size: 21px; margin: 10px 0 6px; }
-  .rich h2 { font-size: 18px; margin: 10px 0 6px; }
-  .rich h3 { font-size: 16px; margin: 8px 0 4px; }
-  .rich ul, .rich ol { padding-left: 24px; margin: 6px 0; }
-  .rich pre { background: #1F2937; color: #F9FAFB; padding: 12px 14px; border-radius: 0; overflow-x: auto; margin: 8px 0; font-size: 13px; }
-  .rich code { background: var(--card-2); border: 1px solid var(--border); padding: 1px 6px; border-radius: 0; font-size: 13px; }
+  /* 중첩 인용(>>>)은 따옴표가 겹치지 않는다 — 맨 바깥 인용만 표시
+     (2026-11-03 사용자 보고: 따옴표가 3중으로 생김) */
+  .rich blockquote blockquote { margin: 0; padding-top: 0; padding-bottom: 0; }
+  .rich blockquote blockquote::before, .rich blockquote blockquote::after { content: none; }
+  .rich h1 { font-size: 26px; margin: 20px 0 8px; line-height: 1.4; letter-spacing: -0.3px; }
+  .rich h2 { font-size: 21px; margin: 20px 0 8px; line-height: 1.4; letter-spacing: -0.3px; }
+  .rich h3 { font-size: 18px; margin: 20px 0 8px; line-height: 1.4; letter-spacing: -0.3px; }
+  .rich > h1:first-child, .rich > h2:first-child, .rich > h3:first-child { margin-top: 0; }
+  .rich ul, .rich ol { padding-left: 24px; margin: 8px 0; }
+  .rich pre { background: #26282c; color: #F9FAFB; padding: 12px 14px; border-radius: 0; overflow-x: auto; margin: 8px 0; font-size: 13px; }
+  .rich code { background: var(--card-2); border: 1px solid var(--border); padding: 1px 6px; border-radius: 0; font-size: 13px; font-family: ui-monospace, monospace; }
   .rich pre code { background: transparent; border: none; padding: 0; color: inherit; }
 
   /* 작성 카드 */
@@ -271,35 +327,19 @@ html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
   #add:disabled { opacity: 0.45; }
   .paste-hint { font-size: 12px; color: var(--dim); margin-top: 10px; }
 
-  /* 타임라인 날짜 헤더 */
-  .dayhead {
-    position: sticky; top: 62px; z-index: 10;
-    font-size: 13px; font-weight: 800; color: var(--sub);
-    background: var(--bg); padding: 10px 4px 8px; margin-top: 6px;
-    transition: top 0.3s ease;
-  }
-  body.nav-hidden .dayhead {
-    top: 14px;
-  }
-
   /* 메모 카드 */
   ul.memo-list { list-style: none; }
   li.memo {
     background: var(--card); border: 1px solid var(--border);
-    border-radius: 0; padding: 18px 20px; margin-bottom: 15px;
+    border-radius: 0; padding: 18px 20px; margin-bottom: 14px;
     box-shadow: var(--shadow); animation: rise .25s ease both;
   }
-  .mhead { display: flex; align-items: center; margin-bottom: 10px; }
-  .mhead .date { font-size: 13px; color: var(--dim); }
-  .mhead .actions { margin-left: auto; display: flex; gap: 2px; }
   .row-main { display: flex; align-items: flex-start; gap: 8px; }
   .row-text { flex: 1; min-width: 0; }
   .row-title { font-weight: 600; margin-bottom: 2px; }
   .row-sub { font-size: 12px; color: var(--text-2); }
   .row-lock-ind { color: var(--text-2); display: inline-flex; padding: 4px; flex-shrink: 0; }
   .row-lock-ind svg { width: 14px; height: 14px; }
-  .card-lock-ind { color: var(--dim); display: inline-flex; align-items: center; }
-  .card-lock-ind svg { width: 14px; height: 14px; stroke-width: 2; }
   .pane-lock-ind {
     background: transparent; border: none; color: var(--dim);
     padding: 6px 10px; display: inline-flex; align-items: center; border-radius: 0;
@@ -307,26 +347,19 @@ html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
   .pane-lock-ind svg { width: 18px; height: 18px; stroke-width: 2; }
   .pane-actions button[data-act="lock"] { color: var(--text-2); }
   .pane-actions button[data-act="lock"].active { color: var(--danger); background: rgba(255,0,0,0.08); }
-  .mhead .actions button {
-    background: transparent; border: none; color: var(--dim);
-    font-size: 13px; padding: 6px 10px; cursor: pointer; border-radius: 0;
-  }
-  .mhead .actions button:hover { background: var(--card-2); color: var(--text); }
-  .mhead .actions button.danger:hover { color: var(--danger); }
-
   /* 마크다운 렌더 */
-  .md { font-size: 15px; line-height: 1.7; word-break: break-word; cursor: text; border-radius: 0; }
+  .md { font-size: 16px; line-height: 1.75; word-break: break-word; cursor: text; border-radius: 0; }
   .md > *:first-child { margin-top: 0; }
   .md > *:last-child { margin-bottom: 0; }
-  .md p { margin: 6px 0; }
-  .md h1, .md h2, .md h3 { margin: 12px 0 6px; letter-spacing: -0.3px; line-height: 1.4; }
-  .md h1 { font-size: 21px; } .md h2 { font-size: 18px; } .md h3 { font-size: 16px; }
+  .md p { margin: 8px 0; }
+  .md h1, .md h2, .md h3 { margin: 20px 0 8px; letter-spacing: -0.3px; line-height: 1.4; }
+  .md h1 { font-size: 26px; } .md h2 { font-size: 21px; } .md h3 { font-size: 18px; }
   .md ul, .md ol { padding-left: 22px; margin: 8px 0; }
   .md li { margin: 3px 0; }
   .md blockquote {
     margin: 8px 0; padding: 2px 8px 2px 4px;
     position: relative; color: var(--text);
-    line-height: 1.6;
+    line-height: 1.75;
   }
   .md blockquote::before {
     content: '\201C';
@@ -342,25 +375,19 @@ html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
     color: #000; line-height: 1;
     margin-left: 2px; vertical-align: -2px;
   }
+  .md blockquote blockquote { margin: 0; padding-top: 0; padding-bottom: 0; }
+  .md blockquote blockquote::before, .md blockquote blockquote::after { content: none; }
   .md code { background: var(--card-2); border: 1px solid var(--border); padding: 1px 6px; border-radius: 0; font-size: 13px; font-family: ui-monospace, monospace; }
-  .md pre { background: #1F2937; padding: 14px 16px; border-radius: 0; overflow-x: auto; margin: 10px 0; }
+  .md pre { background: #26282c; padding: 14px 16px; border-radius: 0; overflow-x: auto; margin: 10px 0; }
   .md pre code { background: transparent; border: none; padding: 0; color: #F9FAFB; font-size: 13px; }
   .md a { color: var(--link); }
   .md table { border-collapse: collapse; width: 100%; margin: 10px 0; font-size: 14px; display: block; overflow-x: auto; }
-  .md th, .md td { border: 1px solid var(--border); padding: 8px 12px; text-align: left; white-space: nowrap; }
+  /* E4: 긴 표는 가로 스크롤 대신 줄바꿈 (모바일에서 표 읽기가 힘들지 않게) */
+  .md th, .md td { border: 1px solid var(--border); padding: 8px 12px; text-align: left; word-break: break-word; }
   .md th { background: var(--card-2); font-weight: 700; }
   .md hr { border: none; border-top: 1px solid var(--border); margin: 14px 0; }
   .md img.inline-img { max-width: 100%; border-radius: 0; margin: 8px 0; cursor: default; display: block; }
   .md input[type="checkbox"] { margin-right: 6px; accent-color: var(--accent); }
-
-  /* 메모 내 태그 칩 */
-  .mtags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
-  .mtags:empty { display: none; }
-  .mtag {
-    font-size: 12px; background: #EFF6FF; border: 1px solid #BFDBFE; color: #2563EB;
-    border-radius: 0; padding: 4px 11px; cursor: pointer;
-  }
-  .mtag:hover { background: #DBEAFE; }
 
   /* 인라인 편집기 */
   .editor { margin-top: 4px; }
@@ -424,7 +451,9 @@ html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
 
   .empty { text-align: center; color: var(--dim); padding: 64px 0; font-size: 15px; line-height: 1.8; }
   .empty .big { font-size: 44px; display: block; margin-bottom: 12px; }
-  mark { background: var(--accent-soft); color: var(--accent-ink); border-radius: 0; padding: 0 3px; }
+  /* 검색 강조: --accent-soft(연파랑)에서는 묻히는 메모 범위에서만 파스텔
+     블루로 보정한다 (이 값 토큰 변경은 별도 결정 필요 — E1 보고) */
+  mark { background: #dceeff; color: var(--accent-ink); border-radius: 0; padding: 0 3px; }
 
   /* 라이트박스 */
   .lightbox {
@@ -523,19 +552,38 @@ html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
     min-width: 120px; white-space: nowrap;
   }
 
-  /* 태그 없음 */
-  .tag-empty { font-size: 13px; color: var(--dim); padding: 7px 4px; white-space: nowrap; }
-
   /* ===== PC 3열 레이아웃 (목록 | 선택메모 | 새메모) ===== */
   .layout { display: flex; flex-direction: column; }
   #panes { display: none; }
+  /* 열 경계 드래그 핸들 — PC(≥1024px)에서만 보인다. 위치는 열 너비
+     변수 + 간격(18px)을 제외한 경계로 계산한다. */
+  .col-resizer {
+    display: none; position: absolute; top: 0; bottom: 0; width: 14px;
+    cursor: col-resize; z-index: 30; touch-action: none;
+  }
+  .col-resizer[data-side="left"] { left: calc(var(--memo-col-left, 300px) + 2px); }
+  .col-resizer[data-side="right"] { right: calc(var(--memo-col-right, 340px) + 2px); }
+  .col-resizer::after {
+    content: ''; position: absolute; top: 0; bottom: 0; left: 50%; width: 2px;
+    margin-left: -1px; background: transparent;
+  }
+  .col-resizer:hover::after, .col-resizer.dragging::after { background: var(--accent); }
   @media (min-width: 1024px) {
-    .wrap { max-width: 1440px; }
+    /* 유연 레이아웃 (범위 2): 고정 max-width를 버려 어떤 창 크기에서도
+       화면 전체를 쓴다. 열 너비는 변수로 조절·저장된다. */
+    /* U-01 확정 (2026-11-05): 지시는 상단 여백(패딩) 통일뿐이다.
+       원본의 상단 패딩만 0이고 좌우 거터는 20px이다 — 그 .wrap의
+       상단 padding만 20px로 올려 좌우와 맞춘다. 하단(64px)·열 높이·
+       카드 패딩·간격·sticky는 전부 원본 그대로 유지해 둔다: 높이를
+       stretch로 일치시키면 달력 카드가 내용 높이를 넘어 늘어나
+       빈 공간이 생기므로 하지 않는다. */
+    .wrap { max-width: none; padding: 20px 20px 64px; }
     .layout {
-      display: grid;
-      grid-template-columns: 300px minmax(0, 1fr) 340px;
+      display: grid; position: relative;
+      grid-template-columns: var(--memo-col-left, 300px) minmax(0, 1fr) var(--memo-col-right, 340px);
       gap: 18px; align-items: start;
     }
+    .col-resizer { display: block; }
     .col-left { grid-column: 1; min-width: 0; }
     .col-mid { grid-column: 2; min-width: 0; }
     .col-right { grid-column: 3; min-width: 0; }
@@ -550,7 +598,6 @@ html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
     .col-left .activefilters { padding-bottom: 8px; }
     .col-left .tagbar { padding-bottom: 10px; }
     .left-scroll { flex: 1; min-height: 0; }
-    .col-left .dayhead { top: 0; font-size: 12px; padding: 8px 4px 6px; }
     #panes:not(:empty) { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
     .col-right { position: sticky; top: 12px; min-width: 0; }
     .col-right .composer { margin-bottom: 16px; flex-shrink: 0; }
@@ -582,7 +629,7 @@ html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
     .left-scroll { order: 6; }
   }
 
-  /* 선택 메모 팬 (우측 열에 세로 스택) */
+  /* 선택 메모 판 (오른쪽 열에 세로 스택) */
   .pane {
     width: 100%;
     background: var(--card); border: 1px solid var(--border);
@@ -598,15 +645,9 @@ html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
   }
   .pane-actions button:hover { background: var(--card-2); color: var(--text); }
   .pane-actions button.danger:hover { color: var(--danger); }
-  .pane-actions .btn-accent.sm {
-    background: var(--text); color: #fff; font-weight: 700;
-    border-radius: 0; padding: 7px 16px; font-size: 13px; border: none; cursor: pointer;
-  }
-  .pane-actions .btn-accent.sm:disabled { opacity: .45; }
-  .pane-actions .btn-accent.sm:active { transform: scale(.96); }
   .pane .rich { min-height: 200px; overflow: visible; scrollbar-width: none; }
   .pane .rich::-webkit-scrollbar { display: none; }
-  .pane-view .pane-body { font-size: 15px; line-height: 1.75; word-break: break-word; }
+  .pane-view .pane-body { font-size: 16px; line-height: 1.75; word-break: break-word; }
   .pane-view .pane-body img { max-width: 100%; height: auto; display: block; margin: 8px 0; }
   .pane-edit .rich { margin-top: 4px; }
   .pane-files { margin-top: 12px; }
@@ -633,45 +674,31 @@ html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
   ::view-transition-old(root), ::view-transition-new(root) { animation-duration: .15s; }
   /* 상단바는 전환 중에도 고정 (깜빡임 방지) */
   ::view-transition-old(topnav), ::view-transition-new(topnav) { animation: none; }
-  /* 모바일 상단바 검색/아이콘 */
-  .nav-search-wrap { display: none; }
-  .nav-icon-btn { display: none; border: none; background: none; cursor: pointer; padding: 8px; color: #6b7280; border-radius: 8px; }
-  .nav-icon-btn:hover { background: rgba(0,0,0,0.05); color: #111; }
-  .nav-icon-btn svg { width: 20px; height: 20px; }
+  /* 검색·달력·태그는 이 뷰포트에서 창 안 컨트롤(#searchBox)이 담당한다.
+     상단바 중복 요소는 갖지 않는다 (사용자 지시 2026-11-04). */
   @media (max-width: 768px) {
     .g-nav .spacer { display: none; }
-    .nav-search-wrap {
-      display: flex; align-items: center; gap: 6px;
-      border: 1px solid var(--border); border-radius: 20px;
-      padding: 6px 12px; background: var(--bg);
-      flex: 1; min-width: 0; margin: 0 8px;
-    }
-    .nav-search-wrap .s-ic { display: flex; color: var(--dim); }
-    .nav-search-wrap .s-ic svg { width: 16px; height: 16px; }
-    .nav-search-wrap input {
-      border: none; outline: none; background: transparent;
-      font-size: 14px; width: 100%; font-family: inherit;
-    }
-    .nav-icon-btn { display: flex; align-items: center; justify-content: center; }
-    #searchBox { display: none; }
   }
-/* 삭제 확인 모달 */
-.confirm-overlay {
+/* PIN step-up 모달(myhub-stepup-*, 공용 step-up.js와 같은 이름 체계) +
+   메모 전용 확인 모달(memo-confirm-*) — N-09 개명 (2026-11-06):
+   일반의 confirm-*가 페이지 CSS 3곳과 값을 올려 짜던 공용 구조를
+   이름으로 분리했다. 이 모달은 메모 페이지 내 값과 개명 전과 동일하다. */
+.myhub-stepup-overlay, .memo-confirm-overlay {
   position: fixed; inset: 0; background: rgba(0,0,0,0.5);
   display: flex; align-items: center; justify-content: center;
   z-index: 10000;
 }
-.confirm-modal {
+.myhub-stepup-modal, .memo-confirm-modal {
   background: #fff; border-radius: 8px; padding: 24px;
   max-width: 320px; width: 90%; box-shadow: 0 4px 20px rgba(0,0,0,0.2);
 }
-.confirm-modal p { margin: 0 0 20px; font-size: 15px; }
-.confirm-btns { display: flex; gap: 10px; justify-content: flex-end; }
-.confirm-btns button {
+.myhub-stepup-modal p, .memo-confirm-modal p { margin: 0 0 20px; font-size: 15px; }
+.myhub-stepup-btns, .memo-confirm-btns { display: flex; gap: 10px; justify-content: flex-end; }
+.myhub-stepup-btns button, .memo-confirm-btns button {
   padding: 8px 20px; border-radius: 6px; border: 1px solid #ddd;
   background: #fff; cursor: pointer; font-size: 14px;
 }
-.confirm-btns .confirm-yes.danger {
+.memo-confirm-btns .memo-confirm-yes.danger {
   background: #dc3545; color: #fff; border-color: #dc3545;
 }
 
@@ -689,27 +716,9 @@ html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
 html, body { overflow-x: hidden; max-width: 100vw; }
 #list, .col-mid { overflow-x: hidden; }
 
-/* 목록 메모 카드 우측상단 편집 버튼 */
+/* 목록 메모 행 */
 #list .row { position: relative; }
-#list .row .row-edit {
-  position: absolute; top: 8px; right: 8px;
-  width: 32px; height: 32px; border-radius: 6px;
-  background: transparent; border: 1px solid transparent;
-  display: flex; align-items: center; justify-content: center;
-  cursor: pointer; opacity: 0.5; transition: all 0.15s;
-}
-
-#list .row .row-edit svg { width: 15px; height: 15px; color: #64748b; }
-/* 모바일 메모 카드 편집 버튼 (원래 디자인 유지) */
 #list li.memo { position: relative; }
-#list li.memo .row-edit {
-  position: absolute; top: 8px; right: 8px;
-  width: 28px; height: 28px;
-  background: transparent; border: none;
-  display: flex; align-items: center; justify-content: center;
-  cursor: pointer; opacity: 0.5;
-}
-#list li.memo .row-edit svg { width: 14px; height: 14px; color: #999; }
 /* 모바일 메모 날짜 */
 #list li.memo .memo-date { font-size: 12px; color: #999; margin-bottom: 6px; }
 
@@ -721,24 +730,8 @@ html, body { overflow-x: hidden; max-width: 100vw; }
     background: #fff; overflow-y: auto;
     padding: 16px; margin: 0;
   }
-  .pane.mobile-modal .pane-close-mobile {
-    position: sticky; top: 0; float: right;
-    width: 36px; height: 36px; border-radius: 50%;
-    background: #f1f5f9; border: none; font-size: 18px;
-    display: flex; align-items: center; justify-content: center;
-  }
 }
-/* 모바일 인라인 pane (카드 아래에 펼침) */
-@media (max-width: 1023.98px) {
-  .pane.mobile-inline {
-    display: block !important;
-    position: static !important;
-    margin: 8px 0 16px 0;
-    border: 1px solid var(--border);
-    background: var(--card);
-  }
-}
-/* 모바일에서 JS로 표시된 pane은 보이도록 */
+/* 모바일에서 JS로 표시한 pane이 보이도록 */
 @media (max-width: 1023.98px) {
   #panes .pane[style*="display: block"],
   #panes .pane[style*="display:block"] {

@@ -27,16 +27,6 @@ const GoogleConnect = require('../public/js/google-connect')
 const ROOT = path.resolve(__dirname, '..')
 const SCHEDULE_HTML = fs.readFileSync(path.join(ROOT, 'public', 'schedule.html'), 'utf-8')
 
-const ROW_HTML = `
-<div class="google-row" id="googleRow">
-  <div class="google-info">
-    <div class="google-title">Google 연동 <span class="google-status" id="googleStatusLabel" data-state="unknown">확인 중…</span></div>
-    <div class="google-desc" id="googleStatusDesc"></div>
-  </div>
-  <button id="googleConnectBtn" type="button" style="display:none;">연결하기</button>
-  <button id="googleDisconnectBtn" type="button" style="display:none;">연결 해제</button>
-</div>`
-
 interface FakeLocation {
   href: string
   search: string
@@ -47,9 +37,13 @@ function getDoc(): any {
   return (globalThis as any).document
 }
 
+// 운영 google-connect.js는 일정 화면 행이 아니라 설정 메뉴 패널이다:
+// createConnectMenu(deps)가 .g-nav를 가진 최상위 문서에 #myhubConnectMenu
+// 패널을 만들고, 설정 메뉴 항목(onSelect → openMenu)으로 열린다.
 function makeHarness(statusQueue: Array<Record<string, unknown>>, search = '') {
   const doc = getDoc()
-  doc.body.innerHTML = ROW_HTML
+  doc.body.innerHTML = '<header class="g-nav"></header>'
+  const win = getWin()
   const calls: Array<{ url: string; method: string }> = []
   const location: FakeLocation = { href: '', search, pathname: '/schedule.html' }
   const history = { replaceState: jest.fn() }
@@ -59,7 +53,44 @@ function makeHarness(statusQueue: Array<Record<string, unknown>>, search = '') {
     const next = statusQueue.shift() ?? { connected: false, configured: true }
     return { json: async () => next }
   })
-  return { doc, calls, location, history, fetchMock }
+  const registered: any[] = []
+  const nav = {
+    addSettingsItems: (items: any[]) => {
+      registered.push(...items)
+    },
+  }
+  const root: any = GoogleConnect.createConnectMenu({
+    doc,
+    win,
+    fetchFn: fetchMock,
+    location,
+    history,
+    nav,
+  })
+  const q = (sel: string): any => root.querySelector(sel)
+  return {
+    doc,
+    root,
+    calls,
+    location,
+    history,
+    fetchMock,
+    registered,
+    // onSelect는 openMenu의 promise를 돌려주지 않으므로 flush로 렌더를 기다린다
+    open: async () => {
+      registered[0].onSelect()
+      await flush()
+    },
+    pill: () => q('.myhub-connect-pill'),
+    desc: () => q('.myhub-connect-desc'),
+    note: () => q('.myhub-connect-note'),
+    connectBtn: () => q('.myhub-connect-action.solid'),
+    disconnectBtn: () => q('.myhub-connect-action.ghost'),
+  }
+}
+
+function getWin(): any {
+  return (globalThis as any).window
 }
 
 const flush = () => new Promise<void>((resolve) => setTimeout(resolve, 10))
@@ -134,45 +165,58 @@ describe('googleCallbackNotice — ?google= 복귀 안내', () => {
   })
 })
 
-describe('init — jsdom + fetch 모의로 버튼 동작', () => {
+describe('createConnectMenu — 설정 메뉴 패널 동작 (jsdom + fetch 모의)', () => {
+  test('설정 메뉴에 Google 연동 항목이 등록되고, 패널은 닫힌 상태로 만들어진다', () => {
+    const h = makeHarness([{ connected: true, configured: true }])
+    expect(h.root).not.toBeNull()
+    expect(h.root.id).toBe('myhubConnectMenu')
+    expect(h.root.hidden).toBe(true)
+    expect(h.registered).toHaveLength(1)
+    expect(h.registered[0].id).toBe('google-connect')
+    expect(h.registered[0].label).toBe('Google 연동')
+    expect(h.doc.querySelector('.myhub-connect-panel').getAttribute('aria-label')).toBe('Google 연동')
+  })
+
+  test('.g-nav가 없는 문서에서는 패널을 만들지 않는다', () => {
+    const doc = getDoc()
+    doc.body.innerHTML = '<main></main>'
+    const root = GoogleConnect.createConnectMenu({
+      doc,
+      win: getWin(),
+      fetchFn: jest.fn(),
+      location: { href: '', search: '', pathname: '/' },
+      history: { replaceState: jest.fn() },
+      nav: { addSettingsItems: jest.fn() },
+    })
+    expect(root).toBeNull()
+  })
+
   test('연결됨 상태: 라벨·설명·버튼 표시가 status 응답과 일치', async () => {
     const h = makeHarness([{ connected: true, email: 'jn817k@gmail.com', configured: true }])
-    await GoogleConnect.init({
-      doc: h.doc,
-      fetchFn: h.fetchMock,
-      location: h.location,
-      history: h.history,
-    })
+    await h.open()
+    expect(h.root.hidden).toBe(false)
     expect(h.fetchMock).toHaveBeenCalledWith('/api/google/status')
-    expect(h.doc.getElementById('googleStatusLabel').textContent).toBe('연결됨')
-    expect(h.doc.getElementById('googleStatusDesc').textContent).toContain('jn817k@gmail.com')
-    expect(h.doc.getElementById('googleConnectBtn').style.display).toBe('none')
-    expect(h.doc.getElementById('googleDisconnectBtn').style.display).toBe('')
+    expect(h.pill().textContent).toBe('연결됨')
+    expect(h.pill().getAttribute('data-state')).toBe('connected')
+    expect(h.desc().textContent).toContain('jn817k@gmail.com')
+    expect(h.connectBtn().style.display).toBe('none')
+    expect(h.disconnectBtn().style.display).toBe('')
+    expect(h.note().textContent).toBe('읽기 전용')
   })
 
   test('미연결 상태: 연결 안 됨 표시 + 연결 버튼 클릭이 /api/google/oauth/start로 이동', async () => {
     const h = makeHarness([{ connected: false, configured: true }])
-    await GoogleConnect.init({
-      doc: h.doc,
-      fetchFn: h.fetchMock,
-      location: h.location,
-      history: h.history,
-    })
-    expect(h.doc.getElementById('googleStatusLabel').textContent).toBe('연결 안 됨')
-    expect(h.doc.getElementById('googleConnectBtn').style.display).toBe('')
-    h.doc.getElementById('googleConnectBtn').click()
+    await h.open()
+    expect(h.pill().textContent).toBe('연결 안 됨')
+    expect(h.connectBtn().style.display).toBe('')
+    h.connectBtn().click()
     expect(h.location.href).toBe('/api/google/oauth/start')
   })
 
   test('미설정 상태: 연결 버튼이 비활성화되고 클릭해도 이동하지 않음', async () => {
     const h = makeHarness([{ connected: false, configured: false }])
-    await GoogleConnect.init({
-      doc: h.doc,
-      fetchFn: h.fetchMock,
-      location: h.location,
-      history: h.history,
-    })
-    const btn = h.doc.getElementById('googleConnectBtn')
+    await h.open()
+    const btn = h.connectBtn()
     expect(btn.hasAttribute('disabled')).toBe(true)
     btn.click()
     expect(h.location.href).toBe('')
@@ -183,96 +227,66 @@ describe('init — jsdom + fetch 모의로 버튼 동작', () => {
       { connected: true, email: 'jn817k@gmail.com', configured: true },
       { connected: false, configured: true },
     ])
-    await GoogleConnect.init({
-      doc: h.doc,
-      fetchFn: h.fetchMock,
-      location: h.location,
-      history: h.history,
-    })
-    expect(h.doc.getElementById('googleStatusLabel').textContent).toBe('연결됨')
-    h.doc.getElementById('googleDisconnectBtn').click()
+    await h.open()
+    expect(h.pill().textContent).toBe('연결됨')
+    h.disconnectBtn().click()
     await flush()
     expect(h.calls).toContainEqual({ url: '/api/google/disconnect', method: 'POST' })
-    expect(h.doc.getElementById('googleStatusLabel').textContent).toBe('연결 안 됨')
-    expect(h.doc.getElementById('googleConnectBtn').style.display).toBe('')
+    expect(h.pill().textContent).toBe('연결 안 됨')
+    expect(h.connectBtn().style.display).toBe('')
   })
 
-  test('?google=connected 복귀: 연결 안내를 보여주고 쿼리를 지운다 — 이메일도 함께 보인다', async () => {
+  test('?google=connected 복귀: 패널이 자동으로 열리고 안내와 이메일을 함께 보여주며 쿼리를 지운다', async () => {
     const h = makeHarness(
       [{ connected: true, email: 'jn817k@gmail.com', configured: true }],
       '?google=connected',
     )
-    await GoogleConnect.init({
-      doc: h.doc,
-      fetchFn: h.fetchMock,
-      location: h.location,
-      history: h.history,
-    })
+    await flush()
     // 콜백 안내가 desc를 통째로 덮으면 이메일이 사라진다 (2026-10-28 QA 결함 ②).
     // 안내와 이메일 설명을 합쳐 둘 다 보여야 한다.
-    expect(h.doc.getElementById('googleStatusDesc').textContent).toContain('Google 계정이 연결됐어요.')
-    expect(h.doc.getElementById('googleStatusDesc').textContent).toContain('jn817k@gmail.com')
+    expect(h.root.hidden).toBe(false)
+    expect(h.desc().textContent).toContain('Google 계정이 연결됐어요.')
+    expect(h.desc().textContent).toContain('jn817k@gmail.com')
     expect(h.history.replaceState).toHaveBeenCalledWith(null, '', '/schedule.html')
   })
 
   test('?google=denied 복귀: 거부 안내를 보여준다', async () => {
     const h = makeHarness([{ connected: false, configured: true }], '?google=denied')
-    await GoogleConnect.init({
-      doc: h.doc,
-      fetchFn: h.fetchMock,
-      location: h.location,
-      history: h.history,
-    })
-    expect(h.doc.getElementById('googleStatusDesc').textContent).toContain('거부됐어요')
+    await flush()
+    expect(h.desc().textContent).toContain('거부됐어요')
   })
 
   test('status 조회 실패: 상태 확인 불가 표시', async () => {
     const h = makeHarness([])
     h.fetchMock.mockRejectedValueOnce(new Error('network down'))
-    await GoogleConnect.init({
-      doc: h.doc,
-      fetchFn: h.fetchMock,
-      location: h.location,
-      history: h.history,
-    })
-    expect(h.doc.getElementById('googleStatusLabel').textContent).toBe('상태 확인 불가')
+    await h.open()
+    expect(h.pill().textContent).toBe('상태 확인 불가')
+    expect(h.connectBtn().style.display).toBe('')
   })
 })
 
-describe('init — 쓰기 활성화 시 연결 버튼이 ?mode=write로 시작한다 (QA 결함 ①)', () => {
-  test('writeEnabled:true → 연결 클릭이 /api/google/oauth/start?mode=write로 이동', async () => {
+describe('createConnectMenu — 쓰기 활성화 시 연결 버튼이 ?mode=write로 시작한다 (QA 결함 ①)', () => {
+  test('writeEnabled:true → 연결 클릭이 /api/google/oauth/start?mode=write로 이동 + 쓰기 가능 고지', async () => {
     const h = makeHarness([{ connected: false, configured: true, writeEnabled: true }])
-    await GoogleConnect.init({
-      doc: h.doc,
-      fetchFn: h.fetchMock,
-      location: h.location,
-      history: h.history,
-    })
-    h.doc.getElementById('googleConnectBtn').click()
+    await h.open()
+    // 고지 문구의 가운데점(·) 유무는 전사 경계 근사 영역이라 단언하지 않는다
+    expect(h.note().textContent).toContain('쓰기 가능')
+    expect(h.note().textContent).not.toBe('읽기 전용')
+    h.connectBtn().click()
     expect(h.location.href).toBe('/api/google/oauth/start?mode=write')
   })
 
   test('writeEnabled:false → 연결 클릭이 읽기 전용 시작(기존 동작) 그대로', async () => {
     const h = makeHarness([{ connected: false, configured: true, writeEnabled: false }])
-    await GoogleConnect.init({
-      doc: h.doc,
-      fetchFn: h.fetchMock,
-      location: h.location,
-      history: h.history,
-    })
-    h.doc.getElementById('googleConnectBtn').click()
+    await h.open()
+    h.connectBtn().click()
     expect(h.location.href).toBe('/api/google/oauth/start')
   })
 
   test('writeEnabled 필드 없음(구버전 응답) → 읽기 전용 시작', async () => {
     const h = makeHarness([{ connected: false, configured: true }])
-    await GoogleConnect.init({
-      doc: h.doc,
-      fetchFn: h.fetchMock,
-      location: h.location,
-      history: h.history,
-    })
-    h.doc.getElementById('googleConnectBtn').click()
+    await h.open()
+    h.connectBtn().click()
     expect(h.location.href).toBe('/api/google/oauth/start')
   })
 
@@ -281,46 +295,28 @@ describe('init — 쓰기 활성화 시 연결 버튼이 ?mode=write로 시작�
       { connected: true, email: 'jn817k@gmail.com', configured: true, writeEnabled: false },
       { connected: false, configured: true, writeEnabled: true },
     ])
-    await GoogleConnect.init({
-      doc: h.doc,
-      fetchFn: h.fetchMock,
-      location: h.location,
-      history: h.history,
-    })
-    h.doc.getElementById('googleDisconnectBtn').click()
+    await h.open()
+    h.disconnectBtn().click()
     await flush()
-    expect(h.doc.getElementById('googleStatusLabel').textContent).toBe('연결 안 됨')
-    h.doc.getElementById('googleConnectBtn').click()
+    expect(h.pill().textContent).toBe('연결 안 됨')
+    h.connectBtn().click()
     expect(h.location.href).toBe('/api/google/oauth/start?mode=write')
   })
 
   test('status 조회 실패 시 연결 클릭은 읽기 전용 시작(안전 기본값)', async () => {
     const h = makeHarness([])
     h.fetchMock.mockRejectedValueOnce(new Error('network down'))
-    await GoogleConnect.init({
-      doc: h.doc,
-      fetchFn: h.fetchMock,
-      location: h.location,
-      history: h.history,
-    })
-    h.doc.getElementById('googleConnectBtn').click()
+    await h.open()
+    h.connectBtn().click()
     expect(h.location.href).toBe('/api/google/oauth/start')
   })
 })
 
-describe('init — 연결된 이메일 표시 (QA 결함 ②)', () => {
+describe('createConnectMenu — 연결된 이메일 표시 (QA 결함 ②)', () => {
   test('연결됨 + 이메일 없음 + ?google=connected: 안내는 보이고 undefined이 새지 않음', async () => {
-    const h = makeHarness(
-      [{ connected: true, configured: true }],
-      '?google=connected',
-    )
-    await GoogleConnect.init({
-      doc: h.doc,
-      fetchFn: h.fetchMock,
-      location: h.location,
-      history: h.history,
-    })
-    const desc = h.doc.getElementById('googleStatusDesc').textContent
+    const h = makeHarness([{ connected: true, configured: true }], '?google=connected')
+    await flush()
+    const desc = h.desc().textContent
     expect(desc).toContain('Google 계정이 연결됐어요.')
     expect(desc).not.toContain('undefined')
   })

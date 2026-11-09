@@ -1,317 +1,797 @@
-/* MyHub 오피스 비서 — 노바 패널 + instruct 파이프라인 (원본 설계 복원).
- *
- * 정본 복원 (일일 기록 2026-11-02~03 + 운영 번들 서버 계약 이중 대조):
- * 이 모듈이 #officeAssistantBtn(노바 아바타 버튼)과 패널을 소유한다. 셸
- * (windows.js)이 이 버튼을 상단바 AI 슬롯에 프록시한다.
- *
- * 대화 흐름은 범용 채팅이 아니다: 지시 → 세션 스냅샷(office-sessions.js) →
- * POST /api/ai/office/instruct {app, fileName, instruction, snapshot} →
- * 서버가 {reply, ops, validationErrors}를 돌려주면 세션이 확인된 연산자
- * 문법(ops)만 문서에 적용한다. 결과 합성은 실패를 먼저 보여주고(연산별
- * 실패 + 서버 validationErrors), 실패가 하나라도 있으면 답변 아래에
- * "적용 전에 작성된 내용이라 실제 결과와 다를 수 있어요"를 고지한다
- * (D-36/D-38 정본). reply는 적용 전에 쓰인 글이라 실패를 숨기면 안 된다.
- *
- * '메모로 만들기': /api/ai/office/memos에서 고른 메모를 문서로 만든다.
- * - excel: /from-memo ops 경로 (새 문서를 열고 ops 적용)
- * - hangul: /from-memo-doc 마크다운 → kordoc markdownToHwpx 바이트 경로가
- *   1차 (엔진 ops 왕복보다 결정적 — D-35 정본)
- * - slide·pdf: 버튼 자체를 숨긴다 (원본 기록: 슬라이드는 메모 변환 없음).
- *
- * 노출: window.MyHubOfficeAssistant { attach, composeResult }
- */
+// 오 피스 (office-assistant.js) 비서 등 AI 전체의
+//
+// 구조 (서브차트 등 숨긴 2단계, 2026-11-06): 세션 코어의 화면 슬라이더를
+// 분리한다. 코어(createCore)지정 실행 메모로 만들기 초기화/발송인
+// 데이터 흐름만 갖고, 결과는 emit 로만(say/findings/busy)내보 낸다.
+// 드라이브가 등 가진다.
+//   - 로컬 드라이브: 단독 페이지(window.parent === window)에서만 붙는
+//     종전 전체 UI (#officeAssistant 단락 + 버튼 뷰어 + 플 로우
+//     버튼). 등창 안에 있는 등 단락이 그 않는다.
+//   - 브리지 드라이브: 등창 안에 있는 영역(myhub:assistant-declare,
+//     flavor 'office')를 게시하고, 이 서브차트 단락이 보낸 명령
+//     (myhub:assistant-office)를 코어로 실행한 결과를 알려준다. 메일
+//     본인 선택한 등 창 안에만 온다 (새로 내보내지 않는다).
+// 지정 등 서버(/api/ai/office) 검증한 연산 등 형식 세션 대변 으로
+// 편집기에 적용한 등 결과를 정확하게 표시. 메모로 만들기(조회 규칙인
+// 서버 ai-access 경계), 메일(초대 게이트 등 발송인 서버
+// 본인 선택한 있어만 실행한다)를 여기서 시작한다.
 (function () {
   'use strict';
-
-  var KIND_BY_APP = { excel: 'excel', hangul: 'hangul', pdf: 'pdf', powerpoint: 'slide' };
-
-  var EXAMPLES = {
-    excel: ['합계 열을 추가해줘', '1행을 굵게 해줘', '금액 큰 순으로 정렬해줘'],
-    hangul: ['맨 아래에 총무팀 문단을 추가해줘', "'검토 요망'을 '검토 완료'로 바꿔줘"],
-    pdf: ['2페이지를 회전해줘', '1페이지를 삭제해줘', '1쪽에 검토 완료 표시를 넣어줘'],
-    slide: ["제목을 '분기 보고'로 바꿔줘", '새 슬라이드를 추가해줘'],
-  };
-
-  var OP_LABELS = {
-    set_cell: '셀 입력', set_formula: '수식 입력', fill_range: '범위 채우기',
-    insert_rows: '행 삽입', insert_cols: '열 삽입', delete_rows: '행 삭제', delete_cols: '열 삭제',
-    set_style: '서식', set_col_width: '열 너비', rename_sheet: '시트 이름',
-    add_sheet: '시트 추가', delete_sheet: '시트 삭제', merge_cells: '셀 병합',
-    sort_range: '정렬', set_freeze: '틀 고정', set_number_format: '표시 형식',
-    append_paragraphs: '문단 추가', replace_text: '텍스트 바꾸기', insert_table: '표 삽입',
-    rotate_page: '페이지 회전', delete_page: '페이지 삭제', extract_pages: '페이지 추출',
-    overlay_text: '텍스트 덧쓰기',
-    'slide.new': '슬라이드 추가', 'text.set': '텍스트 설정', 'text.replace': '텍스트 바꾸기',
-    'insert.textBox': '텍스트 상자 삽입',
-  };
-
-  function opLabel(op) {
-    if (!op) return '연산';
-    var key = op.type || op.id || '';
-    return OP_LABELS[key] || key || '연산';
+  if (typeof window === 'undefined' || typeof document === 'undefined') return;
+  var root = document.getElementById('officeAssistant');
+  if (!root || !window.MyHubOffice) return;
+  var appKey = window.MyHubOffice.parseAppKey(window.location.search);
+  var kind =
+    appKey === 'excel'
+      ? 'excel'
+      : appKey === 'hangul'
+        ? 'hangul'
+        : appKey === 'pdf'
+          ? 'pdf'
+          : appKey === 'powerpoint'
+            ? 'slide'
+            : null;
+  if (!kind) {
+    // 담을한 형식 세션이 없는 등 등 비서를 붙이지 않고, 상단바
+    // 진 행한 버튼과 함께 (치수는 클릭 등 없는 버튼 금지)
+    var orphanBtn = document.getElementById('officeAssistantBtn');
+    if (orphanBtn && orphanBtn.parentNode) orphanBtn.parentNode.removeChild(orphanBtn);
+    return;
   }
 
-  /**
-   * 결과 합성 (순수 함수 — 테스트 대상). 실패가 먼저, 그 다음 답변, 실패가
-   * 있으면 끝에는 "적용 전 작성" 고지. validationErrors도 실패로 표면화한다.
-   */
-  function composeResult(data, results) {
-    data = data || {};
-    results = results || [];
-    var failed = results.filter(function (r) { return !r.ok; });
-    var applied = results.length - failed.length;
-    var validationErrors = Array.isArray(data.validationErrors) ? data.validationErrors : [];
-    var lines = [];
-    if (failed.length || validationErrors.length) {
-      lines.push('적용하지 못한 항목이 있어요:');
-      validationErrors.forEach(function (e) { lines.push('- ' + e); });
-      failed.forEach(function (f) {
-        lines.push('- ' + opLabel(f.op) + (f.error ? ': ' + f.error : ''));
-      });
-      if (applied > 0) lines.push('(' + applied + '개 연산은 적용했어요)');
-    }
-    if (data.reply) lines.push(data.reply);
-    if ((failed.length || validationErrors.length) && data.reply) {
-      lines.push('※ 위 답변은 적용 전에 작성된 내용이라 실제 결과와 다를 수 있어요.');
-    }
-    if (!lines.length) lines.push(applied > 0 ? '적용했어요.' : '처리했어요.');
-    return lines.join('\n');
+  var doc = document;
+  function el(tag, cls, text) {
+    var e = doc.createElement(tag);
+    if (cls) e.className = cls;
+    if (text !== undefined) e.textContent = text;
+    return e;
   }
-
-  function attach(opts) {
-    var host = opts.host;         // office.js 상태 접근자 모음
-    var session = opts.session;   // office-sessions 세션 (없으면 안내만)
-    var state = host.getState();
-    var kind = KIND_BY_APP[state.app] || null;
-
-    var btn = document.createElement('button');
-    btn.type = 'button';
-    btn.id = 'officeAssistantBtn';
-    btn.className = 'g-icon-btn';
-    btn.title = '노바에게 문서 작업 시키기';
-    btn.setAttribute('aria-label', '노바 비서 열기');
-    btn.innerHTML = '<img class="aw-avatar-img" src="/avatars/nova.webp" alt="">';
-    var nav = document.querySelector('.g-nav');
-    if (nav) nav.appendChild(btn);
-
-    var panel = document.createElement('section');
-    panel.id = 'oaPanel';
-    panel.className = 'oa-panel';
-    panel.setAttribute('aria-label', '노바 문서 비서');
-    panel.innerHTML =
-      '<div class="oa-head">' +
-        '<img class="aw-avatar-img" src="/avatars/nova.webp" alt="">' +
-        '<div class="oa-head-text"><strong>노바</strong><span>문서 비서</span></div>' +
-        '<button type="button" class="oa-close" aria-label="닫기">×</button>' +
-      '</div>' +
-      '<div class="oa-msgs" id="oaMsgs"></div>' +
-      '<div class="oa-memo-list" id="oaMemoList" hidden></div>' +
-      '<div class="oa-foot">' +
-        (kind === 'excel' || kind === 'hangul'
-          ? '<button type="button" class="oa-memo-btn" id="oaMemoBtn">메모로 만들기</button>'
-          : '') +
-        '<div class="oa-input-row">' +
-          '<input type="text" id="oaInput" placeholder="문서로 할 일을 적어주세요" autocomplete="off">' +
-          '<button type="button" id="oaSend">보내기</button>' +
-        '</div>' +
-      '</div>';
-    document.body.appendChild(panel);
-    var msgs = panel.querySelector('#oaMsgs');
-    var input = panel.querySelector('#oaInput');
-    var memoList = panel.querySelector('#oaMemoList');
-    var busy = false;
-
-    function addMsg(role, text) {
-      var div = document.createElement('div');
-      div.className = 'oa-msg ' + role;
-      div.textContent = text;
-      msgs.appendChild(div);
-      msgs.scrollTop = msgs.scrollHeight;
-      return div;
-    }
-    function setOpen(open) {
-      panel.classList.toggle('open', open);
-      if (open) input.focus();
-    }
-    btn.addEventListener('click', function () { setOpen(!panel.classList.contains('open')); });
-    panel.querySelector('.oa-close').addEventListener('click', function () { setOpen(false); });
-
-    var examples = EXAMPLES[state.app] || [];
-    if (examples.length) {
-      addMsg('assistant', '이 문서로 할 일을 말씀해 주세요. 예: ' + examples.join(' · '));
-    } else {
-      addMsg('assistant', '이 문서로 할 일을 말씀해 주세요.');
-    }
-
-    function runInstruction(text) {
-      if (busy || !text) return Promise.resolve();
-      busy = true;
-      addMsg('user', text);
-      var thinking = addMsg('assistant', '작업 중이에요…');
-      var finish = function (msg) {
-        thinking.textContent = msg;
-        msgs.scrollTop = msgs.scrollHeight;
-        busy = false;
-      };
-      if (!kind || !session) {
-        finish('이 앱에서는 아직 문서 비서를 쓸 수 없어요.');
-        return Promise.resolve();
-      }
-      var st = host.getState();
-      // snapshot()이 동기적으로 던지면(세션 배선 결함 등) busy가 영원히
-      // 풀리지 않아 패널이 "작업 중"에 고정된다 — 반드시 체인 안에서
-      // 호출해 어떤 예외도 아래 catch → finish로 표면화한다 (F6 가드).
-      var doSnapshot = Promise.resolve().then(function () {
-        return session.snapshot ? session.snapshot() : null;
+  function postJson(path, body) {
+    return fetch(path, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'same-origin',
+      body: JSON.stringify(body || {}),
+    }).then(function (res) {
+      return res.json().catch(function () {
+        return null;
+      }).then(function (json) {
+        return { status: res.status, json: json };
       });
-      return doSnapshot.catch(function () { return null; }).then(function (snapshot) {
-        return fetch('/api/ai/office/instruct', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            app: kind,
-            fileName: st.fileName,
-            instruction: text,
-            snapshot: snapshot,
-          }),
-        });
-      }).then(function (r) {
-        return r.json().catch(function () { return { ok: false, error: 'bad response' }; }).then(function (data) {
-          if (!r.ok || !data || data.ok !== true) {
-            var code = data && data.error;
-            finish(
-              code === 'ai_not_configured' ? 'AI가 아직 설정되지 않았어요.'
-              : code === 'instruction_required' || code === 'empty_instruction' ? '지시가 비어 있어요.'
-              : '비서 호출에 실패했어요. 잠시 뒤 다시 시도해 주세요.'
-            );
-            return null;
-          }
-          var ops = Array.isArray(data.ops) ? data.ops : [];
-          if (!ops.length) {
-            finish(composeResult(data, []));
-            return null;
-          }
-          return Promise.resolve().then(function () { return session.applyOps(ops); }).then(function (results) {
-            finish(composeResult(data, results || []));
-            return null;
-          });
-        });
-      }).catch(function () {
-        finish('비서 호출에 실패했어요. 네트워크를 확인해 주세요.');
-      });
-    }
-
-    function send() {
-      var text = input.value.trim();
-      if (!text) return;
-      input.value = '';
-      runInstruction(text);
-    }
-    panel.querySelector('#oaSend').addEventListener('click', send);
-    input.addEventListener('keydown', function (e) {
-      if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); send(); }
     });
+  }
+  function getJson(path) {
+    return fetch(path, { credentials: 'same-origin' }).then(function (res) {
+      return res.json();
+    });
+  }
 
-    /* ---- 메모로 만들기 ---- */
-    var memoBtn = panel.querySelector('#oaMemoBtn');
-    if (memoBtn) {
-      memoBtn.addEventListener('click', function () {
-        if (busy) return;
-        memoList.hidden = !memoList.hidden;
-        if (memoList.hidden || memoList.dataset.loaded) return;
-        memoList.dataset.loaded = '1';
-        memoList.innerHTML = '<div class="oa-memo-empty">메모를 불러오는 중…</div>';
-        fetch('/api/ai/office/memos?q=')
-          .then(function (r) { return r.json(); })
-          .then(function (data) {
-            var memos = (data && data.memos) || [];
-            if (!memos.length) {
-              memoList.innerHTML = '<div class="oa-memo-empty">변환할 메모가 없어요.</div>';
-              return;
-            }
-            memoList.innerHTML = '';
-            memos.forEach(function (m) {
-              var b = document.createElement('button');
-              b.type = 'button';
-              b.className = 'oa-memo-item';
-              b.textContent = m.title || '제목 없음';
-              b.addEventListener('click', function () { fromMemo(m); });
-              memoList.appendChild(b);
-            });
-          })
-          .catch(function () {
-            memoList.innerHTML = '<div class="oa-memo-empty">메모를 불러오지 못했어요.</div>';
-          });
-      });
+  // 오피스 세션 코어 구분선
+  // emit = { say(text), findings(list), busy(on, label) } 의 드라이브가
+  // 가져와서 출력 아래이다. 코어는 DOM를 직접 맞지 않는다.
+  function createCore() {
+    var emit = {
+      say: function () {},
+      findings: function () {},
+      busy: function () {},
+    };
+    var busyFlag = false;
+    var mailDraft = null;
+
+    function officeApp() {
+      return window.MyHubOfficeApp || null;
+    }
+    function currentFile() {
+      var inst = officeApp();
+      var cur = inst && inst.getCurrent ? inst.getCurrent() : null;
+      if (!cur) return null;
+      // office.js에서 current를 보면 객체 {fileId, name, isNew} (fileId 0 = 새 문서)
+      return { fileId: cur.fileId ? cur.fileId : null, name: cur.name || '' };
+    }
+    function getSession() {
+      if (kind === 'excel') {
+        return window.MyHubFinderFormatSheet ? window.MyHubFinderFormatSheet.getSession() : null;
+      }
+      if (kind === 'hangul') {
+        return window.MyHubFinderFormatHwp && window.MyHubFinderFormatHwp.getSession
+          ? window.MyHubFinderFormatHwp.getSession()
+          : null;
+      }
+      if (kind === 'slide') {
+        return window.MyHubFinderFormatSlide && window.MyHubFinderFormatSlide.getSession
+          ? window.MyHubFinderFormatSlide.getSession()
+          : null;
+      }
+      return window.MyHubFinderFormatPdf && window.MyHubFinderFormatPdf.getSession
+        ? window.MyHubFinderFormatPdf.getSession()
+        : null;
+    }
+    function collectSnapshot(session) {
+      if (kind === 'excel' || kind === 'slide') return session.snapshot();
+      if (kind === 'hangul') return session.readText();
+      return Promise.resolve(session.getState ? session.getState() : null);
+    }
+    function setBusy(on, label) {
+      busyFlag = on;
+      emit.busy(on, label);
+    }
+    // 서버가 1차로 연산 블록을 측에서 분리하지만, 어떤 경로로든
+    // 다시 마커가 측을 이면 사용자에게 보이지 않게 지는 이쪽
+    // 방어. 완성 블록을 핵심으로 가지고, 닫히지 않는 블록은 오는
+    // 마커 부분 끝까지 (않으면 연산 블록 계약 측에만 온다).
+    var OPS_MARKER_RE = /\[\s*\/?\s*OFFICE_OPS\s*\]/i;
+    function stripOpsResidue(text) {
+      var out = String(text || '').replace(/\[OFFICE_OPS\][\s\S]*?\[\/OFFICE_OPS\]/gi, '');
+      for (var i = 0; i < 4; i++) {
+        var m = OPS_MARKER_RE.exec(out);
+        if (!m) break;
+        if (m[0].indexOf('/') >= 0) {
+          out = out.slice(0, m.index) + out.slice(m.index + m[0].length);
+        } else {
+          out = out.slice(0, m.index);
+          break;
+        }
+      }
+      return out.trim();
+    }
+    function applyReportText(result, fallbackMsg) {
+      if (!result) return fallbackMsg || '적용 결과를 받지 못했어요.';
+      var errs = result.errors || [];
+      if (errs.length === 0) return '연산 ' + result.applied + '개를 적용했어요.';
+      var first = errs[0] && errs[0].message ? errs[0].message : '알 수 없는 오류';
+      return '연산 ' + result.applied + '개 적용, ' + errs.length + '개 실패했어요. (첫 실패: ' + first + ')';
+    }
+    function reportApply(result, fallbackMsg) {
+      emit.say(applyReportText(result, fallbackMsg));
     }
 
-    function fromMemo(memo) {
-      if (busy) return;
-      busy = true;
-      memoList.hidden = true;
-      var thinking = addMsg('assistant', '메모를 문서로 만드는 중이에요…');
-      var finish = function (msg) { thinking.textContent = msg; busy = false; };
-      if (kind === 'hangul') {
-        // 한글은 마크다운→hwpx 바이트 경로가 1차 (D-35 정본).
-        fetch('/api/ai/office/from-memo-doc', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ memoId: memo.id }),
-        }).then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
-          .then(function (res) {
-            if (!res.ok || !res.data || res.data.ok !== true || !res.data.markdown) {
-              finish('문서를 만들지 못했어요. 다시 시도해 주세요.');
-              return null;
-            }
-            var title = res.data.title || memo.title || '새 문서';
-            var name = title.replace(/[\\/:*?"<>|]/g, '').trim() + '.hwpx';
-            return host.kordoc().then(function (kordoc) {
-              return Promise.resolve(kordoc.markdownToHwpx(res.data.markdown, title)).then(function (bytes) {
-                var blob = new Blob([bytes], { type: 'application/octet-stream' });
-                return host.officeFetch().createFile(name, blob);
-              }).then(function (created) {
-                return host.openFile(created.id, name).then(function () {
-                  finish('"' + title + '" 문서를 만들었어요.');
-                });
-              });
-            });
-          })
-          .catch(function () { finish('문서를 만들지 못했어요. 다시 시도해 주세요.'); });
-        return;
+    function runInstruction(instruction) {
+      instruction = String(instruction || '').trim();
+      if (!instruction || busyFlag) return Promise.resolve(false);
+      var session = getSession();
+      if (!session) {
+        emit.say('먼저 문서를 열어 주세요. 문서가 열려 있어야 비서가 고칠 수 있어요.');
+        return Promise.resolve(false);
       }
-      // excel: /from-memo ops → 새 문서에 적용
-      fetch('/api/ai/office/from-memo', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ memoId: memo.id, target: 'excel' }),
-      }).then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
-        .then(function (res) {
-          if (!res.ok || !res.data || res.data.ok !== true) {
-            finish('문서를 만들지 못했어요. 다시 시도해 주세요.');
-            return null;
+      var file = currentFile();
+      setBusy(true, '비서가 작업 중이에요');
+      emit.say('');
+      emit.findings([]);
+      var snapshotCapped = false;
+      var replyText = '';
+      // 결함 수정 (2026-11-09 재건 중 발견): collectSnapshot이 동기적으로
+      // 던지면(세션 배선 결함 등) .catch에 닿지 못해 busy가 영원히 풀리지
+      // 않았다. Promise.resolve() 경유로 동기 throw도 null로 접는다.
+      return Promise.resolve()
+        .then(function () {
+          return collectSnapshot(session);
+        })
+        .catch(function () {
+          return null;
+        })
+        .then(function (snapshot) {
+          // E-4 고정: 시트 열람 엔진 캡(120행30열)을 우측하면 비서가
+          // 본 범위가 전체가 아니란 사용자에게 결정적으로 알린다 (모델
+          // 측만 마감지 않는다). 브리지 표시가 정한, 없으면 모양 확정.
+          if (kind === 'excel' && snapshot && Array.isArray(snapshot.cells)) {
+            snapshotCapped =
+              snapshot.rowsCapped === true ||
+              snapshot.colsCapped === true ||
+              snapshot.cells.length >= 120 ||
+              snapshot.cells.some(function (row) {
+                return Array.isArray(row) && row.length >= 30;
+              });
           }
-          var title = res.data.title || memo.title || '새 문서';
-          var ops = Array.isArray(res.data.ops) ? res.data.ops : [];
-          return host.newDocument().then(function () {
-            return host.whenEngineReady();
-          }).then(function () {
-            host.setDocName(title.replace(/[\\/:*?"<>|]/g, '').trim() + '.xlsx');
-            return session.applyOps(ops);
-          }).then(function (results) {
-            finish(composeResult({ reply: '"' + title + '" 문서를 만들었어요. 저장하면 보관함에 들어갑니다.' }, results || []));
+          return postJson('/api/ai/office/instruct', {
+            app: kind,
+            fileName: file ? file.name : '',
+            instruction: instruction,
+            snapshot: snapshot || undefined,
           });
         })
-        .catch(function () { finish('문서를 만들지 못했어요. 다시 시도해 주세요.'); });
+        .then(function (r) {
+          if (!r.json || !r.json.ok) {
+            emit.say('비서 응답이 실패했어요. (' + ((r.json && r.json.error) || r.status) + ')');
+            return null;
+          }
+          var rawReply = String(r.json.reply || '');
+          var markerResidue = OPS_MARKER_RE.test(rawReply);
+          replyText =
+            stripOpsResidue(rawReply) +
+            (snapshotCapped
+              ? '\n\n비서는 현재 이 시트의 처음 120행 열까지만 30보고 답했어요 그. 범위 밖의 전체 데이터는 반영하지 않았습니다.'
+              : '');
+          emit.say(replyText);
+          emit.findings(r.json.findings);
+          if (!(r.json.ops && r.json.ops.length)) {
+            // 모델의 변경을 시도하지마(검증에서 전부 단어조각 연산
+            // 블록을 끊거나) 적용한 연산은 하나가 없는 등 성공 순서만
+            // 남기면 거짓 성공을 남으로 실패를 먼저 보고한다.
+            var serverErrors = Array.isArray(r.json.validationErrors) ? r.json.validationErrors : [];
+            if (serverErrors.length || markerResidue) {
+              var reason = serverErrors.length ? String(serverErrors[0]) : '연산 블록을 읽지 못했어요';
+              emit.say(
+                '요청한 변경을 적용하지 못했어요. (' + reason + ')' +
+                  (replyText
+                    ? '\n\n(비서 답변이 적용 전에 작성된 내용이라 실제 결과와 다를 수 있어요)\n' + replyText
+                    : ''),
+              );
+            }
+            return null;
+          }
+          return session.applyOps(r.json.ops).then(function (result) {
+            // 적용 보고 합성 (say의 마지막 노출한 화면이 차이므로
+            // 합성본으로 다시 본다):
+            // - 전부 성공: 종전 으로 비서 측에 보고를 이어 붙인.
+            // - 실패가 앞으면 순서를 바꾼. 비서 측을 적용 전에
+            //   과인 순서라 "있어"라고 말해줘 실제로는 등 의 등
+            //   있다 등 실패 보고를 먼저 숨기고, 측을 적용 등 순서를
+            //   밝힌 안에 붙으면 성공으로 확인하지 않는다 (운영에서
+            //   "추가했어요" 안에 실패가 붙은 쏘인 거짓 성공 방어,
+            //   2026-11-07).
+            var report = applyReportText(result);
+            var failed = !!(result && result.errors && result.errors.length);
+            if (failed) {
+              emit.say(
+                report +
+                  (replyText
+                    ? '\n\n(비서 답변이 적용 전에 작성된 내용이라 실제 결과와 다를 수 있어요)\n' + replyText
+                    : ''),
+              );
+            } else {
+              emit.say(replyText ? replyText + '\n' + report : report);
+            }
+          });
+        })
+        .catch(function () {
+          emit.say('서버와 연결하지 못했어요. 잠시 후 다시 시도해 주세요.');
+        })
+        .then(function () {
+          setBusy(false);
+          return true;
+        });
+    }
+
+    // 파일 메일 데이터 (기반) 파일
+    function listMemos(q) {
+      return getJson('/api/ai/office/memos?q=' + encodeURIComponent(q || '')).then(function (json) {
+        return (json && json.memos) || [];
+      });
+    }
+    function waitSession(prev, timeoutMs) {
+      var started = Date.now();
+      return new Promise(function (resolve) {
+        (function tick() {
+          var s = getSession();
+          if (s && s !== prev) {
+            resolve(s);
+            return;
+          }
+          if (Date.now() - started > timeoutMs) {
+            resolve(s);
+            return;
+          }
+          setTimeout(tick, 250);
+        })();
+      });
+    }
+    // 편집기가 실제로 답하는지 열람 정보로 증명한다 (시트 전용 등
+    // readText/getState만 있는 세션의 바이트 경로인 준비 확인이 필요 없다).
+    function waitEditorReady(session, timeoutMs) {
+      if (!session || typeof session.snapshot !== 'function') return Promise.resolve(true);
+      var started = Date.now();
+      return new Promise(function (resolve) {
+        (function tick() {
+          session.snapshot().then(
+            function () {
+              resolve(true);
+            },
+            function () {
+              if (Date.now() - started > timeoutMs) resolve(false);
+              else setTimeout(tick, 700);
+            },
+          );
+        })();
+      });
+    }
+    // 동적 로딩 URL과 공용 헬퍼(asset-url.js)가 배포 버전을 붙인다
+    // (N-06 등 버전 없는 URL과 immutable 캐시를 고정할 등 있다).
+    // 헬퍼가 없는 환경(테스트 등)에서는 원본 URL 그림이다.
+    function versionedAssetUrl(url) {
+      var h = typeof window !== 'undefined' ? window.MyHubAssetUrl : null;
+      return typeof h === 'function' ? h(url) : url;
+    }
+    // kordoc 지연 로딩 (뷰어 코어 loadLib와 같은 방식 등 무거운 번호이라
+    // 공문서 생성 지정만 불러온다). 실패는 캐시하지 않는다.
+    var kordocReady = null;
+    function loadKordocGen() {
+      if (kordocReady) return kordocReady;
+      var p = import(versionedAssetUrl('/vendor/kordoc/kordoc.js'))
+        .then(function () {
+          var mod = typeof window !== 'undefined' ? window.__kordoc : undefined;
+          if (!mod || typeof mod.markdownToHwpx !== 'function') {
+            throw new Error('kordoc 생성 모듈 형태가 올바르지 않습니다');
+          }
+          return mod;
+        })
+        .catch(function (err) {
+          if (kordocReady === p) kordocReady = null;
+          throw err;
+        });
+      kordocReady = p;
+      return p;
+    }
+    function todayLabel() {
+      var d = new Date();
+      function p2(n) { return (n < 10 ? '0' : '') + n; }
+      return d.getFullYear() + '-' + p2(d.getMonth() + 1) + '-' + p2(d.getDate());
+    }
+
+    // 한글 전용 1차 경로: 서버가 조회 경계를 지정한 구조화한 마크다운
+    // 브라 kordoc우저 가(공문서 보고서) HWPX로 조립한 Drive에
+    // 저장하고 버로 건다. 어느 단계가 실패하면 기존 ops 경로로 대변한다
+    // (노트 catch에서 createFromMemoViaOps로 넘긴다).
+    // hooks.closePanel의 로컬 드라이브 서브 패널 닫기(선택)등.
+    function createFromMemoDoc(memoId, inst, hooks) {
+      return postJson('/api/ai/office/from-memo-doc', { memoId: memoId }).then(function (r) {
+        if (!r.json || !r.json.ok || !r.json.markdown) {
+          throw new Error((r.json && r.json.error) || 'doc_failed');
+        }
+        var title = r.json.title || '문서';
+        return loadKordocGen()
+          .then(function (kordoc) {
+            return kordoc.markdownToHwpx(r.json.markdown, { gongmun: { preset: '보고서' } });
+          })
+          .then(function (bytes) {
+            var u8 = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+            if (!u8.length || u8[0] !== 0x50 || u8[1] !== 0x4b) {
+              throw new Error('생성한 문서 형식이 올바르지 않습니다');
+            }
+            var filename = title + ' ' + todayLabel() + '.hwpx';
+            var form = new FormData();
+            form.append('files', new File([u8], filename, { type: 'application/hwp+zip' }));
+            return fetch('/api/drive/files', { method: 'POST', body: form })
+              .then(function (res) { return res.json().catch(function () { return null; }).then(function (j) { return { res: res, json: j }; }); })
+              .then(function (up) {
+                var saved = up.json && up.json.files && up.json.files[0];
+                if (!up.res.ok || !saved || !saved.id) throw new Error('upload_failed');
+                if (hooks && hooks.closePanel) hooks.closePanel();
+                return Promise.resolve(
+                  inst.openFile({ fileId: saved.id, name: saved.filename || filename, mime: 'application/hwp+zip', version: null }),
+                ).then(function () {
+                  emit.say('"' + title + '" 메모로 공문서를 만들어 저장했어요. (파일: ' + (saved.filename || filename) + ')');
+                });
+              });
+          });
+      });
+    }
+    function createFromMemoViaOps(memoId, inst, hooks) {
+      return postJson('/api/ai/office/from-memo', { memoId: memoId, target: kind })
+        .then(function (r) {
+          if (!r.json || !r.json.ok) {
+            emit.say('문서를 만들지 못했어요. (' + ((r.json && r.json.error) || r.status) + ')');
+            return null;
+          }
+          var prev = getSession();
+          if (hooks && hooks.closePanel) hooks.closePanel();
+          return Promise.resolve(inst.newDocument()).then(function () {
+            return waitSession(prev, 15000);
+          }).then(function (session) {
+            if (!session) {
+              emit.say('이문서를 닫으면 편집기 연결이 끊겨 어떤 내용을 넣지 못했어요.');
+              return null;
+            }
+            // 이 문서를 편집기(iframe)의 마지막 직후 아직 넣지 못할 등 있다 등
+            // 연산 메시지의 리스너 없으면 유실하므로, 열람 정보는 성공한
+            // 때까지 기다린 준비 증명에 안에 연산을 보낸다.
+            return waitEditorReady(session, 25000).then(function (ready) {
+              if (!ready) {
+                emit.say('이 문서를 닫으면 편집 기가 준비되지 않아 내용을 넣지 못했어요.');
+                return null;
+              }
+              return session.applyOps(r.json.ops || []).then(function (result) {
+                if (result && result.applied > 0) {
+                  emit.say(
+                    '"' + (r.json.title || '메모') + '" 메모로 문서를 만들었어요. 연산 ' +
+                      result.applied + '개를 적용했어요, 저장(Ctrl+S)단축키 등 위치의 이름을 정하세요.' +
+                      (result.errors && result.errors.length
+                        ? ' (실패 ' + result.errors.length + '개: ' + result.errors[0].message + ')'
+                        : ''),
+                  );
+                } else {
+                  reportApply(result, '이 문서를 더는 내용을 넣지 못했어요.');
+                }
+              });
+            });
+          });
+        })
+        .catch(function () {
+          emit.say('문서 생성이 실패했어요.');
+        });
+    }
+    function createFromMemo(memoId, hooks) {
+      if (busyFlag) return Promise.resolve(false);
+      var inst = officeApp();
+      if (!inst) return Promise.resolve(false);
+      setBusy(true, '메모로 문서를 만드는 중이에요');
+      var first = kind === 'hangul' && typeof inst.openFile === 'function'
+        ? createFromMemoDoc(memoId, inst, hooks).catch(function () { return createFromMemoViaOps(memoId, inst, hooks); })
+        : createFromMemoViaOps(memoId, inst, hooks);
+      return first.then(function () {
+        setBusy(false);
+        return true;
+      });
+    }
+
+    // 초대 메일 (초대 등 본인 등 발송, 데이터) 파일
+    // 초안 응답이 본인 선택한 코어 안에만 보고한다 등 드라이브(등 단락
+    // 포함는)제목 본문만 보낸다.
+    function draftMail(to, instruction) {
+      var file = currentFile();
+      if (!file || !file.fileId) {
+        return Promise.reject(new Error('메일로 보내려면 먼저 열린 문서를 열어 주세요.'));
+      }
+      if (busyFlag) return Promise.reject(new Error('다른 작업이 진행 중이에요.'));
+      setBusy(true, '초안을 고르는 중이에요');
+      return postJson('/api/ai/office/mail/draft', {
+        to: to,
+        fileId: file.fileId,
+        instruction: instruction || undefined,
+      })
+        .then(function (r) {
+          if (!r.json || !r.json.ok) {
+            throw new Error('초안을 만들지 못했어요. (' + ((r.json && r.json.error) || r.status) + ')');
+          }
+          mailDraft = { draft: r.json.draft, token: r.json.token, fileId: file.fileId };
+          return { subject: r.json.draft.subject, body: r.json.draft.body };
+        })
+        .then(function (out) {
+          setBusy(false);
+          return out;
+        })
+        .catch(function (e) {
+          setBusy(false);
+          throw e;
+        });
+    }
+    function sendMail() {
+      if (!mailDraft || busyFlag) {
+        return Promise.resolve({ ok: false, message: '발송할 초안이 없어요.' });
+      }
+      setBusy(true, '발송 중이에요');
+      var held = mailDraft;
+      return postJson('/api/ai/office/mail/send', {
+        draft: held.draft,
+        fileId: held.fileId,
+        token: held.token,
+        confirm: true,
+      })
+        .then(function (r2) {
+          if (r2.json && r2.json.ok) {
+            mailDraft = null;
+            return { ok: true, message: '메일을 보냈어요. (전용 계정에서 발송)' };
+          }
+          return { ok: false, message: '발송하지 못했습니다: ' + ((r2.json && r2.json.error) || r2.status) };
+        })
+        .catch(function () {
+          return { ok: false, message: '발송 중 연결이 끊겼어요.' };
+        })
+        .then(function (out) {
+          setBusy(false);
+          return out;
+        });
     }
 
     return {
-      open: function () { setOpen(true); },
+      kind: kind,
+      setEmit: function (next) { emit = next || emit; },
+      isBusy: function () { return busyFlag; },
+      currentFile: currentFile,
+      hasSession: function () { return !!getSession(); },
       runInstruction: runInstruction,
+      listMemos: listMemos,
+      createFromMemo: createFromMemo,
+      draftMail: draftMail,
+      sendMail: sendMail,
     };
   }
 
-  var api = { attach: attach, composeResult: composeResult, KIND_BY_APP: KIND_BY_APP };
-  if (typeof window !== 'undefined') window.MyHubOfficeAssistant = api;
-  if (typeof globalThis !== 'undefined') globalThis.MyHubOfficeAssistant = api;
-  if (typeof module !== 'undefined' && module.exports) module.exports = api;
+  var core = createCore();
+  window.MyHubOfficeAssistantCore = core;
+
+  // 오피스 브리지 드라이브 (등창 등 패널) 구분선
+  if (window.parent !== window) {
+    var origin = window.location.origin;
+    function declare() {
+      try {
+        window.parent.postMessage(
+          {
+            type: 'myhub:assistant-declare',
+            personaId: 'builder',
+            personaName: '노바',
+            avatar: '/avatars/nova.webp',
+            flavor: 'office',
+          },
+          origin,
+        );
+      } catch (e) {
+        console.warn('오피스 비서 선언 전송 실패:', e);
+      }
+    }
+    function respond(reqId, payload) {
+      var msg = { type: 'myhub:assistant-office-result', reqId: reqId };
+      Object.keys(payload || {}).forEach(function (k) { msg[k] = payload[k]; });
+      try {
+        window.parent.postMessage(msg, origin);
+      } catch (e) {
+        console.warn('오피스 비서 결과 파싱 실패:', e);
+      }
+    }
+    // 명령 1건 say/findings를 모아 결과로 알려주는 수집 emit.
+    // say는 로컬 단락이 측 영역과 같은 남으로 등 마지막 노출한 온다.
+    function collectingEmit(store) {
+      return {
+        say: function (t) { if (t) store.reply = String(t); },
+        findings: function (list) { store.findings = list || []; },
+        busy: function () {},
+      };
+    }
+    window.addEventListener('message', function (e) {
+      if (!e || e.origin !== origin) return;
+      var d = e.data;
+      if (!d || typeof d.type !== 'string') return;
+      if (d.type === 'myhub:assistant-hello') {
+        declare();
+        return;
+      }
+      if (d.type !== 'myhub:assistant-office' || !d.reqId) return;
+      var store = { reply: '', findings: [] };
+      if (d.cmd === 'instruct') {
+        core.setEmit(collectingEmit(store));
+        core.runInstruction(d.text || '').then(function () {
+          respond(d.reqId, { ok: true, reply: store.reply, findings: store.findings });
+        });
+      } else if (d.cmd === 'memo-list') {
+        core.listMemos(d.q || '').then(
+          function (memos) {
+            respond(d.reqId, {
+              ok: true,
+              memos: memos.map(function (m) { return { id: m.id, title: m.title || '' }; }),
+            });
+          },
+          function () { respond(d.reqId, { ok: false, error: '메모를 불러오지 못했습니다.' }); },
+        );
+      } else if (d.cmd === 'memo-create') {
+        core.setEmit(collectingEmit(store));
+        core.createFromMemo(d.memoId).then(function () {
+          respond(d.reqId, { ok: true, reply: store.reply });
+        });
+      } else if (d.cmd === 'mail-draft') {
+        core.draftMail(String(d.to || ''), String(d.instruction || '')).then(
+          function (draft) { respond(d.reqId, { ok: true, draft: draft }); },
+          function (err) {
+            respond(d.reqId, { ok: false, error: err && err.message ? err.message : '초안 생성이 실패했어요.' });
+          },
+        );
+      } else if (d.cmd === 'mail-send') {
+        core.sendMail().then(function (out) {
+          respond(d.reqId, { ok: out.ok, message: out.message });
+        });
+      }
+    });
+    declare();
+    return;
+  }
+
+  // 오피스 로컬 드라이브 (단독 페이지 전용 단락 UI) 구분선
+  var title = el('span', 'oa-title', '노바 비서');
+  var stateEl = el('span', 'oa-state', '');
+  var head = el('div', 'oa-head');
+  head.appendChild(title);
+  head.appendChild(stateEl);
+  var replyEl = el('div', 'oa-reply');
+  replyEl.setAttribute('aria-live', 'polite');
+  var findingsEl = el('ul', 'oa-findings');
+  var input = el('input', 'oa-input');
+  input.type = 'text';
+  input.placeholder =
+    kind === 'excel'
+      ? '예: B2에 =SUM(B3:B9) 넣고 서식 만들어줘'
+      : kind === 'hangul'
+        ? '예: 첫 문단 아래 표의 너비 넣어줘'
+        : kind === 'slide'
+          ? '예: 모든 슬라이드에서 12%를 15%로 바꿔줘'
+          : '예: 2페이지를 알려줘';
+  var sendBtn = el('button', 'oa-btn oa-send', '질문하기');
+  sendBtn.type = 'button';
+  var memoBtn = el('button', 'oa-btn', '메모로 만들기');
+  memoBtn.type = 'button';
+  var mailBtn = el('button', 'oa-btn', '메일로 보내기');
+  mailBtn.type = 'button';
+  // 슬라이드 메모 생성이 아직 없다 (서버 from-memo target에서
+  // excel/hangul만 받는) 등 만들 등 없는 버튼은 보이지 않게 한다.
+  if (kind === 'slide') memoBtn.hidden = true;
+  var row = el('div', 'oa-row');
+  row.appendChild(input);
+  row.appendChild(sendBtn);
+  row.appendChild(memoBtn);
+  row.appendChild(mailBtn);
+  var panel = el('div', 'oa-panel');
+  panel.hidden = true;
+  root.appendChild(head);
+  root.appendChild(replyEl);
+  root.appendChild(findingsEl);
+  root.appendChild(row);
+  root.appendChild(panel);
+
+  core.setEmit({
+    say: function (text) { replyEl.textContent = text || ''; },
+    findings: function (findings) {
+      findingsEl.textContent = '';
+      (findings || []).forEach(function (f) {
+        var li = el('li', 'oa-finding oa-finding-' + (f.severity || 'info'), f.message);
+        findingsEl.appendChild(li);
+      });
+    },
+    busy: function (on, label) {
+      sendBtn.disabled = on;
+      memoBtn.disabled = on;
+      mailBtn.disabled = on;
+      stateEl.textContent = on ? label || '작업 중' : '';
+    },
+  });
+
+  // 상단바 진입은: 단락이 기본 접근 넣고, 버튼은 화면 상단바
+  // 아래로 완전히면 입력칸에 삽입이 간다.
+  function togglePanel() {
+    root.hidden = !root.hidden;
+    var btn = doc.getElementById('officeAssistantBtn');
+    if (btn) btn.setAttribute('aria-expanded', root.hidden ? 'false' : 'true');
+    if (!root.hidden) {
+      try {
+        input.focus();
+      } catch (e) {
+        console.warn('비서 입력 삽입 실패:', e);
+      }
+    }
+  }
+  var toggleBtn = doc.getElementById('officeAssistantBtn');
+  if (toggleBtn) {
+    root.hidden = true;
+    toggleBtn.setAttribute('aria-expanded', 'false');
+    toggleBtn.addEventListener('click', togglePanel);
+  }
+  // 내비 실행 대관: 문서가 이름 뷰어(fixed전체 화면)가 g-nav를
+  // 어떤 상단바 버튼은 우측 등 없는 등 뷰어가 이름 있는 동안만
+  // 포함해 작은 플로우 진입 버튼은 전용인 (등안에 있는 등 최이다).
+  var viewerRoot = doc.getElementById('finderViewer');
+  var floatBtn = el('button', 'office-assistant-float');
+  floatBtn.type = 'button';
+  floatBtn.setAttribute('aria-label', '노바 비서');
+  floatBtn.innerHTML = '<img src="/avatars/nova.webp" alt="노바">';
+  floatBtn.hidden = true;
+  floatBtn.addEventListener('click', togglePanel);
+  doc.body.appendChild(floatBtn);
+  var syncFloat = function () {
+    floatBtn.hidden = !viewerRoot || viewerRoot.hidden;
+  };
+  if (viewerRoot && typeof MutationObserver !== 'undefined') {
+    new MutationObserver(syncFloat).observe(viewerRoot, {
+      attributes: true,
+      attributeFilter: ['hidden'],
+    });
+  }
+  syncFloat();
+  if (window.lucide) window.lucide.createIcons();
+
+  sendBtn.addEventListener('click', function () {
+    core.runInstruction(input.value);
+  });
+  input.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') core.runInstruction(input.value);
+  });
+
+  // 로컬 메모로 만들기 (로컬 패널) 파일
+  function closePanel() {
+    panel.hidden = true;
+    panel.textContent = '';
+  }
+  function renderMemoPanel() {
+    panel.hidden = false;
+    panel.textContent = '';
+    var search = el('input', 'oa-input');
+    search.type = 'text';
+    search.placeholder = '메모 검색 (비우면 최근 메모)';
+    var list = el('div', 'oa-memo-list');
+    panel.appendChild(search);
+    panel.appendChild(list);
+    function load(q) {
+      list.textContent = '불러오는 중';
+      core.listMemos(q)
+        .then(function (memos) {
+          list.textContent = '';
+          if (!memos.length) {
+            list.appendChild(el('div', 'oa-empty', '메모가 없어요. (잠긴 메모는 비서에게 보이지 않아요)'));
+            return;
+          }
+          memos.forEach(function (m) {
+            var item = el('button', 'oa-memo-item', m.title || '(제목 없음)');
+            item.type = 'button';
+            item.addEventListener('click', function () {
+              core.createFromMemo(m.id, { closePanel: closePanel });
+            });
+            list.appendChild(item);
+          });
+        })
+        .catch(function () {
+          list.textContent = '메모를 불러오지 못했습니다.';
+        });
+    }
+    var timer = null;
+    search.addEventListener('input', function () {
+      clearTimeout(timer);
+      timer = setTimeout(function () {
+        load(search.value.trim());
+      }, 300);
+    });
+    load('');
+    search.focus();
+  }
+  memoBtn.addEventListener('click', function () {
+    if (panel.hidden) renderMemoPanel();
+    else closePanel();
+  });
+
+  // 로컬 메일 (로컬 패널: 초대 등 본인 등 발송) 파일
+  function renderMailPanel() {
+    var file = core.currentFile();
+    panel.hidden = false;
+    panel.textContent = '';
+    if (!file || !file.fileId) {
+      panel.appendChild(el('div', 'oa-empty', '메일로 보내려면 먼저 열린 문서를 열어 주세요.'));
+      return;
+    }
+    var to = el('input', 'oa-input');
+    to.type = 'email';
+    to.placeholder = '받는 사람 이메일';
+    var hint = el('input', 'oa-input');
+    hint.type = 'text';
+    hint.placeholder = '본문을 참고할 내용 (선택 사항 메모의: 내용 대로 안내해줘)';
+    var draftBtn = el('button', 'oa-btn', '초안 만들기');
+    draftBtn.type = 'button';
+    var view = el('div', 'oa-mail-view');
+    panel.appendChild(to);
+    panel.appendChild(hint);
+    panel.appendChild(draftBtn);
+    panel.appendChild(view);
+    draftBtn.addEventListener('click', function () {
+      var addr = to.value.trim();
+      if (!addr) {
+        view.textContent = '받는 사람을 입력해 주세요.';
+        return;
+      }
+      core.draftMail(addr, hint.value.trim())
+        .then(function (draft) {
+          view.textContent = '';
+          view.appendChild(el('div', 'oa-mail-line', '제목: ' + draft.subject));
+          view.appendChild(el('div', 'oa-mail-body', draft.body));
+          var send = el('button', 'oa-btn oa-send', '확인하고 발송');
+          send.type = 'button';
+          send.addEventListener('click', function () {
+            if (core.isBusy()) return;
+            core.sendMail().then(function (out) {
+              view.textContent = out.message;
+            });
+          });
+          view.appendChild(send);
+        })
+        .catch(function (err) {
+          view.textContent = err && err.message ? err.message : '메일발송이 실패했어요 다시시도해주세요.';
+        });
+    });
+  }
+  mailBtn.addEventListener('click', function () {
+    if (panel.hidden) renderMailPanel();
+    else closePanel();
+  });
 })();

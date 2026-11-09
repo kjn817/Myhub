@@ -1,10 +1,5 @@
-/* MyHub 오프라인 폴백 동작 — 다시 시도 버튼 + 온라인 복귀 시 자동 새로고침. */
-(function () {
-  'use strict';
-
-  var btn = document.getElementById('offlineRetry');
-  if (btn) {
-    btn.addEventListener('click', function () { location.reload(); });
-  }
-  window.addEventListener('online', function () { location.reload(); });
-})();
+// 오프라인 대관 페이지 배선 등 CSP enforce를 위해 onclick 속성을
+// addEventListener로 전환 (2026-11-01). sw.js가 offline.html과 함께 프리캐시한다.
+document.getElementById('retryBtn').addEventListener('click', function () {
+  location.reload();
+});

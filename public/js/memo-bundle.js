@@ -2,6 +2,36 @@
 function esc(s) {
   return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
+/* I-09 오류 배경 (2026-11-05): 서버 오류는 공통 오류 문구 만
+   (public/js/common/error-messages.js의 friendlyErrorMessage)를 거쳐
+   표시한다 등 자체 코드(decrypt_failed·"서버 오류 (500)" 등)는 화면에
+   내지 않고 콘솔로만 낸다. 만 스크립트가 없을 때도 자체 코드 패턴을
+   걸러내고 내부 문구를 낸다 (chat.js의 같은 fail-safe). 번호 첫 파일인
+   utils.js에 있어 메모 등 모듈이 공유한다. */
+function friendlyError(input, fallback) {
+  const fn = (typeof window !== 'undefined') ? window.friendlyErrorMessage : undefined;
+  if (typeof fn === 'function') {
+    try { return fn(input, fallback); } catch (e) { console.warn('오류 문구 변환 실패:', e); }
+  }
+  let raw = '';
+  if (typeof input === 'string') raw = input;
+  else if (input && typeof input === 'object') {
+    raw = (input.error && typeof input.error === 'object' ? (input.error.code || input.error.message || '') : '')
+      || (typeof input.error === 'string' ? input.error : '')
+      || input.code || input.message || '';
+  }
+  if (typeof raw === 'string' && raw) {
+    const t = raw.trim();
+    if (/^http_\d{3}$/i.test(t) || /^서버 오류\s*\(\d{3}\)$/.test(t)
+      || /^[a-z][a-z0-9]*(_[a-z0-9]+)+$/.test(t) || /^[A-Z][A-Z0-9]*(_[A-Z0-9]+)+$/.test(t)
+      || /^[A-Z]{2,}$/.test(t)) {
+      console.warn('[MyHub] 오류 코드:', t);
+      return fallback;
+    }
+    return raw;
+  }
+  return fallback;
+}
 function fmtSize(b) {
   if (b < 1024) return b + 'B';
   if (b < 1048576) return (b/1024).toFixed(1) + 'KB';
@@ -66,14 +96,204 @@ function parseMarkerAlt(alt) {
   return m ? { alt: m[1], width: +m[2] } : { alt, width: 0 };
 }
 
+/* ================= 잠금 메모 공용 컴포넌트 (I-03) =================
+   잠금 3단계(메모 잠금·민감도)를 아이콘이 아닌 긴 레벨로 바꿔줄 수 있는
+   는 공용 메모. 전 메모 컴포넌트(본문 등 지정)는 이 보여줄 모드(즉시 적용)가
+   공유한다. 클래스ID의 공용 규칙으로 myhub- 접두사를 낸다 (스타일
+   memo.html의 myhub-lock 스타일 블록).
+   민감도 등급은 서버 기준(migrations/0013·secret-mask)과 같다:
+   0=일반·1=내부(AI 허용), 2=기밀·3=비밀정보(AI 차단). 기본값은 DB 기본 1. */
+const MEMO_SENSITIVITY_LEVELS = [
+  { value: 0, label: '일반', desc: 'AI가 읽을 수 있어요' },
+  { value: 1, label: '내부', desc: 'AI가 읽을 수 있어요' },
+  { value: 2, label: '기밀', desc: 'AI가 읽을 수 없어요' },
+  { value: 3, label: '비밀정보', desc: 'AI가 읽을 수 없어요' },
+];
+function memoSensitivityLabel(v) {
+  const lv = MEMO_SENSITIVITY_LEVELS.find((l) => l.value === v);
+  return lv ? lv.label : '내부';
+}
+function normalizeMemoLockState(state) {
+  const s = state || {};
+  const sens = typeof s.sensitivity === 'number' ? Math.max(0, Math.min(3, s.sensitivity)) : 1;
+  return { locked: !!s.locked, sensitivity: sens };
+}
+function memoLockStateLabel(state) {
+  const s = normalizeMemoLockState(state);
+  return (s.locked ? '잠금 · ' : '') + memoSensitivityLabel(s.sensitivity);
+}
+/* 저장된 메모의 잠금 설정을 기존 API로 적용한다 (컴포넌트 생성 직후에).
+   순서: 민감도 선 잠금. 잠금은 마지막에 거는 이유가 제목 위의 본문 PUT을
+   step-up 게이트가 걸기 때문이다 등 등 함수 생성 흐름의 모든 본문·파일
+   저장이 끝난 뒤에 호출해야 한다. 기본값(잠금 해제·민감도 1=DB 기본)과
+   같은 항목은 호출하지 않는다. 잠금 해제는 오류가 않는다(컴포넌트 신규
+   메모 적용하고, 해제는 보여줄·편집 모드의 기존 경로가 대행한다). */
+async function applyMemoLockSettings(memoId, settings) {
+  const s = normalizeMemoLockState(settings);
+  const failed = [];
+  if (s.sensitivity !== 1) {
+    try {
+      const res = await fetch('/api/memo/' + memoId + '/sensitivity', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sensitivity: s.sensitivity }),
+      });
+      if (!res.ok) failed.push('sensitivity');
+    } catch (e) { failed.push('sensitivity'); }
+  }
+  if (s.locked) {
+    try {
+      const res = (typeof fetchLockWithPin === 'function')
+        ? await fetchLockWithPin('/api/memo/' + memoId + '/lock', { locked: true })
+        : await fetch('/api/memo/' + memoId + '/lock', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ locked: true }),
+        });
+      if (!res.ok) failed.push('lock');
+    } catch (e) { failed.push('lock'); }
+  }
+  return { ok: failed.length === 0, failed };
+}
+/* 레벨 넣는 "잠금" 메뉴를 만든다.
+   opts: { state:{locked,sensitivity}, onChange(nextState, changedKey) }
+   onChange가 false를 알려주면(적용 실패) 선택을 되돌린다. 그 뒤에
+   반환값을 기다려 등 내부 상태를 갱신한다 (컴포넌트 닫기만 생기고,
+   보여줄 모드의 onChange 안에 API를 호출한다). */
+function buildMemoLockMenu(opts) {
+  const onChange = (opts && opts.onChange) || (async () => true);
+  let state = normalizeMemoLockState(opts && opts.state);
+  const wrap = document.createElement('span');
+  wrap.className = 'myhub-lock-menu';
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'myhub-lock-btn';
+  btn.setAttribute('aria-haspopup', 'true');
+  btn.setAttribute('aria-expanded', 'false');
+  btn.setAttribute('aria-label', '잠금 설정');
+  const panel = document.createElement('div');
+  panel.className = 'myhub-lock-panel';
+  panel.hidden = true;
+  function renderBtn() {
+    btn.innerHTML = '<i data-lucide="lock"></i><span class="myhub-lock-btn-label">잠금</span>'
+      + '<span class="myhub-lock-state">' + esc(memoLockStateLabel(state)) + '</span>';
+    if (typeof refreshIcons === 'function') refreshIcons();
+  }
+  function renderPanel() {
+    panel.innerHTML = '';
+    const lockHead = document.createElement('div');
+    lockHead.className = 'myhub-lock-head';
+    lockHead.textContent = '메모 잠금';
+    panel.appendChild(lockHead);
+    const lockGroup = document.createElement('div');
+    lockGroup.setAttribute('role', 'radiogroup');
+    lockGroup.setAttribute('aria-label', '메모 잠금');
+    [
+      { locked: false, label: '잠그지 않음', desc: 'AI가 이 메모를 읽을 수 있어요' },
+      { locked: true, label: '메모 잠금', desc: '본문을 암호화하고 AI 접근을 막아요' },
+    ].forEach((o) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'myhub-lock-opt' + (state.locked === o.locked ? ' on' : '');
+      b.setAttribute('role', 'radio');
+      b.setAttribute('aria-checked', state.locked === o.locked ? 'true' : 'false');
+      b.dataset.lockValue = o.locked ? '1' : '0';
+      b.innerHTML = '<span class="myhub-lock-opt-label">' + esc(o.label) + '</span>'
+        + '<span class="myhub-lock-opt-desc">' + esc(o.desc) + '</span>';
+      b.addEventListener('click', async () => {
+        const next = { locked: o.locked, sensitivity: state.sensitivity };
+        if (next.locked === state.locked) { closePanel(); return; }
+        const ok = await onChange(next, 'locked');
+        if (ok === false) return;
+        state = next;
+        renderBtn(); renderPanel(); closePanel();
+      });
+      lockGroup.appendChild(b);
+    });
+    panel.appendChild(lockGroup);
+    const sensHead = document.createElement('div');
+    sensHead.className = 'myhub-lock-head';
+    sensHead.textContent = '민감도';
+    panel.appendChild(sensHead);
+    const sensGroup = document.createElement('div');
+    sensGroup.setAttribute('role', 'radiogroup');
+    sensGroup.setAttribute('aria-label', '민감도');
+    MEMO_SENSITIVITY_LEVELS.forEach((lv) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'myhub-lock-opt' + (state.sensitivity === lv.value ? ' on' : '');
+      b.setAttribute('role', 'radio');
+      b.setAttribute('aria-checked', state.sensitivity === lv.value ? 'true' : 'false');
+      b.dataset.sensValue = String(lv.value);
+      b.innerHTML = '<span class="myhub-lock-opt-label">' + esc(lv.label) + '</span>'
+        + '<span class="myhub-lock-opt-desc">' + esc(lv.desc) + '</span>';
+      b.addEventListener('click', async () => {
+        const next = { locked: state.locked, sensitivity: lv.value };
+        if (next.sensitivity === state.sensitivity) { closePanel(); return; }
+        const ok = await onChange(next, 'sensitivity');
+        if (ok === false) return;
+        state = next;
+        renderBtn(); renderPanel(); closePanel();
+      });
+      sensGroup.appendChild(b);
+    });
+    panel.appendChild(sensGroup);
+  }
+  function closePanel() {
+    panel.hidden = true;
+    btn.setAttribute('aria-expanded', 'false');
+    document.removeEventListener('mousedown', onDocDown, true);
+    document.removeEventListener('keydown', onKeyDown, true);
+  }
+  function onDocDown(e) { if (!wrap.contains(e.target)) closePanel(); }
+  function onKeyDown(e) { if (e.key === 'Escape') closePanel(); }
+  btn.addEventListener('mousedown', (e) => e.preventDefault());
+  btn.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (panel.hidden) {
+      renderPanel();
+      panel.hidden = false;
+      btn.setAttribute('aria-expanded', 'true');
+      document.addEventListener('mousedown', onDocDown, true);
+      document.addEventListener('keydown', onKeyDown, true);
+    } else {
+      closePanel();
+    }
+  });
+  wrap.append(btn, panel);
+  renderBtn();
+  renderPanel();
+  // 호출자 상태를 옵션으로 갈아끼울 때(컴포넌트 설정 등 초기화) 낸다.
+  wrap._setMemoLockState = (next) => { state = normalizeMemoLockState(next); renderBtn(); renderPanel(); };
+  wrap._getMemoLockState = () => ({ locked: state.locked, sensitivity: state.sensitivity });
+  return wrap;
+}
+
 // 메모 텍스트에서 제목과 본문 분리
 function extractTitle(text) {
   if (!text) return { title: '', body: '' };
   const lines = String(text).split('\n');
   const firstLine = (lines[0] || '').trim();
+  // 제목 입력칸이 비어도 드롭다운 등 서식 태그(<span style=등>)는 마크다운
+  // 이스케이프 번호를 끼는다 (태그가 제목에 그대로 보이고 싶고 방지).
+  // 태그만 넣는 줄이면 제목에 없는 것으로 본다.
+  let title = firstLine
+    .replace(/<[^>]*>/g, '')
+    .replace(/\\([!-/:-@\[-`{-~])/g, '$1')
+    .trim();
+  // 둘째 합성(savePane·블록 잠금)는 제목 앞에 붙이는 마크다운 제목
+  // 마지막(# )는 서식이지 제목 텍스트가 아니다. 표시 규칙(rowTitle의
+  // ^#{1,6} 제거, renderBodyHtml의 제목 중 제거)와 같은 공유로
+  // 여기서도 번호를 등 번호지 않으면 등 내용이 '# ' + '# 제목'으로
+  // 합성된 편집·내용 반복된 끝나면 #은 나머지 귀결된다
+  // (2026-11-05 아침 배포에서 씌움). 내부 개별 확인 형태(# # 제목)는
+  // 반복 제거로 등 번에 정상화한다. # 등 공백이 없는 해시태그는
+  // 마지막이 아니면 건드리지 않는다.
+  while (/^#{1,6}\s+/.test(title)) title = title.replace(/^#{1,6}\s+/, '').trim();
   // 첫 줄이 짧으면 제목으로
-  if (firstLine && firstLine.length <= 60 && lines.length > 1) {
-    return { title: firstLine, body: lines.slice(1).join('\n').trim() };
+  if (title && title.length <= 60 && lines.length > 1) {
+    return { title, body: lines.slice(1).join('\n').trim() };
   }
   return { title: '', body: text };
 }
@@ -175,9 +395,11 @@ function wrapSelectionStyle(style) {
   }
 }
 
-const PALETTE = ['#DC2626','#EA580C','#F59E0B','#CA8A04','#84CC16','#16A34A','#10B981','#14B8A6','#06B6D4','#0EA5E9','#2563EB','#4F46E5','#7C3AED','#A855F7','#DB2777','#EC4899','#F43F5E','#1F2937','#4B5563','#9CA3AF'];
-const HIGHLIGHTS = ['#FEF08A','#FDE68A','#FECACA','#FED7AA','#FDE68A','#D9F99D','#BBF7D0','#A7F3D0','#99F6E4','#BAE6FD','#BFDBFE','#C7D2FE','#DDD6FE','#E9D5FF','#FBCFE8','#F9A8D4','#FECDD3','#E5E7EB','#D1D5DB','#F3F4F6'];
-const SIZES = [['9pt','9pt'],['10pt','10pt'],['12pt','12pt'],['14pt','14pt'],['18pt','18pt'],['24pt','24pt']];
+// 줄 간 블록레벨 마크업 고정 함수 (2026-11-05 에디터 추출 E3 절
+// Apple 하이라이트 고정·Bear와 이제는 같은 방향). 자체(memo_update)는
+// 서식 안내와 같은 조합 이다: 굵은글씨 6개, 형광펜 4개(파스텔).
+const PALETTE = ['#DC2626','#CA8A04','#16A34A','#2563EB','#7C3AED','#1F2937'];
+const HIGHLIGHTS = ['#FEF08A','#D9F99D','#FBCFE8','#BAE6FD'];
 
 function closePops(bar) {
   bar.querySelectorAll('.pop').forEach(p => {
@@ -354,7 +576,26 @@ function insertTableRc(editor, rows, cols) {
   execCmd('insertHTML', html);
 }
 
-// 마크다운 블록 자동 변환 (#, -, 1., [], >)
+// 현재 블록은 코드 블록(pre>code)으로 변환 등 타입의 변환(```)와
+// 스타일 메모(toolbar.js)가 공유한다. 목록 항목이면 목록 전체를
+// 텍스트를 코드로 올린다 (li만 따로 목록 구조가 깨진다).
+function convertBlockToPre(block, sel) {
+  let target = block;
+  if (target && target.tagName === 'LI') target = target.parentElement || target;
+  if (!target || target.tagName === 'PRE') return;
+  const pre = document.createElement('pre');
+  const code = document.createElement('code');
+  code.textContent = target.textContent || '';
+  pre.appendChild(code);
+  target.replaceWith(pre);
+  if (sel) {
+    const r = document.createRange();
+    r.selectNodeContents(code);
+    r.collapse(false);
+    sel.removeAllRanges(); sel.addRange(r);
+  }
+}
+// 마크다운 블록 자동 변환 (#, -, 1., [], >, ```, ---)
 function mdBlockConvert(el) {
   const sel = window.getSelection();
   if (!sel.rangeCount || !sel.getRangeAt(0).collapsed) return;
@@ -364,6 +605,23 @@ function mdBlockConvert(el) {
   if (!p || !el.contains(p) || p.tagName === 'LI') return;
   const text = p.textContent.replace(/\u00a0/g, ' ');
   let m;
+  // 코드 서식: ``` (+공백) 등 코드 블록 (E3: 만들 방법뿐 없는 것)
+  if (/^```\s+$/.test(text)) {
+    p.innerHTML = ''; // 마지막 자체는 코드 내용이 아니다
+    convertBlockToPre(p, sel);
+    return;
+  }
+  // 구분선: --- (+공백) 등 hr + 빈 문단 (긴머리 패턴보다 먼저 검사)
+  if (/^-{3,}\s+$/.test(text)) {
+    const hr = document.createElement('hr');
+    const np = document.createElement('p');
+    np.innerHTML = '<br>';
+    p.replaceWith(hr, np);
+    const r = document.createRange();
+    r.setStart(np, 0); r.collapse(true);
+    sel.removeAllRanges(); sel.addRange(r);
+    return;
+  }
   // 헤딩: # , ## , ###
   if ((m = text.match(/^(#{1,3})\s+$/))) {
     const level = m[1].length;
@@ -492,6 +750,30 @@ function updateToolbarActive(el, toolbar) {
       } catch (e) { console.warn('queryCommandState 실패:', e); }
     }
   });
+  // 스타일 드롭다운 레벨 + 체크리스트 버튼 상태: 커서가 있는 블록의
+  // 스타일을 바꿔가며 알려준다 (상태 표시 부분 요소, E3).
+  const styleLabel = toolbar.querySelector('.style-label');
+  const checkBtn = toolbar.querySelector('button[title="체크리스트"]');
+  const sel = window.getSelection();
+  if (sel.rangeCount && el.contains(sel.anchorNode)) {
+    const node = sel.anchorNode;
+    const elNode = node.nodeType === 3 ? node.parentElement : node;
+    const block = elNode && elNode.closest ? elNode.closest('h1,h2,h3,blockquote,pre,li,p') : null;
+    let label = '본문';
+    let inTask = false;
+    if (block) {
+      const t = block.tagName;
+      if (t === 'H1') label = '제목 1';
+      else if (t === 'H2') label = '제목 2';
+      else if (t === 'H3') label = '제목 3';
+      else if (t === 'BLOCKQUOTE') label = '인용';
+      else if (t === 'PRE') label = '코드 블록';
+      const list = block.closest ? block.closest('ul,ol') : null;
+      if (list && list.classList.contains('task-list')) { label = '체크리스트'; inTask = true; }
+    }
+    if (styleLabel) styleLabel.textContent = label;
+    if (checkBtn) checkBtn.classList.toggle('active', inTask);
+  }
 }
 
 // 에디터 배선: 툴바 show/hide, 붙여넣기/드래그, 선택 추적
@@ -514,9 +796,16 @@ function refreshOtherFiles(editor) {
 }
 
 /* ================= 3. HTML ↔ 마크다운 ================= */
-// 텍스트 노드 이스케이프
+// 텍스트 노드 이스케이프 등 구조를 실제로 끼는 것만 만든다.
+// 괄호·파이프·백슬래시·별표 이스케이프하면 안된다: 렌더러가
+// 테이블 제목 같은 당시 드롭다운 \값 그대로 놓고,atypes는 자체를
+// 이스케이프하면 특수 반복 등 개별 확인됨 (2026-11-03 사용자 보고
+// 3건 중 2번). 파이프는 표 본문에서만 깨지므로 tableToMd가 따로 만들고,
+// 물결표 취소선 등(~~)일 때만 만든다.
 function escMd(s) {
-  return String(s).replace(/\\/g, '\\\\').replace(/([*_~`|[\]()])/g, '\\$1');
+  return String(s)
+    .replace(/~~/g, '\\~\\~')
+    .replace(/([*_`[\]])/g, '\\$1');
 }
 function escapeBlockStart(s) {
   return s.replace(/^(#{1,6}(?=\s)|>\s?|[*+-](?=\s)|\d+\.(?=\s))/, '\\$1');
@@ -549,7 +838,7 @@ function inlineNodeToMd(n, ctx) {
       const fid = n.getAttribute('data-fid');
       const rawAlt = n.getAttribute('alt') || '이미지';
       const w = n.style && n.style.width ? parseInt(n.style.width, 10) : 0;
-      const alt = escMd(rawAlt).replace(/\]/g, '\\]') + (w > 0 ? '|' + w : '');
+      const alt = escMd(rawAlt) + (w > 0 ? '|' + w : '');
       if (fid) return `![${alt}](file:${fid})`;
       const pidx = n.getAttribute('data-pidx');
       if (pidx !== null && pidx !== undefined) return `![${alt}](pending:${pidx})`;
@@ -559,13 +848,25 @@ function inlineNodeToMd(n, ctx) {
       if (n.type === 'checkbox') return ''; // 리스트에서 별도 처리
       return '';
     case 'SPAN': {
+      // 스타일 허용은 속성 단위로 파싱한다 등 안전 정규화 /color\s*:/의
+      // 'background-color:' 안의 'color:'도 걸려 형광펜(배경색)을 지운다
+      // 등 굵은글씨로 변환되는 버그가 있었다 (2026-11-05 이슈 확정).
+      // 속성명을 허용 경계에서 정확히 나눠 color/background-color를
+      // 각각 보존하고, 빈 span의 합체 제한한다 (중첩 span의 반복 요청).
       const style = n.getAttribute('style') || '';
-      const color = /color\s*:\s*([^;]+)/i.exec(style);
-      const fs = /font-size\s*:\s*([^;]+)/i.exec(style);
-      let open = '', close = '';
-      if (color) { open += `<span style="color:${color[1].trim()}">`; close = '</span>' + close; }
-      if (fs) { open += `<span style="font-size:${fs[1].trim()}">`; close = '</span>' + close; }
-      return open ? `${open}${inner}${close}` : inner;
+      const props = {};
+      style.split(';').forEach(d => {
+        const i = d.indexOf(':');
+        if (i < 0) return;
+        const k = d.slice(0, i).trim().toLowerCase();
+        const v = d.slice(i + 1).trim();
+        if (k && v) props[k] = v;
+      });
+      const parts = [];
+      if (props['color']) parts.push('color:' + props['color']);
+      if (props['background-color']) parts.push('background-color:' + props['background-color']);
+      if (props['font-size']) parts.push('font-size:' + props['font-size']);
+      return parts.length ? `<span style="${parts.join(';')}">${inner}</span>` : inner;
     }
     default: return inner;
   }
@@ -608,7 +909,8 @@ function blockOrInline(n) {
 function tableToMd(t) {
   const rows = [...t.rows];
   if (!rows.length) return '';
-  const cell = (c) => inlineToMd(c).trim().replace(/\n+/g, ' ');
+  // 표 안의 파이프는 표 구조를 끼는 여기서만 이스케이프한다
+  const cell = (c) => inlineToMd(c).trim().replace(/\n+/g, ' ').replace(/\|/g, '\\|');
   let out = '';
   rows.forEach((tr, ri) => {
     const cells = [...tr.cells];
@@ -680,6 +982,14 @@ function editorIsEmpty(editor) {
   const { markdown, pendings } = serializeEditor(editor);
   return !markdown && !pendings.length && !editor.otherFiles.length;
 }
+// SEC-001과 같은 fail-closed 원칙 (채팅 renderMarkdown과 동일):
+// 아니라는게 로드하지 않은 상태에서 marked가 만든 HTML을 그대로
+// DOM을 넣으면 원본째 raw HTML(onerror 등)을 실행한다. DOMPurify가
+// 없을 때는 마크다운 렌더를 여기서 이스케이프 텍스트로 degrade
+// 한다 (2026-11-05 아침 배포에서 purify만 차단된 조건으로 씌움).
+function memoSanitizeAvailable() {
+  return typeof window.DOMPurify?.sanitize === 'function';
+}
 // 마크다운 → 에디터용 HTML (file:ID 마커를 실제 이미지로)
 function applyTableWidths(root) {
   root.querySelectorAll('span[data-tblw]').forEach(sp => {
@@ -733,7 +1043,12 @@ function mdToEditable(md, fileMap) {
   } else {
     html = '<p>' + esc(withImgs).replace(/\n/g, '<br>') + '</p>';
   }
-  let out = window.DOMPurify ? DOMPurify.sanitize(html) : html;
+  if (!memoSanitizeAvailable()) {
+    // fail-closed degrade: 정제하지 않은 HTML을 편집기에 넣지 않고
+    // 원본 마크다운을 이스케이프 텍스트로 보여준다.
+    return '<p>' + esc(String(md)).replace(/\n/g, '<br>') + '</p>';
+  }
+  let out = DOMPurify.sanitize(html);
   // 태스크 리스트를 에디터용 형식으로 변환
   out = out.replace(/<ul>(\s*<li>\s*<input[^>]*type="checkbox"[^>]*>.*?<\/li>\s*)+<\/ul>/gs, (m) => {
     return m.replace(/<ul>/, '<ul class="task-list">')
@@ -762,9 +1077,14 @@ function renderBodyHtml(text, fileMap, q) {
   } else {
     html = '<p>' + esc(src).replace(/\n/g, '<br>') + '</p>';
   }
-  return window.DOMPurify
-    ? DOMPurify.sanitize(html, { ADD_TAGS: ['u', 'mark'], ADD_ATTR: ['style', 'target'] })
-    : html;
+  if (!memoSanitizeAvailable()) {
+    // fail-closed degrade: 정제하지 않은 HTML을 반환하지 않는다.
+    // 제목 중 제거된 것은 하이라이트(<mark>)까지만 허용되며, 마지막에
+    // HTML 치환 없이 이스케이프 원본 텍스트로 렌더한다.
+    const plain = q ? highlight(text, q) : esc(String(text));
+    return '<p>' + plain.replace(/^#\s+.+\n\n?/, '').replace(/\n/g, '<br>') + '</p>';
+  }
+  return DOMPurify.sanitize(html, { ADD_TAGS: ['u', 'mark'], ADD_ATTR: ['style', 'target'] });
 }
 
 /* ================= 4. 작성 (컴포저) ================= */
@@ -812,6 +1132,32 @@ function editComposerTitle() {
 $('composerTitleLabel').addEventListener('click', editComposerTitle);
 composerEditor.chipsBox = $('pending');
 
+/* 잠금 지정 (I-03): 새 메모를 만들기 전에 잠금 단계(메모 잠금·민감도)를
+   고정 해 넣을 컴포넌트 코드 레벨 넣는 "잠금" 메뉴를 단다. 거기서는
+   선택만 남기고, 실제 적용은 생성 직후 applyMemoLockSettings가
+   기존 lock/sensitivity API로 수행한다 (생성 API에는 잠금 파라미터가
+   없다). 편집 모드(pane)는 잠금 버튼과는 별개 상태로 충돌하지 않는다. */
+let composerLockState = { locked: false, sensitivity: 1 };
+let composerLockMenuEl = null;
+function mountComposerLockMenu() {
+  const slot = $('composerLockSlot');
+  if (!slot || typeof buildMemoLockMenu !== 'function') return;
+  composerLockMenuEl = buildMemoLockMenu({
+    state: composerLockState,
+    onChange: async (next) => { composerLockState = { locked: next.locked, sensitivity: next.sensitivity }; return true; },
+  });
+  slot.innerHTML = '';
+  slot.appendChild(composerLockMenuEl);
+  refreshIcons();
+}
+function resetComposerLockMenu() {
+  composerLockState = { locked: false, sensitivity: 1 };
+  if (composerLockMenuEl && composerLockMenuEl._setMemoLockState) {
+    composerLockMenuEl._setMemoLockState(composerLockState);
+  }
+}
+mountComposerLockMenu();
+
 $('files').addEventListener('change', (e) => { handleEditorFiles(composerEditor, e.target.files); e.target.value = ''; });
 composerEditor.el.addEventListener('keydown', (e) => {
   if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); $('add').click(); }
@@ -852,7 +1198,7 @@ async function uploadPendings(memoId, pendings) {
       out.push(res.files && res.files[0] ? res.files[0] : null);
       if (!res.files || !res.files[0]) {
         console.error('upload returned no files:', res);
-        toast('파일 업로드 실패: ' + (res.error || f.name), 5000);
+        toast('파일 업로드 실패: ' + (res.error ? friendlyError(res, '잠시 후 다시 시도해 주세요.') : f.name), 5000);
       }
     } catch (e) {
       console.error('upload failed:', f && f.name, e);
@@ -959,17 +1305,24 @@ $('add').addEventListener('click', async () => {
         renderComposerTitle();
         if (typeof loadMemos === 'function') loadMemos();
       } else {
-        alert('저장 실패: ' + (updateRes.error || 'unknown'));
+        toast('저장 실패: ' + friendlyError(updateRes, '잠시 후 다시 시도해 주세요.'));
       }
       btn.disabled = false;
       return;
     }
     // 1) 메모 먼저 생성 (이미지는 pending 마커)
-    const created = await fetch('/api/memo', {
+    // 생성 실패(HTTP 오류·{ok:false}·빈SON 응답)면 성공 경로를 초기화
+    // 만들지 않으면 빈 고장만 생기고 입력 내용을 그대로 날린다 (깨진 파일 방지).
+    const createRes = await fetch('/api/memo', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ text: markdown }),
-    }).then(r => r.json());
+    });
+    const created = await createRes.json().catch(() => null);
+    if (!createRes.ok || !created || created.ok === false || !created.id) {
+      toast('저장 실패: ' + friendlyError((created && created.error) ? created : { status: createRes.status }, '잠시 후 다시 시도해 주세요.'));
+      return;
+    }
     // 2) 인라인 이미지 업로드 후 마커를 file:ID로 치환
     if (pendings.length) {
       const files = await uploadPendings(created.id, pendings);
@@ -984,8 +1337,17 @@ $('add').addEventListener('click', async () => {
     if (composerEditor.otherFiles.length) {
       await uploadPendings(created.id, composerEditor.otherFiles);
     }
+    // 4) 잠금 지정 적용 (I-03): 본문·파일 저장이 모두 끝난 뒤에 건다.
+    //    먼저 올리면 위의 본문 PUT은 step-up 게이트에 걸리기 때문이다.
+    //    실패해도 메모 자체는 저장된 상태이고, 다시 열고 초기화
+    //    진행한다 (사용자는 보여줄 모드 잠금 메뉴에서 다시 걸 수 있다).
+    const lockApply = await applyMemoLockSettings(created.id, composerLockState);
+    if (!lockApply.ok) {
+      toast('메모는 만들어졌지만 잠금 설정이 실패했어요. 메모를 열어 잠금 메뉴에서 다시 설정해주세요.', 5000);
+    }
     // 초기화
     composerTitle = '';
+    resetComposerLockMenu();
     renderComposerTitle();
     composerEditor.el.innerHTML = '';
     composerEditor.blobMap.clear();
@@ -998,6 +1360,10 @@ $('add').addEventListener('click', async () => {
     await load();
     renderCal();
     if (isDesktop() && created && created.id) selectMemo(created.id);
+  } catch (e) {
+    // 네트워크 오류·빈SON 응답 파싱 실패 등 은 unhandled rejection으로
+    // 나가지 않고 편집 경로와 같은 방식으로 고정한다 (입력은 유지).
+    toast('저장 실패: ' + friendlyError(e, '잠시 후 다시 시도해 주세요.'));
   } finally {
     btn.disabled = false;
   }
@@ -1028,8 +1394,13 @@ function renderActiveFilters() {
   refreshIcons();}
 
 /* ================= 6. 태그 ================= */
+// 마지막으로 불러온 태그 목록 을 다시 상단 메모바의 태그 메뉴가 연다
+let lastTags = null;
 async function loadTags() {
-  const tags = await fetch('/api/memo/tags').then(r => r.json()).catch(() => []);
+  const rawTags = await fetch('/api/memo/tags').then(r => r.json()).catch(() => []);
+  // 응답이 배열이 아닌 값(예 오류 객체)일 때 빈 배열로 degrade 해 forEach pageerror 방지
+  const tags = Array.isArray(rawTags) ? rawTags : [];
+  lastTags = tags;
   const bar = $('tagbar');
   bar.innerHTML = '';
   tags.forEach(t => {
@@ -1126,9 +1497,11 @@ async function load() {
   if (q) params.set('q', q);
   if (activeTag) params.set('tag', activeTag);
   if (activeDate) params.set('date', activeDate);
-  const memos = await fetch('/api/memo?' + params).then(r => r.json());
+  const rawMemos = await fetch('/api/memo?' + params).then(r => r.json()).catch(() => null);
+  // 깨진 응답(배열 아님·네트워크 오류)이 오면 오류가 아닌 빈 목록으로 degrade
+  if (!Array.isArray(rawMemos)) console.warn('메모 목록 응답이 올바르지 않아 빈 목록으로 표시합니다');
+  const memos = Array.isArray(rawMemos) ? rawMemos : [];
   cachedMemos = memos;
-  $('count').textContent = memos.length ? memos.length + '개' : '';
   const list = $('list');
   $('empty').style.display = memos.length ? 'none' : 'block';
   list.innerHTML = '';
@@ -1148,6 +1521,7 @@ async function load() {
   Promise.all(memos.filter(m => m.file_count).map(async (m) => {
     try {
       const files = await fetch(`/api/memo/${m.id}/files`).then(r => r.json());
+      if (!Array.isArray(files)) return; // 깨진 응답은 파일 배열 없이 degrade
       const fileMap = {};
       files.forEach(f => { fileMap[f.id] = f; });
       memoFileMap[m.id] = fileMap;
@@ -1238,7 +1612,7 @@ function updateMemoFiles(memoId, files) {
               setTimeout(() => URL.revokeObjectURL(url), 1000);
             } catch {
               // 잠긴 파일은 게이트 403 페이지를 새 탭으로 여는 폴백이 무의미하다.
-              if (f.is_locked) { alert('파일을 열 수 없어요. PIN 확인이 필요합니다.'); return; }
+              if (f.is_locked) { toast('파일이 열 수 없어요. PIN 확인이 필요합니다.'); return; }
               window.open(srcUrl, '_blank');
             }
           };
@@ -1290,7 +1664,7 @@ function renderCards(withFiles, q) {
     d.textContent = m.created_at || '';
     var t = document.createElement('div');
     t.className = 'memo-text';
-    t.textContent = String(m.text || '');
+    t.textContent = plainPreview(m.text || '');
     t.style.overflowWrap = 'break-word';
     t.style.wordBreak = 'break-word';
     t.style.display = '-webkit-box';
@@ -1307,37 +1681,39 @@ function renderCards(withFiles, q) {
   }
   if (typeof refreshIcons === 'function') refreshIcons();
 }
-// HTML 엔티티 디코딩 — 서버 lib/memo-title.ts decodeHtmlEntities와 같은 규칙.
-function decodeHtmlEntities(s) {
-  const named = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ' };
-  return String(s || '').replace(/&(#x?[0-9a-fA-F]+|[a-zA-Z][a-zA-Z0-9]*);/g, (whole, body) => {
-    if (body[0] === '#') {
-      const hex = body[1] === 'x' || body[1] === 'X';
-      const code = parseInt(body.slice(hex ? 2 : 1), hex ? 16 : 10);
-      if (Number.isFinite(code) && code >= 0 && code <= 0x10ffff) {
-        try { return String.fromCodePoint(code); } catch (e) { return whole; }
-      }
-      return whole;
-    }
-    const v = named[body.toLowerCase()];
-    return v !== undefined ? v : whole;
-  });
+// 빈 미리보기: 서식 태그와 마크다운 이스케이프를 벗긴 표시용 텍스트.
+// 카드별 목록(renderCards)의 원본째 그대로 차이가 태그가 호출하는데 문제의
+// 등 경로로 함께 만든다 (라이브 검증 2026-11-04에서 등 제목만 고정하는
+// 카드 경로가 여는 것을 확인).
+function plainPreview(text) {
+  return String(text)
+    .replace(/<[^>]*>/g, '')
+    .replace(/!\[([^\]]*)\]\(file:\d+\)/g, '[이미지]')
+    .replace(/!\[([^\]]*)\]\(pending:\d+\)/g, '[이미지]')
+    // 본문 텍스트의 마크다운 이스케이프(\( 등)는 자체 드롭다운에서
+    // 테이블로 보여준다 (CommonMark 구분자 조합만 본문 등 C:\temp처럼
+    // 기간 등 백슬래시가 건드리지 않는다)
+    .replace(/\\([!-/:-@\[-`{-~])/g, '$1');
 }
-// 제목 도출 순서 계약 (서버 lib/memo-title.ts와 동일): 태그 제거 → 엔티티
-// 디코딩 → 이미지 마커 치환 → 첫 줄 선택 → 60자 절단 → 마크다운 정리.
-// 절단을 태그 제거보다 먼저 하면 긴 태그가 중간에서 잘려 닫는 '>'가 사라지고
-// 태그 원문이 제목에 그대로 노출된다 (2026-11-08 운영 점검 결함).
 function rowTitle(text) {
-  const plain = decodeHtmlEntities(String(text || '').replace(/<[^>]*>/g, ''))
-    .replace(/!\[([^\]]*)\]\((?:file|pending):\d+\)/g, '[이미지]');
-  const line = (plain.split('\n').find(l => l.trim()) || '').slice(0, 60);
+  // 태그와 얼룩 제거 전에 본문 전체에서 먼저 벗기는 등 뒤에 벗기면
+  // 60자 경계에서 나눠 태그(<span style="font-size:1픽셀)가 그대로
+  // 호출한다 (2026-11-03 사용자 보고). 태그만 넣는 첫 줄에 건너뛰고
+  // 실제 내용이 넣는 줄을 제목으로 삼는다.
+  const plain = plainPreview(text);
+  const line = (plain.split('\n').find(l => l.trim()) || '').slice(0, 60)
+    // 의도된 발산 (2026-11-08 결정 유지): 목록 제목만 엔티티 디코딩·공백 정규화.
+    // 서버 extractMemoTitle·통합 검색은 원본 계약(원문 절단)을 유지한다.
+    .replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"').replace(/&#39;/g, "'")
+    .replace(/&amp;/g, '&')
+    .replace(/\s+/g, ' ');
   return line
     .replace(/~~([^~]+)~~/g, '$1')
     .replace(/^#{1,6}\s+/, '')
     .replace(/(\*\*|__)([\s\S]*?)\1/g, '$2')
     .replace(/(^|[\s(])\*([^*\n]+)\*/g, '$1$2')
     .replace(/^\s*(?:[-+]|\d+[.)]|>)\s+/, '')
-    .replace(/\s+/g, ' ')
     .trim() || '(빈 메모)';
 }
 function renderRows(memos) {
@@ -1393,11 +1769,14 @@ function closePane(id, silent) {
   const p = document.querySelector(`.pane[data-pane="${id}"]`);
   if (p) p.remove();
   if (!silent) { syncRowSelection(); updatePanesVisibility(); }
+  // 창 반 제목을 함께 등 기준으로 다시 게시한다 (pane.js 정의)
+  if (typeof notifyMemoDocTitle === 'function') notifyMemoDocTitle();
 }
 function closeAllPanes() {
   hideImgResize();
   hideImgTools();
   document.querySelectorAll('.pane').forEach(p => p.remove());
+  if (typeof notifyMemoDocTitle === 'function') notifyMemoDocTitle();
 }
 // 71차: 위젯에서 호출할 수 있도록 window에 노출
 window.closePane = closePane;
@@ -1524,6 +1903,45 @@ async function copyImageToClipboard(url) {
     }
   }
 }
+// 캡션 편집 (E4 최소 구현): 캡션은 이미지 alt를 보여주며 마지막
+// (![캡션](file:ID))로 직행한다. 보여줄 화면에서는 figure 캡션으로 표시.
+let captionPop = null;
+function closeCaptionEditor() {
+  if (captionPop) { captionPop.remove(); captionPop = null; }
+}
+function openCaptionEditor(img) {
+  closeCaptionEditor();
+  const pop = document.createElement('div');
+  pop.className = 'img-caption-pop';
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.value = img.getAttribute('alt') || '';
+  input.placeholder = '이미지 캡션';
+  input.setAttribute('aria-label', '이미지 캡션');
+  const ok = document.createElement('button');
+  ok.type = 'button';
+  ok.textContent = '적용';
+  const apply = () => {
+    img.alt = input.value.trim();
+    const ed = img.closest('[contenteditable="true"]');
+    if (ed) ed.dispatchEvent(new Event('input', { bubbles: true }));
+    closeCaptionEditor();
+  };
+  ok.addEventListener('click', apply);
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); apply(); }
+    if (e.key === 'Escape') closeCaptionEditor();
+    e.stopPropagation();
+  });
+  pop.append(input, ok);
+  const r = img.getBoundingClientRect();
+  pop.style.left = (r.left + window.scrollX) + 'px';
+  pop.style.top = (r.bottom + 8 + window.scrollY) + 'px';
+  document.body.appendChild(pop);
+  captionPop = pop;
+  setTimeout(() => { input.focus(); input.select(); }, 30);
+}
+
 let imgToolsBar = null;
 let imgToolsTimer = null;
 function hideImgTools() {
@@ -1539,7 +1957,18 @@ function showImgTools(img) {
   bar._img = img;
   const isEditMode = !!img.closest('[contenteditable="true"]');
   if (isEditMode) {
-    // 수정모드: 삭제 버튼만 (휴지통, 적색)
+    // 편집모드: 캡션 편집 + 삭제 버튼
+    const capBtn = document.createElement('button');
+    capBtn.innerHTML = '<i data-lucide="pencil"></i>';
+    capBtn.title = '캡션 편집';
+    capBtn.setAttribute('aria-label', '캡션 편집');
+    capBtn.addEventListener('mousedown', (e) => e.preventDefault());
+    capBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      hideImgTools();
+      openCaptionEditor(img);
+    });
+    bar.appendChild(capBtn);
     const delBtn = document.createElement('button');
     delBtn.innerHTML = '<i data-lucide="trash-2"></i>';
     delBtn.className = 'danger';
@@ -1766,6 +2195,21 @@ function wireEditor(el, toolbar, pinToolbar, opts) {
       execCmd('removeFormat');
       return;
     }
+    // ``` + Enter 등 코드 블록 (스페이스바로 발동하는 mdBlockConvert와 같은 변환)
+    if (e.key === 'Enter' && !e.shiftKey) {
+      const sel0 = window.getSelection();
+      if (sel0.rangeCount && sel0.getRangeAt(0).collapsed) {
+        const n0 = sel0.anchorNode;
+        const b0 = n0.nodeType === 3 ? n0.parentElement : n0;
+        const p0 = b0.closest ? b0.closest('p,div') : null;
+        if (p0 && el.contains(p0) && p0.textContent.replace(/\u00a0/g, ' ') === '```') {
+          e.preventDefault();
+          p0.innerHTML = '';
+          convertBlockToPre(p0, sel0);
+          return;
+        }
+      }
+    }
     // 인용 블록에서 빈 상태로 Enter → 인용 탈출
     if (e.key === 'Enter' && !e.shiftKey) {
       const sel = window.getSelection();
@@ -1932,6 +2376,170 @@ function wireEditor(el, toolbar, pinToolbar, opts) {
   return editor;
 }
 /* 표 도구: 열 너비 드래그 + 행/열/표 편집 */
+/* 이미지 리사이즈 핸들 (에디터 전용) */
+let imgResize = null;
+function hideImgResize() {
+  if (imgResize && imgResize.resizing) return;
+  if (imgResize) {
+    imgResize.handle.remove();
+    imgResize.badge.remove();
+    if (imgResize.presets) imgResize.presets.remove();
+    imgResize = null;
+  }
+  window.removeEventListener('scroll', hideImgResize);
+}
+function showImgResize(editor, img) {
+  hideImgResize();
+  const handle = document.createElement('div');
+  handle.className = 'img-handle';
+  handle.setAttribute('aria-label', '이미지 크기 조절');
+  const badge = document.createElement('div');
+  badge.className = 'img-wbadge';
+  // 크기 프리셋 (E4): 드래그 미세 조정을 허용하고 25/50/100/원본 중 번에
+  const presets = document.createElement('div');
+  presets.className = 'img-presets';
+  [['25%', 0.25], ['50%', 0.5], ['100%', 1], ['원본', 0]].forEach(([label, ratio]) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = label;
+    b.setAttribute('aria-label', '이미지 크기 ' + label);
+    b.addEventListener('mousedown', (e) => e.preventDefault());
+    b.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (ratio === 0) {
+        img.style.width = ''; img.style.maxWidth = ''; img.style.height = '';
+      } else {
+        const maxW = editor.el.clientWidth || 600;
+        img.style.width = Math.round(maxW * ratio) + 'px';
+        img.style.maxWidth = '100%';
+        img.style.height = 'auto';
+      }
+      // input 이벤트는 에디터의 hideImgResize를 부르므로, 직접 신호를
+      // 보내지 등 선택 표시(핸들·프리셋)를 등 크기로 다시 그린다.
+      editor.el.dispatchEvent(new Event('input', { bubbles: true }));
+      showImgResize(editor, img);
+    });
+    presets.appendChild(b);
+  });
+  document.body.append(handle, badge, presets);
+  const place = () => {
+    const r = img.getBoundingClientRect();
+    handle.style.left = (r.right - 6 + window.scrollX) + 'px';
+    handle.style.top = (r.bottom - 6 + window.scrollY) + 'px';
+    badge.textContent = Math.round(r.width) + 'px';
+    badge.style.left = (r.right + 8 + window.scrollX) + 'px';
+    badge.style.top = (r.bottom - 10 + window.scrollY) + 'px';
+    presets.style.left = (r.left + window.scrollX) + 'px';
+    presets.style.top = (r.bottom + 8 + window.scrollY) + 'px';
+  };
+  place();
+  imgResize = { handle, badge, presets };
+  window.addEventListener('scroll', hideImgResize, { passive: true });
+  // 더블클릭 등 원본 크기로
+  img.addEventListener('dblclick', () => {
+    img.style.width = ''; img.style.maxWidth = ''; img.style.height = '';
+    place();
+  });
+  handle.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    hideImgTools();
+    const startX = e.clientX;
+    const startW = img.getBoundingClientRect().width;
+    const maxW = editor.el.clientWidth || 600;
+    if (!img.style.width) {
+      img.style.width = Math.round(startW) + 'px';
+      img.style.maxWidth = '100%';
+      img.style.height = 'auto';
+    }
+    let dragged = false;
+    imgResize.resizing = true;
+    const move = (ev) => {
+      dragged = true;
+      const w = Math.max(48, Math.min(maxW, startW + (ev.clientX - startX)));
+      img.style.width = Math.round(w) + 'px';
+      img.style.maxWidth = '100%';
+      img.style.height = 'auto';
+      place();
+    };
+    const up = () => {
+      document.removeEventListener('pointermove', move);
+      document.removeEventListener('pointerup', up);
+      document.removeEventListener('pointercancel', up);
+      imgResize.resizing = false;
+      if (dragged) {
+        // 드래그 직후 click은 핸들을 열리게 않도록 1회 억제
+        const suppress = (ce) => { ce.stopPropagation(); window.removeEventListener('click', suppress, true); };
+        window.addEventListener('click', suppress, true);
+        setTimeout(() => window.removeEventListener('click', suppress, true), 300);
+      }
+      editor.el.dispatchEvent(new Event('input', { bubbles: true }));
+    };
+    document.addEventListener('pointermove', move);
+    document.addEventListener('pointerup', up);
+    document.addEventListener('pointercancel', up);
+  });
+}
+
+function restoreSel(editor) {
+  editor.el.focus();
+  if (editor.savedRange) {
+    // UI-003/MEMO-001 핸들러: 저장된 Range를 그대로 사용하지 않는다.
+    // - 분리(detached)에게 에디터 밖을 가리키는 stale Range는 복원하지 않는다
+    //   (stale Range를 addRange가 렌더러 확인 가능 A와, 등 버튼이 공유하는 경로로).
+    // - addRange에는 반드시 clone을 넘긴다 (저장본 자체를 Selection에 넘기면
+    //   Range가 Selection 쪽으로 이동·변경 다음 복원에서는 사용할 수 없다).
+    const saved = editor.savedRange;
+    const startNode = saved.startContainer;
+    if (!startNode || !startNode.isConnected || !editor.el.contains(startNode)) return;
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    try { sel.addRange(saved.cloneRange()); } catch (e) { console.warn('선택 영역 복원 실패:', e); }
+  }
+}
+// 에디터에 파일 붙이기: 이미지는 본문 커서 위치에, 나머지는 첨부 칩으로
+function handleEditorFiles(editor, fileList) {
+  const MAX_SIZE = 10 * 1024 * 1024;
+  const files = [...fileList].filter(f => f.size > 0);
+  if (!files.length) return;
+  // 10MB 초과 파일은 선택 지점에서 차단
+  const valid = [];
+  for (const f of files) {
+    if (f.size > MAX_SIZE) {
+      toast(`"${f.name}"은 10MB를 초과해서 첨부가 안 돼요`, 5000);
+    } else {
+      valid.push(f);
+    }
+  }
+  if (!valid.length) return;
+  editor.el.focus();
+  restoreSel(editor);
+  // 선택 영역이 없으면 맨 뒤에 붙임
+  const sel = window.getSelection();
+  if (!sel.rangeCount || !editor.el.contains(sel.anchorNode)) {
+    const r = document.createRange();
+    r.selectNodeContents(editor.el);
+    r.collapse(false);
+    sel.removeAllRanges();
+    sel.addRange(r);
+  }
+  for (const f of valid) {
+    if (isImage(f.type, f.name)) {
+      const url = URL.createObjectURL(f);
+      editor.blobMap.set(url, f);
+      execCmd('insertHTML', `<img src="${url}" data-pending="1" alt="${esc(f.name)}">`);
+      execCmd('insertParagraph'); // 이미지 뒤에 빈 줄
+    } else {
+      editor.otherFiles.push(f);
+      refreshOtherFiles(editor);
+    }
+  }
+}
+
+
+// editor-core.js에서 분리 (2026-11-01 단일 파일 분해): 등 도구 배경.
+// memo-bundle.js로 함께 번호순으로 위임 함수 공유 방식과 기존과 동일하다.
+
 function wireTableTools(el) {
   let tblBar = null;
   let resizeState = null;
@@ -2055,157 +2663,11 @@ function wireTableTools(el) {
     }
   });
 }
-/* 이미지 리사이즈 핸들 (에디터 전용) */
-let imgResize = null;
-function hideImgResize() {
-  if (imgResize && imgResize.resizing) return;
-  if (imgResize) {
-    imgResize.handle.remove();
-    imgResize.badge.remove();
-    imgResize = null;
-  }
-  window.removeEventListener('scroll', hideImgResize);
-}
-function showImgResize(editor, img) {
-  hideImgResize();
-  const handle = document.createElement('div');
-  handle.className = 'img-handle';
-  handle.setAttribute('aria-label', '이미지 크기 조절');
-  const badge = document.createElement('div');
-  badge.className = 'img-wbadge';
-  document.body.append(handle, badge);
-  const place = () => {
-    const r = img.getBoundingClientRect();
-    handle.style.left = (r.right - 6 + window.scrollX) + 'px';
-    handle.style.top = (r.bottom - 6 + window.scrollY) + 'px';
-    badge.textContent = Math.round(r.width) + 'px';
-    badge.style.left = (r.right + 8 + window.scrollX) + 'px';
-    badge.style.top = (r.bottom - 10 + window.scrollY) + 'px';
-  };
-  place();
-  imgResize = { handle, badge };
-  window.addEventListener('scroll', hideImgResize, { passive: true });
-  // 더블클릭 → 원본 크기로
-  img.addEventListener('dblclick', () => {
-    img.style.width = ''; img.style.maxWidth = ''; img.style.height = '';
-    place();
-  });
-  handle.addEventListener('pointerdown', (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    hideImgTools();
-    const startX = e.clientX;
-    const startW = img.getBoundingClientRect().width;
-    const maxW = editor.el.clientWidth || 600;
-    if (!img.style.width) {
-      img.style.width = Math.round(startW) + 'px';
-      img.style.maxWidth = '100%';
-      img.style.height = 'auto';
-    }
-    let dragged = false;
-    imgResize.resizing = true;
-    const move = (ev) => {
-      dragged = true;
-      const w = Math.max(48, Math.min(maxW, startW + (ev.clientX - startX)));
-      img.style.width = Math.round(w) + 'px';
-      img.style.maxWidth = '100%';
-      img.style.height = 'auto';
-      place();
-    };
-    const up = () => {
-      document.removeEventListener('pointermove', move);
-      document.removeEventListener('pointerup', up);
-      document.removeEventListener('pointercancel', up);
-      imgResize.resizing = false;
-      if (dragged) {
-        // 드래그 직후 click이 핸들을 숨기지 않도록 1회 억제
-        const suppress = (ce) => { ce.stopPropagation(); window.removeEventListener('click', suppress, true); };
-        window.addEventListener('click', suppress, true);
-        setTimeout(() => window.removeEventListener('click', suppress, true), 300);
-      }
-      editor.el.dispatchEvent(new Event('input', { bubbles: true }));
-    };
-    document.addEventListener('pointermove', move);
-    document.addEventListener('pointerup', up);
-    document.addEventListener('pointercancel', up);
-  });
-}
-
-function restoreSel(editor) {
-  editor.el.focus();
-  if (editor.savedRange) {
-    // UI-003/MEMO-001 하드닝: 저장된 Range를 그대로 재사용하지 않는다.
-    // - 분리(detached)됐거나 에디터 밖을 가리키는 stale Range는 복원하지 않는다
-    //   (stale Range의 addRange가 렌더러 정지 가설 A였고, 전 버튼이 공유하는 경로다).
-    // - addRange에는 반드시 clone을 넘긴다 (저장본 자체를 Selection에 넘기면
-    //   Range가 Selection 쪽으로 이동·변경돼 다음 복원에서 재사용할 수 없다).
-    const saved = editor.savedRange;
-    const startNode = saved.startContainer;
-    if (!startNode || !startNode.isConnected || !editor.el.contains(startNode)) return;
-    const sel = window.getSelection();
-    sel.removeAllRanges();
-    try { sel.addRange(saved.cloneRange()); } catch (e) { console.warn('선택 영역 복원 실패:', e); }
-  }
-}
-// 에디터에 파일 넣기: 이미지는 본문 커서 위치에, 나머지는 첨부 칩으로
-function handleEditorFiles(editor, fileList) {
-  const MAX_SIZE = 10 * 1024 * 1024;
-  const files = [...fileList].filter(f => f.size > 0);
-  if (!files.length) return;
-  // 10MB 초과 파일은 선택 시점에 차단
-  const valid = [];
-  for (const f of files) {
-    if (f.size > MAX_SIZE) {
-      toast(`"${f.name}"은 10MB를 초과해서 첨부할 수 없어요`, 5000);
-    } else {
-      valid.push(f);
-    }
-  }
-  if (!valid.length) return;
-  editor.el.focus();
-  restoreSel(editor);
-  // 선택 영역이 없으면 맨 뒤에 삽입
-  const sel = window.getSelection();
-  if (!sel.rangeCount || !editor.el.contains(sel.anchorNode)) {
-    const r = document.createRange();
-    r.selectNodeContents(editor.el);
-    r.collapse(false);
-    sel.removeAllRanges();
-    sel.addRange(r);
-  }
-  for (const f of valid) {
-    if (isImage(f.type, f.name)) {
-      const url = URL.createObjectURL(f);
-      editor.blobMap.set(url, f);
-      execCmd('insertHTML', `<img src="${url}" data-pending="1" alt="${esc(f.name)}">`);
-      execCmd('insertParagraph'); // 이미지 뒤에 빈 줄
-    } else {
-      editor.otherFiles.push(f);
-      refreshOtherFiles(editor);
-    }
-  }
-}
 
 
 function buildToolbarButtons(bar, editor) {
-  // 스테이징 전용 진단 패널 (TRACE 로그를 DOM에 표시)
-  let diagPanel = document.getElementById('memo-trace-panel');
-  if (!diagPanel) {
-    diagPanel = document.createElement('div');
-    diagPanel.id = 'memo-trace-panel';
-    diagPanel.style.cssText = 'position:fixed;bottom:10px;right:10px;background:#000;color:#0f0;font-family:monospace;font-size:11px;padding:8px;max-width:400px;max-height:200px;overflow:auto;z-index:9999;display:none;';
-    document.body.appendChild(diagPanel);
-  }
-  const traceLog = (msg) => {
-    console.log(msg);
-    diagPanel.style.display = 'block';
-    const line = document.createElement('div');
-    line.textContent = new Date().toISOString().slice(11, 19) + ' ' + msg;
-    diagPanel.appendChild(line);
-    // 최대 50줄 유지
-    while (diagPanel.children.length > 50) diagPanel.removeChild(diagPanel.firstChild);
-  };
-
+  // (2026-11-05 E5: 스테이징 전용 TRACE 로그 패널·traceLog를 이번 번호에서
+  // 제거한다 등 서식 버튼의 프로 끝나면 개발 로그가 화면에 남지 않는다.)
   const btn = (label, title, fn) => {
     const b = document.createElement('button');
     b.type = 'button';
@@ -2214,22 +2676,15 @@ function buildToolbarButtons(bar, editor) {
     b.setAttribute('aria-label', title);
     b.addEventListener('mousedown', (e) => e.preventDefault()); // 선택 유지
     b.addEventListener('click', () => {
-      traceLog('[TRACE-01] 버튼 클릭 이벤트 진입: ' + title);
-      try {
-        restoreSel(editor);
-        traceLog('[TRACE-02] restoreSel 완료');
-      } catch (e) {
-        traceLog('[TRACE-02-ERR] restoreSel 실패: ' + e.message);
-      }
+      try { restoreSel(editor); } catch (e) { console.warn('선택 영역 복원 실패:', e); }
       closePops(bar);
       try {
         const result = fn(editor);
-        traceLog('[TRACE-03] fn() 호출됨, Promise: ' + (result instanceof Promise));
         if (result instanceof Promise) {
-          result.catch(e => traceLog('[TRACE-03-ERR] 비동기 오류: ' + e.message));
+          result.catch(e => console.warn('내부 동작 실패:', e));
         }
       } catch (e) {
-        traceLog('[TRACE-03-ERR] fn() 동기 오류: ' + e.message);
+        console.warn('내부 동작 실패:', e);
       }
       editor.el.focus();
     });
@@ -2265,21 +2720,21 @@ function buildToolbarButtons(bar, editor) {
       range = editor.savedRange.cloneRange();
     }
     if (!range || range.collapsed) {
-      alert('잠글 텍스트를 먼저 선택해주세요.');
+      toast('잠금 텍스트를 먼저 선택해주세요.');
       return;
     }
     const memoId = window.currentEditingMemoId;
     if (!memoId) {
-      alert('메모를 먼저 저장한 후에 블록을 잠글 수 있습니다.');
+      toast('메모를 먼저 만든 뒤에 블록에 잠금 등 안내합니다.');
       return;
     }
     const selectedText = range.toString();
     if (!selectedText.trim()) {
-      alert('잠글 텍스트를 선택해주세요.');
+      toast('잠금 텍스트를 선택해주세요.');
       return;
     }
     if (selectedText.length > 5000) {
-      alert('선택한 텍스트가 너무 깁니다. (최대 5000자)');
+      toast('선택한 텍스트가 너무 깁니다. (최대 5000자)');
       return;
     }
     // 순서 1) 저장: 서버 lock-block(D-3)은 저장된 본문에 선택 텍스트가
@@ -2289,7 +2744,7 @@ function buildToolbarButtons(bar, editor) {
     const hasPendingsEarly = (editor.blobMap && editor.blobMap.size > 0)
       || (editor.otherFiles && editor.otherFiles.length > 0);
     if (hasPendingsEarly) {
-      alert('첨부 업로드가 끝나지 않았어요. 먼저 저장한 뒤 블록을 잠가주세요.');
+      toast('첨부 업로드가 끝나지 않았어요. 먼저 만들기를 끝낸 블록에 잠가주세요.');
       return;
     }
     if (typeof serializeEditor === 'function') {
@@ -2303,13 +2758,13 @@ function buildToolbarButtons(bar, editor) {
           body: JSON.stringify({ text: curText })
         });
         if (!saveRes.ok) {
-          alert('블록 잠금 전에 본문 저장에 실패했습니다. 저장 버튼을 눌러주세요.');
+          toast('블록 잠금 전에 본문 내용에 실패했어요. 다시 버튼을 눌러주세요.');
           return;
         }
         if (typeof memoCache !== 'undefined' && memoCache[memoId]) memoCache[memoId].text = curText;
         if (typeof memoTexts !== 'undefined') memoTexts[memoId] = curText;
       } catch (e) {
-        alert('블록 잠금 전에 본문 저장에 실패했습니다. 저장 버튼을 눌러주세요.');
+        toast('블록 잠금 전에 본문 내용에 실패했어요. 다시 버튼을 눌러주세요.');
         return;
       }
     }
@@ -2327,19 +2782,19 @@ function buildToolbarButtons(bar, editor) {
       clearTimeout(timeoutId);
       if (!res.ok) {
         const errData = await res.json().catch(() => ({}));
-        alert('블록 잠금 실패: ' + (errData.error === 'block_not_in_text'
+        toast('블록 잠금 실패: ' + (errData.error === 'block_not_in_text'
           ? '선택한 내용이 저장된 본문과 달라요. 저장 후 다시 시도해주세요.'
-          : (errData.error || '서버 오류')));
+          : friendlyError(errData, '잠시 후 다시 시도해 주세요.')));
         return;
       }
       data = await res.json();
     } catch (e) {
-      if (e.name === 'AbortError') alert('블록 잠금 요청 시간이 초과되었습니다. (10초)');
-      else alert('블록 잠금 실패: ' + e.message);
+      if (e.name === 'AbortError') toast('블록 잠금 요청 시간이 초과됐습니다. (10초)');
+      else toast('블록 잠금 실패: ' + friendlyError(e, '잠시 후 다시 시도해 주세요.'));
       return;
     }
     if (!data.ok || !data.blockId) {
-      alert('블록 잠금 실패: ' + (data.error || '알 수 없는 오류'));
+      toast('블록 잠금 실패: ' + friendlyError(data, '잠시 후 다시 시도해 주세요.'));
       return;
     }
     // 플레이스홀더 삽입: 인라인 span (div-in-p 재구성 회피), 편집 불가 원자 요소
@@ -2361,7 +2816,7 @@ function buildToolbarButtons(bar, editor) {
       sel.addRange(after);
     } catch (domErr) {
       console.error('DOM 업데이트 실패:', domErr);
-      alert('화면 갱신에 실패했습니다. 새로고침해주세요.');
+      toast('오류 갱신이 실패했어요. 새로고침해주세요.');
       return;
     }
     editor.el.dispatchEvent(new Event('input', { bubbles: true }));
@@ -2385,11 +2840,11 @@ function buildToolbarButtons(bar, editor) {
           if (typeof memoCache !== 'undefined' && memoCache[memoId]) memoCache[memoId].text = finalText;
           if (typeof memoTexts !== 'undefined') memoTexts[memoId] = finalText;
         } else {
-          alert('블록은 잠겼지만 본문 저장에 실패했습니다. 저장 버튼을 눌러주세요.');
+          toast('블록이 잠기지 본문 내용에 실패했어요. 다시 버튼을 눌러주세요.');
         }
       } catch (e) {
         console.warn('블록 잠금 본문 반영 실패:', e);
-        alert('블록은 잠겼지만 본문 저장에 실패했습니다. 저장 버튼을 눌러주세요.');
+        toast('블록이 잠기지 본문 내용에 실패했어요. 다시 버튼을 눌러주세요.');
       }
     }
   });
@@ -2417,75 +2872,295 @@ function buildToolbarButtons(bar, editor) {
           restoreSel(editor);
         }
       };
-      if (kind === 'color' || kind === 'highlight') {
-        const colors = kind === 'color' ? PALETTE : HIGHLIGHTS;
-        const prop = kind === 'color' ? 'color:' : 'background-color:';
-        colors.forEach(c => {
-          const sw = document.createElement('button');
-          sw.type = 'button'; sw.className = 'sw'; sw.style.background = c;
-          sw.setAttribute('aria-label', c);
-          sw.addEventListener('click', () => { restoreSaved(); wrapSelectionStyle(prop + c); closePops(bar); editor.el.focus(); });
-          pop.appendChild(sw);
-        });
-        if (kind === 'highlight') {
-          const none = document.createElement('button');
-          none.type = 'button'; none.className = 'sz'; none.textContent = '없음';
-          none.addEventListener('click', () => { restoreSaved(); wrapSelectionStyle('background-color:transparent'); closePops(bar); editor.el.focus(); });
-          pop.appendChild(none);
-        }
-      } else {
-        const customRow = document.createElement('div');
-        customRow.className = 'sz-custom';
-        const customInput = document.createElement('input');
-        customInput.type = 'text';
-        customInput.placeholder = '12pt';
-        customInput.setAttribute('aria-label', '직접 입력 (예: 12pt)');
-        customInput.addEventListener('keydown', (e) => {
-          if (e.key === 'Enter') {
-            e.preventDefault();
-            let v = customInput.value.trim();
-            if (!v) return;
-            if (/^\d+(\.\d+)?$/.test(v)) v += 'pt';
-            restoreSaved(); wrapSelectionStyle('font-size:' + v);
-            closePops(bar);
-            editor.el.focus();
-          }
-          e.stopPropagation();
-        });
-        customInput.addEventListener('mousedown', (e) => e.stopPropagation());
-        const customBtn = document.createElement('button');
-        customBtn.type = 'button'; customBtn.className = 'sz'; customBtn.textContent = '적용';
-        customBtn.addEventListener('mousedown', (e) => e.stopPropagation());
-        customBtn.addEventListener('click', () => {
-          let v = customInput.value.trim();
-          if (!v) return;
-          if (/^\d+(\.\d+)?$/.test(v)) v += 'pt';
-          restoreSaved(); wrapSelectionStyle('font-size:' + v);
-          closePops(bar);
-          editor.el.focus();
-        });
-        customRow.append(customInput, customBtn);
-        pop.appendChild(customRow);
-        SIZES.forEach(([label, size]) => {
-          const sz = document.createElement('button');
-          sz.type = 'button'; sz.className = 'sz'; sz.textContent = label;
-          sz.addEventListener('click', () => { restoreSaved(); wrapSelectionStyle('font-size:' + size); closePops(bar); editor.el.focus(); });
-          pop.appendChild(sz);
-        });
+      // E3: 행간 고정 함수만 (굵은글씨 6 · 형광펜 4). pt 크기 단위의 배지 등
+      // 크기 계열의 스타일(본문·제목 1~3)은 대행한다.
+      const colors = kind === 'color' ? PALETTE : HIGHLIGHTS;
+      const prop = kind === 'color' ? 'color:' : 'background-color:';
+      colors.forEach(c => {
+        const sw = document.createElement('button');
+        sw.type = 'button'; sw.className = 'sw'; sw.style.background = c;
+        sw.setAttribute('aria-label', c);
+        sw.addEventListener('click', () => { restoreSaved(); wrapSelectionStyle(prop + c); closePops(bar); editor.el.focus(); });
+        pop.appendChild(sw);
+      });
+      if (kind === 'highlight') {
+        const none = document.createElement('button');
+        none.type = 'button'; none.className = 'sz'; none.textContent = '없음';
+        none.addEventListener('click', () => { restoreSaved(); wrapSelectionStyle('background-color:transparent'); closePops(bar); editor.el.focus(); });
+        pop.appendChild(none);
       }
       bar.appendChild(pop);
     });
     return b;
   };
 
+  // ---- 스타일 드롭다운 (E3): 본문·제목 1~3인용·코드 블록·구분선 ----
+  // 만들 방법뿐 없는 코드 블록·구분선을 크기별 만들 등 넣을 생기고,
+  // 버튼 레벨의 현재 블록 스타일을 표시한다 (updateToolbarActive).
+  const currentBlock = (ed) => {
+    const sel = window.getSelection();
+    if (!sel.rangeCount) return null;
+    const node = sel.anchorNode;
+    if (!node || !ed.el.contains(node)) return null;
+    const elNode = node.nodeType === 3 ? node.parentElement : node;
+    return elNode && elNode.closest ? elNode.closest('p,div,h1,h2,h3,blockquote,pre,li') : null;
+  };
+  const applyQuoteToggle = (ed) => {
+    restoreSel(ed);
+    const sel = window.getSelection();
+    if (!sel.rangeCount) return;
+    const node = sel.anchorNode;
+    const block = node.nodeType === 3 ? node.parentElement : node;
+    const bq = block.closest ? block.closest('blockquote') : null;
+    if (bq && ed.el.contains(bq)) {
+      // 내부 인용 셀이면 해제: 내용은 꺼내고 blockquote 제거
+      const parent = bq.parentNode;
+      while (bq.firstChild) parent.insertBefore(bq.firstChild, bq);
+      parent.removeChild(bq);
+    } else {
+      execCmd('formatBlock', 'blockquote');
+    }
+    ed.el.focus();
+  };
+  const applyBlockStyle = (ed, style) => {
+    restoreSel(ed);
+    if (style === 'quote') { applyQuoteToggle(ed); return; }
+    if (style === 'pre') {
+      const block = currentBlock(ed);
+      const sel = window.getSelection();
+      if (block) convertBlockToPre(block, sel);
+      ed.el.focus();
+      return;
+    }
+    if (style === 'hr') {
+      const block = currentBlock(ed);
+      const hr = document.createElement('hr');
+      const np = document.createElement('p');
+      np.innerHTML = '<br>';
+      if (block && block !== ed.el && ed.el.contains(block)) block.after(hr, np);
+      else ed.el.append(hr, np);
+      const sel = window.getSelection();
+      const r = document.createRange();
+      r.setStart(np, 0); r.collapse(true);
+      sel.removeAllRanges(); sel.addRange(r);
+      ed.el.dispatchEvent(new Event('input', { bubbles: true }));
+      ed.el.focus();
+      return;
+    }
+    execCmd('formatBlock', style);
+    ed.el.focus();
+  };
+  const styleBtn = (() => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'style-btn';
+    b.title = '문단 스타일';
+    b.setAttribute('aria-label', '문단 스타일');
+    b.innerHTML = '<span class="style-label">본문</span><i data-lucide="chevron-down"></i>';
+    b.addEventListener('mousedown', (e) => e.preventDefault());
+    b.addEventListener('click', () => {
+      restoreSel(editor);
+      if (bar.querySelector('.pop')) { closePops(bar); return; }
+      const pop = document.createElement('div');
+      pop.className = 'pop pop-list';
+      pop.addEventListener('mousedown', (e) => e.preventDefault());
+      const items = [
+        ['본문', 'p'], ['제목 1', 'h1'], ['제목 2', 'h2'], ['제목 3', 'h3'],
+        ['인용', 'quote'], ['코드 블록', 'pre'], ['구분선', 'hr'],
+      ];
+      items.forEach(([label, style]) => {
+        const it = document.createElement('button');
+        it.type = 'button'; it.className = 'sz pop-item pop-style-' + style;
+        it.textContent = label;
+        it.addEventListener('click', () => {
+          closePops(bar);
+          applyBlockStyle(editor, style);
+          // 스타일 레벨의 selectionchange에서 갱신하지만, 적용 직후에는
+          // 선택한 그대로 이벤트가 없을 수 있다 도 즉시 다시 쏜다.
+          if (typeof updateToolbarActive === 'function') updateToolbarActive(editor.el, bar);
+          editor.el.dispatchEvent(new Event('input', { bubbles: true }));
+        });
+        pop.appendChild(it);
+      });
+      bar.appendChild(pop);
+    });
+    return b;
+  })();
+
+  // ---- 체크리스트 잠금 (E3): 목록이면 체크 전환, 아니면 문단을 변환 ----
+  const toggleChecklist = (ed) => {
+    restoreSel(ed);
+    const sel = window.getSelection();
+    if (!sel.rangeCount) return;
+    const node = sel.anchorNode;
+    const elNode = node.nodeType === 1 ? node : node.parentElement;
+    const li = elNode && elNode.closest ? elNode.closest('li') : null;
+    const list = li ? li.parentElement : null;
+    if (list && (list.tagName === 'UL' || list.tagName === 'OL') && ed.el.contains(list)) {
+      if (list.classList.contains('task-list')) {
+        list.classList.remove('task-list');
+        list.querySelectorAll(':scope > li').forEach(item => {
+          item.classList.remove('task-item');
+          const cb = item.querySelector(':scope > input[type="checkbox"]');
+          if (cb) cb.remove();
+          const span = item.querySelector(':scope > span');
+          if (span) { while (span.firstChild) item.appendChild(span.firstChild); span.remove(); }
+        });
+      } else {
+        list.classList.add('task-list');
+        list.querySelectorAll(':scope > li').forEach(item => {
+          item.classList.add('task-item');
+          if (!item.querySelector(':scope > input[type="checkbox"]')) {
+            const cb = document.createElement('input');
+            cb.type = 'checkbox'; cb.tabIndex = -1;
+            const span = document.createElement('span');
+            while (item.firstChild) span.appendChild(item.firstChild);
+            item.append(cb, span);
+          }
+        });
+      }
+      ed.el.dispatchEvent(new Event('input', { bubbles: true }));
+      ed.el.focus();
+      return;
+    }
+    const block = currentBlock(ed);
+    if (!block || block === ed.el || block.tagName === 'LI') return;
+    const ul = document.createElement('ul');
+    ul.className = 'task-list';
+    const item = document.createElement('li');
+    item.className = 'task-item';
+    const cb = document.createElement('input');
+    cb.type = 'checkbox'; cb.tabIndex = -1;
+    const span = document.createElement('span');
+    span.innerHTML = block.innerHTML || '<br>';
+    item.append(cb, span);
+    ul.appendChild(item);
+    block.replaceWith(ul);
+    const r = document.createRange();
+    r.selectNodeContents(span); r.collapse(true);
+    sel.removeAllRanges(); sel.addRange(r);
+    ed.el.dispatchEvent(new Event('input', { bubbles: true }));
+    ed.el.focus();
+  };
+
+  // ---- 선택 영역 AI 액션 (범위 3-1: 편집 중 AI) ----
+  // 서버 /api/memo/ai-assist가 잠긴 메모·비밀정보를 자체 차단한다.
+  // 커서는 잠긴 블록 플레이스홀더 선택한 건너뛴 경우를 먼저 만든다
+  // (플레이스홀더 빈칸 없지만 마지막·안내 문구는 AI에 보내지 않는다).
+  const AI_ERROR_MESSAGES = {
+    locked_memo: '잠긴 메모에서는 AI를 쓸 수 없어요',
+    restricted_memo: '민감도가 높은 메모에서는 AI를 쓸 수 없어요',
+    secret_detected: '카드번호 같은 비밀정보가 포함되어 있어 AI로 보낼 수 없어요',
+    locked_block_included: '잠긴 블록이 포함되어 있어 AI를 쓸 수 없어요',
+    text_too_long: '선택한 내용이 너무 길어요 (최대 4000자)',
+    empty_text: '먼저 텍스트를 선택해주세요',
+  };
+  const runAiAssist = async (ed, action) => {
+    restoreSel(ed);
+    const sel = window.getSelection();
+    if (!sel.rangeCount) return;
+    const range = sel.getRangeAt(0);
+    if (range.collapsed || !ed.el.contains(range.commonAncestorContainer)) {
+      toast('AI로 붙인 텍스트를 먼저 선택해주세요');
+      return;
+    }
+    const frag = range.cloneContents();
+    if (frag.querySelector && frag.querySelector('.locked-block')) {
+      toast('잠긴 블록이 포함되어 있어 AI를 쓸 수 없어요');
+      return;
+    }
+    const text = range.toString();
+    if (!text.trim()) { toast('AI로 붙인 텍스트를 먼저 선택해주세요'); return; }
+    if (ed.memoId && typeof memoCache !== 'undefined' && memoCache[ed.memoId] && memoCache[ed.memoId].is_locked) {
+      toast('잠긴 메모에서는 AI를 쓸 수 없어요');
+      return;
+    }
+    const saved = range.cloneRange();
+    toast('AI가 작업하고 있어요', 4000);
+    let data = null;
+    try {
+      const res = await fetch('/api/memo/ai-assist', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ memoId: ed.memoId || null, text, action }),
+      });
+      data = await res.json().catch(() => null);
+      if (!res.ok || !data || !data.ok) {
+        toast((data && AI_ERROR_MESSAGES[data.error]) || 'AI 작업이 실패했어요');
+        return;
+      }
+    } catch (e) {
+      console.warn('AI 액션 요청 실패:', e);
+      toast('AI 작업이 실패했어요');
+      return;
+    }
+    const result = String(data.result || '').trim();
+    if (!result) { toast('AI 작업이 실패했어요'); return; }
+    if (action === 'title') {
+      const title = result.replace(/^#+\s*/, '').split('\n')[0].trim();
+      if (ed.titleInput) {
+        ed.titleInput.value = title;
+        toast('제목을 뽑았어요');
+      } else if (ed.el.id === 'composerRich' && typeof renderComposerTitle === 'function') {
+        composerTitle = title;
+        renderComposerTitle();
+        toast('제목을 뽑았어요');
+      } else {
+        toast('제목 적용: ' + title, 4000);
+      }
+      ed.el.focus();
+      return;
+    }
+    // 결과(마크다운)를 HTML로 바꿔 선택 영역과 교체한다
+    if (!saved.startContainer.isConnected) { toast('선택 영역이 바뀌어서 적용하지 못했어요'); return; }
+    sel.removeAllRanges();
+    sel.addRange(saved);
+    execCmd('insertHTML', mdToEditable(result, {}));
+    ed.el.dispatchEvent(new Event('input', { bubbles: true }));
+    ed.el.focus();
+    toast('적용했어요');
+  };
+  const aiBtn = (() => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.title = 'AI 액션';
+    b.setAttribute('aria-label', 'AI 액션');
+    b.innerHTML = '<i data-lucide="sparkles"></i>';
+    b.addEventListener('mousedown', (e) => e.preventDefault());
+    b.addEventListener('click', () => {
+      restoreSel(editor);
+      if (bar.querySelector('.pop')) { closePops(bar); return; }
+      const pop = document.createElement('div');
+      pop.className = 'pop pop-list';
+      pop.addEventListener('mousedown', (e) => e.preventDefault());
+      const items = [
+        ['다듬기', 'polish'], ['요약', 'summarize'],
+        ['제목 뽑기', 'title'], ['체크리스트로 변환', 'checklist'],
+      ];
+      items.forEach(([label, action]) => {
+        const it = document.createElement('button');
+        it.type = 'button'; it.className = 'sz pop-item';
+        it.textContent = label;
+        it.addEventListener('click', () => { closePops(bar); runAiAssist(editor, action); });
+        pop.appendChild(it);
+      });
+      bar.appendChild(pop);
+    });
+    return b;
+  })();
+
   bar.append(
     btn('<i data-lucide="undo-2"></i>', '되돌리기', () => execCmd('undo')),
     btn('<i data-lucide="redo-2"></i>', '다시 실행', () => execCmd('redo')),
     sep(),
+    styleBtn,
     btn('<i data-lucide="bold"></i>', '굵게', () => execCmd('bold')),
     btn('<i data-lucide="italic"></i>', '기울임', () => execCmd('italic')),
     btn('<i data-lucide="underline"></i>', '밑줄', () => execCmd('underline')),
     btn('<i data-lucide="strikethrough"></i>', '취소선', () => execCmd('strikeThrough')),
+    sep(),
+    popupBtn('<i data-lucide="highlighter"></i>', '형광펜', 'highlight'),
+    popupBtn('<i data-lucide="palette"></i>', '글자색', 'color'),
     sep(),
 
     btn('<i data-lucide="list"></i>', '글머리 기호', (ed) => {
@@ -2504,78 +3179,11 @@ function buildToolbarButtons(bar, editor) {
         execCmd('insertOrderedList');
       }
     }),
-    btn('<i data-lucide="indent"></i>', '들여쓰기', (ed) => {
-      restoreSel(ed);
-      const sel = window.getSelection();
-      if (!sel.rangeCount) return;
-      const range = sel.getRangeAt(0);
-      const node = range.commonAncestorContainer;
-      const block = node.nodeType === 3 ? node.parentElement : node;
-      let target = block.closest('p, div, li');
-      // 에디터 자체가 잡히거나 블록이 없으면: 현재 내용을 p로 감싸기
-      if (!target || target === ed.el) {
-        // 선택 영역이 있으면 그 부분을, 없으면 현재 블록을 p로 감싸기
-        if (!range.collapsed) {
-          execCmd('formatBlock', 'p');
-          target = sel.anchorNode.nodeType === 3
-            ? sel.anchorNode.parentElement.closest('p')
-            : sel.anchorNode.closest('p');
-        } else {
-          // 빈 에디터면 그냥 p 생성
-          execCmd('insertHTML', '<p>\u200B</p>');
-          const p = ed.el.querySelector('p:last-child');
-          if (p) {
-            const r = document.createRange();
-            r.selectNodeContents(p);
-            r.collapse(false);
-            sel.removeAllRanges();
-            sel.addRange(r);
-            target = p;
-          }
-        }
-      }
-      if (target && target !== ed.el) {
-        const cur = parseInt(target.style.marginLeft || '0', 10);
-        target.style.marginLeft = (cur + 40) + 'px';
-      }
-    }),
-    btn('<i data-lucide="outdent"></i>', '내어쓰기', (ed) => {
-      restoreSel(ed);
-      const sel = window.getSelection();
-      if (!sel.rangeCount) return;
-      const range = sel.getRangeAt(0);
-      const node = range.commonAncestorContainer;
-      const block = node.nodeType === 3 ? node.parentElement : node;
-      const target = block.closest('p, div, li') || block;
-      if (target && target !== ed.el) {
-        const cur = parseInt(target.style.marginLeft || '0', 10);
-        target.style.marginLeft = Math.max(0, cur - 40) + 'px';
-      }
-    }),
-    btn('<i data-lucide="quote"></i>', '인용', (ed) => {
-      restoreSel(ed);
-      const sel = window.getSelection();
-      if (!sel.rangeCount) return;
-      const node = sel.anchorNode;
-      const block = node.nodeType === 3 ? node.parentElement : node;
-      const bq = block.closest('blockquote');
-      if (bq) {
-        // 이미 인용 안이면 해제: 내용을 꺼내고 blockquote 제거
-        const parent = bq.parentNode;
-        while (bq.firstChild) parent.insertBefore(bq.firstChild, bq);
-        parent.removeChild(bq);
-      } else {
-        execCmd('formatBlock', 'blockquote');
-      }
-      ed.el.focus();
-    }),
-
+    btn('<i data-lucide="list-checks"></i>', '체크리스트', (ed) => toggleChecklist(ed)),
     btn('<i data-lucide="table"></i>', '표 삽입', () => openTablePicker(bar, editor)),
     btn('<i data-lucide="link"></i>', '링크', (ed) => openLinkDialog(bar, ed)),
     sep(),
-    popupBtn('<i data-lucide="palette"></i>', '글자색', 'color'),
-    popupBtn('<i data-lucide="highlighter"></i>', '형광펜', 'highlight'),
-    popupBtn('<i data-lucide="a-large-small"></i>', '글자 크기', 'size'),
+    aiBtn,
     btn('<i data-lucide="eraser"></i>', '서식 지우기', (ed) => {
       restoreSel(ed);
       const unwrap = (el) => {
@@ -2621,6 +3229,10 @@ function buildToolbarButtons(bar, editor) {
 }
 
 // 표 크기 그리드 피커 (Notion/TipTap식)
+
+// toolbar.js에서 분리 (2026-11-01 단일 파일 분해): 블록 잠금 해제 공용 포함 (UI-003).
+// memo-bundle.js로 함께 번호순으로 위임 함수 공유 방식과 기존과 동일하다.
+
 // ---- 블록 잠금 해제 공용 헬퍼 (UI-003) ----
 // 해제 API 호출 + step-up PIN 재시도. fetchLockWithPin은 pane.js의 전역 함수로,
 // 번들 로드 후 클릭 시점에는 항상 존재한다. 없으면(단독 로드 등) 일반 fetch로 폴백.
@@ -2629,7 +3241,7 @@ function buildToolbarButtons(bar, editor) {
 // locked_blocks 제거 UPDATE가 실패하면 {ok:true, html, warning:'unlock_pending'}을
 // 돌려준다 — 복호문은 왔지만 암호문 블록이 DB에 남아 있는 부분 성공이다.
 // 이를 무경고 성공으로 처리하면 호출자가 플레이스홀더/마커를 평문으로 교체·저장해
-// blockId가 UI에서 사라지고, 암호문 사본만 DB에 영구 잔류한다(고아 암호문).
+// blockId가 UI에서 들어온 암호문 원본 DB의 상단 드롭한다(곳은 암호문).
 // 그래서 여기서 1회 자동 재시도한다: 재시도에서 블록이 이미 제거됐으면 404가
 // 오는데, 그 경우 첫 응답의 html로 완전 성공으로 간주한다. 재시도 후에도
 // warning이 남으면 그대로 호출자에게 전달하고, 호출자는 플레이스홀더/마커를
@@ -2671,7 +3283,7 @@ async function unlockLockedBlockEl(el, memoId) {
   try {
     const { data } = await requestUnlockBlock(memoId, blockId);
     if (data.ok && data.warning === 'unlock_pending') {
-      alert('서버에서 암호문 블록을 제거하지 못해 해제를 보류했어요.\n블록은 잠긴 상태로 유지됩니다. 다시 시도해주세요.');
+      toast('서버에서 암호문 블록을 제거하지 못해 해제를 보류했어요.\n블록은 잠긴 상태로 유지됩니다. 다시 시도해주세요.');
       return;
     }
     if (data.ok && typeof data.html === 'string') {
@@ -2679,307 +3291,18 @@ async function unlockLockedBlockEl(el, memoId) {
       el.replaceWith(document.createTextNode(data.html));
       if (parent) parent.dispatchEvent(new Event('input', { bubbles: true }));
     } else if (data.code === 'PIN_REQUIRED' || data.code === 'PIN_INVALID') {
-      alert('PIN 확인이 필요합니다. 다시 시도해주세요.');
+      toast('PIN 확인이 필요합니다. 다시 시도해주세요.');
     } else {
-      alert('잠금 해제 실패: ' + (data.error || '알 수 없는 오류'));
+      toast('잠금 해제 실패: ' + friendlyError(data, '잠시 후 다시 시도해 주세요.'));
     }
   } catch (e) {
-    alert('잠금 해제 실패: ' + e.message);
+    toast('잠금 해제 실패: ' + friendlyError(e, '잠시 후 다시 시도해 주세요.'));
   }
 }
 
-async function openPane(id) {
-  id = Number(id);
-  if (typeof window._debugPane === 'undefined') window._debugPane = [];
-  window._debugPane.push('openPane called: ' + id);
-  if (document.querySelector(`.pane[data-pane="${id}"]`)) return;
-  let cached = memoCache[id];
-  // 79차: 캐시에 없으면 서버에서 직접 조회
-  // 82차: credentials 추가로 인증 쿠키 포함
-  // 트랙 2: 잠긴 메모는 목록 캐시의 본문이 비어 있을 수 있어(body_protected)
-  // 항상 단건 조회를 거친다 — 게이트 403이면 _fetchStepUp이 PIN 모달로 잇는다.
-  if (!cached || cached.is_locked) {
-    try {
-      const res = await window._fetchStepUp(`/api/memo/${id}`, { credentials: 'same-origin' });
-      if (res.ok) {
-        const data = await res.json();
-        const fresh = data.memo || data;
-        if (fresh && fresh.id) {
-          cached = fresh;
-          memoCache[id] = fresh;
-        }
-      } else if (cached && cached.body_protected) {
-        // step-up 거부/취소 — 본문 없는 팬을 열지 않는다
-        return;
-      }
-    } catch (e) { console.warn('메모 조회 실패:', e); }
-  }
-  if (!cached) return;
-  let fileMap = memoFileMap[id];
-  if (!fileMap && cached.file_count) {
-    try {
-      const files = await fetch(`/api/memo/${id}/files`).then(r => r.json());
-      fileMap = {};
-      files.forEach(f => { fileMap[f.id] = f; });
-      memoFileMap[id] = fileMap;
-    } catch (e) { console.warn('메모 파일 목록 조회 실패:', e); fileMap = {}; }
-  }
-  fileMap = fileMap || {};
-  const panes = $('panes');
-  const pane = document.createElement('div');
-  pane.className = 'pane';
-  pane.dataset.pane = id;
-  pane.innerHTML = `
-    <div class="pane-head">
-      <span class="date"></span>
-      <span class="pane-actions"></span>
-    </div>
-    <div class="pane-view"></div>
-    <div class="pane-edit" hidden></div>
-    <div class="pane-files"></div>`;
-  panes.appendChild(pane);
-  const viewEl = pane.querySelector('.pane-view');
-  const editEl = pane.querySelector('.pane-edit');
-  const actionsEl = pane.querySelector('.pane-actions');
-  const dateEl = pane.querySelector('.pane-head .date');
-  let editor = null, rich = null;
+// pane.js에서 분리 (2026-11-01 단일 파일 분해): 등 하단 첨부 파일 목록 렌더링만.
+// memo-bundle.js로 함께 번호순으로 위임 함수 공유 방식과 기존과 동일하다.
 
-  function refreshHead() {
-    const c = memoCache[id];
-    if (!c) return;
-    dateEl.innerHTML = esc(fmtDate(c.created_at)) + (c.file_count ? ' · <i data-lucide="paperclip" class="ic-xs"></i> ' + c.file_count : '');
-  }
-  function showView(targetPane) {
-    const p = targetPane || pane;
-    const pActionsEl = p.querySelector('.pane-actions');
-    const pViewEl = p.querySelector('.pane-view');
-    const pEditEl = p.querySelector('.pane-edit');
-    const pDateEl = p.querySelector('.pane-head .date');
-    pEditEl.hidden = true;
-    pViewEl.hidden = false;
-    const isLocked = memoCache[id]?.is_locked ? true : false;
-    pActionsEl.innerHTML = `
-      ${isLocked ? '<span class="pane-lock-ind" title="AI 접근 잠김"><i data-lucide="lock"></i></span>' : ''}
-      <button data-act="edit" title="수정" aria-label="수정"><i data-lucide="pencil"></i></button>
-      <button data-act="del" class="danger" title="삭제" aria-label="삭제" onclick="window._deleteMemo(this)"><i data-lucide="trash-2"></i></button>
-      <button data-act="close" title="닫기" aria-label="닫기"><i data-lucide="x"></i></button>`;
-    wireActions(p);
-    refreshIcons();
-    const c = memoCache[id];
-    const fm = memoFileMap[id] || {};
-    pViewEl.innerHTML = '';
-    const body = document.createElement('div');
-    body.className = 'md pane-body';
-    body.innerHTML = renderBodyHtml(c.text, fm, '');
-    // 모든 링크는 새탭에서 열기
-    body.querySelectorAll('a[href]').forEach(a => {
-      a.target = '_blank';
-      a.rel = 'noopener';
-    });
-    body.querySelectorAll('img[data-full]').forEach(img => {
-      img.style.cursor = 'default';
-      img.onclick = null;
-      img.addEventListener('mouseenter', () => showImgTools(img));
-    });
-    // 잠긴 블록 플레이스홀더 (보기 모드): 클릭 → step-up 해제 → 본문 마커를
-    // 복호문으로 되돌려 저장하고 다시 그린다 (UI-003, 트랙 D).
-    body.querySelectorAll('.locked-block').forEach(el => {
-      el.addEventListener('click', async () => {
-        const blockId = el.getAttribute('data-block-id');
-        if (!blockId) return;
-        if (!await window._confirmAction('이 블록의 잠금을 해제할까요?', '해제')) return;
-        try {
-          const { data } = await requestUnlockBlock(id, blockId);
-          if (data.ok && data.warning === 'unlock_pending') {
-            // 부분 성공(복호문 수신·암호문 DB 잔류): 마커를 평문으로 교체해
-            // 저장하면 blockId가 사라져 암호문 사본이 고아가 된다.
-            // 마커를 유지하고 보류를 알린다 (재클릭으로 재시도 가능).
-            alert('서버에서 암호문 블록을 제거하지 못해 해제를 보류했어요.\n블록은 잠긴 상태로 유지됩니다. 다시 시도해주세요.');
-            return;
-          }
-          if (!data.ok || typeof data.html !== 'string') {
-            if (data.code !== 'PIN_REQUIRED' && data.code !== 'PIN_INVALID') {
-              alert('잠금 해제 실패: ' + (data.error || '알 수 없는 오류'));
-            }
-            return;
-          }
-          const cur = memoCache[id];
-          if (!cur) return;
-          const markerRe = new RegExp('\\\\?\\[LOCKED_BLOCK:' + blockId + '\\\\?\\]');
-          const newText = String(cur.text || '').replace(markerRe, () => data.html);
-          const putRes = await window._fetchStepUp('/api/memo/' + id, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ text: newText })
-          });
-          if (!putRes.ok) { alert('잠금은 해제됐지만 본문 반영에 실패했습니다.'); return; }
-          cur.text = newText;
-          if (typeof memoTexts !== 'undefined') memoTexts[id] = newText;
-          showView(p);
-        } catch (e) {
-          alert('잠금 해제 실패: ' + e.message);
-        }
-      });
-    });
-    viewEl.appendChild(body);
-    renderPaneFiles(pane, id, fm, false);
-    refreshHead();
-  }
-  function showEdit() {
-    viewEl.hidden = true;
-    editEl.hidden = false;
-    window.currentEditingMemoId = id;
-    const memoForEdit = memoCache[id];
-    if (memoForEdit) memoForEdit._pendingLock = !!memoForEdit.is_locked;
-    const isLockedEdit = memoForEdit?.is_locked ? true : false;
-    actionsEl.innerHTML = `
-      <button data-act="lock" title="${isLockedEdit ? 'AI 접근 잠김 (클릭하여 해제)' : 'AI 접근 허용 (클릭하여 잠금)'}" aria-label="잠금"><i data-lucide="${isLockedEdit ? 'lock' : 'lock-open'}"></i></button>
-      <button data-act="save" title="저장 (⌘/Ctrl+Enter)" aria-label="저장"><i data-lucide="save"></i></button>
-      <button data-act="cancel" title="취소" aria-label="취소"><i data-lucide="x"></i></button>`;
-    wireActions();
-    refreshIcons();
-    if (!editor) {
-      const titleInput = document.createElement('input');
-      titleInput.className = 'title-input';
-      titleInput.placeholder = '제목';
-      titleInput.autocomplete = 'off';
-      titleInput.addEventListener('keydown', (e) => {
-        if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
-          e.preventDefault();
-          pane.querySelector('[data-act="save"]').click();
-        }
-      });
-      const toolbar = document.createElement('div');
-      toolbar.className = 'toolbar hidden';
-      rich = document.createElement('div');
-      rich.className = 'rich';
-      rich.contentEditable = 'true';
-      rich.setAttribute('role', 'textbox');
-      editor = wireEditor(rich, toolbar, true);
-      editor.titleInput = titleInput;
-      const chips = document.createElement('div');
-      chips.className = 'pending';
-      editor.chipsBox = chips;
-      // 파일 첨부 진입점: 새 메모 컴포저에는 #files 입력이 있지만 기존 메모
-      // 편집(pane)에는 붙여넣기·드래그드롭 외에 파일을 고르는 경로가 없었다
-      // (누락 — otherFiles 칩·저장 시 업로드 등 하위 배선은 전부 살아 있었다).
-      // inedit와 같은 .editor-row/.mini-file-btn 패턴으로 일반 파일 첨부를 연다.
-      const attachRow = document.createElement('div');
-      attachRow.className = 'editor-row';
-      const attachBtn = document.createElement('label');
-      attachBtn.className = 'mini-file-btn';
-      attachBtn.title = '파일 첨부';
-      attachBtn.setAttribute('aria-label', '파일 첨부');
-      attachBtn.innerHTML = '<i data-lucide="paperclip"></i>';
-      const attachInput = document.createElement('input');
-      attachInput.type = 'file';
-      attachInput.multiple = true;
-      attachInput.setAttribute('aria-label', '파일 첨부');
-      attachInput.addEventListener('change', () => { handleEditorFiles(editor, attachInput.files); attachInput.value = ''; });
-      attachBtn.appendChild(attachInput);
-      attachRow.appendChild(attachBtn);
-      editEl.append(titleInput, toolbar, rich, chips, attachRow);
-      rich.addEventListener('keydown', (e) => {
-        if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
-          e.preventDefault();
-          pane.querySelector('[data-act="save"]').click();
-        }
-      });
-    }
-    const fm = memoFileMap[id] || {};
-    try {
-      const memoText = (memoCache[id] && memoCache[id].text) || '';
-      const { title, body } = extractTitle(memoText);
-      editor.titleInput.value = title || '';
-      rich.innerHTML = mdToEditable(body || '', fm) || '';
-    } catch (e) {
-      console.error('편집 내용 로드 실패:', e);
-      rich.innerHTML = '<p>내용을 불러오지 못했습니다.</p>';
-    }
-    // 저장돼 있던 잠긴 블록 플레이스홀더에도 해제 클릭을 연결한다 (UI-003)
-    rich.querySelectorAll('.locked-block').forEach(el => {
-      el.addEventListener('click', () => { unlockLockedBlockEl(el, id); });
-    });
-    applyTableWidths(rich);
-    renderPaneFiles(pane, id, fm, true);
-    refreshIcons();
-    rich.focus();
-  }
-  function wireActions(targetPane) {
-    const waPane = targetPane || pane;
-    const waActionsEl = waPane.querySelector('.pane-actions');
-    const q = (a) => waActionsEl.querySelector(`[data-act="${a}"]`);
-    // 보기 모드에서는 lock 토글 없음 (편집 모드에서만)
-    // 단, 편집 모드의 lock 버튼은 아래에서 처리
-    const lb = q('lock');
-    if (lb && actionsEl.querySelector('[data-act="save"]')) {
-      // 편집 모드: 토글 시 UI만 변경, 저장은 save 버튼에서
-      lb.addEventListener('mousedown', (e) => { e.preventDefault(); e.stopPropagation(); });
-      lb.addEventListener('click', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        e.stopImmediatePropagation();
-        const memo = memoCache[id];
-        if (!memo) return;
-        // pending 상태로 저장 (실제 저장은 save 버튼에서)
-        const newLocked = !memo._pendingLock;
-        memo._pendingLock = newLocked;
-        lb.innerHTML = `<i data-lucide="${newLocked ? 'lock' : 'lock-open'}"></i>`;
-        lb.title = newLocked ? 'AI 접근 잠김 (클릭하여 해제)' : 'AI 접근 허용 (클릭하여 잠금)';
-        lb.classList.toggle('active', newLocked);
-        refreshIcons();
-        return false;
-      });
-    }
-    const eb = q('edit');
-    if (eb) { eb.addEventListener('mousedown', (e) => e.preventDefault()); eb.onclick = showEdit; }
-    const sb = q('save');
-    if (sb) {
-      sb.addEventListener('mousedown', (e) => e.preventDefault());
-      sb.onclick = async () => {
-        // pending된 lock 상태가 있으면 먼저 저장
-        const memo = memoCache[id];
-        if (memo && memo._pendingLock !== undefined) {
-          try {
-            const lockRes = await fetchLockWithPin('/api/memo/' + id + '/lock', { locked: memo._pendingLock });
-            // HTTP 오류(예: 암호화 실패 500)면 본문 저장을 중단한다 —
-            // 실패를 삼키고 PUT을 진행하면 잠금 상태와 본문이 어긋난다.
-            if (!lockRes.ok) {
-              alert('잠금 설정 실패');
-              return;
-            }
-            memo.is_locked = memo._pendingLock ? 1 : 0;
-            delete memo._pendingLock;
-          } catch (err) {
-            alert('잠금 설정 실패');
-            return;
-          }
-        }
-        await savePane(id, pane, editor, rich);
-        showView();
-      };
-    }
-    const cb = q('cancel');
-    if (cb) { cb.addEventListener('mousedown', (e) => e.preventDefault()); cb.onclick = () => {
-      const p = waPane;
-      const vEl = p.querySelector('.pane-view');
-      const eEl = p.querySelector('.pane-edit');
-      if (vEl) vEl.hidden = false;
-      if (eEl) eEl.hidden = true;
-      // view 모드 버튼으로 복원
-      try { showView(p); } catch (e) { console.warn('showView 실패:', e); }
-    }; }
-    // 삭제 버튼은 HTML의 onclick="window._deleteMemo(this)" 사용 (커스텀 모달)
-    // wireActions()에서 덮어쓰지 않음
-    const xb = q('close');
-    if (xb) { xb.addEventListener('mousedown', (e) => e.preventDefault()); xb.onclick = () => {
-      if (typeof closePane === 'function') { try { closePane(id); } catch (e) { console.warn('closePane 실패:', e); } }
-    }; }
-  }
-  showView(pane);
-  wireActions(pane);
-  updatePanesVisibility();
-}
 // 팬 하단: 첨부 파일 목록 (마커 없는 이미지 + 일반 파일)
 function renderPaneFiles(pane, memoId, fileMap, isEditMode) {
   const sec = pane.querySelector('.pane-files');
@@ -3047,7 +3370,7 @@ function renderPaneFiles(pane, memoId, fileMap, isEditMode) {
         setTimeout(() => URL.revokeObjectURL(url), 1000);
       } catch {
         // 잠긴 파일은 게이트 403 페이지를 새 탭으로 여는 폴백이 무의미하다.
-        if (f.is_locked) { alert('파일을 열 수 없어요. PIN 확인이 필요합니다.'); return; }
+        if (f.is_locked) { toast('파일이 열 수 없어요. PIN 확인이 필요합니다.'); return; }
         window.open(srcUrl, '_blank');
       }
     };
@@ -3085,12 +3408,12 @@ function renderPaneFiles(pane, memoId, fileMap, isEditMode) {
           }
           renderPaneFiles(pane, memoId, memoFileMap[memoId], isEditMode);
         } else if (data.error === 'migration_needed') {
-          alert('D1 마이그레이션 필요: ' + data.message);
+          toast(friendlyError(data, '데이터 준비가 아직 끝나지 않았어요. 잠시 후 다시 시도해 주세요.'));
         } else {
-          alert('파일 잠금 실패');
+          toast('파일 잠금 실패');
         }
       } catch (err) {
-        alert('파일 잠금 실패: ' + err.message);
+        toast('파일 잠금 실패: ' + friendlyError(err, '잠시 후 다시 시도해 주세요.'));
       } finally {
         lockBtn.disabled = false;
       }
@@ -3112,9 +3435,468 @@ function renderPaneFiles(pane, memoId, fileMap, isEditMode) {
   sec.append(imgBox, fileBox);
 
   refreshIcons();}
+
+/* 창 반 제목 게시 (myhub:doc-title, 단축 H): 제목은 등 이름이 아닌
+   문서 이름이라는 HIG 규칙 등 애플 메모 중 가장 최근 주의 제목은 창
+   제목줄에 뿐. 사이 없으면 name=null로 모듈 제목('메모')는
+   파악한다. 잠긴 메모는 본문 텍스트가 비어 있어 '제목 없음'으로만
+   게시한다 (제목은 지배하지 않는다). */
+function notifyMemoDocTitle() {
+  try {
+    if (typeof window === 'undefined' || !window.parent || window.parent === window) return;
+    const panes = document.querySelectorAll('.pane[data-pane]');
+    let name = null;
+    if (panes.length) {
+      const id = Number(panes[panes.length - 1].dataset.pane);
+      const text = (typeof memoTexts !== 'undefined' && memoTexts[id])
+        || (typeof memoCache !== 'undefined' && memoCache[id] && memoCache[id].text) || '';
+      name = extractTitle(text).title || '제목 없음';
+    }
+    window.parent.postMessage({ type: 'myhub:doc-title', name, dirty: false }, window.location.origin);
+  } catch (e) { console.warn('메모 제목 동기 실패:', e); }
+}
+window.notifyMemoDocTitle = notifyMemoDocTitle;
+
+/* 보여줄 모드 잠금 메뉴 적용 (I-03): 기존 lock/sensitivity API를 그대로 낸다.
+   잠금 해제는 fetchLockWithPin의 PIN step-up을 대행하므로 기존 편집 모드
+   잠금 버튼·step-up 동작과 동일하다. 성공 시에만 캐시를 갱신한다. */
+async function setMemoLockFromView(id, locked) {
+  const res = await fetchLockWithPin('/api/memo/' + id + '/lock', { locked: !!locked });
+  if (!res.ok) return false;
+  if (memoCache[id]) memoCache[id].is_locked = locked ? 1 : 0;
+  return true;
+}
+async function setMemoSensitivityFromView(id, sensitivity) {
+  const res = await fetch('/api/memo/' + id + '/sensitivity', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ sensitivity }),
+  });
+  if (!res.ok) return false;
+  if (memoCache[id]) memoCache[id].sensitivity = sensitivity;
+  return true;
+}
+
+async function openPane(id) {
+  id = Number(id);
+  if (document.querySelector(`.pane[data-pane="${id}"]`)) return;
+  let cached = memoCache[id];
+  // 79차: 캐시가 없으면 서버에서 직접 조회
+  // 82차: credentials 추가로 넣을 쿠키 포함
+  // 단축 2: 잠긴 메모는 목록 캐시가 본문이 비어 있을 수 있어(body_protected)
+  // 정상 권한 조회가 건너뛴 등 게이트 403이면 _fetchStepUp의 PIN 모달로 넘는다.
+  if (!cached || cached.is_locked) {
+    try {
+      const res = await window._fetchStepUp(`/api/memo/${id}`, { credentials: 'same-origin' });
+      if (res.ok) {
+        const data = await res.json();
+        const fresh = data.memo || data;
+        if (fresh && fresh.id) {
+          // 권한 GET 응답에는 sensitivity가 없다 등 목록 캐시가 가진 값을
+          // 보존해야 잠금 메모가 현재 민감도대로 올바르게 표시한다 (I-03).
+          if (typeof fresh.sensitivity !== 'number' && cached && typeof cached.sensitivity === 'number') {
+            fresh.sensitivity = cached.sensitivity;
+          }
+          cached = fresh;
+          memoCache[id] = fresh;
+        }
+      } else if (cached && cached.body_protected) {
+        // step-up 거부/취소 등 본문 없는 사유 내지 않는다
+        return;
+      }
+    } catch (e) { console.warn('메모 조회 실패:', e); }
+  }
+  if (!cached) return;
+  let fileMap = memoFileMap[id];
+  if (!fileMap && cached.file_count) {
+    try {
+      const files = await fetch(`/api/memo/${id}/files`).then(r => r.json());
+      fileMap = {};
+      files.forEach(f => { fileMap[f.id] = f; });
+      memoFileMap[id] = fileMap;
+    } catch (e) { console.warn('메모 파일 목록 조회 실패:', e); fileMap = {}; }
+  }
+  fileMap = fileMap || {};
+  const panes = $('panes');
+  const pane = document.createElement('div');
+  pane.className = 'pane';
+  pane.dataset.pane = id;
+  pane.innerHTML = `
+    <div class="pane-head">
+      <span class="date"></span>
+      <span class="pane-actions"></span>
+    </div>
+    <div class="pane-view"></div>
+    <div class="pane-edit" hidden></div>
+    <div class="pane-files"></div>`;
+  panes.appendChild(pane);
+  const viewEl = pane.querySelector('.pane-view');
+  const editEl = pane.querySelector('.pane-edit');
+  const actionsEl = pane.querySelector('.pane-actions');
+  const dateEl = pane.querySelector('.pane-head .date');
+  let editor = null, rich = null;
+
+  function refreshHead() {
+    const c = memoCache[id];
+    if (!c) return;
+    dateEl.innerHTML = esc(fmtDate(c.created_at)) + (c.file_count ? ' 쨌 <i data-lucide="paperclip" class="ic-xs"></i> ' + c.file_count : '');
+  }
+  function showView(targetPane) {
+    const p = targetPane || pane;
+    const pActionsEl = p.querySelector('.pane-actions');
+    const pViewEl = p.querySelector('.pane-view');
+    const pEditEl = p.querySelector('.pane-edit');
+    const pDateEl = p.querySelector('.pane-head .date');
+    pEditEl.hidden = true;
+    pViewEl.hidden = false;
+    const isLocked = memoCache[id]?.is_locked ? true : false;
+    pActionsEl.innerHTML = `
+      ${isLocked ? '<span class="pane-lock-ind" title="AI 접근 잠금"><i data-lucide="lock"></i></span>' : ''}
+      <span class="myhub-lock-slot" data-act="lockmenu"></span>
+      ${isLocked ? '' : '<button data-act="tags" title="AI 태그 적용" aria-label="AI 태그 적용"><i data-lucide="tags"></i></button>'}
+      <button data-act="edit" title="수정" aria-label="수정"><i data-lucide="pencil"></i></button>
+      <button data-act="del" class="danger" title="삭제" aria-label="삭제" onclick="window._deleteMemo(this)"><i data-lucide="trash-2"></i></button>
+      <button data-act="close" title="닫기" aria-label="닫기"><i data-lucide="x"></i></button>`;
+    wireActions(p);
+    refreshIcons();
+    wireLockMenu(p);
+    wireTagSuggest(p);
+    const c = memoCache[id];
+    const fm = memoFileMap[id] || {};
+    pViewEl.innerHTML = '';
+    const body = document.createElement('div');
+    body.className = 'md pane-body';
+    body.innerHTML = renderBodyHtml(c.text, fm, '');
+    // 모든 마크가 트리에서 숨김
+    body.querySelectorAll('a[href]').forEach(a => {
+      a.target = '_blank';
+      a.rel = 'noopener';
+    });
+    body.querySelectorAll('img[data-full]').forEach(img => {
+      img.style.cursor = 'default';
+      img.onclick = null;
+      img.addEventListener('mouseenter', () => showImgTools(img));
+    });
+    // 이미지 캡션 (E4): alt가 파일명뿐인('이미지')가 아닌 경우에만
+    // figure 캡션으로 표시한다 (캡션은 alt 편집으로 저장된 값).
+    body.querySelectorAll('img[data-full]').forEach(img => {
+      const alt = (img.getAttribute('alt') || '').trim();
+      const fid = img.getAttribute('data-fid');
+      const f = fid ? fm[fid] : null;
+      if (!alt || alt === '이미지' || (f && alt === f.filename)) return;
+      const fig = document.createElement('figure');
+      fig.className = 'img-figure';
+      const cap = document.createElement('figcaption');
+      cap.textContent = alt;
+      img.replaceWith(fig);
+      fig.append(img, cap);
+    });
+    // 잠긴 블록 플레이스홀더 (보여줄 모드): 내부 등 step-up 해제 등 본문 마지막을
+    // 복호문으로 되돌린 만들고 다시 그린다 (UI-003, 단축 D).
+    body.querySelectorAll('.locked-block').forEach(el => {
+      el.addEventListener('click', async () => {
+        const blockId = el.getAttribute('data-block-id');
+        if (!blockId) return;
+        if (!await window._confirmAction('이 블록의 잠금을 해제할까요?', '해제')) return;
+        try {
+          const { data } = await requestUnlockBlock(id, blockId);
+          if (data.ok && data.warning === 'unlock_pending') {
+            // 부분 성공(복호문 수신·암호문 DB 삭제): 마지막을 빈칸으로 교체해
+            // 만들면 blockId가 들어온 암호문 원본이 있는가 한다.
+            // 마지막을 허용하고 보류를 남김 (클릭으로 다시 가능).
+            toast('서버에서 암호문 블록을 제거하지 못해 해제를 보류했어요.\n블록은 잠긴 상태로 유지됩니다. 다시 시도해주세요.');
+            return;
+          }
+          if (!data.ok || typeof data.html !== 'string') {
+            if (data.code !== 'PIN_REQUIRED' && data.code !== 'PIN_INVALID') {
+              toast('잠금 해제 실패: ' + friendlyError(data, '잠시 후 다시 시도해 주세요.'));
+            }
+            return;
+          }
+          const cur = memoCache[id];
+          if (!cur) return;
+          const markerRe = new RegExp('\\\\?\\[LOCKED_BLOCK:' + blockId + '\\\\?\\]');
+          const newText = String(cur.text || '').replace(markerRe, () => data.html);
+          const putRes = await window._fetchStepUp('/api/memo/' + id, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text: newText })
+          });
+          if (!putRes.ok) { toast('잠금은 해제했지만 본문 반영이 실패했어요.'); return; }
+          cur.text = newText;
+          if (typeof memoTexts !== 'undefined') memoTexts[id] = newText;
+          showView(p);
+        } catch (e) {
+          toast('잠금 해제 실패: ' + friendlyError(e, '잠시 후 다시 시도해 주세요.'));
+        }
+      });
+    });
+    viewEl.appendChild(body);
+    // 태그 적용 칩이 붙을 자리 (AI 태그 적용 버튼이 채워짐)
+    const tagRow = document.createElement('div');
+    tagRow.className = 'tag-suggest';
+    tagRow.hidden = true;
+    pViewEl.appendChild(tagRow);
+    // 보여줄 오류 체크리스트 잠금 (E3 구성)
+    wireViewChecklist(body, id, () => showView(p));
+    renderPaneFiles(pane, id, fm, false);
+    refreshHead();
+  }
+  // 보여줄 모드 잠금 메뉴 (I-03): 레벨 넣는 "잠금" 메뉴로 메모 잠금·민감도를
+  // 즉시 적용한다. 편집 모드의 아이콘 잠금 버튼(_pendingLock)과는 경로가
+  // 들어 충돌하지 않는 등 보여줄에서 바꿔 상태는 memoCache에 반영해
+  // 편집 진입 등 showEdit의 그 값을 읽는다.
+  function wireLockMenu(targetPane) {
+    const p = targetPane || pane;
+    const slot = p.querySelector('[data-act="lockmenu"]');
+    if (!slot || typeof buildMemoLockMenu !== 'function') return;
+    const c = memoCache[id];
+    if (!c) return;
+    const menu = buildMemoLockMenu({
+      state: { locked: !!c.is_locked, sensitivity: typeof c.sensitivity === 'number' ? c.sensitivity : 1 },
+      onChange: async (next, key) => {
+        try {
+          const ok = key === 'locked'
+            ? await setMemoLockFromView(id, next.locked)
+            : await setMemoSensitivityFromView(id, next.sensitivity);
+          if (!ok) { toast('잠금 설정이 실패했어요'); return false; }
+        } catch (e) {
+          console.warn('잠금 설정 실패:', e);
+          toast('잠금 설정이 실패했어요');
+          return false;
+        }
+        toast(key === 'locked'
+          ? (next.locked ? '메모를 잠갔어요' : '잠금을 해제했어요')
+          : '민감도 ' + memoSensitivityLabel(next.sensitivity) + '(으)로 바꿨어요');
+        // 잠금 표시·태그 버튼 호출 등 보여줄 코드가 상태에 따라 달라지므로
+        // 다시 그린다 (메뉴의 등 상태로 구축된다).
+        showView(p);
+        return true;
+      },
+    });
+    slot.innerHTML = '';
+    slot.appendChild(menu);
+    refreshIcons();
+  }
+  // AI 태그 적용 (범위 3-3): 적용만 생기고, 적용한 사용자가 칩을 눌러
+  // 확정한다 (자동 적용 금지). 잠긴 메모에는 버튼 자체가 없다.
+  function wireTagSuggest(targetPane) {
+    const p = targetPane || pane;
+    const btn = p.querySelector('[data-act="tags"]');
+    if (!btn) return;
+    btn.addEventListener('mousedown', (e) => e.preventDefault());
+    btn.addEventListener('click', async () => {
+      const row = p.querySelector('.tag-suggest');
+      if (!row) return;
+      if (!row.hidden) { row.hidden = true; return; }
+      btn.disabled = true;
+      try {
+        const res = await fetch('/api/memo/' + id + '/tag-suggestions', { method: 'POST' });
+        const data = await res.json().catch(() => null);
+        if (!res.ok || !data || !data.ok) { toast('잠긴 메모에서는 태그 적용이 안 돼 요'); return; }
+        if (!data.tags || !data.tags.length) { toast('적용한 태그가 없어요'); return; }
+        row.innerHTML = '';
+        const label = document.createElement('span');
+        label.className = 'tag-suggest-label';
+        label.textContent = 'AI 태그 적용 등 눌러서 크기';
+        row.appendChild(label);
+        data.tags.forEach(tag => {
+          const chip = document.createElement('button');
+          chip.type = 'button';
+          chip.className = 'tag';
+          chip.textContent = '#' + tag;
+          chip.addEventListener('click', async () => {
+            const cur = memoCache[id];
+            if (!cur || cur.is_locked) return;
+            const newText = String(cur.text || '').replace(/\s+$/, '') + '\n\n#' + tag;
+            try {
+              const putRes = await window._fetchStepUp('/api/memo/' + id, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ text: newText }),
+              });
+              if (!putRes.ok) { toast('태그 내용에 실패했어요'); return; }
+              cur.text = newText;
+              if (typeof memoTexts !== 'undefined') memoTexts[id] = newText;
+              chip.remove();
+              loadTags();
+              toast('태그를 복사했어요');
+            } catch (e) {
+              console.warn('태그 복사 실패:', e);
+              toast('태그 내용에 실패했어요');
+            }
+          });
+          row.appendChild(chip);
+        });
+        row.hidden = false;
+      } catch (e) {
+        console.warn('태그 적용 실패:', e);
+        toast('태그 적용을 가져오지 못했어요');
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  }
+  function showEdit() {
+    viewEl.hidden = true;
+    editEl.hidden = false;
+    window.currentEditingMemoId = id;
+    const memoForEdit = memoCache[id];
+    if (memoForEdit) memoForEdit._pendingLock = !!memoForEdit.is_locked;
+    const isLockedEdit = memoForEdit?.is_locked ? true : false;
+    actionsEl.innerHTML = `
+      <button data-act="lock" title="${isLockedEdit ? 'AI 접근 잠금 (내부에서 해제)' : 'AI 접근 허용 (내부에서 잠금)'}" aria-label="잠금"><i data-lucide="${isLockedEdit ? 'lock' : 'lock-open'}"></i></button>
+      <button data-act="save" title="저장 (단축/Ctrl+Enter)" aria-label="저장"><i data-lucide="save"></i></button>
+      <button data-act="cancel" title="취소" aria-label="취소"><i data-lucide="x"></i></button>`;
+    wireActions();
+    refreshIcons();
+    if (!editor) {
+      const titleInput = document.createElement('input');
+      titleInput.className = 'title-input';
+      titleInput.placeholder = '제목';
+      titleInput.autocomplete = 'off';
+      titleInput.addEventListener('keydown', (e) => {
+        if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+          e.preventDefault();
+          pane.querySelector('[data-act="save"]').click();
+        }
+      });
+      const toolbar = document.createElement('div');
+      toolbar.className = 'toolbar hidden';
+      rich = document.createElement('div');
+      rich.className = 'rich';
+      rich.contentEditable = 'true';
+      rich.setAttribute('role', 'textbox');
+      editor = wireEditor(rich, toolbar, true, { memoId: id });
+      editor.titleInput = titleInput;
+      const chips = document.createElement('div');
+      chips.className = 'pending';
+      editor.chipsBox = chips;
+      // 파일 첨부 진입점: 등 메모 컴포넌트는 #files 입력에 넣지 기존 메모
+      // 편집(pane)는 붙여넣기·드래그드롭으로 뒤에 파일이 곧바로 경로가 없었다
+      // (아님 등 otherFiles 카운트뿐 등 업로드 등 상위 배경의 프로 이하 있었다).
+      // inedit의 같은 .editor-row/.mini-file-btn 패턴으로 일반 파일 첨부를 건다.
+      const attachRow = document.createElement('div');
+      attachRow.className = 'editor-row';
+      const attachBtn = document.createElement('label');
+      attachBtn.className = 'mini-file-btn';
+      attachBtn.title = '파일 첨부';
+      attachBtn.setAttribute('aria-label', '파일 첨부');
+      attachBtn.innerHTML = '<i data-lucide="paperclip"></i>';
+      const attachInput = document.createElement('input');
+      attachInput.type = 'file';
+      attachInput.multiple = true;
+      attachInput.setAttribute('aria-label', '파일 첨부');
+      attachInput.addEventListener('change', () => { handleEditorFiles(editor, attachInput.files); attachInput.value = ''; });
+      attachBtn.appendChild(attachInput);
+      attachRow.appendChild(attachBtn);
+      editEl.append(titleInput, toolbar, rich, chips, attachRow);
+      rich.addEventListener('keydown', (e) => {
+        if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+          e.preventDefault();
+          pane.querySelector('[data-act="save"]').click();
+        }
+      });
+    }
+    const fm = memoFileMap[id] || {};
+    try {
+      const memoText = (memoCache[id] && memoCache[id].text) || '';
+      const { title, body } = extractTitle(memoText);
+      editor.titleInput.value = title || '';
+      rich.innerHTML = mdToEditable(body || '', fm) || '';
+    } catch (e) {
+      console.error('편집 내용 로드 실패:', e);
+      rich.innerHTML = '<p>내용을 불러오지 못했습니다.</p>';
+    }
+    // 저장된 넣는 잠긴 블록 플레이스홀더에 해제 내부 연결한다 (UI-003)
+    rich.querySelectorAll('.locked-block').forEach(el => {
+      el.addEventListener('click', () => { unlockLockedBlockEl(el, id); });
+    });
+    applyTableWidths(rich);
+    renderPaneFiles(pane, id, fm, true);
+    refreshIcons();
+    rich.focus();
+  }
+  function wireActions(targetPane) {
+    const waPane = targetPane || pane;
+    const waActionsEl = waPane.querySelector('.pane-actions');
+    const q = (a) => waActionsEl.querySelector(`[data-act="${a}"]`);
+    // data-act="lock" 잠금 버튼은 편집 모드 전용이다 (보여줄 모드는 잠금을
+    // data-act="lockmenu" 메뉴가 wireLockMenu로 따로 처리한다, I-03).
+    const lb = q('lock');
+    if (lb && actionsEl.querySelector('[data-act="save"]')) {
+      // 편집 모드: 잠금 등 UI만 변경, 내용은 save 버튼에서
+      lb.addEventListener('mousedown', (e) => { e.preventDefault(); e.stopPropagation(); });
+      lb.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
+        const memo = memoCache[id];
+        if (!memo) return;
+        // pending 상태로 고정 (실제 내용은 save 버튼에서)
+        const newLocked = !memo._pendingLock;
+        memo._pendingLock = newLocked;
+        lb.innerHTML = `<i data-lucide="${newLocked ? 'lock' : 'lock-open'}"></i>`;
+        lb.title = newLocked ? 'AI 접근 잠금 (내부에서 해제)' : 'AI 접근 허용 (내부에서 잠금)';
+        lb.classList.toggle('active', newLocked);
+        refreshIcons();
+        return false;
+      });
+    }
+    const eb = q('edit');
+    if (eb) { eb.addEventListener('mousedown', (e) => e.preventDefault()); eb.onclick = showEdit; }
+    const sb = q('save');
+    if (sb) {
+      sb.addEventListener('mousedown', (e) => e.preventDefault());
+      sb.onclick = async () => {
+        // pending의 lock 상태가 있으면 먼저 고정
+        const memo = memoCache[id];
+        if (memo && memo._pendingLock !== undefined) {
+          try {
+            const lockRes = await fetchLockWithPin('/api/memo/' + id + '/lock', { locked: memo._pendingLock });
+            // HTTP 오류(등: 암호화 실패 500)면 본문 내용을 중단한다 등
+            // 실패를 알리고 PUT을 진행하면 잠금 상태와 본문이 숨긴다.
+            if (!lockRes.ok) {
+              toast('잠금 설정 실패');
+              return;
+            }
+            memo.is_locked = memo._pendingLock ? 1 : 0;
+            delete memo._pendingLock;
+          } catch (err) {
+            toast('잠금 설정 실패');
+            return;
+          }
+        }
+        const saved = await savePane(id, pane, editor, rich);
+        // 고정 실패 시에는 편집 오류를 메모에 (게스트는 savePane의 프로)
+        if (saved) { showView(); notifyMemoDocTitle(); }
+      };
+    }
+    const cb = q('cancel');
+    if (cb) { cb.addEventListener('mousedown', (e) => e.preventDefault()); cb.onclick = () => {
+      const p = waPane;
+      const vEl = p.querySelector('.pane-view');
+      const eEl = p.querySelector('.pane-edit');
+      if (vEl) vEl.hidden = false;
+      if (eEl) eEl.hidden = true;
+      // view 모드 버튼으로 복원
+      try { showView(p); } catch (e) { console.warn('showView 실패:', e); }
+    }; }
+    // 삭제 버튼의 HTML은 onclick="window._deleteMemo(this)" 사용 (커스텀 모달)
+    // wireActions()에서 일어나지 않음
+    const xb = q('close');
+    if (xb) { xb.addEventListener('mousedown', (e) => e.preventDefault()); xb.onclick = () => {
+      if (typeof closePane === 'function') { try { closePane(id); } catch (e) { console.warn('closePane 실패:', e); } }
+    }; }
+  }
+  showView(pane);
+  wireActions(pane);
+  updatePanesVisibility();
+  notifyMemoDocTitle();
+}
 async function savePane(id, pane, editor, rich) {
   const pTitle = (editor.titleInput ? editor.titleInput.value : '').trim();
-  if (!pTitle && editorIsEmpty(editor)) return;
+  if (!pTitle && editorIsEmpty(editor)) return true; // 만들어진 내용 없음 등 성공으로 간주
   const btn = pane.querySelector('[data-act="save"]');
   const oldText = memoTexts[id] || '';
   btn.disabled = true;
@@ -3132,7 +3914,7 @@ async function savePane(id, pane, editor, rich) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ text: finalText }),
     });
-    if (!putRes.ok) { toast('저장에 실패했어요'); return; }
+    if (!putRes.ok) { toast('내용에 실패했어요'); return false; }
     await cleanupOrphanFiles(oldText, finalText);
     hideImgResize();
     hideImgTools();
@@ -3142,6 +3924,7 @@ async function savePane(id, pane, editor, rich) {
     // 파일맵 새로고침 후 팬 내용 갱신
     let files = [];
     try { files = await fetch(`/api/memo/${id}/files`).then(r => r.json()); } catch (e) { console.warn('메모 파일 목록 조회 실패:', e); }
+    if (!Array.isArray(files)) files = []; // 깨진 응답은 빈 파일 목록으로 degrade
     const fm = {};
     files.forEach(f => { fm[f.id] = f; });
     memoFileMap[id] = fm;
@@ -3158,24 +3941,101 @@ async function savePane(id, pane, editor, rich) {
     load();
     renderCal();
     toast('저장했어요');
+    return true;
   } finally {
     btn.disabled = false;
   }
 }
+
+// 보여줄 오류 체크리스트 잠금 (E3 구성): 렌더러 체크박스의 순서는 원본
+// 마크다운의 '- [ ]' 줄 순서가 1:1로 대응한 현재로 n번째 체크를
+// 실지 PUT한다. 개수가 숨긴하면(코드 블록 안의 마지막 등) 배경의
+// 않는데 등 나머지 줄을 실지 것보다 동작하지 않게 이름 안전하다.
+function wireViewChecklist(container, memoId, rerender) {
+  const boxes = [...container.querySelectorAll('input[type="checkbox"]')];
+  if (!boxes.length) return;
+  const src = String((memoCache[memoId] && memoCache[memoId].text) || '');
+  const taskLineCount = src.split('\n').filter(l => /^\s*[-*]\s+\[[ xX]\]/.test(l)).length;
+  if (taskLineCount !== boxes.length) return;
+  boxes.forEach((box, idx) => {
+    box.disabled = false;
+    box.addEventListener('click', async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const c = memoCache[memoId];
+      if (!c || c.is_locked) return;
+      const lines = String(c.text || '').split('\n');
+      const re = /^(\s*[-*]\s+\[)([ xX])(\])/;
+      let seen = -1;
+      let flipped = false;
+      for (let i = 0; i < lines.length; i++) {
+        if (re.test(lines[i])) {
+          seen++;
+          if (seen === idx) {
+            lines[i] = lines[i].replace(re, (m, pre, mark, post) => pre + (mark === ' ' ? 'x' : ' ') + post);
+            flipped = true;
+            break;
+          }
+        }
+      }
+      if (!flipped) return;
+      const newText = lines.join('\n');
+      try {
+        const res = await window._fetchStepUp('/api/memo/' + memoId, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text: newText }),
+        });
+        if (!res.ok) { toast('체크 내용에 실패했어요'); return; }
+        c.text = newText;
+        if (typeof memoTexts !== 'undefined') memoTexts[memoId] = newText;
+        rerender();
+      } catch (err) {
+        console.warn('체크 복사 실패:', err);
+        toast('체크 내용에 실패했어요');
+      }
+    });
+  });
+}
+
+// AI 데이터 변경 등 새로고침 (범위 3-4 응답): assistant-widget의
+// dataChanged 응답에는 window.refreshAfterAI를 부른다. 정의가 없으면
+// 전체를 location.reload()로 떨어진 "AI 따로 메모 따로"의 분리감이
+// 생긴 등 목록·태그·달력 다시 열고, 보여줄 모드 새로 등 내용으로
+// 다시 그린다. 편집 중인 화면 잠긴 메모 새로 건드리지 않는다.
+window.refreshAfterAI = async function () {
+  await load();
+  loadTags();
+  if (typeof renderCal === 'function') renderCal();
+  const panes = [...document.querySelectorAll('.pane[data-pane]')];
+  for (const p of panes) {
+    const pid = Number(p.dataset.pane);
+    const editEl = p.querySelector('.pane-edit');
+    if (editEl && !editEl.hidden) continue; // 편집 중 등 사용자 입력을 지운다
+    const c = memoCache[pid];
+    if (!c || c.is_locked) continue; // 잠긴 메모는 step-up 없이 다시 내지 않는다
+    p.remove();
+    await openPane(pid);
+  }
+};
 
 $('q').addEventListener('input', () => { clearTimeout(searchTimer); searchTimer = setTimeout(load, 300); });
 // 전역 삭제 함수 (동적 버튼용)
 window._deleteMemo = async function(btn) {
   const pane = btn.closest('.pane');
   const id = pane ? pane.dataset.pane : null;
-  if (!id) { alert('메모 ID를 찾을 수 없어요'); return; }
+  if (!id) { toast('메모 ID를 찾을 수 없어요'); return; }
   // 커스텀 확인 모달 (자동화 테스트 가능)
   if (!await window._confirmDelete('이 메모를 삭제할까요?')) return;
   try {
     const res = await window._fetchStepUp('/api/memo/' + id, { method: 'DELETE' });
-    if (!res.ok) throw new Error('삭제 실패: ' + res.status);
+    if (!res.ok) {
+      const data = await res.json().catch(() => null);
+      toast('삭제가 실패했어요: ' + friendlyError(data || { status: res.status }, '잠시 후 다시 시도해 주세요.'));
+      return;
+    }
   } catch (err) {
-    alert('삭제에 실패했어요: ' + err.message);
+    toast('삭제가 실패했어요: ' + friendlyError(err, '잠시 후 다시 시도해 주세요.'));
     return;
   }
   if (typeof cachedMemos !== 'undefined') cachedMemos = cachedMemos.filter(m => m.id != id);
@@ -3188,26 +4048,30 @@ window._deleteMemo = async function(btn) {
   }
 };
 
+
+// pane.js에서 분리 (2026-11-01 단일 파일 분해): PIN/step-up 모달·확인 모달·공용 숨김.
+// memo-bundle.js로 함께 번호순으로 위임 함수 공유 방식과 기존과 동일하다.
+
 // 잠금 해제 step-up용 PIN 입력 모달 (서버가 PIN을 요구할 때만 뜬다)
 window._promptPin = function(msg) {
   return new Promise((resolve) => {
     const overlay = document.createElement('div');
-    overlay.className = 'confirm-overlay';
+    overlay.className = 'myhub-stepup-overlay';
     overlay.innerHTML = `
-      <div class="confirm-modal">
+      <div class="myhub-stepup-modal">
         <p>${msg}</p>
-        <input type="password" inputmode="numeric" autocomplete="off" maxlength="6" class="pin-prompt-input" placeholder="PIN 6자리" style="width:100%;box-sizing:border-box;padding:10px;margin-bottom:16px;font-size:16px;text-align:center;letter-spacing:6px;">
-        <div class="confirm-btns">
-          <button class="confirm-no">취소</button>
-          <button class="confirm-yes">확인</button>
+        <input type="password" inputmode="numeric" autocomplete="off" maxlength="6" class="myhub-stepup-pin-input" placeholder="PIN 6자리" style="width:100%;box-sizing:border-box;padding:10px;margin-bottom:16px;font-size:16px;text-align:center;letter-spacing:6px;">
+        <div class="myhub-stepup-btns">
+          <button class="myhub-stepup-no">취소</button>
+          <button class="myhub-stepup-yes">확인</button>
         </div>
       </div>`;
     document.body.appendChild(overlay);
-    const input = overlay.querySelector('.pin-prompt-input');
+    const input = overlay.querySelector('.myhub-stepup-pin-input');
     input.addEventListener('input', () => { input.value = input.value.replace(/[^0-9]/g, '').slice(0, 6); });
     const done = (v) => { overlay.remove(); resolve(v); };
-    overlay.querySelector('.confirm-no').onclick = () => done(null);
-    overlay.querySelector('.confirm-yes').onclick = () => done(input.value || null);
+    overlay.querySelector('.myhub-stepup-no').onclick = () => done(null);
+    overlay.querySelector('.myhub-stepup-yes').onclick = () => done(input.value || null);
     overlay.onclick = (e) => { if (e.target === overlay) done(null); };
     input.addEventListener('keydown', (e) => { if (e.key === 'Enter') done(input.value || null); });
     input.focus();
@@ -3242,7 +4106,7 @@ async function fetchLockWithPin(url, bodyObj) {
 // PIN_INVALID면 모달을 다시 띄운다. 사용자가 취소하면 원래 403 응답을 그대로
 // 돌려주므로 호출자는 기존 실패 처리로 떨어진다.
 window._stepUpWithPin = async function(msg) {
-  const pin = await window._promptPin(msg || '보호된 메모예요. PIN을 입력하세요.');
+  const pin = await window._promptPin(msg || '보호한 메모예요. 로그인된 같은 PIN을 입력하세요. 확인하면 5분 동안 다시 묻지 않아요.');
   if (!pin) return false;
   let data = null;
   try {
@@ -3279,19 +4143,19 @@ window._fetchStepUp = async function(url, opts) {
 window._confirmAction = function(msg, yesLabel, danger) {
   return new Promise((resolve) => {
     const overlay = document.createElement('div');
-    overlay.className = 'confirm-overlay';
+    overlay.className = 'memo-confirm-overlay';
     overlay.innerHTML = `
-      <div class="confirm-modal">
+      <div class="memo-confirm-modal">
         <p>${msg}</p>
-        <div class="confirm-btns">
-          <button class="confirm-no">취소</button>
-          <button class="confirm-yes${danger ? ' danger' : ''}">${yesLabel || '확인'}</button>
+        <div class="memo-confirm-btns">
+          <button class="memo-confirm-no">취소</button>
+          <button class="memo-confirm-yes${danger ? ' danger' : ''}">${yesLabel || '확인'}</button>
         </div>
       </div>`;
     document.body.appendChild(overlay);
     const done = (v) => { overlay.remove(); resolve(v); };
-    overlay.querySelector('.confirm-no').onclick = () => done(false);
-    overlay.querySelector('.confirm-yes').onclick = () => done(true);
+    overlay.querySelector('.memo-confirm-no').onclick = () => done(false);
+    overlay.querySelector('.memo-confirm-yes').onclick = () => done(true);
     overlay.onclick = (e) => { if (e.target === overlay) done(false); };
   });
 };
@@ -3319,6 +4183,110 @@ window.openPaneForEdit = function(id) {
 
 // 71차: 위젯에서 호출할 수 있도록 window에 노출
 window.openPane = openPane;
+
+/* 창 상단 메뉴바 정의 (공유: js/desktop/windows.js 상단 주석).
+   결과 입력 같은 컨트롤러 차 등에 얹고, 명령은(창 메모·첨부)와
+   보여줄 잠금·태그 선택만 메뉴로 허용한다. 태그 항목은 태그 칩
+   내부와 같은 잠금 동작이고, 목록의 등 등 lastTags로 렌더한다. */
+window.MyHubMenus = [
+  {
+    label: '파일',
+    items: [
+      {
+        label: '새 메모',
+        run: () => {
+          const el = $('composerRich');
+          if (el) el.focus();
+        },
+      },
+      { label: '파일 첨부', target: '#files' },
+    ],
+  },
+  {
+    label: '보여줄',
+    items: () => {
+      const items = [
+        {
+          label: '달력',
+          checked: () => $('tglCal').classList.contains('on'),
+          target: '#tglCal',
+        },
+        { label: '태그', checked: () => tagbarOpen, target: '#tglTag' },
+      ];
+      if (lastTags && lastTags.length) {
+        items.push({ separator: true });
+        lastTags.forEach((t) => {
+          items.push({
+            label: '#' + t.tag,
+            sub: t.n + '개',
+            checked: () => activeTag === t.tag,
+            run: () => {
+              activeTag = activeTag === t.tag ? '' : t.tag;
+              syncTagUI();
+              load();
+            },
+          });
+        });
+      }
+      return items;
+    },
+  },
+];
+
+/* ================= 열 너비 드래그 조절 (범위 2) =================
+   PC 3단의 경계 핸들을 누른 CSS 변환이 바뀌어서 등 너비가 조절하고,
+   펼치면 localStorage의 저장된 다음도 유지한다 (복원된 memo.html
+   코드 스크립트). 좁은 폭(<1024px)에서는 너비 세로로 펼치는 기존
+   모바일 규칙이라는 핸들 자체가 표시하지 않고 드래그도 시작하지 않는다. */
+(function initColResizers() {
+  const layout = $('layout');
+  if (!layout) return;
+  const CONF = {
+    left: { key: 'myhub.memo.colLeft', varName: '--memo-col-left', def: 300, min: 220, max: 560 },
+    right: { key: 'myhub.memo.colRight', varName: '--memo-col-right', def: 340, min: 260, max: 600 },
+  };
+  layout.querySelectorAll('.col-resizer').forEach((h) => {
+    h.addEventListener('pointerdown', (e) => {
+      if (window.innerWidth < 1024) return;
+      const conf = CONF[h.dataset.side];
+      if (!conf) return;
+      e.preventDefault();
+      const cur = parseInt(getComputedStyle(document.documentElement).getPropertyValue(conf.varName), 10) || conf.def;
+      const startX = e.clientX;
+      h.classList.add('dragging');
+      try { h.setPointerCapture(e.pointerId); } catch (err) { console.warn('포인터 캡처 실패:', err); }
+      const move = (ev) => {
+        const dx = h.dataset.side === 'left' ? ev.clientX - startX : startX - ev.clientX;
+        const w = Math.max(conf.min, Math.min(conf.max, cur + dx));
+        document.documentElement.style.setProperty(conf.varName, w + 'px');
+      };
+      const up = () => {
+        h.classList.remove('dragging');
+        h.removeEventListener('pointermove', move);
+        h.removeEventListener('pointerup', up);
+        h.removeEventListener('pointercancel', up);
+        const w = parseInt(getComputedStyle(document.documentElement).getPropertyValue(conf.varName), 10);
+        if (w) {
+          try { localStorage.setItem(conf.key, String(w)); }
+          catch (err) { console.warn('열 너비 복원 실패:', err); }
+        }
+      };
+      h.addEventListener('pointermove', move);
+      h.addEventListener('pointerup', up);
+      h.addEventListener('pointercancel', up);
+    });
+  });
+})();
+
+/* 주의 제목 무거운 요청은 현재 애플 메모 제목으로 보낸다
+   (load 순서 경유를 자기치유 등 windows.js의 myhub:request-doc-title) */
+if (typeof window !== 'undefined' && window.parent && window.parent !== window) {
+  window.addEventListener('message', (e) => {
+    if (e.origin !== window.location.origin) return;
+    if (e.data && e.data.type === 'myhub:request-doc-title'
+      && typeof notifyMemoDocTitle === 'function') notifyMemoDocTitle();
+  });
+}
 
 /* ================= 11. 시작 ================= */
 initCal();

@@ -545,6 +545,57 @@ describe('POST / 생성', () => {
     const res = await json('/', 'POST', { text: '#한글 #abc_123 #한글' })
     expect(res.status).toBe(200)
   })
+
+  // 회귀: parseBody 기본 파싱은 중복 'files' 키에서 마지막 값만 남긴다.
+  // 배열 처리 분기가 있어도 도달할 수 없어 앞 파일이 조용히 버려졌던 결함의 재현·고정.
+  test('multipart: 파일 2개 동시 전송 — 둘 다 저장된다 (중복 키 소실 회귀)', async () => {
+    const { req, db } = makeApp()
+    db.runQueue.push({ meta: { last_row_id: 21, changes: 1 } }) // INSERT memos
+    db.runQueue.push({ meta: { last_row_id: 0, changes: 1 } }) // syncTags DELETE
+    db.runQueue.push({ meta: { last_row_id: 31, changes: 1 } }) // INSERT files (a)
+    db.runQueue.push({ meta: { last_row_id: 32, changes: 1 } }) // INSERT files (b)
+    const fd = new FormData()
+    fd.append('text', 'two files')
+    fd.append('files', new File(['x'], 'a.png', { type: 'image/png' }))
+    fd.append('files', new File(['yy'], 'b.png', { type: 'image/png' }))
+    const res = await req('/', { method: 'POST', body: fd })
+    const j = await body(res)
+    expect(res.status).toBe(200)
+    expect(j.files.map((f: any) => f.filename)).toEqual(['a.png', 'b.png'])
+    expect(mockStorageUpload).toHaveBeenCalledTimes(2)
+  })
+
+  test('multipart: 텍스트 스칼라 — INSERT 파라미터가 trim된 입력과 같다 (기존 동작 불변)', async () => {
+    const { req, db } = makeApp()
+    db.runQueue.push({ meta: { last_row_id: 22, changes: 1 } })
+    db.runQueue.push({ meta: { last_row_id: 0, changes: 1 } })
+    db.runQueue.push({ meta: { last_row_id: 33, changes: 1 } }) // INSERT files
+    const fd = new FormData()
+    fd.append('text', '  hello scalar  ')
+    fd.append('files', new File(['x'], 'a.png', { type: 'image/png' }))
+    const res = await req('/', { method: 'POST', body: fd })
+    expect(res.status).toBe(200)
+    const insert = db.calls.find((call) => call.sql.includes('INSERT INTO memos'))
+    expect(insert?.params[0]).toBe('hello scalar')
+  })
+
+  // 스칼라 정규화 계약: text는 단일 값 필드다. 중복 전송(계약 밖 입력)에서는
+  // 첫 값을 쓰는 것으로 고정한다 (FormData.get 관례). 배열을 String()으로
+  // 합쳐 저장하는 일이 없어야 한다.
+  test('multipart: text 중복 전송 시 첫 값을 쓴다 (스칼라 정규화 계약)', async () => {
+    const { req, db } = makeApp()
+    db.runQueue.push({ meta: { last_row_id: 23, changes: 1 } })
+    db.runQueue.push({ meta: { last_row_id: 0, changes: 1 } })
+    const fd = new FormData()
+    fd.append('text', 'first')
+    fd.append('text', 'second')
+    const res = await req('/', { method: 'POST', body: fd })
+    const j = await body(res)
+    expect(res.status).toBe(200)
+    expect(j.ok).toBe(true)
+    const insert = db.calls.find((call) => call.sql.includes('INSERT INTO memos'))
+    expect(insert?.params[0]).toBe('first')
+  })
 })
 
 // ---------------- GET /:id ----------------
