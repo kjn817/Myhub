@@ -526,6 +526,10 @@
   flex-direction: column;
 }
 .finder-viewer[hidden] { display: none; }
+/* 뷰어 창 껍질: 크롬(제목 행·탭)과 본문을 세로로 쌓고 본문이 남은
+   높이를 전부 가져가게 하는 중간 고리. 이 고리가 없으면 본문의
+   flex:1이 닿을 부모가 없어 시트 프레임이 자체 높이로 주저앉는다. */
+.fv-window { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; }
 .finder-viewer-head {
   display: flex;
   align-items: center;
@@ -537,7 +541,11 @@
 .finder-viewer-note { font-size: 12px; color: #868e96; flex: 1 1 auto; min-width: 0; }
 .finder-viewer-actions { display: flex; align-items: center; gap: 6px; flex: none; }
 .finder-viewer-actions a.finder-upload-btn { text-decoration: none; }
-.finder-viewer-body { flex: 1 1 auto; overflow: auto; padding: 10px 14px; }
+/* 본문 요소는 finder.html·office.html 양쪽의 #fvBody이며, 이 클래스가
+   실제로 붙어 있어야 아래 fv-fill 채움 규칙이 산다. 클래스 없이
+   fv-fill만 붙으면 채움 규칙이 닿지 않아 프레임이 고정 높이로
+   주저앉는다 (2026-11-11 실측으로 확정된 결함의 절반). */
+.finder-viewer-body { flex: 1 1 auto; min-height: 0; overflow: auto; padding: 10px 14px; }
 /* 임베드형 화면(시트 iframe·한글 편집기·PDF)은 본문의 남은 높이를 꽉
    채운다. 고정 vh 높이면 창이 작을 때 편집영역 아래가 빈다 (2026-11-02
    사용자 캡처: 워크북이 창 높이 중간에서 끝남). 핸들러가 화면에 마우스를
@@ -546,6 +554,13 @@
 .finder-viewer-body.fv-fill .fv-sheet-frame,
 .finder-viewer-body.fv-fill .fv-hwp-editor,
 .finder-viewer-body.fv-fill .fv-frame { flex: 1 1 auto; min-height: 0; height: auto; }
+/* 한글 편집기 iframe은 컨테이너(.fv-hwp-editor) 안의 자식이라 시트처럼
+   flex 아이템으로 직접 늘릴 수 없다. height:100%는 flex로 정해진 컨테이너
+   높이를 상대로 해소되지 않아 기본 150px로 무너진다 (office.html 단독
+   진입에서 실측). 컨테이너를 기준 상자로 삼고 iframe을 절대배치로
+   채우면 높이가 확정된 상자 기준이라 어느 진입 경로에서도 채워진다. */
+.finder-viewer-body.fv-fill .fv-hwp-editor { position: relative; }
+.finder-viewer-body.fv-fill .fv-hwp-editor iframe { position: absolute; inset: 0; }
 /* 슬라이드 최소 리더 패치: fv-fill(패딩 0·flex) 안에서도 카드 목록이
    자기 영역에서 스크롤하고 여백을 그대로 유지한다 (DeckCraft 화면과 교환) */
 .finder-viewer-body.fv-fill .fv-slide-reader { flex: 1 1 auto; min-height: 0; overflow: auto; padding: 10px 14px; }
@@ -645,9 +660,12 @@
 }
 .fv-hwp-page:has(svg) { aspect-ratio: auto; }
 .fv-hwp-page svg { display: block; width: 100%; height: auto; }
-.fv-hwp-editor { height: 72vh; border: 1px solid rgba(15, 23, 42, 0.1); }
+.fv-hwp-editor { border: 1px solid rgba(15, 23, 42, 0.1); }
 .fv-hwp-editor iframe { width: 100%; height: 100%; border: none; display: block; }
-.fv-sheet-frame { width: 100%; height: 72vh; border: none; display: block; }
+/* 높이는 고정값으로 정하지 않는다 — fv-fill 본문 안에서 flex로
+   남은 높이를 전부 채운다 (위의 .finder-viewer-body.fv-fill 규칙).
+   72vh 고정 시절에는 창이 클수록 시트 아래 여백이 커졌다. */
+.fv-sheet-frame { width: 100%; border: none; display: block; }
 .fv-slide {
   background: #ffffff;
   border: 1px solid rgba(15, 23, 42, 0.1);

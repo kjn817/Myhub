@@ -88,7 +88,7 @@ function setupShell() {
   doc.body.innerHTML = `
 <header class="g-nav">
   <a href="/" class="brand-logo">JN</a>
-  <span id="dt-active-title"></span>
+  <button type="button" id="dt-active-title" class="dt-active-title"></button>
   <div id="dt-app-actions"></div>
   <div id="dt-office-tabs"></div>
   <div class="spacer"></div>
@@ -328,6 +328,35 @@ describe('데스크톱 셸 — 새로고침 복원', () => {
   })
 })
 
+describe('데스크톱 셸 — 오피스 메뉴 탭 유지 (회귀: 창 전환 시 소실)', () => {
+  test('한글 메뉴 탭이 다른 창을 열었다가 돌아와도 상단바에 유지된다', () => {
+    const storage = new MemoryStorage()
+    const m = makeManager(storage)
+    m.openModule('hangul')
+    const frame = winEl('hangul').querySelector('iframe.dt-frame')
+    const tabs = ['파일', '편집', '보기', '입력', '서식', '쪽', '표', '도구'].map((label, i) => ({
+      id: ['file', 'edit', 'view', 'insert', 'format', 'page', 'table', 'tool'][i],
+      label,
+      kind: 'menu',
+    }))
+    const ev = new (getWin().MessageEvent)('message', {
+      data: { type: 'myhub:office-tabs', app: 'hangul', menuShell: true, tabs },
+      origin: getWin().location.origin,
+      source: frame.contentWindow,
+    } as any)
+    getWin().dispatchEvent(ev)
+    const labels = () =>
+      [...getDoc().querySelectorAll('#dt-office-tabs button')].map((b: any) => b.textContent.trim())
+    expect(labels()).toEqual(['파일', '편집', '보기', '입력', '서식', '쪽', '표', '도구'])
+
+    m.openModule('finder')
+    expect(labels()).toEqual([])
+
+    pointer(winEl('hangul'), 'pointerdown')
+    expect(labels()).toEqual(['파일', '편집', '보기', '입력', '서식', '쪽', '표', '도구'])
+  })
+})
+
 describe('nav.js — 설정 버튼과 데스크톱 진입', () => {
   const NAV_HTML = `
 <header class="g-nav">
@@ -360,13 +389,15 @@ describe('nav.js — 설정 버튼과 데스크톱 진입', () => {
     const btn = doc.getElementById('settingsBtn')
     btn.click() // 메뉴 열기
 
-    const menu = doc.querySelector('.myhub-settings-menu')
+    // 원본 계약: 메뉴는 #myhubSettingsMenu(백드롭+패널) 싱크톱으로 열린다
+    const menu = doc.getElementById('myhubSettingsMenu')
     expect(menu).not.toBeNull()
-    const labels = [...menu.querySelectorAll('.myhub-settings-item')].map((b: any) => b.textContent)
+    expect(menu!.hidden).toBe(false)
+    const labels = [...menu!.querySelectorAll('.myhub-settings-item')].map((b: any) => b.textContent)
     expect(labels.some((t: string) => t.includes('데스크톱 열기'))).toBe(true)
     expect(labels.some((t: string) => t.includes('로그아웃'))).toBe(true)
-    const logoutItem = [...menu.querySelectorAll('.myhub-settings-item')].find((b: any) => b.textContent.includes('로그아웃'))
-    expect(logoutItem.classList.contains('myhub-settings-item-danger')).toBe(true)
+    const logoutItem = [...menu!.querySelectorAll('.myhub-settings-item')].find((b: any) => b.textContent.includes('로그아웃'))
+    expect(logoutItem.classList.contains('danger')).toBe(true)
   })
 
   test('.g-nav가 없는 화면에서는 버튼을 만들지 않는다', () => {

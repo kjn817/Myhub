@@ -370,25 +370,22 @@
       );
     },
     schedule: function () {
-      // 일정 실행 변환: 사용자가 제공한 달력 아이콘(image-64)의 구성된
-      // 벡터로 다시 그리고, 월요일 날짜로 채운다 사용자 (지정 이미지
-      // 2026-11-03: "등 월 요일"). 상단 밴드 이미지
-      // 3글자 월요일(NOV날짜DEC라는JUL사용자)지정 (월 임 2026-11-03: "11함
-      // 막대 NOV"). 규격 막대: 본체 이 0.312, 미지 #F4615B, 함
-      // #F7F6F5. 날짜가 바뀌어 하나로 appTileFor 캐시를 넣지 않는다.
+      // 일정 타일: 흰 squircle에 한글 요일 전체 이름(검정 볼드) + 큰 날짜
+      // 숫자, 오늘 값으로 실시간 렌더 (2026-11-08 사용자 확정 디자인이
+      // 2026-11-03의 영문 월 약어(NOV) 방식을 대체). 날짜가 바뀌므로
+      // appTileFor 캐시를 타지 않는다.
+      // 비율은 2026-11-10 사용자가 첨부한 실제 Apple Calendar 아이콘
+      // 사진 실측에 맞춘 값이다 (타일 한 변=1 기준): 모서리 반경 0.245,
+      // 테두리 스트로크 없음, 요일 잉크 [상단 0.133·높이 0.173] 볼드,
+      // 날짜 잉크 [상단 0.388·높이 0.449] 레귤러(획/높이 0.114 실측),
+      // 잉크 색 순검정. 장부: ~/workspace/calendar-tile-20261110.md
       var now = new Date();
-      var MONTH_ABBR = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
-      var month = MONTH_ABBR[now.getMonth()];
-      var day = now.getDate();
+      var WEEKDAY_KO = ['일요일', '월요일', '화요일', '수요일', '목요일', '금요일', '토요일'];
       return (
         '<svg viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">' +
-        '<defs><clipPath id="mta-cal-clip"><rect x="0" y="0" width="48" height="48" rx="10.8"/></clipPath></defs>' +
-        '<g clip-path="url(#mta-cal-clip)">' +
-        '<rect x="0" y="0" width="48" height="48" fill="#F7F6F5"/>' +
-        '<rect x="0" y="0" width="48" height="15" fill="#F4615B"/>' +
-        '<text x="24" y="11.6" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, \'Segoe UI\', \'Malgun Gothic\', sans-serif" font-size="8" font-weight="700" fill="#ffffff">' + month + '</text>' +
-        '<text x="24" y="40" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, \'Segoe UI\', \'Malgun Gothic\', sans-serif" font-size="25" font-weight="500" fill="#26211E">' + day + '</text>' +
-        '</g>' +
+        '<rect x="4.25" y="4.25" width="39.5" height="39.5" rx="9.7" fill="#ffffff"/>' +
+        '<text x="24" y="15.7" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, \'Segoe UI\', \'Malgun Gothic\', sans-serif" font-size="7.4" font-weight="700" fill="#000000">' + WEEKDAY_KO[now.getDay()] + '</text>' +
+        '<text x="24" y="37.3" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, \'Segoe UI\', \'Malgun Gothic\', sans-serif" font-size="24.6" font-weight="400" fill="#000000">' + now.getDate() + '</text>' +
         '</svg>'
       );
     },

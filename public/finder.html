@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
@@ -11,102 +11,135 @@
 <link rel="manifest" href="/manifest.json">
 <title>Finder</title>
 <link rel="stylesheet" href="/shell.css">
+<link rel="stylesheet" href="/assistant-widget.css">
+<script src="/vendor/lucide/lucide.min.js"></script>
 <link rel="stylesheet" href="/css/finder.css">
 <link rel="stylesheet" href="/css/picker.css">
-<script src="/vendor/lucide/lucide.min.js"></script>
-<script src="/vendor/jszip.min.js"></script>
-<script src="/vendor/xlsx.full.min.js"></script>
-<script src="/vendor/mammoth.browser.min.js"></script>
 </head>
 <body>
-<header class="g-nav">
+<header class="g-nav" data-app-actions="none">
   <a href="/" class="brand-logo" aria-label="MyHub 홈"><img src="/icon-192.png" alt="JN" style="height:26px;width:auto;display:block;"></a>
   <div class="spacer"></div>
-  <div class="nav-search-wrap"><span class="s-ic"><i data-lucide="search"></i></span><input id="finderSearch" type="search" placeholder="파일 검색" autocomplete="off"></div>
-  <button class="nav-icon-btn" id="finderNewFolderBtn" aria-label="새 폴더"><i data-lucide="folder-plus"></i></button>
-  <button class="nav-icon-btn" id="finderUploadBtn" aria-label="업로드"><i data-lucide="upload"></i></button>
+  <span class="ver" id="clock"></span>
 </header>
 <div class="g-main">
   <div class="finder-layout">
-    <aside class="finder-side">
-      <button type="button" class="finder-side-item" data-view="recent"><i data-lucide="clock"></i><span>최근 항목</span></button>
+    <aside class="finder-side" aria-label="Finder 항목">
+      <button type="button" class="finder-side-item" data-view="recent" title="최근 항목">
+        <i data-lucide="clock"></i><span>최근 항목</span>
+      </button>
       <div class="finder-side-title">즐겨찾기</div>
+      <button type="button" class="finder-side-item" data-view="apps" title="응용 프로그램">
+        <i data-lucide="layout-grid"></i><span>응용 프로그램</span>
+      </button>
+      <button type="button" class="finder-side-item" id="sideDesktop" title="데스크탑" hidden>
+        <i data-lucide="monitor"></i><span>데스크탑</span>
+      </button>
+      <button type="button" class="finder-side-item" id="sideDocs" title="문서" hidden>
+        <i data-lucide="file-text"></i><span>문서</span>
+      </button>
+      <button type="button" class="finder-side-item" id="sideDownloads" title="다운로드" hidden>
+        <i data-lucide="arrow-down-circle"></i><span>다운로드</span>
+      </button>
       <div id="sideFavorites"></div>
       <div class="finder-side-title">위치</div>
-      <button type="button" class="finder-side-item" id="sideRoot"><i data-lucide="archive"></i><span>보관함</span><span class="finder-side-badge" id="sideRootBadge" hidden></span></button>
-      <button type="button" class="finder-side-item" data-view="trash"><i data-lucide="trash-2"></i><span>휴지통</span></button>
+      <button type="button" class="finder-side-item is-active" data-view="drive" title="보관함">
+        <i data-lucide="hard-drive"></i><span>보관함</span>
+        <span class="finder-side-count" id="countDrive"></span>
+      </button>
       <div class="finder-side-usage" id="sideUsage"></div>
+      <button type="button" class="finder-side-item" data-view="trash" title="휴지통">
+        <i data-lucide="trash-2"></i><span>휴지통</span>
+        <span class="finder-side-count" id="countTrash"></span>
+      </button>
     </aside>
-    <main class="finder-main" id="finderMain">
+    <main class="finder-main">
       <div class="finder-toolbar">
-        <button type="button" class="finder-nav-btn" id="finderBack" aria-label="뒤로"><i data-lucide="chevron-left"></i></button>
-        <button type="button" class="finder-nav-btn" id="finderFwd" aria-label="앞으로"><i data-lucide="chevron-right"></i></button>
-        <nav class="finder-path" id="finderPath" aria-label="경로"></nav>
-        <div class="finder-view-toggle" role="group" aria-label="보기 방식">
-          <button type="button" id="finderViewList" class="is-active" aria-label="목록 보기"><i data-lucide="list"></i></button>
-          <button type="button" id="finderViewGrid" aria-label="격자 보기"><i data-lucide="layout-grid"></i></button>
+        <div class="finder-nav-btns">
+          <button type="button" class="finder-navbtn" id="finderBack" aria-label="뒤로" disabled><i data-lucide="chevron-left"></i></button>
+          <button type="button" class="finder-navbtn" id="finderFwd" aria-label="앞으로" disabled><i data-lucide="chevron-right"></i></button>
         </div>
-        <button type="button" class="finder-nav-btn" id="finderSortBtn" aria-label="정렬"><i data-lucide="arrow-up-down"></i></button>
-        <div class="spacer"></div>
-        <button type="button" class="finder-empty-trash" id="finderEmptyTrash" style="display:none;">휴지통 비우기</button>
-        <button type="button" class="finder-nav-btn" id="finderNewBtn" aria-label="새 폴더"><i data-lucide="folder-plus"></i></button>
-        <button type="button" class="finder-nav-btn" id="finderUpBtn" aria-label="올리기"><i data-lucide="upload"></i></button>
-        <span class="finder-toolbar-search" id="finderToolbarSearchWrap" hidden><input id="finderToolbarSearch" type="search" placeholder="검색" autocomplete="off"></span>
-        <button type="button" class="finder-nav-btn" id="finderSearchBtn" aria-label="검색"><i data-lucide="search"></i></button>
+        <strong id="finderTitle">보관함</strong>
+        <div class="finder-tools">
+          <div class="finder-seg" role="group" aria-label="보기 방식">
+            <button type="button" id="finderModeList" class="is-active" aria-label="목록으로 보기"><i data-lucide="list"></i></button>
+            <button type="button" id="finderModeGrid" aria-label="아이콘으로 보기"><i data-lucide="layout-grid"></i></button>
+          </div>
+          <button type="button" class="finder-toolbtn" id="finderSortBtn" aria-label="정렬">
+            <i data-lucide="arrow-down-wide-narrow"></i><span>정렬</span>
+          </button>
+          <button type="button" class="finder-toolbtn" id="finderNewFolderBtn" aria-label="새 폴더" title="새 폴더" hidden>
+            <i data-lucide="folder-plus"></i>
+          </button>
+          <button type="button" class="finder-toolbtn" id="finderUploadBtn" aria-label="올리기" title="올리기" hidden>
+            <i data-lucide="upload"></i>
+          </button>
+        </div>
+        <div class="finder-search">
+          <i data-lucide="search"></i>
+          <input id="finderQ" type="text" placeholder="검색" autocomplete="off">
+        </div>
       </div>
+      <div class="finder-head" id="finderHead" hidden></div>
+      <input type="file" id="finderFileInput" multiple hidden>
       <div class="finder-list" id="finderList"></div>
-      <footer class="finder-statusbar"><span id="finderStatusPath"></span><span id="finderStatus"></span></footer>
+      <div class="finder-bottombar">
+        <div class="finder-path" id="finderPath" hidden></div>
+        <p class="finder-status" id="finderStatus"></p>
+      </div>
+      <div class="finder-viewer" id="finderViewer" hidden>
+        <div class="finder-viewer-head">
+          <strong id="fvName"></strong>
+          <span class="finder-viewer-note" id="fvNote"></span>
+          <span class="finder-viewer-actions">
+            <button type="button" class="finder-upload-btn" id="fvSave" hidden>저장</button>
+            <a class="finder-upload-btn" id="fvDownload" href="#" download>다운로드</a>
+            <button type="button" class="finder-act" id="fvClose" aria-label="닫기"><i data-lucide="x"></i></button>
+          </span>
+        </div>
+        <div class="finder-viewer-body" id="fvBody"></div>
+        <p class="finder-status-overlay" id="fvStatus" hidden></p>
+      </div>
     </main>
   </div>
 </div>
 
-<div id="finderViewer" role="dialog" aria-modal="true">
-  <div class="fv-window">
-    <div id="fvChrome">
-      <span id="fvName"></span>
-      <div class="spacer"></div>
-      <button type="button" id="fvSave">저장</button>
-      <button type="button" id="fvClose" aria-label="닫기"><i data-lucide="x"></i></button>
-    </div>
-    <div id="fvBody"></div>
-  </div>
-</div>
-
-<div id="officePicker" class="office-picker-backdrop" hidden>
+<!-- 열기/저장 패널 (office-picker.js 공용 — PDF 병합·추출이 쓴다) -->
+<div class="office-picker-backdrop" id="officePicker" hidden>
   <div class="office-picker" role="dialog" aria-modal="true" aria-labelledby="officePickerTitle">
     <div class="office-picker-head">
       <strong id="officePickerTitle">파일 열기</strong>
-      <button type="button" id="officePickerClose" aria-label="닫기"><i data-lucide="x"></i></button>
+      <button type="button" class="finder-act" id="officePickerClose" aria-label="닫기"><i data-lucide="x"></i></button>
     </div>
-    <nav class="office-picker-crumb" id="officeCrumb" aria-label="폴더 경로"></nav>
+    <div class="office-picker-crumb" id="officeCrumb"></div>
     <div class="office-picker-list" id="officePickList"></div>
     <div class="office-picker-save" id="officeSaveRow" hidden>
-      <label for="officeSaveName">이름</label>
+      <label for="officeSaveName">파일 이름</label>
       <input type="text" id="officeSaveName" autocomplete="off">
     </div>
     <p class="office-picker-status" id="officePickerStatus"></p>
     <div class="office-picker-foot">
-      <button type="button" id="officePickImport" class="office-ghost-btn office-pick-import" hidden>이 기계에서 가져오기</button>
-      <button type="button" id="officePickCancel" class="office-ghost-btn">취소</button>
-      <button type="button" id="officePickConfirm" class="office-primary-btn">열기</button>
+      <button type="button" class="office-ghost-btn" id="officePickCancel">취소</button>
+      <button type="button" class="office-primary-btn" id="officePickConfirm">열기</button>
     </div>
   </div>
 </div>
-
-<input type="file" id="finderFileInput" multiple hidden>
-
+<script src="/js/google-connect.js"></script>
 <script src="/nav.js"></script>
-<script src="/js/file-icons.js"></script>
 <script src="/js/asset-url.js"></script>
+<script src="/js/file-icons.js"></script>
+<script src="/js/fonts.js"></script>
 <script src="/js/finder-codec.js"></script>
 <script src="/js/finder-viewer.js"></script>
-<script src="/js/finder-format-text.js"></script>
-<script src="/js/finder-format-hwp.js"></script>
-<script src="/js/finder-format-sheet.js"></script>
-<script src="/js/finder-format-slide.js"></script>
-<script src="/js/finder-format-doc.js"></script>
-<script src="/js/finder-format-pdf.js"></script>
-<script src="/js/assistant-bridge.js"></script>
+<!-- 포맷 모듈(finder-format-*·deckcraft·pdfcraft 호스트)과 벤더
+     라이브러리(xlsx·jszip·mammoth)는 정적으로 싣지 않는다 — 파일을
+     실제로 열 때 finder.js의 지연 로더가 해당 모듈만 import하고,
+     뷰어 코어의 loadLib가 벤더를 그 순간 불러온다. 목록만 열면
+     벤더·포맷 요청이 0건이다. -->
+<script src="/js/office-picker.js"></script>
+<script src="/js/desktop/drop-upload.js"></script>
 <script src="/js/finder.js"></script>
+<script src="/assistant-widget.js"></script>
+<script src="/js/assistant-bridge.js" data-persona-id="builder" data-persona-name="노바" data-avatar="/avatars/nova.webp"></script>
 </body>
 </html>

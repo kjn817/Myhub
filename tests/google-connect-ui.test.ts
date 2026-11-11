@@ -368,3 +368,47 @@ describe('AI 안내 문구 — 실제 버튼 위치를 가리킨다', () => {
     expect(GOOGLE_RECONNECT_MESSAGE).not.toContain('일정 화면 상단')
   })
 })
+
+describe('wireInlineStatusRow — 일정 상단 인라인 상태 행 배선 (회귀: 확인 중… 고정)', () => {
+  function buildRow() {
+    const doc = getDoc()
+    doc.body.innerHTML =
+      '<span id="googleStatusLabel" data-state="unknown">확인 중…</span>' +
+      '<div id="googleStatusDesc">Gmail·캘린더 연동 상태를 확인하고 있어요.</div>' +
+      '<button id="googleConnectBtn" type="button" style="display:none;">연결하기</button>' +
+      '<button id="googleDisconnectBtn" type="button" style="display:none;">연결 해제</button>'
+    return doc
+  }
+
+  test('상태 응답이 오면 라벨이 확인 중…에서 연결됨으로 바뀌고 버튼이 맞게 토글된다', async () => {
+    const doc = buildRow()
+    const fetchFn = jest.fn(async () => ({
+      json: async () => ({ connected: true, configured: true, email: 'jn817k@gmail.com', writeEnabled: true }),
+    }))
+    const load = GoogleConnect.wireInlineStatusRow(doc, fetchFn, { href: '' })
+    expect(typeof load).toBe('function')
+    await load()
+    const label = doc.getElementById('googleStatusLabel')
+    expect(label.textContent).toBe('연결됨')
+    expect(label.getAttribute('data-state')).toBe('connected')
+    expect(doc.getElementById('googleStatusDesc').textContent).toContain('jn817k@gmail.com')
+    expect(doc.getElementById('googleConnectBtn').style.display).toBe('none')
+    expect(doc.getElementById('googleDisconnectBtn').style.display).toBe('')
+    expect(fetchFn).toHaveBeenCalledWith('/api/google/status')
+  })
+
+  test('조회 실패 시 상태 확인 불가로 정직하게 표시된다', async () => {
+    const doc = buildRow()
+    const fetchFn = jest.fn(async () => { throw new Error('network') })
+    const load = GoogleConnect.wireInlineStatusRow(doc, fetchFn, { href: '' })
+    await load()
+    expect(doc.getElementById('googleStatusLabel').textContent).toBe('상태 확인 불가')
+    expect(doc.getElementById('googleConnectBtn').style.display).toBe('')
+  })
+
+  test('인라인 행이 없는 페이지에서는 아무 것도 하지 않는다', () => {
+    const doc = getDoc()
+    doc.body.innerHTML = '<div></div>'
+    expect(GoogleConnect.wireInlineStatusRow(doc, jest.fn(), { href: '' })).toBeNull()
+  })
+})

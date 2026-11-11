@@ -104,6 +104,10 @@ describe('CSP 실태 — public 전체', () => {
     // 2026-11-07 F2·F3: enforce 대상 15페이지는 전부 인라인 0이 됐다 —
     // 남은 것은 GENERAL 정책(스크립트 무제한) 페이지뿐이다. enforce
     // 페이지에 인라인이 되돌아오면 이 목록이 늘어나며 실패한다.
+    // 2026-11-11 장부 갱신: HTML 5종 운영 원본을 전부 설치했다 (인라인 0).
+    // sheet-fortune.html은 운영 번들(부트스트랩 내장)을 바이트 회수해
+    // 함께 설치한 뒤에야 원본 페이지가 성립한다 — 번들 회수 전에는
+    // 재구성본 페이지(인라인 부트스트랩)를 유지했었다.
     const withInline = fs
       .readdirSync(PUB)
       .filter((n) => n.endsWith('.html'))
@@ -114,7 +118,6 @@ describe('CSP 실태 — public 전체', () => {
       'index.html',
       'memo.html',
       'memory.html',
-      'sheet-fortune.html',
     ])
   })
 })

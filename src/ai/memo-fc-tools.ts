@@ -220,7 +220,6 @@ export function prepareToolsFor(provider: ToolFormatProvider, tools: FCToolDefin
           parameters: t.parameters,
         })),
       }]
-    case 'workers-ai':
     default:
       return tools
   }

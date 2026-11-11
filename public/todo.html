@@ -68,7 +68,10 @@
 
 <script src="/nav.js"></script>
 <script src="/assistant-widget.js"></script>
-
+<!-- 비서 브리지: TODO_CSP(script-src 'self')라 인라인 init이 차단되므로,
+     원본(canonical)의 인라인 init 값(scheduler/캘리)을 bridge data-*로 게시한다.
+     단독 실행이면 위젯 init, 창 모드이면 셸에 assistant-declare를 보낸다. -->
+<script src="/js/assistant-bridge.js" data-persona-id="scheduler" data-persona-name="캘리" data-avatar="/avatars/cali.webp"></script>
 <script src="/js/todo.js"></script>
 </body>
 </html>

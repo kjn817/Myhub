@@ -425,7 +425,7 @@
     var chunks = String(xml || '').split(/<\/a:p>/);
     chunks.forEach(function (chunk) {
       var parts = [];
-      var re = /<a:t[^>]*>([\s\S]*?)<\/a:t>/g;
+      var re = /<a:t(?:\s[^>]*)?>([\s\S]*?)<\/a:t>/g;
       var m;
       while ((m = re.exec(chunk)) !== null) parts.push(unescapeXml(m[1]));
       var text = parts.join('');

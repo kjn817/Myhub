@@ -1,14 +1,25 @@
 {
-  "sourceCommit": "ca64a31c6ccc61d326970cc576e00043671d3f57",
-  "glue": "pdfcraft-web-b3d25b7e92d662c0.js",
-  "wasm": "pdfcraft-web-b3d25b7e92d662c0_bg.wasm",
-  "wasmBytes": 36111193,
+  "app": "pdfcraft",
+  "version": "0.18.0",
+  "sourceCommit": "c966e689f1d0117f15aedc4357ecd60007ecc561",
+  "entry": "index.html",
+  "html": "index.html",
+  "js": "pdfcraft-web-15b9731c4d83bf88.js",
+  "wasm": "pdfcraft-web-51eed0055b268fe2_bg.wasm",
   "wasmParts": [
-    "pdfcraft-web-b3d25b7e92d662c0_bg.wasm.part0",
-    "pdfcraft-web-b3d25b7e92d662c0_bg.wasm.part1"
+    "pdfcraft-web-51eed0055b268fe2_bg.wasm.part0",
+    "pdfcraft-web-51eed0055b268fe2_bg.wasm.part1"
   ],
-  "wasmPartBytes": [
-    18055597,
-    18055596
+  "wasmBytes": 36070191,
+  "files": [
+    "LICENSE-APACHE",
+    "LICENSE-MIT",
+    "NOTICE",
+    "index.html",
+    "loader.js",
+    "pdfcraft-web-15b9731c4d83bf88.js",
+    "pdfcraft-web-51eed0055b268fe2_bg.wasm.part0",
+    "pdfcraft-web-51eed0055b268fe2_bg.wasm.part1",
+    "snippets/eframe-d31a8450ea12dfc1/inline0.js"
   ]
 }

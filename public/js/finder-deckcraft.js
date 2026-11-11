@@ -451,6 +451,32 @@
     // 정교게 부른다 (rAF 한 번으로 내리면 앱이 중간 길이를 못 보고
     // 합게한 버퍼인 것을 실측으로 확인). 원복 두 플래이아껏이 한 번 두
     // 서면한 최종 길이+적용한 폰트로 배치가 확정한다.
+    // 폰트 적용 직후 세션당 1회: exec로 줌을 한 단계 올렸다가 별도
+    // exec로 곧바로 창 맞춤(fit)으로 되돌려, 엔진이 텍스트를 현재
+    // 폰트로 다시 shaping하게 한다. 폰트 도착 전에 배치된 텍스트
+    // (새 문서의 플레이스홀더 등)는 .notdef로 고정돼 있어 위의 재배치
+    // 넛지(리사이즈)로는 풀리지 않지만, 줌 배율이 실제로 바뀌는
+    // 프레임에서는 엔진이 다시 그리는 것을 실측으로 확인했다
+    // (2026-11-10, ppt-korean-fix 프로브). 두 명령을 한 exec 배치로
+    // 묶으면 최종 줌이 원래 값과 같아져 엔진이 무효화를 건너뛰므로
+    // 반드시 별도 exec로 나눠 보내야 한다. 최종 상태는 처음과 같은
+    // 창 맞춤이고 문서·dirty·선택·포커스는 건드리지 않는다.
+    var zoomNudgeDone = false;
+    function nudgeZoomReshape() {
+      if (dead || zoomNudgeDone || !ready) return;
+      zoomNudgeDone = true;
+      runExec([{ id: 'view.zoomIn', params: {} }])
+        .catch(function () {
+          return null;
+        })
+        .then(function () {
+          if (dead) return null;
+          return runExec([{ id: 'view.fit', params: {} }]).catch(function () {
+            return null;
+          });
+        });
+    }
+
     var nudgePending = false;
     function nudgeRelayout() {
       if (dead || nudgePending || !frame) return;
@@ -597,6 +623,7 @@
         }
       } else if (d.type === 'deckcraft:fonts-applied') {
         nudgeRelayout();
+        nudgeZoomReshape();
         if (typeof deps.onFontsApplied === 'function') {
           deps.onFontsApplied(typeof d.faces === 'number' ? d.faces : 0);
         }

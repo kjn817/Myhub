@@ -1,11 +1,14 @@
-/* step-up PIN 모달 공용 스타일 (public/js/step-up.js가 주입하던 규칙의 외부 파일 사본).
+/* step-up PIN 모달 공용 스타일 (public/js/step-up.js가 주입하는 규칙의 외부 파일 사본).
    CSP enforce 페이지(key-rotation.html)는 <link id="step-up-style">로 이 파일을
    선언한다 — step-up.js는 같은 id의 요소가 있으면 인라인 <style> 주입을 건너뛰므로
    style-src-elem 'self' 아래에서도 모달 스타일이 유지된다.
-   값을 바꿀 때는 step-up.js 안의 주입 문자열과 함께 바꿀 것 (tests/unit/csp-inventory.test.ts가 일치를 고정). */
-.confirm-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:10000;}
-.confirm-modal{background:#fff;border-radius:8px;padding:24px;max-width:320px;width:90%;box-shadow:0 4px 20px rgba(0,0,0,0.2);}
-.confirm-modal p{margin:0 0 20px;font-size:15px;}
-.confirm-btns{display:flex;gap:10px;justify-content:flex-end;}
-.confirm-btns button{padding:8px 20px;border-radius:6px;border:1px solid #ddd;background:#fff;cursor:pointer;font-size:14px;}
-.confirm-btns .confirm-yes{background:#007aff;color:#fff;border-color:#007aff;}
+   클래스명은 step-up.js가 방출하는 myhub-stepup-* 와 반드시 같아야 하고,
+   값을 바꿀 때는 step-up.js 안의 주입 문자열과 함께 바꿀 것
+   (tests/unit/csp-inventory.test.ts가 일치를 고정).
+   원본(운영 전사본)도 myhub-stepup-* — 재구축 때 confirm-*로 바뀐 것을 복원. */
+.myhub-stepup-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:10000;}
+.myhub-stepup-modal{background:#fff;border-radius:8px;padding:24px;max-width:320px;width:90%;box-shadow:0 4px 20px rgba(0,0,0,0.2);}
+.myhub-stepup-modal p{margin:0 0 20px;font-size:15px;}
+.myhub-stepup-btns{display:flex;gap:10px;justify-content:flex-end;}
+.myhub-stepup-btns button{padding:8px 20px;border-radius:6px;border:1px solid #ddd;background:#fff;cursor:pointer;font-size:14px;}
+.myhub-stepup-btns .myhub-stepup-yes{background:#007aff;color:#fff;border-color:#007aff;}

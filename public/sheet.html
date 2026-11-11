@@ -2,17 +2,19 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-<meta name="theme-color" content="#ffffff">
-<title>Excel</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>시트 편집 · MyHub</title>
 <link rel="stylesheet" href="/css/sheet.css">
 </head>
 <body>
+<!-- 시트 편집 페이지: 파인더 뷰어가 iframe으로 임베드하고 postMessage로
+     파일 바이트를 주고받는다 (finder-format-sheet.js). 엔진은 GridCraft —
+     js/sheet-gridcraft.js가 안쪽 iframe과 myhub-sheet:* ↔ gridcraft:*
+     프로토콜을 번역한다. 시작 실패 시 폴백은 sheet-fortune.html. -->
 <div id="sheetApp"></div>
-
-<script src="/js/asset-url.js"></script>
-<script src="/js/office-fetch.js"></script>
 <script src="/js/fonts.js"></script>
+<script src="/js/google-connect.js"></script>
+<script src="/nav.js"></script>
 <script src="/js/sheet-gridcraft.js"></script>
 </body>
 </html>

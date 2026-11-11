@@ -599,6 +599,12 @@ def build_worker_metadata(completion_jwt):
             # 그래서 플래그의 유일한 기준은 이 메타데이터이다 (wrangler.toml
             # [vars]는 deploy_full.py가 동기화하지 않는다).
             {'type': 'plain_text', 'name': 'GOOGLE_WRITE_ENABLED', 'text': 'true'},
+            # 리마인더 워크플로 플래그 (운영 a2702ca4에 plain_text 'false'로 실재).
+            # keep_bindings는 plain_text를 보존하지 않으므로, 명시하지 않으면
+            # 다음 배포에서 소실된다. 코드는 === 'true'로 판정해 부재와 동작이
+            # 같지만, 운영 바인딩과의 이름 단위 일치를 위해 'false'로 명시한다
+            # (2026-11-11 배포 메타 감사에서 발견).
+            {'type': 'plain_text', 'name': 'WORKFLOW_REMINDER_ENABLED', 'text': 'false'},
             {'type': 'queue', 'name': 'ARTIFACT_QUEUE', 'queue_name': 'myhub-artifact-jobs'},
         ],
         'keep_bindings': ['secret_text', 'secret_key'],

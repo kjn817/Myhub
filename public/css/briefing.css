@@ -8,3 +8,6 @@
 .briefing-empty { color: #999; padding: 20px; text-align: center; }
 .briefing-loading { text-align: center; padding: 40px; color: #666; }
 .briefing-error { background: #fee; border: 1px solid #fcc; padding: 12px; border-radius: 8px; margin-bottom: 16px; }
+/* 오류·재시도 요소는 처음에 숨겨 둔다 (JS가 필요할 때 style.display로 켠다) — 원본 규칙 복원 */
+#briefing-error { display: none; }
+#btn-retry { display: none; }

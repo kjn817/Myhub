@@ -30,16 +30,68 @@ describe('office-picker DOM 계약', () => {
     expect(ids).toContain('officePickConfirm')
   })
 
+  // 유일한 예외: officePickImport. office-picker.js는 이 버튼의 모든
+  // 사용처를 if (pickImportBtn) 로 null 가드하는 선택 요소로 취급하고,
+  // 원본 finder.html의 패널은 '이 기기에서 가져오기'를 제공하지 않아
+  // 버튼 자체가 없다 (office.html에는 hidden 버튼으로 실재한다).
+  // 2026-11-11 운영 원본 설치 때 드러난 원본 계약.
+  const OPTIONAL_BY_PAGE: Record<string, string[]> = { 'finder.html': ['officePickImport'] }
+
   it.each(['office.html', 'finder.html'])('%s에 패널 요소가 전부 있다', (page) => {
     const html = fs.readFileSync(path.join(ROOT, 'public', page), 'utf8')
-    const missing = ids.filter((id) => !html.includes(`id="${id}"`))
+    const optional = OPTIONAL_BY_PAGE[page] ?? []
+    const missing = ids.filter((id) => !optional.includes(id) && !html.includes(`id="${id}"`))
     expect(missing).toEqual([])
+  })
+
+  it('officePickImport 예외의 전제: office-picker.js가 사용처를 null 가드한다', () => {
+    // 가드가 사라지면 finder.html(버튼 부재)에서 패널이 깨진다 — 그때는
+    // 예외가 무효이므로 이 테스트가 먼저 실패해 예외를 재검토하게 한다.
+    const src = fs.readFileSync(path.join(ROOT, 'public/js/office-picker.js'), 'utf8')
+    expect(src.match(/if \(pickImportBtn\)/g)?.length ?? 0).toBeGreaterThanOrEqual(4)
   })
 
   it('office.html의 패널은 처음에 숨겨져 있다', () => {
     const html = fs.readFileSync(path.join(ROOT, 'public/office.html'), 'utf8')
-    const tag = html.match(/<div id="officePicker"[^>]*>/)
+    // 원본 마크업은 class가 id보다 앞이다: <div class="office-picker-backdrop" id="officePicker" hidden>
+    const tag = html.match(/<div[^>]*id="officePicker"[^>]*>/)
     expect(tag).not.toBeNull()
     expect(tag![0]).toContain('hidden')
   })
 })
+
+describe('데스크톱 오피스 탭 셰브론 스프라이트 (회귀: 심볼 누락 시 탭 348px 팽창)', () => {
+  const html = fs.readFileSync(path.join(ROOT, 'public', 'desktop.html'), 'utf8');
+  const css = fs.readFileSync(path.join(ROOT, 'public', 'css', 'desktop.css'), 'utf8');
+  test('desktop.html에 #i-chevron-down 심볼이 정의돼 있다', () => {
+    expect(html).toContain('id="i-chevron-down"');
+  });
+  test('desktop.css에 메뉴 아이콘 크기 규칙이 있다', () => {
+    expect(css).toMatch(/\.dt-office-tab-menu-icon svg \{[^}]*width: 12px/);
+  });
+});
+
+describe('rhwp 파일 메뉴 브리지 계약 (회귀: 임베드 파일 메뉴 소실)', () => {
+  const bridge = fs.readFileSync(path.join(ROOT, 'public', 'rhwp-studio', 'myhub-file-menu.js'), 'utf8');
+  const studioHtml = fs.readFileSync(path.join(ROOT, 'public', 'rhwp-studio', 'index.html'), 'utf8');
+  test('스튜디오 index.html이 브리지를 로드한다', () => {
+    expect(studioHtml).toContain('myhub-file-menu.js');
+  });
+  test('브리지는 호스트 계약 전역(__myhubFileMenu.enable·__myhubFileMenuOk)을 제공한다', () => {
+    expect(bridge).toContain('__myhubFileMenu');
+    expect(bridge).toContain('enable');
+    // 운영 원본(2026-11-10 회수본)의 값은 '= 1'이다 — 재구성 스텁의 '= true'가 아님.
+    expect(bridge).toContain('__myhubFileMenuOk = 1');
+  });
+  test('브리지는 메뉴 호스트·찾기 전역(__myhubMenuHost·__myhubFind)까지 한 파일로 제공한다 (운영 원본 구성)', () => {
+    expect(bridge).toContain('window.__myhubMenuHost = {');
+    expect(bridge).toContain('__myhubMenuHostOk = 1');
+    expect(bridge).toContain('window.__myhubFind = { search: searchStudio }');
+    expect(bridge).toContain("auto.registerCommand");
+  });
+  test('보관함 항목이 myhub-hwp:file-action(open·save)으로 위임된다', () => {
+    expect(bridge).toContain("'myhub-hwp:file-action'");
+    expect(bridge).toContain("'open'");
+    expect(bridge).toContain("'save'");
+  });
+});

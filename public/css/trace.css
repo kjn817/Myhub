@@ -28,5 +28,7 @@
 .span-bar.blocked, .span-bar.denied { background: #ff9500; }
 .span-dur { width: 74px; flex: none; text-align: right; font-size: 12px; color: #666; font-variant-numeric: tabular-nums; }
 .back { margin-bottom: 12px; }
+/* 상세 보기는 처음에 숨겨 둔다 (JS가 style.display로 토글한다) — 원본 규칙 복원 */
+#detail-view { display: none; }
 .detail-head { font-family: ui-monospace, monospace; font-size: 13px; word-break: break-all; margin-bottom: 4px; }
 .detail-meta { font-size: 12px; color: #999; margin-bottom: 14px; }

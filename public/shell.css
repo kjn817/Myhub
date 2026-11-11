@@ -1,11 +1,7 @@
-/* MyHub global shell — 상단바·설정 메뉴·임베드 규칙
- * 재구성 근거: 상단바 34px+안전영역 하한 4px (2026-11-03 여백 균형 실측: 바 38px,
- * 제목 13/13·JN 13.5/14·시계 13/12.5 + 시계 translateY(-2px) 광학 보정),
- * html.myhub-embedded에서 .g-nav 숨김 + --topnav-h:0 + .g-main padding-top:0
- * (2026-11-03 D-15 임베드 4px 띠 근본 수정 포함).
- */
+/* MyHub global shell v10 — AWS Console inspired */
 html { background: #ffffff; }
 :root {
+  /* AWS Cloudscape design tokens */
   --aws-nav: #232f3e;
   --aws-nav-hover: #35465c;
   --aws-blue: #006ce0;
@@ -26,6 +22,17 @@ html { background: #ffffff; }
   --radius: 4px;
   --topnav-h: 34px;
   --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Apple SD Gothic Neo", "Noto Sans KR", "Helvetica Neue", Arial, sans-serif;
+  /* Finder 기하 토큰 (기준표 docs/FINDER-GEOMETRY.md, 2026-11-06):
+     셸 문서(desktop.html)와 iframe 문서(finder.html)가 나눠 갖는
+     기하값의 단일 출처 — 두 문서가 함께 읽는 이 파일에서만 선언하고
+     desktop.css·finder.css는 참조만 한다 (규칙 R-4). */
+  --finder-side-w: 208px;
+  --finder-rail-w: 52px;
+  --finder-side-material: #eff4f9;
+  --finder-inset: 8px;
+  --finder-icon-w: 24px;
+  --finder-icon-gap: 7px;
+  --finder-name-slot: calc(var(--finder-icon-w) + var(--finder-icon-gap));
 }
 * { box-sizing: border-box; }
 html, body { margin: 0; padding: 0; }
@@ -39,6 +46,17 @@ body {
 }
 button { font-family: inherit; }
 a { color: var(--aws-blue); }
+
+/* ---- 데스크톱 창 안(iframe)에서 열렸을 때 ----
+   자체 상단바는 숨기고, --topnav-h 기반 오프셋을 전부 접어 시스템
+   상단바(바깥 데스크톱) 하나로 통합된 것처럼 보이게 한다. */
+html.myhub-embedded { --topnav-h: 0px; }
+html.myhub-embedded .g-nav { display: none !important; }
+/* 임베드에서는 상단바 자체가 없으므로 g-main의 상단 오프셋(안전영역
+   포함)도 전부 접는다 — 접지 않으면 창 제목줄 아래로 4px 띠가 떠서
+   앱 내용이 아래로 밀리고 하단이 그만큼 잘린다 (2026-11-03 파인더
+   여백 실측: .finder-layout top = 4px). */
+html.myhub-embedded .g-main { padding-top: 0; }
 
 /* ---- global top nav (모든 모듈 동일) ---- */
 .g-nav {
@@ -56,70 +74,185 @@ a { color: var(--aws-blue); }
 .g-nav.nav-hidden {
   top: calc(-1 * var(--topnav-h) - max(env(safe-area-inset-top), 4px));
 }
-.g-nav .brand-logo { display: inline-flex; align-items: center; text-decoration: none; }
-.g-nav .brand-logo img { height: 26px; width: auto; display: block; }
+.g-nav .brand-logo { display: inline-flex; align-items: center; }
+.g-nav .brand-logo img { height: 21px; width: auto; display: block; }
 .g-nav nav { display: flex; align-items: center; gap: 2px; }
 .g-nav nav a {
   display: inline-flex; align-items: center; gap: 7px;
-  color: #4b5563; text-decoration: none; font-size: 13.5px; font-weight: 500;
-  padding: 7px 12px; border-radius: var(--radius); white-space: nowrap;
+  color: #4b5563; text-decoration: none; font-size: 13px; font-weight: 500;
+  padding: 4px 10px; border-radius: var(--radius); white-space: nowrap;
 }
 .g-nav nav a svg { width: 15px; height: 15px; }
 .g-nav nav a:hover { color: #111; background: rgba(0,0,0,0.05); }
 .g-nav nav a.active { color: #111; background: rgba(0,0,0,0.06); box-shadow: inset 0 -2px 0 #006ce0; border-radius: 4px 4px 0 0; }
 .g-nav .spacer { flex: 1; }
-.g-nav .ver { font-size: 12px; color: #6b7280; white-space: nowrap; font-variant-numeric: tabular-nums; letter-spacing: -0.1px; transform: translateY(-2px); }
+.g-nav .ver { font-size: 12px; color: #6b7280; white-space: nowrap; font-variant-numeric: tabular-nums; letter-spacing: -0.1px; transform: translateY(-2px); /* 12px 글리프 광학 중심 보정 (상단바 여백 균형, 실측) */ }
 .g-nav .settings-btn {
-  display: inline-flex; align-items: center; justify-content: center;
-  background: none; border: none; cursor: pointer; color: #4b5563;
-  width: 30px; height: 30px; padding: 0; border-radius: 8px;
+  display: inline-flex; align-items: center;
+  background: none; border: none; cursor: pointer;
+  color: #4b5563; font-family: inherit;
+  padding: 6px 9px; border-radius: 999px; white-space: nowrap;
 }
+.g-nav .settings-btn svg { width: 17px; height: 17px; display: block; }
 .g-nav .settings-btn:hover { color: #111; background: rgba(0,0,0,0.05); }
-.g-nav .settings-btn svg { width: 17px; height: 17px; }
+/* 메뉴가 열려 있는 동안은 셸 메뉴 트리거와 같은 캡슐 하이라이트 */
+.g-nav .settings-btn[aria-expanded="true"] { color: #111; background: rgba(60,64,67,0.14); }
 
-/* 설정 드롭다운 (애플 메뉴식) — 공용 컴포넌트는 myhub- 접두사 필수 */
-.myhub-settings-menu {
-  position: fixed; z-index: 200; min-width: 208px;
-  background: rgba(255,255,255,0.92);
-  backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px);
-  border: 1px solid rgba(0,0,0,0.08); border-radius: 12px;
-  box-shadow: 0 12px 32px rgba(0,0,0,0.16);
-  padding: 5px; display: flex; flex-direction: column;
+/* ---- 설정 드롭다운 메뉴 (nav.js가 생성, 상단바 아래 우측에 펼침) ---- */
+/* 클래스 이름에 myhub- 접두사는 필수다: 페이지별 CSS(chat.css 등)의 일반
+   이름(.settings-overlay)과 충돌하면 메뉴가 표시되지 않는다. */
+.myhub-settings-root[hidden] { display: none; }
+.myhub-settings-backdrop {
+  position: fixed; inset: 0; z-index: 190; background: transparent;
+}
+/* 패널·항목의 결은 셸 드롭다운(.dt-ctx-menu)과 같은 토큰으로 통일한다
+   (프로스티드 글래스·12px 라운드·헤어라인, 기준: 실제 macOS 메뉴) */
+.myhub-settings-panel {
+  position: fixed; z-index: 201;
+  top: calc(var(--topnav-h) + max(env(safe-area-inset-top), 4px) + 6px);
+  right: 10px;
+  width: 264px; max-width: 92vw;
+  background: rgba(250,250,252,0.86);
+  backdrop-filter: blur(24px) saturate(1.6);
+  -webkit-backdrop-filter: blur(24px) saturate(1.6);
+  border: 1px solid rgba(15,23,42,0.1); border-radius: 12px;
+  box-shadow: 0 14px 38px rgba(15,23,42,0.28);
+  padding: 6px;
 }
 .myhub-settings-item {
-  display: flex; align-items: center; gap: 6px;
-  background: none; border: none; cursor: pointer; text-align: left;
-  font-size: 13.5px; color: #1a1a1a; padding: 6px 8px; border-radius: 7px;
-  white-space: nowrap;
+  display: flex; align-items: center; gap: 10px;
+  width: 100%; box-sizing: border-box;
+  padding: 8px 10px; border-radius: 6px;
+  background: none; border: none; cursor: pointer;
+  color: #111; font-size: 14px; font-family: inherit;
+  text-decoration: none; text-align: left;
 }
-.myhub-settings-item:hover { background: #0a84ff; color: #ffffff; }
-.myhub-settings-item-danger { color: #d13239; }
-.myhub-settings-item-danger:hover { background: #d13239; color: #ffffff; }
-.myhub-settings-check { width: 14px; text-align: center; font-size: 12px; }
+.myhub-settings-item:hover { background: #0a84ff; color: #fff; }
+.myhub-settings-item svg { width: 18px; height: 18px; color: #4b5563; flex: none; }
+.myhub-settings-item:hover svg { color: #fff; }
+.myhub-settings-check { margin-left: auto; display: inline-flex; }
+.myhub-settings-check svg { color: #2563eb; }
+.myhub-settings-item:hover .myhub-settings-check svg { color: #fff; }
+.myhub-settings-item.danger { color: var(--danger); }
+.myhub-settings-item.danger svg { color: var(--danger); }
+.myhub-settings-item.danger:hover { background: #dc2626; color: #fff; }
+.myhub-settings-item.danger:hover svg { color: #fff; }
+.myhub-settings-item:disabled { opacity: 0.5; cursor: default; }
+.myhub-settings-divider { height: 1px; background: rgba(15,23,42,0.12); margin: 6px 10px; }
+/* 설정 메뉴 그룹/서브메뉴 (nav.js) — 패널이 우상단 고정이라 넓은 화면에서는
+   왼쪽으로 플라이아웃하고, 좁은 화면에서는 인라인으로 펼친다. */
+.myhub-settings-group-wrap { position: relative; }
+.myhub-settings-chevron { margin-left: auto; display: inline-flex; }
+.myhub-settings-chevron svg { width: 16px; height: 16px; color: #9ca3af; }
+.myhub-settings-item:hover .myhub-settings-chevron svg { color: #fff; }
+.myhub-settings-submenu {
+  position: absolute; z-index: 202;
+  right: calc(100% + 6px); top: -6px;
+  width: 240px; max-width: 80vw; box-sizing: border-box;
+  background: rgba(250,250,252,0.86);
+  backdrop-filter: blur(24px) saturate(1.6);
+  -webkit-backdrop-filter: blur(24px) saturate(1.6);
+  border: 1px solid rgba(15,23,42,0.1); border-radius: 12px;
+  box-shadow: 0 14px 38px rgba(15,23,42,0.28);
+  padding: 6px;
+}
+.myhub-settings-submenu[hidden] { display: none; }
+@media (max-width: 560px) {
+  .myhub-settings-submenu {
+    position: static; width: auto; max-width: none;
+    border: none; border-radius: 0; box-shadow: none;
+    padding: 2px 0 2px 20px;
+  }
+}
 
+/* ---- Google 연동 패널 (google-connect.js가 생성 — 진입점은 설정 메뉴 안
+   'Google 연동' 항목이다, 2026-11-03 상단바 버튼에서 이동) ---- */
+.myhub-connect-root[hidden] { display: none; }
+.myhub-connect-backdrop {
+  position: fixed; inset: 0; z-index: 190; background: transparent;
+}
+.myhub-connect-panel {
+  position: fixed; z-index: 201;
+  top: calc(var(--topnav-h) + max(env(safe-area-inset-top), 4px) + 6px);
+  right: 10px;
+  width: 300px; max-width: 92vw; box-sizing: border-box;
+  background: #fff; border: 1px solid rgba(0,0,0,0.08); border-radius: 12px;
+  box-shadow: 0 12px 40px rgba(0,0,0,0.16);
+  padding: 14px;
+}
+.myhub-connect-head { display: flex; align-items: center; gap: 8px; }
+.myhub-connect-head svg { width: 17px; height: 17px; color: #4b5563; flex: none; }
+.myhub-connect-title { font-size: 14px; font-weight: 600; color: #111; }
+.myhub-connect-pill {
+  margin-left: auto; flex: none;
+  font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 999px;
+  background: #f3f4f6; color: #4b5563; white-space: nowrap;
+}
+.myhub-connect-pill[data-state="connected"] { background: #e6f4ea; color: var(--success); }
+.myhub-connect-pill[data-state="unknown"] { background: #fef3c7; color: #92400e; }
+.myhub-connect-desc {
+  font-size: 12.5px; color: var(--text-secondary);
+  margin: 8px 0 0; line-height: 1.55; overflow-wrap: anywhere;
+}
+.myhub-connect-meta { font-size: 12px; color: #6b7280; margin: 6px 0 0; line-height: 1.5; }
+.myhub-connect-meta[hidden] { display: none; }
+.myhub-connect-actions { display: flex; gap: 8px; margin-top: 12px; }
+.myhub-connect-action {
+  flex: 1; padding: 8px 10px; border-radius: 8px;
+  font-size: 13.5px; font-weight: 600; font-family: inherit; cursor: pointer;
+}
+.myhub-connect-action.solid { background: #111; color: #fff; border: 1px solid #111; }
+.myhub-connect-action.solid:hover { background: #333; border-color: #333; }
+.myhub-connect-action.ghost { background: #fff; color: #111; border: 1px solid var(--border); }
+.myhub-connect-action.ghost:hover { background: rgba(0,0,0,0.04); }
+.myhub-connect-action:disabled { opacity: 0.5; cursor: default; }
+.myhub-connect-note { font-size: 11.5px; color: #9ca3af; margin: 10px 0 0; }
 .g-main { padding-top: calc(var(--topnav-h) + max(env(safe-area-inset-top), 4px)); min-height: 100vh; transition: padding-top 0.3s ease; }
 body.nav-hidden .g-main { padding-top: max(env(safe-area-inset-top), 4px); }
-
-/* 임베드(데스크톱 창 안): 자체 상단바를 접고 오프셋을 전수 제거한다 */
-html.myhub-embedded { --topnav-h: 0px; }
-html.myhub-embedded .g-nav { display: none; }
-html.myhub-embedded .g-main { padding-top: 0; }
-
-/* 오피스 임베드: 페이지 자체 도구 모음·탭 행을 숨기고 편집기가 창 영역
-   전체를 채운다 — 셸이 제목줄·빠른 실행·메뉴를 제공한다 (운영 창 캡처
-   실측). office.html은 CSP enforce 페이지라 인라인 <style>을 둘 수
-   없어 이 규칙은 연결 스타일시트인 여기에 둔다. */
-html.myhub-embedded .office-toolbar,
-html.myhub-embedded .office-tabs { display: none; }
-html.myhub-embedded .office-main { max-width: none; padding: 0; gap: 0; }
 
 /* Lucide icons default sizing */
 .lucide { flex-shrink: 0; }
 
 @media (max-width: 1023px) {
-  .g-nav { padding-left: 12px; padding-right: 12px; gap: 12px; }
+  .g-nav { padding: 0 12px; gap: 12px; }
   .g-nav .ver { display: none; }
   .g-nav nav a { padding: 7px 9px; font-size: 13px; }
-  .g-nav nav a span.lbl { display: none; }
   .g-nav nav a svg { width: 17px; height: 17px; }
+  .g-nav .settings-btn { padding: 6px 8px; }
+}
+
+/* ---- Window Controls Overlay (데스크톱 설치형 PWA) ----
+   설치된 PWA에서 OS 타이틀바 줄이 사라지고 이 상단바가 그 영역까지
+   확장된다. 네이티브 버튼(최소화·최대화·닫기)은 Windows는 우상단,
+   macOS는 좌상단에 오버레이로 남으므로 env(titlebar-area-*)로 그
+   자리를 비우고, 바 자체는 창 드래그 핸들이 된다. 미지원 환경
+   (모바일·일반 브라우저 탭)에서는 적용되지 않아 기존과 동일하다. */
+@media (display-mode: window-controls-overlay) {
+  /* 높이를 타이틀바와 정확히 같게: --topnav-h를 줄이면 바 높이·아래
+     요소들의 오프셋이 전부 같은 식으로 계산돼 함께 맞춰진다. */
+  :root {
+    --topnav-h: calc(env(titlebar-area-height, 32px) - max(env(safe-area-inset-top), 4px));
+  }
+  .g-nav {
+    -webkit-app-region: drag;
+    /* 색도 타이틀바와 동일하게: 버튼 띠를 칠하는 theme-color와 같은
+       값(--titlebar-tone, wallpaper.js가 동기)을 단색 배경으로 쓴다.
+       반투명·블러는 이 모드에서 쓰지 않는다 (띠는 단색뿐이라 경계가
+       생기기 때문). fallback은 앱 페이지들의 theme-color(#ffffff)와
+       같은 값이어야 한다 — 데스크톱 베이지(#f4f2ef)를 쓰면 wallpaper
+       동기가 없는 단독 페이지(백업 등)에서 띠와 바가 어긋난다
+       (2026-11-06). 데스크톱 셸은 desktop.css의 body > .g-nav 규칙이
+       자체 fallback(#f4f2ef)을 갖고 nav.js가 theme-color로 동기한다. */
+    background: var(--titlebar-tone, #ffffff);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    padding-top: 0;
+    padding-left: max(env(titlebar-area-x, 0px), 16px);
+    padding-right: calc(100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, 100vw) + 16px);
+  }
+  /* 얇아진 바 안에서 설정 버튼이 위아래로 닿지 않게 (WCO 한정) */
+  .g-nav .settings-btn { padding: 5px 8px; }
+  .g-nav a, .g-nav button, .g-nav input, .g-nav select, .g-nav [role="button"] {
+    -webkit-app-region: no-drag;
+  }
 }

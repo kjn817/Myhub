@@ -378,6 +378,9 @@
       el.addEventListener('pointerdown', function (e) {
         if (missionOpen) {
           if (e.target && e.target.closest && e.target.closest('button')) return;
+          // preventDefault가 없으면 드래그 이동 중 브라우저 텍스트
+          // 선택이 시작돼 창·라벨이 선택 틴트로 덮인다 (실브라우저 실측).
+          e.preventDefault();
           missionDrag = {
             id: win.id, pointerId: e.pointerId,
             startX: e.clientX, startY: e.clientY,
@@ -690,7 +693,7 @@
         rec.el.classList.toggle('dt-minimized', win.minimized === true);
         rec.el.classList.toggle('dt-maximized', modeKind(win.id) === 'full');
         var maxBtn = rec.el.querySelector('.dt-btn-max');
-        if (maxBtn) maxBtn.setAttribute('aria-label', modeKind(win.id) === 'full' ? '' : '');
+        if (maxBtn) maxBtn.setAttribute('aria-label', modeKind(win.id) === 'full' ? '원래 크기로' : '확대');
       });
       entries.forEach(function (rec, id) {
         if (!alive[id]) {
@@ -712,7 +715,7 @@
       if (deps.activeTitleEl) {
         var activeWin = state.activeId ? findWin(state.activeId) : null;
         var activeMod = activeWin ? findModule(activeWin.module) : null;
-        deps.activeTitleEl.textContent = activeMod ? activeMod.title : '';
+        deps.activeTitleEl.textContent = activeMod ? activeMod.title : '데스크톱';
       }
       renderDock();
       syncDockAutohide();
@@ -797,7 +800,7 @@
     function jnMenuItems() {
       var items = [
         {
-          label: '',
+          label: '미션 컨트롤',
           onSelect: function () {
             toggleMission();
           },
@@ -806,12 +809,12 @@
       ];
       var hasSettings = !!shellDocument().querySelector('.g-nav .settings-btn');
       items.push({
-        label: '',
+        label: '시스템 설정',
         disabled: !hasSettings,
         onSelect: openShellSettings,
       });
       items.push({
-        label: '',
+        label: '백업',
         disabled: !hasSettings,
         onSelect: openShellSettings,
       });
@@ -820,7 +823,7 @@
       if (nav && typeof nav.handleLogout === 'function') {
         items.push({ separator: true });
         items.push({
-          label: '',
+          label: '로그아웃',
           danger: true,
           onSelect: function () {
             nav.handleLogout();
@@ -834,14 +837,14 @@
       if (!id) return [];
       return [
         {
-          label: '',
+          label: '최소화',
           onSelect: function () {
             commit(stateApi.minimizeWindow(state, id));
           },
         },
         { separator: true },
         {
-          label: '',
+          label: '창 닫기',
           onSelect: function () {
             commit(stateApi.closeWindow(state, id));
           },
@@ -1055,7 +1058,7 @@
       if (!box) return;
       var winId = state.activeId || null;
       var win = findWin(winId);
-      var st = win && win.officeTabs ? normalizeOfficeTabState(win.officeTabs) : null;
+      var st = officeTabsByWin.get(winId) || (win && win.officeTabs ? normalizeOfficeTabState(win.officeTabs) : null);
       var sig = officeTabsSignature(winId, st);
       if (sig === officeTabsSig) return;
       officeTabsSig = sig;
@@ -1646,10 +1649,10 @@
     var officeQuickSig = new Map();
     var officeFoldByWin = new Map();
     var OFFICE_QUICK_DEFS = [
-      { action: 'save', icon: 'save', label: '' },
-      { action: 'print', icon: 'printer', label: '' },
-      { action: 'undo', icon: 'undo-2', label: '' },
-      { action: 'redo', icon: 'redo-2', label: '' },
+      { action: 'save', icon: 'save', label: '저장' },
+      { action: 'print', icon: 'printer', label: '인쇄' },
+      { action: 'undo', icon: 'undo-2', label: '실행 취소' },
+      { action: 'redo', icon: 'redo-2', label: '다시 실행' },
     ];
     function normalizeOfficeQuickState(q) {
       if (!q || typeof q !== 'object') return null;
@@ -1746,7 +1749,7 @@
         var fb = document.createElement('button');
         fb.type = 'button';
         fb.className = 'myhub-oq-btn myhub-win-fold';
-        fb.title = foldSt.folded ? '' : '';
+        fb.title = foldSt.folded ? '펼치기' : '접기';
         fb.setAttribute('aria-label', fb.title);
         fb.setAttribute('aria-expanded', foldSt.folded ? 'false' : 'true');
         fb.setAttribute('data-fold-state', foldSt.folded ? 'folded' : 'open');
@@ -1800,8 +1803,8 @@
       label.innerHTML = '<i data-lucide="search"></i>';
       var input = document.createElement('input');
       input.type = 'text';
-      input.placeholder = '';
-      input.setAttribute('aria-label', '');
+      input.placeholder = '문서 내 검색';
+      input.setAttribute('aria-label', '문서 내 검색');
       input.addEventListener('keydown', function (e) {
         if (e.key === 'Enter') {
           postOfficeQuickAction(winId, 'search', input.value);
@@ -2148,7 +2151,7 @@
       delete catalog.backup;
       catalog.settings = {
         id: 'settings',
-        label: '',
+        label: '설정',
         onSelect: function () {
           var doc = (root && root.ownerDocument) || document;
           var btn = doc.querySelector('.g-nav .settings-btn');
@@ -2205,7 +2208,7 @@
       });
       var trashItem = {
         id: 'trash',
-        label: '',
+        label: '휴지통',
         onSelect: function () { openFinderTrash(); },
       };
       if (extraSep) trashItem.separatorBefore = true;
@@ -2228,12 +2231,12 @@
           var menuItems = [];
           if (item.id === 'trash') {
             menuItems.push({
-              label: 'Finder ', icon: 'trash-2',
+              label: 'Finder에서 휴지통 열기', icon: 'trash-2',
               onSelect: function () { openFinderTrash(); },
             });
             if (loadTrash().length || (driveTrashCount || 0) > 0) {
               menuItems.push({
-                label: '', icon: 'trash-2', danger: true,
+                label: '휴지통 비우기', icon: 'trash-2', danger: true,
                 onSelect: function () { emptyTrash(); },
               });
             }
@@ -2241,20 +2244,20 @@
             return;
           } else if (findModule(item.id)) {
             menuItems.push({
-              label: '', icon: 'arrow-up-right',
+              label: '열기', icon: 'arrow-up-right',
               onSelect: function () { openModule(item.id); },
             });
             menuItems.push({ separator: true });
             if (ensureDockIds().indexOf(item.id) >= 0) {
               if (item.id !== 'finder') {
                 menuItems.push({
-                  label: '', icon: 'x', danger: true,
+                  label: '독에서 제거', icon: 'x', danger: true,
                   onSelect: function () { removeFromDock(item.id); },
                 });
               }
             } else {
               menuItems.push({
-                label: '', icon: 'pin',
+                label: '독에 고정', icon: 'pin',
                 onSelect: function () { addToDock(item.id); },
               });
             }
@@ -2599,17 +2602,17 @@
       var children = state.spaces.map(function (spaceId, i) {
         return {
           id: 'desktop-space-' + spaceId,
-          label: ' ' + (i + 1),
+          label: '데스크톱 ' + (i + 1),
           checked: function () { return state.activeSpace === spaceId; },
           onSelect: function () { switchSpace(spaceId); },
         };
       });
       children.push({
         id: 'desktop-space-add',
-        label: '',
+        label: '데스크톱 추가',
         onSelect: function () { addSpace(); },
       });
-      return [{ id: 'desktop-space-group', group: '', children: children }];
+      return [{ id: 'desktop-space-group', group: '데스크톱', children: children }];
     }
     function onKeydown(e) {
       if (missionOpen) {
@@ -2672,7 +2675,15 @@
       missionBg = document.createElement('div');
       missionBg.className = 'dt-mission-bg';
       missionBg.hidden = true;
-      anchor.parentNode.insertBefore(missionBg, anchor);
+      // 딤 레이어는 바탕화면 표면(#dt-surface) 안에 둔다: 표면은 fixed라
+      // 자체 스태킹 컨텍스트여서, body에 둔 레이어는 창 레이어(#dt-root
+      // z2)까지 통째로 덮어 스프레드 창이 블러에 가려지고 클릭도
+      // 가로막혔다 (실브라우저 실측). 표면 안 z1(아이콘과 동층·최상단,
+      // 창 z2 아래)이면 바탕화면·아이콘만 딤되고 창 미리보기는 선명하게
+      // 위에 남으며 포인터도 창에 닿는다.
+      var surface = document.getElementById('dt-surface');
+      if (surface) surface.appendChild(missionBg);
+      else anchor.parentNode.insertBefore(missionBg, anchor);
       missionBg.addEventListener('pointerdown', function () {
         if (missionOpen) confirmMission();
       });
@@ -2711,6 +2722,7 @@
       if (el) {
         el.hidden = true;
         el.innerHTML = '';
+        el.classList.remove('is-open');
         el.classList.remove('is-entering');
         el.classList.remove('is-leaving');
       }
@@ -2766,7 +2778,7 @@
       if (target !== null && target !== state.activeSpace) switchSpace(target);
     }
     var MISSION_AREA_X = 56;
-    var MISSION_AREA_TOP = 176;
+    var MISSION_AREA_TOP = 84;
     var MISSION_GAP = 28;
     var MISSION_CAPTION_H = 30;
     function clearMissionSpread() {
@@ -2802,7 +2814,7 @@
       if (!wins.length) {
         var empty = document.createElement('p');
         empty.className = 'dt-mission-empty';
-        empty.textContent = '';
+        empty.textContent = '이 데스크톱에는 열린 창이 없어요';
         el.appendChild(empty);
         return;
       }
@@ -2944,7 +2956,7 @@
       el.addEventListener('pointerdown', function (e) {
         if (!missionOpen) return;
         var t = e.target;
-        var onEmpty = t === el || (t.classList && t.classList.contains('dt-mission-spaces'));
+        var onEmpty = t === el || (t.classList && (t.classList.contains('dt-mission-bar') || t.classList.contains('dt-mission-labels')));
         if (onEmpty) confirmMission();
       });
     }
@@ -2967,46 +2979,31 @@
       var bg = ensureMissionBg();
       if (bg) applyMissionWallpaper(bg);
       el.innerHTML = '';
-      var vp = getViewport();
       var viewSpace = missionSel;
-      var strip = document.createElement('div');
-      strip.className = 'dt-mission-spaces';
+      // 실제 macOS 미션 컨트롤 형태: 화면 맨 위 스페이스 바에 이름만
+      // 나열하고, 보고 있는 스페이스만 알약으로 강조한다 (사용자 실측
+      // 정본 2026-11-10: 바 60px·라벨 14px·알약 높이 22px·+ 원형 우상단).
+      var bar = document.createElement('div');
+      bar.className = 'dt-mission-bar';
+      var labels = document.createElement('div');
+      labels.className = 'dt-mission-labels';
       missionCardsArr = [];
-      var missionCards = missionCardsArr;
+      var missionSpaces = missionCardsArr;
       state.spaces.forEach(function (spaceId, i) {
-        var card = document.createElement('div');
-        card.className = 'dt-mission-card' + (spaceId === state.activeSpace ? ' is-active' : '') + (spaceId === viewSpace ? ' is-selected' : '');
-        card.dataset.spaceId = String(spaceId);
-        missionCards.push({ spaceId: spaceId, el: card });
-        var stage = document.createElement('div');
-        stage.className = 'dt-mission-stage';
-        state.windows.forEach(function (w) {
-          if (w.space !== spaceId || w.minimized) return;
-          var rect = document.createElement('div');
-          rect.className = 'dt-mission-winrect';
-          if (isMobile()) {
-            rect.style.left = '0%';
-            rect.style.top = '0%';
-            rect.style.width = '100%';
-            rect.style.height = '100%';
-          } else {
-            rect.style.left = (w.x / vp.w) * 100 + '%';
-            rect.style.top = (w.y / vp.h) * 100 + '%';
-            rect.style.width = (w.w / vp.w) * 100 + '%';
-            rect.style.height = (w.h / vp.h) * 100 + '%';
-          }
-          stage.appendChild(rect);
-        });
-        var name = document.createElement('div');
-        name.className = 'dt-mission-name';
-        name.textContent = ' ' + (i + 1);
-        card.appendChild(stage);
-        card.appendChild(name);
+        var label = document.createElement('button');
+        label.type = 'button';
+        label.className = 'dt-mission-label' + (spaceId === viewSpace ? ' is-current' : '');
+        label.dataset.spaceId = String(spaceId);
+        missionSpaces.push({ spaceId: spaceId, el: label });
+        var text = document.createElement('span');
+        text.className = 'dt-mission-label-text';
+        text.textContent = '데스크톱 ' + (i + 1);
+        label.appendChild(text);
         if (state.spaces.length > 1) {
-          var closeBtn = document.createElement('button');
-          closeBtn.type = 'button';
-          closeBtn.className = 'dt-mission-close';
-          closeBtn.setAttribute('aria-label', ' ' + (i + 1) + ' ');
+          var closeBtn = document.createElement('span');
+          closeBtn.className = 'dt-mission-label-x';
+          closeBtn.setAttribute('role', 'button');
+          closeBtn.setAttribute('aria-label', '데스크톱 ' + (i + 1) + ' 닫기');
           closeBtn.innerHTML = '<i data-lucide="x"></i>';
           closeBtn.addEventListener('click', function (ev) {
             ev.stopPropagation();
@@ -3014,29 +3011,31 @@
             if (missionSel === spaceId) missionSel = state.activeSpace;
             openMission();
           });
-          card.appendChild(closeBtn);
+          label.appendChild(closeBtn);
         }
-        card.addEventListener('click', function () {
+        label.addEventListener('click', function () {
           if (Date.now() - lastMissionDrop < 350) return;
           missionSel = spaceId;
           confirmMission();
         });
-        strip.appendChild(card);
+        labels.appendChild(label);
       });
-      var addCard = document.createElement('button');
-      addCard.type = 'button';
-      addCard.className = 'dt-mission-add';
-      addCard.setAttribute('aria-label', ' ');
-      addCard.innerHTML = '<i data-lucide="plus"></i>';
-      addCard.addEventListener('click', function () {
+      bar.appendChild(labels);
+      var addBtn = document.createElement('button');
+      addBtn.type = 'button';
+      addBtn.className = 'dt-mission-add';
+      addBtn.setAttribute('aria-label', '데스크톱 추가');
+      addBtn.innerHTML = '<i data-lucide="plus"></i>';
+      addBtn.addEventListener('click', function () {
         addSpace();
         openMission();
       });
-      strip.appendChild(addCard);
-      el.appendChild(strip);
-      missionAddEl = addCard;
+      bar.appendChild(addBtn);
+      el.appendChild(bar);
+      missionAddEl = addBtn;
       wireMissionEmptyClick();
       refreshIcons();
+      el.classList.add('is-open');
       el.hidden = false;
       if (bg) bg.hidden = false;
       root.classList.add('dt-mission-mode');

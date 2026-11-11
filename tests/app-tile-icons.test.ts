@@ -126,14 +126,56 @@ describe('appTileFor — pdf·일정 인라인 SVG 타일', () => {
     expect(new Set(MANIFEST.files).has('/icons/pdf-app.png')).toBe(false)
   })
 
-  test('schedule은 오늘 날짜로 라이브 렌더된다 (영문 월 약어 + 날짜, 이미지 파일 없음)', () => {
+  test('schedule은 오늘 날짜로 라이브 렌더된다 (한글 요일 + 날짜, 2026-11-08 확정 디자인)', () => {
+    const WEEKDAY_KO = ['일요일', '월요일', '화요일', '수요일', '목요일', '금요일', '토요일']
     const MONTH_ABBR = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC']
     const now = new Date()
     const svg = fi.appTileFor('schedule')
     expect(svg).not.toContain('<image')
-    expect(svg).toContain('fill="#F4615B"')
-    expect(svg).toContain('>' + MONTH_ABBR[now.getMonth()] + '<')
+    // 흰 squircle + 한글 요일(검정 볼드) + 큰 날짜 — 영문 월 약어·빨간 밴드는
+    // 2026-11-08 확정으로 폐기된 구 디자인이라 남아 있으면 실패해야 한다.
+    expect(svg).toContain('fill="#ffffff"')
+    expect(svg).toContain('>' + WEEKDAY_KO[now.getDay()] + '<')
     expect(svg).toContain('>' + now.getDate() + '<')
+    expect(svg).not.toContain('>' + MONTH_ABBR[now.getMonth()] + '<')
+    expect(svg).not.toContain('#F4615B')
+  })
+
+  test('schedule 타일 비율이 실제 Apple Calendar 아이콘 실측과 같다 (2026-11-10)', () => {
+    // 정본: 사용자가 첨부한 실제 아이콘 사진 PIL 실측 (타일 한 변=1):
+    // 반경 0.245·스트로크 없음·요일 잉크 높이 0.173 볼드·날짜 잉크 높이
+    // 0.449 레귤러(획/높이 0.114)·순검정. 비율이 어긋나면 실패해야 한다.
+    // 장부: ~/workspace/calendar-tile-20261110.md
+    const WEEKDAY_KO = ['일요일', '월요일', '화요일', '수요일', '목요일', '금요일', '토요일']
+    const now = new Date()
+    const svg = fi.appTileFor('schedule')
+    const TILE = 39.5 // rect width/height (viewBox 48, offset 4.25)
+    const rect = svg.match(/<rect[^>]*>/)
+    expect(rect).not.toBeNull()
+    const rx = Number((rect as RegExpMatchArray)[0].match(/rx="([\d.]+)"/)![1])
+    expect(rx / TILE).toBeGreaterThanOrEqual(0.235)
+    expect(rx / TILE).toBeLessThanOrEqual(0.255)
+    expect(svg).not.toContain('stroke')
+    const textTag = (body: string): string => {
+      const m = svg.match(new RegExp('<text[^>]*>' + body + '<'))
+      expect(m).not.toBeNull()
+      return (m as RegExpMatchArray)[0]
+    }
+    const attr = (tag: string, name: string): string => tag.match(new RegExp(name + '="([^"]+)"'))![1]
+    const wd = textTag(WEEKDAY_KO[now.getDay()])
+    expect(Number(attr(wd, 'font-size')) / TILE).toBeGreaterThanOrEqual(0.18)
+    expect(Number(attr(wd, 'font-size')) / TILE).toBeLessThanOrEqual(0.195)
+    expect(attr(wd, 'font-weight')).toBe('700')
+    expect(attr(wd, 'fill')).toBe('#000000')
+    expect((Number(attr(wd, 'y')) - 4.25) / TILE).toBeGreaterThanOrEqual(0.28)
+    expect((Number(attr(wd, 'y')) - 4.25) / TILE).toBeLessThanOrEqual(0.3)
+    const dt = textTag(String(now.getDate()))
+    expect(Number(attr(dt, 'font-size')) / TILE).toBeGreaterThanOrEqual(0.605)
+    expect(Number(attr(dt, 'font-size')) / TILE).toBeLessThanOrEqual(0.645)
+    expect(attr(dt, 'font-weight')).toBe('400')
+    expect(attr(dt, 'fill')).toBe('#000000')
+    expect((Number(attr(dt, 'y')) - 4.25) / TILE).toBeGreaterThanOrEqual(0.825)
+    expect((Number(attr(dt, 'y')) - 4.25) / TILE).toBeLessThanOrEqual(0.85)
   })
 })
 

@@ -170,7 +170,7 @@
 .office-tab-chevron-down { transform: translateY(-2px) rotate(45deg); }
 
 /* ---- 뷰어 (finder 셸 사용, 오피스에서는 남은 높이를 채운다) ---- */
-.office-viewer { flex: 1 1 auto; min-height: 0; }
+.office-viewer { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
 
 
 @media (max-width: 640px) {

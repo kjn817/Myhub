@@ -5,13 +5,13 @@
 /**
  * 로그아웃 UI 테스트 — 공용 상단바(nav.js)의 로그아웃 버튼
  *
- * 배경: 로그아웃 API(POST /api/auth/logout — 쿠키 삭제 + 서버 측 세션 무효화)는
- * 있었지만 어떤 화면에서도 호출하지 않아 사용자가 화면에서 로그아웃할 방법이
- * 없었다. nav.js가 .g-nav(시계 앞)에 버튼을 마운트하는 방식으로 진입점을 추가한다.
+ * 배경: 로그아웃 진입점은 원본 nav.js의 설정 메뉴(기어 버튼 → 패널 안
+ * 로그아웃 항목)가 제공한다. .g-nav(시계 앞)에 설정 버튼 1개가 마운트되고,
+ * 메뉴의 로그아웃 항목이 handleLogout을 호출한다.
  *
  * - handleLogout: POST /api/auth/logout 호출 → 성공 시 /login.html 이동,
  *   실패(네트워크·비200) 시 사용자에게 알리고 이동하지 않음
- * - mountLogoutButton: .g-nav에 버튼 1개 마운트, 클릭 배선, 중복 클릭 가드,
+ * - mountSettingsButton: .g-nav에 버튼 1개 마운트, 클릭 배선, 중복 마운트 가드,
  *   .g-nav 없는 화면에서는 무동작
  * - 배선: 주요 화면 10개가 nav.js를 로드하고, shell.css에 버튼 스타일이 있으며,
  *   nav.js·shell.css가 정적 에셋 집합에 포함됨. memory·search·backup 화면은
@@ -155,8 +155,10 @@ describe('설정 버튼·메뉴 — 상단바 마운트와 로그아웃 배선',
 
   function openMenuAndFindLogout(doc: any): any {
     doc.getElementById('settingsBtn').click()
-    const menu = doc.querySelector('.myhub-settings-menu')
+    // 원본 계약: 메뉴는 #myhubSettingsMenu 싱크톱(백드롭+패널)으로 열린다
+    const menu = doc.getElementById('myhubSettingsMenu')
     expect(menu).not.toBeNull()
+    expect(menu.hidden).toBe(false)
     const item = [...menu.querySelectorAll('.myhub-settings-item')].find((b: any) =>
       b.textContent.includes('로그아웃'),
     )
@@ -164,7 +166,7 @@ describe('설정 버튼·메뉴 — 상단바 마운트와 로그아웃 배선',
     return item
   }
 
-  test('메뉴의 로그아웃 클릭: API를 호출하고 메뉴가 닫힌다', async () => {
+  test('메뉴의 로그아웃 클릭: API를 호출하고 버튼이 비활성으로 남는다 (이동 대기)', async () => {
     const doc = getDoc()
     doc.body.innerHTML = NAV_HTML
     loadNav()
@@ -175,8 +177,8 @@ describe('설정 버튼·메뉴 — 상단바 마운트와 로그아웃 배선',
     await flush()
     expect(fetchFn).toHaveBeenCalledTimes(1)
     expect(fetchFn).toHaveBeenCalledWith('/api/auth/logout', { method: 'POST' })
-    // 항목 클릭 즉시 메뉴가 닫혀 같은 항목을 연달아 누를 수 없다
-    expect(doc.querySelector('.myhub-settings-menu')).toBeNull()
+    // 원본: 성공 시 로그인 화면으로 이동하므로 버튼은 비활성으로 남는다
+    expect(item.disabled).toBe(true)
     delete (globalThis as any).fetch
   })
 
@@ -230,7 +232,10 @@ describe('배선 — 주요 화면과 정적 에셋', () => {
 
   test('shell.css에 설정 버튼과 로그아웃(danger) 메뉴 항목 스타일이 있다', () => {
     expect(SHELL_CSS).toContain('.g-nav .settings-btn')
-    expect(SHELL_CSS).toContain('.myhub-settings-item-danger')
+    // 운영 원본 계약: nav.js가 'myhub-settings-item danger' 클래스를 붙이고
+    // shell.css가 .danger 수식자로 색을 준다 (재구성본의 -danger 클래스는
+    // 데스크톱 메뉴 전용으로 desktop.css가 담당).
+    expect(SHELL_CSS).toContain('.myhub-settings-item.danger')
   })
 
   test('nav.js 소스에 로그아웃 API 경로가 정확히 있다 (카나리아 기준)', () => {

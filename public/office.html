@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
@@ -11,120 +11,124 @@
 <link rel="manifest" href="/manifest.json">
 <title>오피스</title>
 <link rel="stylesheet" href="/shell.css">
+<script src="/vendor/lucide/lucide.min.js"></script>
 <link rel="stylesheet" href="/css/finder.css">
 <link rel="stylesheet" href="/css/office.css">
 <link rel="stylesheet" href="/css/picker.css">
-<script src="/vendor/lucide/lucide.min.js"></script>
-<script src="/vendor/jszip.min.js"></script>
-<script src="/vendor/xlsx.full.min.js"></script>
-<script src="/vendor/mammoth.browser.min.js"></script>
 </head>
-<body class="office-body">
+<body>
 <header class="g-nav">
   <a href="/" class="brand-logo" aria-label="MyHub 홈"><img src="/icon-192.png" alt="JN" style="height:26px;width:auto;display:block;"></a>
+  <span class="office-app-name" id="officeAppName">오피스</span>
   <div class="spacer"></div>
+  <button type="button" class="office-assistant-btn aw-avatar-btn" id="officeAssistantBtn" aria-expanded="false" aria-label="노바 비서"><img src="/avatars/nova.webp" alt="노바"></button>
   <span class="ver" id="clock"></span>
 </header>
-
-<main class="office-main">
-  <div class="office-toolbar">
-    <span class="office-brand-icon" id="officeBrandIcon"></span>
-    <span class="office-brand-name" id="officeBrandName"></span>
-    <span class="office-app-name" id="officeAppName"></span>
-    <div class="office-toolbar-actions">
-      <button type="button" id="officeNewBtn" hidden>새로 만들기</button>
-      <button type="button" id="officeOpenBtn">파일 열기</button>
-      <button type="button" id="officeCloseBtn">닫기</button>
-      <button type="button" class="office-assistant-btn" id="officeAssistantBtn" aria-label="노바 비서" aria-expanded="false"><img src="/avatars/nova.webp" alt="노바"></button>
+<section class="office-assistant" id="officeAssistant" aria-label="AI 비서" hidden></section>
+<div class="g-main">
+  <main class="office-main">
+    <div class="office-toolbar">
+      <span class="office-brand-icon" id="officeBrandIcon"></span>
+      <strong class="office-brand-name" id="officeBrandName">오피스</strong>
+      <span class="office-toolbar-actions">
+        <button type="button" class="finder-upload-btn" id="officeOpenBtn"><i data-lucide="folder-open"></i><span>파일 열기</span></button>
+        <button type="button" class="finder-upload-btn" id="officeNewBtn" hidden><i data-lucide="file-plus-2"></i><span>새로 만들기</span></button>
+        <button type="button" class="finder-upload-btn" id="officeCloseBtn" hidden><i data-lucide="x"></i><span>닫기</span></button>
+      </span>
     </div>
-  </div>
-
-  <div class="office-progress" id="officeProgress" hidden>
-    <div class="office-progress-track"><div class="office-progress-fill" id="officeProgressFill"></div></div>
-    <span class="office-progress-label" id="officeProgressLabel"></span>
-  </div>
-
-  <div class="office-tabs" id="officeTabs" hidden></div>
-
-  <section class="office-start" id="officeStart" hidden>
-    <div class="office-start-icon" id="officeStartIcon"></div>
-    <h1 class="office-start-name" id="officeStartName"></h1>
-    <p class="office-start-desc" id="officeStartDesc"></p>
-    <div class="office-start-actions">
-      <button type="button" id="officeStartNew" hidden>새로 만들기</button>
-      <button type="button" id="officeStartOpen">파일 열기</button>
+    <div class="office-progress" id="officeProgress" hidden>
+      <div class="office-progress-track"><div class="office-progress-fill" id="officeProgressFill"></div></div>
+      <span class="office-progress-label" id="officeProgressLabel"></span>
     </div>
-    <div class="office-resume" id="officeResume" hidden>
-      <span class="office-resume-label">이어서 열기</span>
-      <button type="button" class="office-resume-btn" id="officeResumeBtn"></button>
-    </div>
-    <div class="office-recent" id="officeRecentWrap" hidden>
-      <p class="office-recent-title">최근 문서</p>
-      <div id="officeRecent"></div>
-    </div>
-  </section>
 
-  <div id="finderViewer" class="office-viewer" role="dialog" aria-modal="true" hidden>
-    <div class="fv-window">
-      <div id="fvChrome">
-        <span id="fvName"></span>
-        <span id="fvNote"></span>
-        <div class="spacer"></div>
-        <span id="fvStatus"></span>
-        <button type="button" id="fvSave">저장</button>
-        <button type="button" id="fvDownload">다운로드</button>
-        <button type="button" id="fvClose" aria-label="닫기"><i data-lucide="x"></i></button>
+    <!-- 시작 화면은 hidden으로 시작한다: 자동 새 문서 앱(한글·엑셀)은
+         아예 그리지 않고, 시작 화면 앱은 office.js 부팅이 표시를 맡는다.
+         기본 표시로 두면 스크립트 로딩 동안 시작 화면이 먼저 그려져
+         자동 진입 앱에서 로딩 화면처럼 깜빡인다 (사용자 지적). -->
+    <section class="office-start" id="officeStart" hidden>
+      <div class="office-start-icon" id="officeStartIcon"></div>
+      <h1 class="office-start-name" id="officeStartName">오피스</h1>
+      <p class="office-start-desc" id="officeStartDesc"></p>
+      <p class="office-start-hint" style="font-size:12.5px;color:#5f6368;line-height:1.5;">문서를 연 뒤에는 각 문서의 [파일] 메뉴에서 열고 저장할 수 있어요. 저장 상태는 창 제목줄의 점으로 표시돼요.</p>
+      <div class="office-start-actions">
+        <button type="button" class="office-primary-btn" id="officeStartOpen"><i data-lucide="folder-open"></i><span>파일 열기</span></button>
+        <button type="button" class="office-ghost-btn" id="officeStartNew" hidden><i data-lucide="file-plus-2"></i><span>새로 만들기</span></button>
       </div>
-      <div id="fvBody"></div>
-    </div>
-  </div>
-</main>
+      <div class="office-resume" id="officeResume" hidden>
+        <span class="office-resume-label">이어서 열기</span>
+        <button type="button" class="office-resume-btn" id="officeResumeBtn"></button>
+      </div>
+      <div class="office-recent" id="officeRecentWrap" hidden>
+        <h2 class="office-recent-title">최근 파일</h2>
+        <div class="office-recent-list" id="officeRecent"></div>
+      </div>
+    </section>
 
-<div id="officePicker" class="office-picker-backdrop" hidden>
+    <!-- 오피스 탭 행 (설계 정정 2026-11-06): 리본 탭은 창 안 리본
+         영역 최상단 줄인 이 행이 소유한다 (js/office-tabs.js 로컬
+         렌더가 본체). 셸 상단바는 postMessage(myhub:office-tabs)
+         계약으로 메뉴(kind 'menu')만 호스팅하므로, 임베드에서는
+         메뉴만 이 행에서 빠지고 탭은 그대로 그려진다. -->
+    <div class="office-tabs" id="officeTabs" role="tablist" hidden></div>
+
+    <div class="finder-viewer office-viewer" id="finderViewer" hidden>
+      <div class="fv-float-chrome" id="fvChrome">
+        <span class="fv-fold-slot" id="fvFoldSlot"></span>
+        <button type="button" class="finder-act" id="fvClose" aria-label="닫기"><i data-lucide="x"></i></button>
+      </div>
+      <div class="finder-viewer-body" id="fvBody"></div>
+      <p class="finder-status-overlay" id="fvStatus" hidden></p>
+    </div>
+  </main>
+</div>
+
+<div class="office-picker-backdrop" id="officePicker" hidden>
   <div class="office-picker" role="dialog" aria-modal="true" aria-labelledby="officePickerTitle">
     <div class="office-picker-head">
       <strong id="officePickerTitle">파일 열기</strong>
-      <button type="button" id="officePickerClose" aria-label="닫기"><i data-lucide="x"></i></button>
+      <button type="button" class="finder-act" id="officePickerClose" aria-label="닫기"><i data-lucide="x"></i></button>
     </div>
-    <nav class="office-picker-crumb" id="officeCrumb" aria-label="폴더 경로"></nav>
+    <div class="office-picker-crumb" id="officeCrumb"></div>
     <div class="office-picker-list" id="officePickList"></div>
     <div class="office-picker-save" id="officeSaveRow" hidden>
-      <label for="officeSaveName">이름</label>
+      <label for="officeSaveName">파일 이름</label>
       <input type="text" id="officeSaveName" autocomplete="off">
     </div>
     <p class="office-picker-status" id="officePickerStatus"></p>
     <div class="office-picker-foot">
-      <button type="button" id="officePickImport" class="office-ghost-btn office-pick-import" hidden>이 기계에서 가져오기</button>
-      <button type="button" id="officePickCancel" class="office-ghost-btn">취소</button>
-      <button type="button" id="officePickConfirm" class="office-primary-btn">열기</button>
+      <button type="button" class="office-ghost-btn office-pick-import" id="officePickImport" hidden>이 기기에서 가져오기</button>
+      <button type="button" class="office-ghost-btn" id="officePickCancel">취소</button>
+      <button type="button" class="office-primary-btn" id="officePickConfirm">열기</button>
     </div>
   </div>
 </div>
 
-<div id="officeAssistant" class="office-assistant" hidden></div>
-
+<script src="/js/google-connect.js"></script>
 <script src="/nav.js"></script>
-<script src="/js/file-icons.js"></script>
 <script src="/js/asset-url.js"></script>
+<script src="/vendor/xlsx.full.min.js"></script>
+<script src="/vendor/jszip.min.js"></script>
+<script src="/vendor/mammoth.browser.min.js"></script>
+<script src="/js/file-icons.js"></script>
+<script src="/js/fonts.js"></script>
 <script src="/js/finder-codec.js"></script>
-<script src="/js/office-fetch.js"></script>
 <script src="/js/finder-viewer.js"></script>
 <script src="/js/finder-format-text.js"></script>
 <script src="/js/finder-format-hwp.js"></script>
 <script src="/js/finder-format-sheet.js"></script>
+<script src="/js/gridcraft-prefetch.js"></script>
+<script src="/js/deckcraft-prefetch.js"></script>
 <script src="/js/finder-deckcraft.js"></script>
 <script src="/js/finder-format-slide.js"></script>
 <script src="/js/finder-format-doc.js"></script>
 <script src="/js/finder-pdf-ops.js"></script>
 <script src="/js/finder-pdfcraft.js"></script>
 <script src="/js/finder-format-pdf.js"></script>
-<script src="/js/office-memory.js"></script>
-<script src="/js/office-picker.js"></script>
-<script src="/js/assistant-bridge.js"></script>
-<script src="/vendor/pdf-lib/pdf-lib.min.js"></script>
-<script src="/js/sheet-gridcraft.js"></script>
-<script src="/js/fonts.js"></script>
+<script src="/js/desktop/menu.js"></script>
 <script src="/js/office-tabs.js"></script>
+<script src="/js/office-fetch.js"></script>
+<script src="/js/office-picker.js"></script>
+<script src="/js/office-memory.js"></script>
 <script src="/js/office.js"></script>
 <script src="/js/office-assistant.js"></script>
 </body>

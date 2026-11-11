@@ -68,3 +68,8 @@
 - 진입점 `scripts/build-fortune-entry.js`를 esbuild로 번들해
   `public/vendor/fortune/fortune.js` + `fortune.css`를 만든다.
   (2026-11-07 재빌드본은 운영본과 바이트가 다를 수 있는 기능 동등 재구성본이다.)
+
+### fortune 한국어 로케일 (2026-11-11 복원)
+- 절차: ① 기준 빌드(위 fortune 절)로 트리 해시 832a818f… 재현 확인 → ② `scripts/fortune-ko/apply-ko-locale.mjs`로 @fortune-sheet/core dist에 ko 로케일 등록(en deep-walk + `scripts/fortune-ko/ko-locale-map.json` 934항목 치환, 키 패리티 기계 대조) → ③ 재빌드 → ④ `scripts/fortune-ko/patch-image-titles.mjs`로 이미지 도구 하드코딩 제목 4종(자르기·원본 복원·삭제·확대/축소 설정) 패치(개수 단언 포함).
+- 최종 산출 해시: ab6054f9… (5,945,563B에서 제목 패치로 소폭 변동). 원본의 자체 번역 자산은 소실 확정 — 재번역본이며 원본 바이트와는 상이(기능·UI 동등 복원).
+- functionlist(함수 설명)는 원본 기준대로 영어 유지.
