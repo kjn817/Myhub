@@ -389,6 +389,12 @@
       // 순백(#fff) 평면이라 어두운 배경화면 위에서 유독 튀었다. 그래서
       // 타일에 진짜 맥과 같은 위 #fff → 아래 #ebebeb 그라데이션을 넣었다
       // (pdf 타일의 mta-pdf-bg 패턴과 동일). 스트로크는 넣지 않는다.
+      // 같은 날 세 번째 지적("애플 비율·간격·글씨를 그대로 못하냐")에
+      // 진짜 맥 독 아이콘(60px)을 픽셀 실측해 치수를 맞췄다: 요일 글자
+      // 높이 0.183·위 여백 0.133, 날짜 글자 높이 0.450·위 0.400·아래
+      // 여백 0.150, 요일-날짜 간격 0.083 (타일 높이 대비). MyHub는
+      // 요일이 크고 날짜가 크며 간격이 절반(0.05)이어서 답답해 보였다.
+      // 요일 10.3→9.7·날짜 31.6→30.5·날짜 기준선 39.6→40.8로 교정했다.
       // 장부: ~/workspace/calendar-tile-20261110.md
       var now = new Date();
       var WEEKDAY_KO = ['일요일', '월요일', '화요일', '수요일', '목요일', '금요일', '토요일'];
@@ -396,8 +402,8 @@
         '<svg viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">' +
         '<defs><linearGradient id="mta-cal-bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#ebebeb"/></linearGradient></defs>' +
         '<rect x="0" y="0" width="48" height="48" rx="12" fill="url(#mta-cal-bg)"/>' +
-        '<text x="24" y="15.1" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, \'Segoe UI\', \'Malgun Gothic\', sans-serif" font-size="10.3" font-weight="400" fill="#000000">' + WEEKDAY_KO[now.getDay()] + '</text>' +
-        '<text x="24" y="39.6" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, \'Segoe UI\', \'Malgun Gothic\', sans-serif" font-size="31.6" font-weight="400" fill="#000000">' + now.getDate() + '</text>' +
+        '<text x="24" y="15.1" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, \'Segoe UI\', \'Malgun Gothic\', sans-serif" font-size="9.7" font-weight="400" fill="#000000">' + WEEKDAY_KO[now.getDay()] + '</text>' +
+        '<text x="24" y="40.8" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, \'Segoe UI\', \'Malgun Gothic\', sans-serif" font-size="30.5" font-weight="400" fill="#000000">' + now.getDate() + '</text>' +
         '</svg>'
       );
     },

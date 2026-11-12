@@ -156,6 +156,12 @@ describe('appTileFor — pdf·일정 인라인 SVG 타일', () => {
     // (진짜 맥이 볼드가 아님, 사용자 지적·실측). 타일 배경은 순백 평면이
     // 아니라 진짜 맥과 같은 위 #fff → 아래 #ebebeb 세로 그라데이션
     // (순백 평면은 어두운 배경화면 위에서 메모·할 일보다 튀었다).
+    // 같은 날 세 번째 지적("애플 비율·간격·글씨를 그대로 못하냐")에
+    // 진짜 맥 독 아이콘(60px)을 픽셀 실측해 치수를 맞췄다: 요일 글자
+    // 높이 0.183·위 여백 0.133, 날짜 글자 높이 0.450·위 0.400·아래
+    // 여백 0.150, 요일-날짜 간격 0.083 (타일 높이 대비). 그에 맞춰
+    // 요일 9.7/400·y 15.1, 날짜 30.5/400·y 40.8로 교정했다 (이전
+    // 10.3·31.6·39.6은 요일·날짜가 크고 간격이 절반이라 답답했다).
     // 장부: ~/workspace/calendar-tile-20261110.md
     const WEEKDAY_KO = ['일요일', '월요일', '화요일', '수요일', '목요일', '금요일', '토요일']
     const now = new Date()
@@ -185,19 +191,19 @@ describe('appTileFor — pdf·일정 인라인 SVG 타일', () => {
     }
     const attr = (tag: string, name: string): string => tag.match(new RegExp(name + '="([^"]+)"'))![1]
     const wd = textTag(WEEKDAY_KO[now.getDay()])
-    expect(Number(attr(wd, 'font-size')) / TILE).toBeGreaterThanOrEqual(0.205)
-    expect(Number(attr(wd, 'font-size')) / TILE).toBeLessThanOrEqual(0.225)
+    expect(Number(attr(wd, 'font-size')) / TILE).toBeGreaterThanOrEqual(0.195)
+    expect(Number(attr(wd, 'font-size')) / TILE).toBeLessThanOrEqual(0.21)
     expect(attr(wd, 'font-weight')).toBe('400')
     expect(attr(wd, 'fill')).toBe('#000000')
     expect(Number(attr(wd, 'y')) / TILE).toBeGreaterThanOrEqual(0.305)
     expect(Number(attr(wd, 'y')) / TILE).toBeLessThanOrEqual(0.325)
     const dt = textTag(String(now.getDate()))
-    expect(Number(attr(dt, 'font-size')) / TILE).toBeGreaterThanOrEqual(0.645)
-    expect(Number(attr(dt, 'font-size')) / TILE).toBeLessThanOrEqual(0.67)
+    expect(Number(attr(dt, 'font-size')) / TILE).toBeGreaterThanOrEqual(0.625)
+    expect(Number(attr(dt, 'font-size')) / TILE).toBeLessThanOrEqual(0.645)
     expect(attr(dt, 'font-weight')).toBe('400')
     expect(attr(dt, 'fill')).toBe('#000000')
-    expect(Number(attr(dt, 'y')) / TILE).toBeGreaterThanOrEqual(0.815)
-    expect(Number(attr(dt, 'y')) / TILE).toBeLessThanOrEqual(0.835)
+    expect(Number(attr(dt, 'y')) / TILE).toBeGreaterThanOrEqual(0.84)
+    expect(Number(attr(dt, 'y')) / TILE).toBeLessThanOrEqual(0.86)
   })
 })
 
