@@ -359,6 +359,36 @@ def test_upload_assets_bucket_multipart():
     print('_upload_assets_bucket multipart PASS')
 
 
+def test_upload_assets_bucket_wasm_parts_mime():
+    # WASM 조각(.wasm.part0/.part1)은 application/wasm으로 올려야 한다
+    # (2026-11-12 오피스 성능 점검): mimetypes가 못 알아봐 octet-stream이
+    # 되면 Cloudflare 압축 대상이 아니라 36MB를 통째로 내려받는다.
+    seen = {}
+    def fake_urlopen(req):
+        seen['body'] = req.data
+        payload = _json.dumps({'success': True, 'result': {'jwt': 'completion-jwt'}}).encode()
+        return _FakeResp(payload, status=201)
+    orig = _urlrequest.urlopen
+    with _tempfile.TemporaryDirectory() as d:
+        root = _Path(d)
+        f0 = root / 'x_bg.wasm.part0'
+        f1 = root / 'x_bg.wasm.part1'
+        f0.write_bytes(b'\x00asm-part0')
+        f1.write_bytes(b'\x00asm-part1')
+        h0 = df.asset_hash(b'\x00asm-part0', 'part0')
+        h1 = df.asset_hash(b'\x00asm-part1', 'part1')
+        _urlrequest.urlopen = fake_urlopen
+        try:
+            status, jwt = df._upload_assets_bucket('session-jwt', [h0, h1], {h0: f0, h1: f1})
+        finally:
+            _urlrequest.urlopen = orig
+    assert status == 201 and jwt == 'completion-jwt', (status, jwt)
+    body = seen['body']
+    assert body.count(b'Content-Type: application/wasm') == 2, body[:600]
+    assert b'Content-Type: application/octet-stream' not in body
+    print('_upload_assets_bucket wasm parts MIME PASS')
+
+
 def test_upload_assets_bucket_failure():
     def fake_urlopen(req):
         raise _urlerror.HTTPError(req.full_url, 400, 'bad', {}, None)

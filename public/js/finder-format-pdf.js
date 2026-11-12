@@ -94,6 +94,12 @@
     // 등 행이 모두가 없다 (이 스트림의 이름붙어설정말로
     // 인클린된 호스트 메뉴가 파일한 등 등조건
     // docs/pdfcraft-tabstrip-absorb-prereg-20261106.md).
+    // 모드 탭(모든 도구·편집·변환·전자 서명)은 호스트 탭 행에 게시하지 않는다
+    // (2026-11-12 사용자 지적: 엔진 사이드바 패널 제목과 똑같이 중복된다).
+    // 엔진 사이드바가 모드별 도구 목록을 보여주는 유일한 네비게이션이며,
+    // 모드 탭을 빼면 탭 행은 메뉴만 남아 셸이 채택한 뒤에는 숨겨진다
+    // (office-tabs render가 그릴 것이 없으면 행을 가린다). 메뉴는 상단바에
+    // 그대로 남는다. MODE_TABS 상수는 엔진 모드 id 목록으로만 남긴다.
     var MODE_TABS = [
       { id: 'all', label: '모든 도구', kind: 'tab' },
       { id: 'edit', label: '편집', kind: 'tab' },
@@ -175,17 +181,13 @@
         window.MyHubOfficeTabs.setState('pdf', null);
         return;
       }
-      var active = null;
-      MODE_TABS.forEach(function (t) {
-        if (t.id === lastMode) active = t.id;
-      });
+      // 모드 탭은 게시하지 않는다 (엔진 사이드바와 중복 — 위 MODE_TABS 주석).
+      // 메뉴 탭만 게시하면 셸이 채택한 뒤 탭 행은 그릴 것이 없어 숨겨진다.
       var menus = menuTabs();
       var tabs = menus.slice();
-      if (tabs.length) tabs.push({ id: 'sep:menus-modes', kind: 'separator' });
-      tabs = tabs.concat(MODE_TABS);
       window.MyHubOfficeTabs.setState('pdf', {
         tabs: tabs,
-        activeId: active,
+        activeId: null,
         collapsed: false,
         canCollapse: false,
         menuShell: menus.length > 0,

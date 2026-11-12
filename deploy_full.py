@@ -689,6 +689,13 @@ def _upload_assets_bucket(jwt, bucket, by_hash):
             return None, None
         data = path.read_bytes()
         mime = mimetypes.guess_type(str(path))[0] or 'application/octet-stream'
+        # WASM 조각(.wasm.part0/.part1)은 mimetypes가 못 알아봐 octet-stream이
+        # 되는데, octet-stream은 Cloudflare 압축 대상이 아니라 36MB를 통째로
+        # 내려받는다. 조각도 WASM 바이트이므로 application/wasm으로 올려
+        # Brotli 압축을 받게 한다 (fetch arrayBuffer는 전송 인코딩과 무관하게
+        # 원본 바이트를 돌려주므로 로더는 안전 — 2026-11-12 오피스 성능 점검).
+        if str(path).endswith(('.wasm.part0', '.wasm.part1')):
+            mime = 'application/wasm'
         parts.append(f'--{boundary}\r\n'.encode())
         parts.append(f'Content-Disposition: form-data; name="{h}"; filename="{h}"\r\n'.encode())
         parts.append(f'Content-Type: {mime}\r\n\r\n'.encode())

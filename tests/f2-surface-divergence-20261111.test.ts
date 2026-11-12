@@ -271,4 +271,16 @@ describe('한글·PDF 호스트 메뉴 게시 유지', () => {
     expect(pdf).toContain("provideMenuItems('pdf'")
     expect(pdf).toContain('shellMenuNodes')
   })
+
+  it('PDF 모드 탭은 게시하지 않는다 — 엔진 사이드바와 중복 (2026-11-12 사용자 지적)', () => {
+    // 실브라우저 실증: 모드 탭 "모든 도구"와 엔진 사이드바 패널 제목
+    // "모든 도구"가 똑같이 나란히 보이고, "편집" 탭을 누르면 패널 제목도
+    // "편집"으로 바뀐다. 엔진 사이드바가 유일한 모드 네비게이션이다.
+    // 메뉴 탭만 게시하면 셸 채택 뒤 탭 행은 그릴 것이 없어 숨겨진다.
+    const pdf = read('js/finder-format-pdf.js')
+    expect(pdf).not.toContain('tabs.concat(MODE_TABS)')
+    expect(pdf).not.toContain("tabs.push({ id: 'sep:menus-modes'")
+    // 메뉴 게시는 유지한다 (위 테스트와 같은 가드).
+    expect(pdf).toContain("provideMenuItems('pdf'")
+  })
 })

@@ -419,6 +419,12 @@
       el.addEventListener('dblclick', function () {
         fireOpen(item);
       });
+      // 오피스 앱 호버 프리패치 (2026-11-12 오피스 성능 점검): 바탕화면
+      // 아이콘에 마우스를 올리면 해당 앱의 WASM을 미리 받아 둔다.
+      el.addEventListener('mouseenter', function () {
+        var pre = typeof window !== 'undefined' ? window.MyHubOfficePrefetch : null;
+        if (pre && typeof pre.prefetch === 'function') pre.prefetch(item.id);
+      });
       el.addEventListener('contextmenu', function (e) {
         e.preventDefault();
         openIconMenu(item, e.clientX, e.clientY);

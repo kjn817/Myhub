@@ -292,6 +292,12 @@
           deps.onContextMenu(item, e.clientX, e.clientY);
         }
       });
+      // 오피스 앱 호버 프리패치 (2026-11-12 오피스 성능 점검): 독 아이콘에
+      // 마우스를 올리면 해당 앱의 WASM을 미리 받아 둔다 (클릭 전 다운로드).
+      btn.addEventListener('mouseenter', function () {
+        var pre = typeof window !== 'undefined' ? window.MyHubOfficePrefetch : null;
+        if (pre && typeof pre.prefetch === 'function') pre.prefetch(item.id);
+      });
       btn.addEventListener('click', function () {
         if (suppressClick) {
           suppressClick = false;
