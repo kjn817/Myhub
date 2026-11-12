@@ -2870,6 +2870,12 @@
         rec.el.classList.add('dt-mission-drag');
         rec.el.style.transform = 'translate(' + (base.dx + d.mdx) + 'px,' + (base.dy + d.mdy) + 'px) scale(' + base.scale + ')';
       }
+      // 미션 드래그 중에는 배경 블러를 끈다 (2026-11-12 성능 점검:
+      // .dt-mission-bg 전폭 블러 14px이 미션 드래그 프레임을 지배한다 —
+      // 하네스 실측에서 끄면 느린 프레임 80건→0건. 드래그 중에만 끄고
+      // 끝나면 복원하므로 정적 외관은 원본과 동일하다. 사용자가
+      // "버벅임은 없는지, 빠릿빠릿한 게 생명"이라고 직접 제기해 적용).
+      if (d.moved) root.classList.add('dt-mission-dragging');
       var over = missionCardAtCached(d);
       if (over !== d.hotSpace) {
         d.hotSpace = over;
@@ -2911,6 +2917,7 @@
       missionDrag = null;
       var rec = entries.get(d.id);
       if (rec) rec.el.classList.remove('dt-mission-drag');
+      root.classList.remove('dt-mission-dragging');
       missionCardsArr.forEach(function (c) { c.el.classList.remove('is-drop-hot'); });
       if (missionAddEl) missionAddEl.classList.remove('is-drop-hot');
       var w = findWin(d.id);

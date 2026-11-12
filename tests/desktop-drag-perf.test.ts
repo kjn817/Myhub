@@ -8,12 +8,17 @@
  * 사용자 실화면 지적: 창 타이틀바 드래그와 미션 컨트롤에서 창을 다른
  * 데스크톱으로 드롭할 때 버벅임. 하네스 실측(1440×900, SwiftShader)에서
  * 원인은 두 가지로 갈렸다.
- * - 페인트: backdrop-filter 재계산이 지배적이다 (진단용 프로브로만 확인 —
- *   드래그 중 블러 정지는 원본에도 없다(setDragPerf 빈 스텁) — 원본과
- *   달리 블러를 끄는 변경은 이 수정에 넣지 않는다).
+ * - 페인트: backdrop-filter 재계산이 지배적이다. 미션 배경 전폭 블러
+ *   14px(미션 드래그)·창 타이틀바 블러 20px(창 드래그)이 프레임의
+ *   지배 원인이다 (진단용 프로브로 확인 — 끄면 느린 프레임 80건→0건).
+ *   처음에는 "원본과 달리 블러를 끄는 변경은 넣지 않는다"고 했으나,
+ *   2026-11-12 사용자가 "버벅임은 없는지, 빠릿빠릿한 게 생명"이라고
+ *   직접 제기해 드래그 중에만 블러를 끄는 것으로 결정했다. 정적 외관은
+ *   원본과 동일하게 유지된다 (드래그 끝나면 복원).
  * - 메인 스레드: move 이벤트마다 transform 직접 쓰기 + 미션 카드마다
  *   getBoundingClientRect 호출 + 드롭 시 미션 전체 재생성.
- * 이 파일은 메인 스레드 쪽 계약만 검증한다 (페인트는 하네스 수치로 별도 확인).
+ * 이 파일은 메인 스레드 계약과 드래그 중 블러 정지 신호(클래스 토글)를
+ * 검증한다 (페인트 효과는 하네스 수치로 별도 확인).
  *
  * 검증 성질 (깨지면 실패해야 한다):
  * - 창 이동: pointermove 직후에는 transform이 바뀌지 않고(합쳐진다),
@@ -24,6 +29,10 @@
  * - 미션 드롭(다른 데스크톱): 카드 DOM이 재생성되지 않고 winrect만
  *   갱신된다 — 드롭 후 카드 노드 동일성이 유지되고, 이동한 창의
  *   winrect가 목적지 카드에 생기고 출발 카드에서 사라진다.
+ * - 드래그 중 블러 정지: 창 드래그 중에는 루트에 dt-dragging이,
+ *   미션 카드 드래그 중에는 루트에 dt-mission-dragging이 붙고,
+ *   드래그가 끝나면 떨어진다. desktop.css에 두 클래스에 대한
+ *   backdrop-filter: none 규칙이 있다.
  */
 import * as fs from 'fs'
 import * as path from 'path'
@@ -37,6 +46,7 @@ const MENU_JS = read('public/js/desktop/menu.js')
 const MENUBAR_JS = read('public/js/desktop/menubar.js')
 const DOCK_JS = read('public/js/desktop/dock.js')
 const WINDOWS_JS = read('public/js/desktop/windows.js')
+const DESKTOP_CSS = read('public/css/desktop.css')
 
 const VIEWPORT = { w: 1280, h: 800 }
 const getWin = (): any => (globalThis as any).window
@@ -240,5 +250,57 @@ describe('미션 드래그 — 캐시된 rect와 경량 드롭', () => {
     // winrect만 갱신된다: 출발 카드에서 사라지고 목적지 카드에 생긴다
     expect(afterCards[0].querySelectorAll('.dt-mission-winrect').length).toBe(0)
     expect(afterCards[1].querySelectorAll('.dt-mission-winrect').length).toBe(1)
+  })
+})
+
+describe('드래그 중 블러 정지 — 클래스 신호와 CSS 규칙', () => {
+  test('창 드래그 중에는 루트에 dt-dragging이 붙고 끝나면 떨어진다', async () => {
+    const m = makeManager()
+    m.openModule('memo')
+    const root = getDoc().getElementById('dt-root')
+    const winEl = getDoc().querySelector('.dt-window')
+    const bar = winEl.querySelector('.dt-titlebar')
+    expect(root.classList.contains('dt-dragging')).toBe(false)
+    pointer(bar, 'pointerdown', 500, 150)
+    expect(root.classList.contains('dt-dragging')).toBe(true)
+    pointer(getDoc(), 'pointermove', 520, 160)
+    await wait(50)
+    expect(root.classList.contains('dt-dragging')).toBe(true)
+    pointer(getDoc(), 'pointerup', 520, 160)
+    expect(root.classList.contains('dt-dragging')).toBe(false)
+  })
+
+  test('미션 카드 드래그 중에는 루트에 dt-mission-dragging이 붙고 끝나면 떨어진다', async () => {
+    const m = makeManager()
+    m.openModule('memo')
+    m.addSpace()
+    const spaces = m.getState().spaces.slice()
+    m.switchSpace(spaces[0])
+    m.toggleMission()
+    expect(m.isMissionOpen()).toBe(true)
+    const root = getDoc().getElementById('dt-root')
+    const winEl = getDoc().querySelector('.dt-window.dt-mission-win')
+    expect(winEl).not.toBeNull()
+    expect(root.classList.contains('dt-mission-dragging')).toBe(false)
+    pointer(winEl, 'pointerdown', 400, 400)
+    // pointerdown만으로는 아직 안 붙는다 (6px 이상 움직여야 moved).
+    expect(root.classList.contains('dt-mission-dragging')).toBe(false)
+    pointer(getDoc(), 'pointermove', 420, 380)
+    await wait(50)
+    expect(root.classList.contains('dt-mission-dragging')).toBe(true)
+    pointer(getDoc(), 'pointerup', 420, 380)
+    expect(root.classList.contains('dt-mission-dragging')).toBe(false)
+  })
+
+  test('desktop.css에 드래그 중 블러 정지 규칙이 있다', () => {
+    // 창 드래그: 타이틀바 블러 20px 정지
+    expect(DESKTOP_CSS).toContain('.dt-dragging .dt-titlebar')
+    // 미션 드래그: 미션 배경 전폭 블러 14px 정지
+    expect(DESKTOP_CSS).toContain('.dt-mission-dragging .dt-mission-bg')
+    // 두 규칙 모두 backdrop-filter를 none으로 한다
+    const dragBlock = DESKTOP_CSS.slice(DESKTOP_CSS.indexOf('.dt-dragging .dt-titlebar'))
+    expect(dragBlock).toContain('backdrop-filter: none !important')
+    const missionBlock = DESKTOP_CSS.slice(DESKTOP_CSS.indexOf('.dt-mission-dragging .dt-mission-bg'))
+    expect(missionBlock).toContain('backdrop-filter: none !important')
   })
 })

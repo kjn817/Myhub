@@ -1288,6 +1288,24 @@ html, body { overscroll-behavior-x: none; }
 
 .dt-mission-bg[hidden] { display: none; }
 
+/* 드래그 중 블러 정지 (2026-11-12 성능 점검 — 사용자가 "버벅임은
+   없는지, 빠릿빠릿한 게 생명"이라고 직접 제기해 적용).
+   backdrop-filter는 드래그 중 매 프레임 재계산돼 프레임을 지배한다:
+   미션 배경 전폭 블러 14px은 미션 드래그 느린 프레임의 원인이고,
+   창 타이틀바 블러 20px은 창 드래그의 원인이다 (하네스 실측).
+   드래그 중에만 끄고 끝나면 복원하므로 정적 외관은 원본과 동일하다.
+   창 드래그는 루트의 dt-dragging 클래스(기존 startDrag에서 토글),
+   미션 카드 드래그는 dt-mission-dragging 클래스(applyMissionFrame/
+   finishMissionDrag에서 토글)가 신호다. */
+.dt-dragging .dt-titlebar {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+.dt-mission-dragging .dt-mission-bg {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
 /* 배경·띠·창 스프레드는 하나의 시간축(0.28s, 같은 이징)으로 움직인다 —
    따로 놀면 진입이 어긋나 보인다. 닫힘은 is-leaving 페이드아웃이
    창 복귀 트랜지션과 같은 길이로 겹친다. */
