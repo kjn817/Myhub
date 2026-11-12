@@ -134,17 +134,19 @@ describe('appTileFor — pdf·일정 인라인 SVG 타일', () => {
     expect(svg).not.toContain('<image')
     // 흰 squircle(위 #fafafa → 아래 #e9e9e9 그라데이션) + 한글 요일 +
     // 큰 날짜 — 영문 월 약어·빨간 밴드는 2026-11-08 확정으로 폐기된
-    // 구 디자인이라 남아 있으면 실패해야 한다. 글자색은 순검정이 아니라
-    // 진짜 맥 실측 RGB 39~40(#282828), 배경은 순백 평면이 아니다.
+    // 구 디자인이라 남아 있으면 실패해야 한다. 글자색은 진짜 맥 실측
+    // RGB 7~9(#0a0a0a), 배경은 순백 평면이 아니다. 텍스트에는 은은한
+    // 드롭 섀도우(feDropShadow)가 있다 (맥 실측: 날짜 아래 띠가
+    // 배경보다 8포인트 어두움).
     expect(svg).toContain('fill="url(#mta-cal-bg)"')
     expect(svg).toContain('stop-color="#fafafa"')
     expect(svg).toContain('stop-color="#e9e9e9"')
     expect(svg).toContain('>' + WEEKDAY_KO[now.getDay()] + '<')
-    // 날짜: 두 자리면 두 번째 자릿수를 tspan dx="-5"로 당겨 자릿수
-    // 간격을 좁힌다 (일곱 번째 지적). 한 자리면 그대로.
+    // 날짜: 두 자리면 두 번째 자릿수를 tspan dx="-3"로 당겨 자릿수
+    // 간격을 좁힌다 (여덟 번째 지적; dx=-5는 너무 붙었다).
     const dateStr = String(now.getDate())
     if (dateStr.length === 2) {
-      expect(svg).toContain('>' + dateStr[0] + '<tspan dx="-5">' + dateStr[1] + '</tspan><')
+      expect(svg).toContain('>' + dateStr[0] + '<tspan dx="-3">' + dateStr[1] + '</tspan><')
     } else {
       expect(svg).toContain('>' + dateStr + '<')
     }
@@ -186,9 +188,21 @@ describe('appTileFor — pdf·일정 인라인 SVG 타일', () => {
     // 0.070의 2.7배였다 — letter-spacing 1 + 32px 확대가 벌린 것.
     // 다섯 번째 "간격이 더좁아"는 맥 간격이 좁다는 뜻이었고 반대로
     // 읽어 넓혔던 오독이다. letter-spacing을 없애고 두 자리 날짜는
-    // 두 번째 자릿수를 tspan dx="-5"로 당겨 간격을 ~4px로 좁혔다.
-    // 음수 letter-spacing은 text-anchor 중심을 어긋나게 해서 안 쓴다.
-    // 둥글게: 날짜 폰트 스택에 "SF Pro Rounded"을 명시했다.
+    // 두 번째 자릿수를 tspan dx로 당겨 간격을 좁혔다. 음수
+    // letter-spacing은 text-anchor 중심을 어긋나게 해서 안 쓴다.
+    // 여덟 번째 지적 묶음(진짜 맥 클로즈업 image-22 + 현 MyHub
+    // image-23 동일 방법 실측): ① 1-2 간격 맥 0.080 대 MyHub 0.045
+    // — dx=-5가 너무 붙였다. dx=-3으로 되돌렸다. ② 요일 너비 맥
+    // 0.537 대 MyHub 0.659, 요일 내 자간 맥 0.011/0.016 대 MyHub
+    // 0.023/0.023 — 요일을 9.0으로 줄이고 letter-spacing -0.5로
+    // 자간을 좁혔다. ③ 요일 굵기 700→800 (사용자 요청 1.2배).
+    // ④ 글자색 맥 실측 RGB 7~9 (이전 RGB 39~40은 업스케일 왜곡) —
+    // #282828에서 #0a0a0a로. ⑤ 그림자: 맥 날짜 아래 띠가 배경보다
+    // 8포인트 어두움 — feDropShadow(dy 1·blur 1·opacity 0.12)를
+    // 요일·날짜에 걸었다. ⑥ 폰트: ui-rounded은 Safari 전용이고
+    // Chrome 미지원, macOS Safari도 SF Pro로 폴백한다. 진짜 맥
+    // 아이콘의 "2"는 말단이 평평한 일반 SF라 Rounded 변형이 아니다.
+    // 애플 폰트를 구할 필요 없이 -apple-system(SF)을 그대로 쓴다.
     // 장부: ~/workspace/calendar-tile-20261110.md
     const WEEKDAY_KO = ['일요일', '월요일', '화요일', '수요일', '목요일', '금요일', '토요일']
     const now = new Date()
@@ -225,25 +239,33 @@ describe('appTileFor — pdf·일정 인라인 SVG 타일', () => {
     }
     const attr = (tag: string, name: string): string => tag.match(new RegExp(name + '="([^"]+)"'))![1]
     const wd = textTag(WEEKDAY_KO[now.getDay()])
-    expect(Number(attr(wd, 'font-size')) / TILE).toBeGreaterThanOrEqual(0.21)
-    expect(Number(attr(wd, 'font-size')) / TILE).toBeLessThanOrEqual(0.23)
-    expect(attr(wd, 'font-weight')).toBe('700')
-    expect(attr(wd, 'fill')).toBe('#282828')
+    expect(Number(attr(wd, 'font-size')) / TILE).toBeGreaterThanOrEqual(0.18)
+    expect(Number(attr(wd, 'font-size')) / TILE).toBeLessThanOrEqual(0.195)
+    expect(attr(wd, 'font-weight')).toBe('800')
+    expect(attr(wd, 'fill')).toBe('#0a0a0a')
+    expect(attr(wd, 'letter-spacing')).toBe('-0.5')
+    expect(attr(wd, 'filter')).toBe('url(#mta-cal-shadow)')
     expect(Number(attr(wd, 'y')) / TILE).toBeGreaterThanOrEqual(0.305)
     expect(Number(attr(wd, 'y')) / TILE).toBeLessThanOrEqual(0.325)
     const dt = textByY('40.8')
     expect(Number(attr(dt, 'font-size')) / TILE).toBeGreaterThanOrEqual(0.66)
     expect(Number(attr(dt, 'font-size')) / TILE).toBeLessThanOrEqual(0.68)
     expect(attr(dt, 'font-weight')).toBe('400')
-    expect(attr(dt, 'fill')).toBe('#282828')
+    expect(attr(dt, 'fill')).toBe('#0a0a0a')
     expect(dt).not.toContain('letter-spacing')
-    expect(attr(dt, 'font-family')).toContain('SF Pro Rounded')
-    expect(attr(dt, 'font-family')).toContain('ui-rounded')
-    // 두 자리 날짜는 두 번째 자릿수를 dx="-5"로 당긴다.
+    // SF Rounded 지정은 웹에서 동작하지 않는다 (Chrome 미지원,
+    // macOS Safari도 SF Pro로 폴백). 진짜 맥 아이콘도 일반 SF다.
+    expect(attr(dt, 'font-family')).not.toContain('SF Pro Rounded')
+    expect(attr(dt, 'font-family')).not.toContain('ui-rounded')
+    expect(attr(dt, 'filter')).toBe('url(#mta-cal-shadow)')
+    // 두 자리 날짜는 두 번째 자릿수를 dx="-3"로 당긴다.
     const dateStr = String(now.getDate())
     if (dateStr.length === 2) {
-      expect(dt).toContain('<tspan dx="-5">' + dateStr[1] + '</tspan>')
+      expect(dt).toContain('<tspan dx="-3">' + dateStr[1] + '</tspan>')
     }
+    // 그림자 필터 정의가 있다.
+    expect(svg).toContain('<filter id="mta-cal-shadow"')
+    expect(svg).toContain('<feDropShadow dx="0" dy="1" stdDeviation="1"')
     expect(Number(attr(dt, 'y')) / TILE).toBeGreaterThanOrEqual(0.84)
     expect(Number(attr(dt, 'y')) / TILE).toBeLessThanOrEqual(0.86)
   })
@@ -281,10 +303,10 @@ describe('tiles.createTile — 렌더 위임', () => {
   test('schedule 타일은 오늘 날짜를 품는다', () => {
     const span = tiles.createTile(getWin().document, 'schedule')
     expect(span.classList.contains('dt-tile-svg')).toBe(true)
-    // 날짜: 두 자리면 두 번째 자릿수를 tspan dx="-5"로 당긴다.
+    // 날짜: 두 자리면 두 번째 자릿수를 tspan dx="-3"로 당긴다.
     const dateStr = String(new Date().getDate())
     if (dateStr.length === 2) {
-      expect(span.innerHTML).toContain('>' + dateStr[0] + '<tspan dx="-5">' + dateStr[1] + '</tspan><')
+      expect(span.innerHTML).toContain('>' + dateStr[0] + '<tspan dx="-3">' + dateStr[1] + '</tspan><')
     } else {
       expect(span.innerHTML).toContain('>' + dateStr + '<')
     }

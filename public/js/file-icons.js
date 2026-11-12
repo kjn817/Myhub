@@ -433,20 +433,45 @@
       // 쓰지 않는다 (dx는 advance에 포함돼 중심이 유지된다).
       // 둥글게: 날짜 폰트 스택 맨 앞에 "SF Pro Rounded"을 명시해
       // ui-rounded과 함께 SF Rounded를 확실히 타게 했다.
+      // 같은 날 여덟 번째 지적 묶음(사용자, 진짜 맥 클로즈업
+      // image-22 + 현 MyHub image-23 대조): "너무붙였자나·폰트
+      // 자체를 둥그렇게·요일 1.2배 볼드하게·웹에서 검색해봐·
+      // 살짝 그림자같은게 있고 숫자2도 살짝 다르자나·애플폰트를
+      // 구해야해?·우리껀 목요일 수평도 넓네". 두 이미지를 동일
+      // 방법으로 실측한 결과: ① 1-2 간격 맥 0.080 대 MyHub 0.045 —
+      // dx=-5가 너무 붙인 것이다. dx=-3으로 되돌려 간격 ~0.09로.
+      // ② 요일 너비 맥 0.537 대 MyHub 0.659(23% 넓음), 요일 내
+      // 자간 맥 0.011/0.016 대 MyHub 0.023/0.023 — 요일을 9.0으로
+      // 줄이고 letter-spacing -0.5로 자간을 좁혔다. ③ 요일 굵기
+      // 700→800 (사용자 요청 1.2배). ④ 글자색: 맥 실측 RGB 7~9
+      // (거의 순검정) — 이전 side-by-side 실측 RGB 39~40은 업스케일
+      // 왜곡이었다. #282828에서 #0a0a0a로 되돌렸다. ⑤ 그림자:
+      // 맥은 날짜 아래 1~4px 띠가 배경보다 8포인트 어둡다(227 대
+      // 235) — 텍스트에 은은한 드롭 섀도우가 있다. feDropShadow
+      // (dy 1·blur 1·opacity 0.12)를 요일·날짜에 걸었다.
+      // ⑥ 폰트: 웹 검색 결과 ui-rounded은 Safari 전용이고 Chrome은
+      // 미지원, macOS Safari도 SF Pro로 폴백한다. "SF Pro Rounded"
+      // 직접 지정도 웹에서 동작하지 않는다. 진짜 맥 아이콘의 "2"를
+      // 보면 말단이 평평한 일반 SF라 Rounded 변형이 아니다.
+      // 애플 폰트를 구할 필요 없이 맥에 있는 SF(-apple-system)를
+      // 그대로 쓰면 된다 — 차이는 폰트가 아니라 굵기·간격·색상·
+      // 그림자였다. "SF Pro Rounded"·ui-rounded 지정은 제거했다.
+      // Nunito 등 둥근 웹폰트도 맥과 달라지므로 쓰지 않는다.
       // 장부: ~/workspace/calendar-tile-20261110.md
       var now = new Date();
       var WEEKDAY_KO = ['일요일', '월요일', '화요일', '수요일', '목요일', '금요일', '토요일'];
       var dateStr = String(now.getDate());
       // 두 자리 날짜는 두 번째 자릿수를 dx로 당겨 자릿수 간격을 좁힌다.
       var dateInner = dateStr.length === 2
-        ? dateStr[0] + '<tspan dx="-5">' + dateStr[1] + '</tspan>'
+        ? dateStr[0] + '<tspan dx="-3">' + dateStr[1] + '</tspan>'
         : dateStr;
       return (
         '<svg viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">' +
-        '<defs><linearGradient id="mta-cal-bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fafafa"/><stop offset="1" stop-color="#e9e9e9"/></linearGradient></defs>' +
+        '<defs><linearGradient id="mta-cal-bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fafafa"/><stop offset="1" stop-color="#e9e9e9"/></linearGradient>' +
+        '<filter id="mta-cal-shadow" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="1" stdDeviation="1" flood-color="#000000" flood-opacity="0.12"/></filter></defs>' +
         '<rect x="0" y="0" width="48" height="48" rx="12" fill="url(#mta-cal-bg)"/>' +
-        '<text x="24" y="15.1" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, \'Segoe UI\', \'Malgun Gothic\', sans-serif" font-size="10.5" font-weight="700" fill="#282828">' + WEEKDAY_KO[now.getDay()] + '</text>' +
-        '<text x="24" y="40.8" text-anchor="middle" font-family="\'SF Pro Rounded\', ui-rounded, -apple-system, BlinkMacSystemFont, \'Segoe UI\', \'Malgun Gothic\', sans-serif" font-size="32" font-weight="400" fill="#282828">' + dateInner + '</text>' +
+        '<text x="24" y="15.1" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, \'Segoe UI\', \'Malgun Gothic\', sans-serif" font-size="9.0" font-weight="800" letter-spacing="-0.5" fill="#0a0a0a" filter="url(#mta-cal-shadow)">' + WEEKDAY_KO[now.getDay()] + '</text>' +
+        '<text x="24" y="40.8" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, \'Segoe UI\', \'Malgun Gothic\', sans-serif" font-size="32" font-weight="400" fill="#0a0a0a" filter="url(#mta-cal-shadow)">' + dateInner + '</text>' +
         '</svg>'
       );
     },
