@@ -135,9 +135,10 @@ describe('appTileFor — pdf·일정 인라인 SVG 타일', () => {
     // 흰 squircle(위 #fafafa → 아래 #e9e9e9 그라데이션) + 한글 요일 +
     // 큰 날짜 — 영문 월 약어·빨간 밴드는 2026-11-08 확정으로 폐기된
     // 구 디자인이라 남아 있으면 실패해야 한다. 글자색은 진짜 맥 실측
-    // RGB 7~9(#0a0a0a), 배경은 순백 평면이 아니다. 텍스트에는 은은한
-    // 드롭 섀도우(feDropShadow)가 있다 (맥 실측: 날짜 아래 띠가
-    // 배경보다 8포인트 어두움).
+    // RGB 7~9(#0a0a0a), 배경은 순백 평면이 아니다. 텍스트 아래 1px에
+    // 불투명도 0.05의 복제 그림자 텍스트가 있다 (맥 실측: 날짜 아래
+    // 띠가 배경보다 8포인트 어두움. feDropShadow 필터는 래스터화해서
+    // Retina에서 흐려지므로 쓰지 않는다).
     expect(svg).toContain('fill="url(#mta-cal-bg)"')
     expect(svg).toContain('stop-color="#fafafa"')
     expect(svg).toContain('stop-color="#e9e9e9"')
@@ -198,11 +199,19 @@ describe('appTileFor — pdf·일정 인라인 SVG 타일', () => {
     // 자간을 좁혔다. ③ 요일 굵기 700→800 (사용자 요청 1.2배).
     // ④ 글자색 맥 실측 RGB 7~9 (이전 RGB 39~40은 업스케일 왜곡) —
     // #282828에서 #0a0a0a로. ⑤ 그림자: 맥 날짜 아래 띠가 배경보다
-    // 8포인트 어두움 — feDropShadow(dy 1·blur 1·opacity 0.12)를
-    // 요일·날짜에 걸었다. ⑥ 폰트: ui-rounded은 Safari 전용이고
-    // Chrome 미지원, macOS Safari도 SF Pro로 폴백한다. 진짜 맥
-    // 아이콘의 "2"는 말단이 평평한 일반 SF라 Rounded 변형이 아니다.
-    // 애플 폰트를 구할 필요 없이 -apple-system(SF)을 그대로 쓴다.
+    // 8포인트 어두움 — 처음에는 feDropShadow 필터를 썼으나 아홉 번째
+    // 지적에서 필터가 래스터화해서 요일을 흐리게 만든다고 확인돼
+    // 벡터 복제 텍스트(1px 아래·불투명도 0.05)로 바꿨다. ⑥ 폰트:
+    // ui-rounded은 Safari 전용이고 Chrome 미지원, macOS Safari도
+    // SF Pro로 폴백한다. 진짜 맥 아이콘의 "2"는 말단이 평평한 일반
+    // SF라 Rounded 변형이 아니다. 애플 폰트를 구할 필요 없이
+    // -apple-system(SF)을 그대로 쓴다. 아홉 번째 지적("2가 좀
+    // 다르던데? 맥은 이렇게 꺾이지않고 쭉떨어지는데 글씨자체가
+    // 틀려"): 맥 "2" 하단은 곡선으로 부드럽게 이어지는데 우리 "2"는
+    // 꺾인 모서리(Helvetica식) — -apple-system이 SF로 안 풀리고
+    // sans-serif로 떨어진 것이다. SF 광학 사이징에 따라 날짜(32px)
+    // 에는 "SF Pro Display"를, 요일(9px)에는 "SF Pro Text"를 스택
+    // 맨 앞에 명시했다.
     // 장부: ~/workspace/calendar-tile-20261110.md
     const WEEKDAY_KO = ['일요일', '월요일', '화요일', '수요일', '목요일', '금요일', '토요일']
     const now = new Date()
@@ -226,25 +235,26 @@ describe('appTileFor — pdf·일정 인라인 SVG 타일', () => {
     expect(svg).toContain('<linearGradient id="mta-cal-bg"')
     expect(svg).toContain('<stop offset="0" stop-color="#fafafa"/>')
     expect(svg).toContain('<stop offset="1" stop-color="#e9e9e9"/>')
-    // 날짜 text는 두 자리면 tspan을 포함하므로 y 속성으로 찾는다.
-    const textTag = (body: string): string => {
-      const m = svg.match(new RegExp('<text[^>]*>' + body + '<'))
-      expect(m).not.toBeNull()
-      return (m as RegExpMatchArray)[0]
-    }
+    // 날짜 text는 두 자리면 tspan을 포함하고, 요일·날짜 모두 그림자
+    // 복제 텍스트가 있으므로 y 속성으로 본문을 찾는다.
     const textByY = (y: string): string => {
       const m = svg.match(new RegExp('<text[^>]*y="' + y + '"[^>]*>.*?</text>'))
       expect(m).not.toBeNull()
       return (m as RegExpMatchArray)[0]
     }
     const attr = (tag: string, name: string): string => tag.match(new RegExp(name + '="([^"]+)"'))![1]
-    const wd = textTag(WEEKDAY_KO[now.getDay()])
+    const wd = textByY('15.1')
     expect(Number(attr(wd, 'font-size')) / TILE).toBeGreaterThanOrEqual(0.18)
     expect(Number(attr(wd, 'font-size')) / TILE).toBeLessThanOrEqual(0.195)
     expect(attr(wd, 'font-weight')).toBe('800')
     expect(attr(wd, 'fill')).toBe('#0a0a0a')
     expect(attr(wd, 'letter-spacing')).toBe('-0.5')
-    expect(attr(wd, 'filter')).toBe('url(#mta-cal-shadow)')
+    expect(attr(wd, 'font-family')).toContain('SF Pro Text')
+    expect(wd).not.toContain('filter=')
+    // 요일 그림자: 같은 내용의 복제 텍스트가 1px 아래에 있다.
+    const wdShadow = textByY('16.1')
+    expect(attr(wdShadow, 'fill')).toBe('#000000')
+    expect(attr(wdShadow, 'opacity')).toBe('0.05')
     expect(Number(attr(wd, 'y')) / TILE).toBeGreaterThanOrEqual(0.305)
     expect(Number(attr(wd, 'y')) / TILE).toBeLessThanOrEqual(0.325)
     const dt = textByY('40.8')
@@ -257,15 +267,21 @@ describe('appTileFor — pdf·일정 인라인 SVG 타일', () => {
     // macOS Safari도 SF Pro로 폴백). 진짜 맥 아이콘도 일반 SF다.
     expect(attr(dt, 'font-family')).not.toContain('SF Pro Rounded')
     expect(attr(dt, 'font-family')).not.toContain('ui-rounded')
-    expect(attr(dt, 'filter')).toBe('url(#mta-cal-shadow)')
+    // 날짜(32px)는 SF Pro Display 변형을 쓴다 (광학 사이징).
+    expect(attr(dt, 'font-family')).toContain('SF Pro Display')
+    expect(dt).not.toContain('filter=')
     // 두 자리 날짜는 두 번째 자릿수를 dx="-3"로 당긴다.
     const dateStr = String(now.getDate())
     if (dateStr.length === 2) {
       expect(dt).toContain('<tspan dx="-3">' + dateStr[1] + '</tspan>')
     }
-    // 그림자 필터 정의가 있다.
-    expect(svg).toContain('<filter id="mta-cal-shadow"')
-    expect(svg).toContain('<feDropShadow dx="0" dy="1" stdDeviation="1"')
+    // 날짜 그림자: 같은 내용의 복제 텍스트가 1px 아래에 있다.
+    const dtShadow = textByY('41.8')
+    expect(attr(dtShadow, 'fill')).toBe('#000000')
+    expect(attr(dtShadow, 'opacity')).toBe('0.05')
+    // feDropShadow 필터는 래스터화해서 텍스트를 흐리게 하므로 쓰지 않는다.
+    expect(svg).not.toContain('<filter')
+    expect(svg).not.toContain('feDropShadow')
     expect(Number(attr(dt, 'y')) / TILE).toBeGreaterThanOrEqual(0.84)
     expect(Number(attr(dt, 'y')) / TILE).toBeLessThanOrEqual(0.86)
   })

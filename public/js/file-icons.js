@@ -457,6 +457,21 @@
       // 그대로 쓰면 된다 — 차이는 폰트가 아니라 굵기·간격·색상·
       // 그림자였다. "SF Pro Rounded"·ui-rounded 지정은 제거했다.
       // Nunito 등 둥근 웹폰트도 맥과 달라지므로 쓰지 않는다.
+      // 같은 날 아홉 번째 지적(사용자, "2" 클로즈업 image-24):
+      // "2가 좀 다르던데? 맥은 이렇게 꺾이지않고 쭉떨어지는데
+      // 글씨자체가 틀려. 요일은 픽셀이 부족한지 명확하게 안보이는데
+      // 고품질로 개선". 맥 "2" 하단(image-22 크롭)은 대각선이
+      // 곡선으로 부드럽게 밑변에 이어지는데, 우리 "2"는 꺾인
+      // 모서리(Helvetica/Arial식)다 — -apple-system이 SF로 안 풀리고
+      // sans-serif(Helvetica)로 떨어진 것이다. SF는 광학 사이징이
+      // 있어 20pt 이상은 SF Pro Display, 미만은 SF Pro Text를
+      // 쓴다. 날짜(32px)에는 "SF Pro Display"를, 요일(9px)에는
+      // "SF Pro Text"를 스택 맨 앞에 명시해 Display/Text 변형을
+      // 확실히 타게 했다 (system-ui·-apple-system은 폴백으로 유지).
+      // 요일 흐릿함의 원인은 feDropShadow 필터 — 필터가 텍스트를
+      // 래스터화해서 Retina에서 뿌옇게 보인다. 필터를 없애고
+      // 그림자를 벡터 복제 텍스트(1px 아래·불투명도 0.05)로 바꿔
+      // 그림자는 유지하면서 선명도를 되돌렸다.
       // 장부: ~/workspace/calendar-tile-20261110.md
       var now = new Date();
       var WEEKDAY_KO = ['일요일', '월요일', '화요일', '수요일', '목요일', '금요일', '토요일'];
@@ -465,13 +480,15 @@
       var dateInner = dateStr.length === 2
         ? dateStr[0] + '<tspan dx="-3">' + dateStr[1] + '</tspan>'
         : dateStr;
+      var weekdayStr = WEEKDAY_KO[now.getDay()];
       return (
         '<svg viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">' +
-        '<defs><linearGradient id="mta-cal-bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fafafa"/><stop offset="1" stop-color="#e9e9e9"/></linearGradient>' +
-        '<filter id="mta-cal-shadow" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="1" stdDeviation="1" flood-color="#000000" flood-opacity="0.12"/></filter></defs>' +
+        '<defs><linearGradient id="mta-cal-bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fafafa"/><stop offset="1" stop-color="#e9e9e9"/></linearGradient></defs>' +
         '<rect x="0" y="0" width="48" height="48" rx="12" fill="url(#mta-cal-bg)"/>' +
-        '<text x="24" y="15.1" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, \'Segoe UI\', \'Malgun Gothic\', sans-serif" font-size="9.0" font-weight="800" letter-spacing="-0.5" fill="#0a0a0a" filter="url(#mta-cal-shadow)">' + WEEKDAY_KO[now.getDay()] + '</text>' +
-        '<text x="24" y="40.8" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, \'Segoe UI\', \'Malgun Gothic\', sans-serif" font-size="32" font-weight="400" fill="#0a0a0a" filter="url(#mta-cal-shadow)">' + dateInner + '</text>' +
+        '<text x="24" y="16.1" text-anchor="middle" font-family="\'SF Pro Text\', system-ui, -apple-system, BlinkMacSystemFont, \'Segoe UI\', \'Malgun Gothic\', sans-serif" font-size="9.0" font-weight="800" letter-spacing="-0.5" fill="#000000" opacity="0.05">' + weekdayStr + '</text>' +
+        '<text x="24" y="15.1" text-anchor="middle" font-family="\'SF Pro Text\', system-ui, -apple-system, BlinkMacSystemFont, \'Segoe UI\', \'Malgun Gothic\', sans-serif" font-size="9.0" font-weight="800" letter-spacing="-0.5" fill="#0a0a0a">' + weekdayStr + '</text>' +
+        '<text x="24" y="41.8" text-anchor="middle" font-family="\'SF Pro Display\', system-ui, -apple-system, BlinkMacSystemFont, \'Segoe UI\', \'Malgun Gothic\', sans-serif" font-size="32" font-weight="400" fill="#000000" opacity="0.05">' + dateInner + '</text>' +
+        '<text x="24" y="40.8" text-anchor="middle" font-family="\'SF Pro Display\', system-ui, -apple-system, BlinkMacSystemFont, \'Segoe UI\', \'Malgun Gothic\', sans-serif" font-size="32" font-weight="400" fill="#0a0a0a">' + dateInner + '</text>' +
         '</svg>'
       );
     },
