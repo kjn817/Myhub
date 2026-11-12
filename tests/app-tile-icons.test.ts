@@ -140,7 +140,14 @@ describe('appTileFor — pdf·일정 인라인 SVG 타일', () => {
     expect(svg).toContain('stop-color="#fafafa"')
     expect(svg).toContain('stop-color="#e9e9e9"')
     expect(svg).toContain('>' + WEEKDAY_KO[now.getDay()] + '<')
-    expect(svg).toContain('>' + now.getDate() + '<')
+    // 날짜: 두 자리면 두 번째 자릿수를 tspan dx="-5"로 당겨 자릿수
+    // 간격을 좁힌다 (일곱 번째 지적). 한 자리면 그대로.
+    const dateStr = String(now.getDate())
+    if (dateStr.length === 2) {
+      expect(svg).toContain('>' + dateStr[0] + '<tspan dx="-5">' + dateStr[1] + '</tspan><')
+    } else {
+      expect(svg).toContain('>' + dateStr + '<')
+    }
     expect(svg).not.toContain('>' + MONTH_ABBR[now.getMonth()] + '<')
     expect(svg).not.toContain('#F4615B')
   })
@@ -174,6 +181,14 @@ describe('appTileFor — pdf·일정 인라인 SVG 타일', () => {
     // 너무 얇아"): 가독성 우선으로 요일 10.5/700·날짜 32/400으로
     // 키웠다. 날짜 400은 #282828 + SF Rounded과 함께라 이전의
     // 순검정 400보다 부드럽다. 기준선은 유지(요일 15.1·날짜 40.8).
+    // 일곱 번째 지적("일자 사이 간격은 왜 또 떨어졌어. 둥글한
+    // 일자로 해야지"): 사용자 맥 실측에서 1-2 간격이 0.188로 애플
+    // 0.070의 2.7배였다 — letter-spacing 1 + 32px 확대가 벌린 것.
+    // 다섯 번째 "간격이 더좁아"는 맥 간격이 좁다는 뜻이었고 반대로
+    // 읽어 넓혔던 오독이다. letter-spacing을 없애고 두 자리 날짜는
+    // 두 번째 자릿수를 tspan dx="-5"로 당겨 간격을 ~4px로 좁혔다.
+    // 음수 letter-spacing은 text-anchor 중심을 어긋나게 해서 안 쓴다.
+    // 둥글게: 날짜 폰트 스택에 "SF Pro Rounded"을 명시했다.
     // 장부: ~/workspace/calendar-tile-20261110.md
     const WEEKDAY_KO = ['일요일', '월요일', '화요일', '수요일', '목요일', '금요일', '토요일']
     const now = new Date()
@@ -197,8 +212,14 @@ describe('appTileFor — pdf·일정 인라인 SVG 타일', () => {
     expect(svg).toContain('<linearGradient id="mta-cal-bg"')
     expect(svg).toContain('<stop offset="0" stop-color="#fafafa"/>')
     expect(svg).toContain('<stop offset="1" stop-color="#e9e9e9"/>')
+    // 날짜 text는 두 자리면 tspan을 포함하므로 y 속성으로 찾는다.
     const textTag = (body: string): string => {
       const m = svg.match(new RegExp('<text[^>]*>' + body + '<'))
+      expect(m).not.toBeNull()
+      return (m as RegExpMatchArray)[0]
+    }
+    const textByY = (y: string): string => {
+      const m = svg.match(new RegExp('<text[^>]*y="' + y + '"[^>]*>.*?</text>'))
       expect(m).not.toBeNull()
       return (m as RegExpMatchArray)[0]
     }
@@ -210,13 +231,19 @@ describe('appTileFor — pdf·일정 인라인 SVG 타일', () => {
     expect(attr(wd, 'fill')).toBe('#282828')
     expect(Number(attr(wd, 'y')) / TILE).toBeGreaterThanOrEqual(0.305)
     expect(Number(attr(wd, 'y')) / TILE).toBeLessThanOrEqual(0.325)
-    const dt = textTag(String(now.getDate()))
+    const dt = textByY('40.8')
     expect(Number(attr(dt, 'font-size')) / TILE).toBeGreaterThanOrEqual(0.66)
     expect(Number(attr(dt, 'font-size')) / TILE).toBeLessThanOrEqual(0.68)
     expect(attr(dt, 'font-weight')).toBe('400')
     expect(attr(dt, 'fill')).toBe('#282828')
-    expect(attr(dt, 'letter-spacing')).toBe('1')
+    expect(dt).not.toContain('letter-spacing')
+    expect(attr(dt, 'font-family')).toContain('SF Pro Rounded')
     expect(attr(dt, 'font-family')).toContain('ui-rounded')
+    // 두 자리 날짜는 두 번째 자릿수를 dx="-5"로 당긴다.
+    const dateStr = String(now.getDate())
+    if (dateStr.length === 2) {
+      expect(dt).toContain('<tspan dx="-5">' + dateStr[1] + '</tspan>')
+    }
     expect(Number(attr(dt, 'y')) / TILE).toBeGreaterThanOrEqual(0.84)
     expect(Number(attr(dt, 'y')) / TILE).toBeLessThanOrEqual(0.86)
   })
@@ -254,7 +281,13 @@ describe('tiles.createTile — 렌더 위임', () => {
   test('schedule 타일은 오늘 날짜를 품는다', () => {
     const span = tiles.createTile(getWin().document, 'schedule')
     expect(span.classList.contains('dt-tile-svg')).toBe(true)
-    expect(span.innerHTML).toContain('>' + new Date().getDate() + '<')
+    // 날짜: 두 자리면 두 번째 자릿수를 tspan dx="-5"로 당긴다.
+    const dateStr = String(new Date().getDate())
+    if (dateStr.length === 2) {
+      expect(span.innerHTML).toContain('>' + dateStr[0] + '<tspan dx="-5">' + dateStr[1] + '</tspan><')
+    } else {
+      expect(span.innerHTML).toContain('>' + dateStr + '<')
+    }
   })
 
   test('앱 종류가 아닌 모듈(backup)은 글리프 타일이다', () => {

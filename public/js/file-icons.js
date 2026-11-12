@@ -420,15 +420,33 @@
       // 부드럽다. 기준선(요일 15.1·날짜 40.8)은 유지 — 글자가
       // 커져 요일-날짜 간격이 4.3px에서 3.3px로 좁아지지만 답답한
       // 수준은 아니다.
+      // 같은 날 일곱 번째 지적("일자 사이 간격은 왜 또 떨어졌어
+      // 둥글한 일자로 해야지. 스타일은 그대로 일자 사이간격
+      // 더줄이고 둥글하게"): 사용자 맥 스크린샷(image-21) 실측에서
+      // 1-2 간격이 0.188(9px)로 애플 0.070(3.4px)의 2.7배였다 —
+      // letter-spacing 1 + 32px 확대가 간격을 벌린 것이다.
+      // 다섯 번째 지적의 "간격이 더좁아"는 맥 간격이 좁다는
+      // 뜻이었고, 나는 반대로 읽어 넓혔던 것이다 (오독 정정).
+      // 수정: letter-spacing을 없애고, 두 자리 날짜는 두 번째
+      // 자릿수를 <tspan dx="-5">로 당겨 간격을 ~4px로 좁혔다.
+      // 음수 letter-spacing은 text-anchor 중심을 어긋나게 해서
+      // 쓰지 않는다 (dx는 advance에 포함돼 중심이 유지된다).
+      // 둥글게: 날짜 폰트 스택 맨 앞에 "SF Pro Rounded"을 명시해
+      // ui-rounded과 함께 SF Rounded를 확실히 타게 했다.
       // 장부: ~/workspace/calendar-tile-20261110.md
       var now = new Date();
       var WEEKDAY_KO = ['일요일', '월요일', '화요일', '수요일', '목요일', '금요일', '토요일'];
+      var dateStr = String(now.getDate());
+      // 두 자리 날짜는 두 번째 자릿수를 dx로 당겨 자릿수 간격을 좁힌다.
+      var dateInner = dateStr.length === 2
+        ? dateStr[0] + '<tspan dx="-5">' + dateStr[1] + '</tspan>'
+        : dateStr;
       return (
         '<svg viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">' +
         '<defs><linearGradient id="mta-cal-bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fafafa"/><stop offset="1" stop-color="#e9e9e9"/></linearGradient></defs>' +
         '<rect x="0" y="0" width="48" height="48" rx="12" fill="url(#mta-cal-bg)"/>' +
         '<text x="24" y="15.1" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, \'Segoe UI\', \'Malgun Gothic\', sans-serif" font-size="10.5" font-weight="700" fill="#282828">' + WEEKDAY_KO[now.getDay()] + '</text>' +
-        '<text x="24" y="40.8" text-anchor="middle" font-family="ui-rounded, -apple-system, BlinkMacSystemFont, \'Segoe UI\', \'Malgun Gothic\', sans-serif" font-size="32" font-weight="400" letter-spacing="1" fill="#282828">' + now.getDate() + '</text>' +
+        '<text x="24" y="40.8" text-anchor="middle" font-family="\'SF Pro Rounded\', ui-rounded, -apple-system, BlinkMacSystemFont, \'Segoe UI\', \'Malgun Gothic\', sans-serif" font-size="32" font-weight="400" fill="#282828">' + dateInner + '</text>' +
         '</svg>'
       );
     },
