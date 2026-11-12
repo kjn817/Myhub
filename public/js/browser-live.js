@@ -25,7 +25,7 @@
     var init = { method: 'POST', headers: { 'Content-Type': 'application/json' } };
     var payload = {};
     if (url) payload.url = url;
-    // iframe 크기를 보내 원격 뷰포트를 맞춘다 (2026-11-12: 기본
+    // stage 크기를 보내 원격 뷰포트를 맞춘다 (2026-11-12: 기본
     // 1280x720이 창보다 넓으면 Live View가 짤린다).
     if (viewport && viewport.width > 0 && viewport.height > 0) {
       payload.viewport = { width: Math.round(viewport.width), height: Math.round(viewport.height) };
@@ -140,12 +140,24 @@
       liveState = 'starting';
       var gen = ++liveGen;
       onChange();
-      // iframe 크기를 재서 원격 뷰포트를 맞춘다 (기본 1280x720이
-      // 창보다 넓으면 Live View가 짤린다 — 2026-11-12 사용자 지적).
+      // 뷰포트 측정: iframe은 시작 중 hidden(display:none)이라 자기
+      // rect가 항상 0x0이다 — iframe이 꽉 채우는 .bw-stage(부모, 항상
+      // 보임) 크기를 잰다 (2026-11-12: hidden iframe을 재서 뷰포트가
+      // 서버에 한 번도 전달되지 않았고, 원격이 기본 1280x720으로 뜬
+      // 채 최대화 창에서 1.5배 확대돼 보였다 — 사용자 실화면 지적).
+      // 부모를 못 재면 iframe 자기 rect로 폴백한다.
       var viewport = null;
-      if (liveFrame && typeof liveFrame.getBoundingClientRect === 'function') {
-        var r = liveFrame.getBoundingClientRect();
-        if (r && r.width > 0 && r.height > 0) viewport = { width: r.width, height: r.height };
+      var measureTargets = [];
+      if (liveFrame && liveFrame.parentElement) measureTargets.push(liveFrame.parentElement);
+      if (liveFrame) measureTargets.push(liveFrame);
+      for (var mi = 0; mi < measureTargets.length; mi++) {
+        var target = measureTargets[mi];
+        if (typeof target.getBoundingClientRect !== 'function') continue;
+        var r = target.getBoundingClientRect();
+        if (r && r.width > 0 && r.height > 0) {
+          viewport = { width: r.width, height: r.height };
+          break;
+        }
       }
       return liveStart(url || null, viewport).then(function (res) {
         if (gen !== liveGen) {
@@ -161,6 +173,18 @@
             typeof body.expiresAt === 'number' ? body.expiresAt : Date.now() + 120000;
           if (liveFrame) liveFrame.src = body.viewUrl;
           if (liveMsg) liveMsg.textContent = '원격 브라우저';
+          // 진단: 보낸 뷰포트와 서버의 CDP 이동 결과(nav/navStage)를
+          // 남겨 원격 뷰포트 적용 여부를 콘솔에서 확인할 수 있게 한다.
+          if (typeof console !== 'undefined' && typeof console.info === 'function') {
+            console.info(
+              '[browser-live] start viewport=',
+              viewport,
+              'nav=',
+              body.nav,
+              body.navStage,
+              body.navSource,
+            );
+          }
           startLiveTimer();
           started = true;
         } else if (res && res.status === 503) {
