@@ -20,7 +20,7 @@
   var DEFAULT_PERSONA = {
     personaId: 'concierge',
     personaName: '루미',
-    avatar: '/avatars/rumi.webp',
+    avatar: '/avatars/rumi-128.webp',
     flavor: 'chat',
   };
   var CONTEXT_TIMEOUT_MS = 800;

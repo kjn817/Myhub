@@ -74,7 +74,9 @@
 - 진입점 `scripts/build-kordoc-entry.js` (readText·markdownToHwpx·parse export),
   번들러 `scripts/build-kordoc.mjs` (esbuild, ESM, browser, 스텁 플러그인 +
   Buffer inject `build-kordoc-buffer-shim.js`).
-- 산출 `kordoc.bundle.js`를 `public/vendor/kordoc/kordoc.bundle.js`로 복사한다.
+- 산출 `kordoc.js`를 `public/vendor/kordoc/kordoc.js`로 복사한다.
+  (2026-11-13: 구 `kordoc.bundle.js`와 바이트 동일 중복이라 삭제 — 런타임은
+  `kordoc.js`만 로드한다. bundle.js 이름으로 복사하지 말 것.)
 - 산출 가드: 번들에 markdownToHwpx 존재 + 무패치 nodeStream 호출 잔존 금지.
 - 클라이언트 배선: Finder 뷰어는 `public/js/finder-format-hwp.js`가 동적 import로
   지연 로딩해 `window.kordoc`에 노출(readText는 {markdown} → 문자열 정규화),

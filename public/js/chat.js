@@ -143,10 +143,10 @@ async function loadPersonas() {
   } catch { personas = []; }
   if (!personas.length) {
     personas = [
-      { id: 'concierge', name: '루미', avatar: '/avatars/rumi.webp', desc: '일상 비서' },
-      { id: 'keeper', name: '에코', avatar: '/avatars/echo.webp', desc: '기록 담당' },
-      { id: 'builder', name: '노바', avatar: '/avatars/nova.webp', desc: '만들기 담당' },
-      { id: 'scheduler', name: '캘리', avatar: '/avatars/cali.webp', desc: '일정·할일 담당' },
+      { id: 'concierge', name: '루미', avatar: '/avatars/rumi-128.webp', desc: '일상 비서' },
+      { id: 'keeper', name: '에코', avatar: '/avatars/echo-128.webp', desc: '기록 담당' },
+      { id: 'builder', name: '노바', avatar: '/avatars/nova-128.webp', desc: '만들기 담당' },
+      { id: 'scheduler', name: '캘리', avatar: '/avatars/cali-128.webp', desc: '일정·할일 담당' },
     ];
   }
   // 우측 토스트 참여자 목록 (N-03: 서버 문자열은 전부 escapeHtml 경유 —
@@ -464,7 +464,7 @@ function addImageMsg(url, prompt) {
   const group = document.createElement('div');
   group.className = 'msg-group';
   group.dataset.sender = 'concierge';
-  group.innerHTML = `<div class="msg-row"><img class="avatar" src="/avatars/rumi.webp" alt="">` +
+  group.innerHTML = `<div class="msg-row"><img class="avatar" src="/avatars/rumi-128.webp" alt="">` +
     `<div class="content"><div class="sender">루미</div>` +
     `<div class="bubble"><img src="${escapeHtml(url)}" alt="${escapeHtml(prompt)}" class="generated-image" loading="lazy">` +
     `<div class="meta">이미지 생성: ${escapeHtml(prompt.slice(0, 50))}</div></div></div></div>`;

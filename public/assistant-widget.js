@@ -1,7 +1,7 @@
 /**
  * 모든 비서 위젯 앱 각 모든 페이지의 비서 아바타 + 플로팅 채팅
  * 사용법: <script src="/assistant-widget.js"></script>
- *         AssistantWidget.init({ personaId: 'scheduler', personaName: '캘리', avatar: '/avatars/cali.webp' });
+ *         AssistantWidget.init({ personaId: 'scheduler', personaName: '캘리', avatar: '/avatars/cali-128.webp' });
  */
 (function () {
   'use strict';

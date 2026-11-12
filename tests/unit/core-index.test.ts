@@ -580,10 +580,10 @@ describe('정적 에셋 서빙 (/*)', () => {
     const env = makeEnv()
     const bytes = new Uint8Array([0x52, 0x49, 0x46, 0x46])
     env.ASSETS.fetch.mockImplementation(async (req: Request) => {
-      expect(req.url).toContain('/avatars/rumi.webp')
+      expect(req.url).toContain('/avatars/rumi-128.webp')
       return new Response(bytes, { headers: { 'Content-Type': 'image/webp' } })
     })
-    const res = await get('/avatars/rumi.webp', env, authedHeaders())
+    const res = await get('/avatars/rumi-128.webp', env, authedHeaders())
     expect(res.status).toBe(200)
     expect(res.headers.get('Content-Type')).toBe('image/webp')
     expect(res.headers.get('Cache-Control')).toBe('public, max-age=31536000, immutable')

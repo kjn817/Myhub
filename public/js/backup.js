@@ -104,8 +104,3 @@ document.addEventListener('keydown', function(e) {
   }
 });
 
-window.MyHubMenus = window.MyHubMenus || [];
-window.MyHubMenus.push([
-  { icon: '저', href: '/backup.html', text: '장' },
-  { icon: '홈', href: '/', text: '메인 으로' },
-]);

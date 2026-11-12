@@ -384,6 +384,24 @@
     // 2026-11-06; 반쯤 sheet.html 프레임에 같은 선택이 있다).
     frame.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-modals');
     frame.src = GC_URL;
+    // 풀 폰트 조기 fetch (2026-11-13 성능 4라운드): 엔진 WASM 부팅과
+    // 병렬로 내장 폰트 풀(11MB)을 받아 둔다. loadPoolBytes는 fetchFn별
+    // Promise를 캐시하므로 pushFonts()가 gcReady 뒤에 다시 불러도 같은
+    // 진행 중 Promise를 재사용한다 — 직렬 대기가 사라져 한글 tofu
+    // 구간이 줄어든다. deckcraft는 이미 같은 패턴을 쓴다.
+    if (fonts && typeof fonts.loadPoolBytes === 'function') {
+      try {
+        var poolPrefetch = fonts.loadPoolBytes(fetchFn);
+        if (poolPrefetch && typeof poolPrefetch.catch === 'function') {
+          // 폰트 풀 실패가 부팅을 막지 않는다 — 경고만 남긴다.
+          poolPrefetch.catch(function (err) {
+            console.warn('GridCraft 풀 폰트 조기 fetch 실패:', err);
+          });
+        }
+      } catch (e) {
+        console.warn('GridCraft 풀 폰트 조기 fetch 실패:', e);
+      }
+    }
     var veil = doc.createElement('div');
     veil.className = 'sheet-readonly-veil';
     veil.hidden = true;

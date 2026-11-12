@@ -1309,7 +1309,13 @@ html, body { overscroll-behavior-x: none; }
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
 }
-.dt-mission-dragging .dt-mission-bg {
+/* 미션 배경은 #dt-root의 자손이 아니라 형제다 (desktop.html: #dt-root
+   뒤에 #dt-mission이 있고, .dt-mission-bg는 그 앞에 삽입된다) — 자손
+   선택자(.dt-mission-dragging .dt-mission-bg)는 절대 매칭되지 않아
+   1라운드 "미션 드래그 중 블러 정지"가 처음부터 동작하지 않았다
+   (2026-11-13 프로브 실증: p-missionbg만으로 느린 프레임 80건→0건).
+   형제 선택자(~)로 고친다. */
+#dt-root.dt-mission-dragging ~ .dt-mission-bg {
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
 }

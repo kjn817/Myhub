@@ -21,7 +21,7 @@
   <a href="/" class="brand-logo" aria-label="MyHub 홈"><img src="/icon-192.png" alt="JN" style="height:26px;width:auto;display:block;"></a>
   <span class="office-app-name" id="officeAppName">오피스</span>
   <div class="spacer"></div>
-  <button type="button" class="office-assistant-btn aw-avatar-btn" id="officeAssistantBtn" aria-expanded="false" aria-label="노바 비서"><img src="/avatars/nova.webp" alt="노바"></button>
+  <button type="button" class="office-assistant-btn aw-avatar-btn" id="officeAssistantBtn" aria-expanded="false" aria-label="노바 비서"><img src="/avatars/nova-128.webp" alt="노바"></button>
   <span class="ver" id="clock"></span>
 </header>
 <section class="office-assistant" id="officeAssistant" aria-label="AI 비서" hidden></section>
@@ -106,9 +106,9 @@
 <script src="/js/google-connect.js"></script>
 <script src="/nav.js"></script>
 <script src="/js/asset-url.js"></script>
-<script src="/vendor/xlsx.full.min.js"></script>
-<script src="/vendor/jszip.min.js"></script>
-<script src="/vendor/mammoth.browser.min.js"></script>
+<!-- xlsx/jszip/mammoth는 eager 로딩하지 않는다 (2026-11-13 성능 4라운드).
+     형식 핸들러가 finder-viewer.js의 loadLib으로 처음 쓸 때만 동적
+     import한다 — 오피스 앱 열기마다 1.6MB를 먼저 받는 낭비를 없앤다. -->
 <script src="/js/file-icons.js"></script>
 <script src="/js/fonts.js"></script>
 <script src="/js/finder-codec.js"></script>

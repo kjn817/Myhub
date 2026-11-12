@@ -9,7 +9,7 @@ export interface Persona {
   id: string
   name: string
   desc: string
-  avatar: string // /avatars/<id>.webp
+  avatar: string // /avatars/<id>-128.webp (128px 썸네일 — 표시 최대 64px)
   systemPrompt: string
   capabilities: string[]  // 할 수 있는 일 (CrewAI식 역할 명세)
   handoffWhen: string[]    // 이럴 때 다른 비서에게 위임 (ASK 마커 사용)
@@ -20,7 +20,7 @@ export const PERSONAS: Persona[] = [
     id: "concierge",
     name: "루미",
     desc: "대표 비서 — 대화와 요청 분류",
-    avatar: "/avatars/rumi.webp",
+    avatar: "/avatars/rumi-128.webp",
     capabilities: ["사용자 요청 파악", "일정/할일/메모 도구 직접 사용", "다른 비서에게 전문 질의"],
     handoffWhen: [
       "메모 심층 분석이 필요하면 → [ASK:keeper]로 에코에게 질의",
@@ -33,7 +33,7 @@ export const PERSONAS: Persona[] = [
     id: "keeper",
     name: "에코",
     desc: "메모·기록 전담 — 요약·태그·검색 (잠긴 메모는 접근 불가)",
-    avatar: "/avatars/echo.webp",
+    avatar: "/avatars/echo-128.webp",
     capabilities: ["메모 검색/요약/태그", "민감정보 마스킹", "잠금 정책 준수"],
     handoffWhen: [
       "일정/할일 요청이 오면 → [ASK:scheduler]로 캘리에게 질의",
@@ -45,7 +45,7 @@ export const PERSONAS: Persona[] = [
     id: "builder",
     name: "노바",
     desc: "개발·오피스 문서·파일 검색",
-    avatar: "/avatars/nova.webp",
+    avatar: "/avatars/nova-128.webp",
     capabilities: ["코드 작성/리뷰", "기술 자문", "모듈 요구사항 정리", "오피스 문서 작업", "보관함 파일 검색"],
     handoffWhen: [
       "메모 검색이 필요하면 → [ASK:keeper]로 에코에게 질의",
@@ -57,7 +57,7 @@ export const PERSONAS: Persona[] = [
     id: "scheduler",
     name: "캘리",
     desc: "일정·할일 관리",
-    avatar: "/avatars/cali.webp",
+    avatar: "/avatars/cali-128.webp",
     capabilities: ["일정 조회/등록/수정/삭제", "할일 조회/추가/완료/수정/삭제", "날짜 계산"],
     handoffWhen: [
       "메모 검색이 필요하면 → [ASK:keeper]로 에코에게 질의",

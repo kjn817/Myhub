@@ -289,24 +289,55 @@ describe('드래그 중 블러 정지 — 클래스 신호와 CSS 규칙', () =>
     await wait(50)
     expect(root.classList.contains('dt-mission-dragging')).toBe(true)
     pointer(getDoc(), 'pointerup', 420, 380)
+    // 드롭 직후에는 스프레드 정착(0.28s) 동안 블러가 꺼진 채 유지되고,
+    // 정착 뒤에야 복원된다 (2026-11-13 드롭 버벅임 수정).
+    expect(root.classList.contains('dt-mission-dragging')).toBe(true)
+    await wait(350)
     expect(root.classList.contains('dt-mission-dragging')).toBe(false)
   })
 
   test('desktop.css에 드래그 중 블러 정지 규칙이 있다', () => {
     // 창 드래그: 타이틀바 블러 20px 정지
     expect(DESKTOP_CSS).toContain('.dt-dragging .dt-titlebar')
-    // 미션 드래그: 미션 배경 전폭 블러 14px 정지
-    expect(DESKTOP_CSS).toContain('.dt-mission-dragging .dt-mission-bg')
+    // 미션 드래그: 미션 배경 전폭 블러 14px 정지 — .dt-mission-bg는
+    // #dt-root의 자손이 아니라 형제라 형제 선택자(~)여야 한다 (2026-11-13:
+    // 자손 선택자는 절대 매칭되지 않아 1라운드 수정이 동작하지 않았다).
+    expect(DESKTOP_CSS).toContain('#dt-root.dt-mission-dragging ~ .dt-mission-bg')
     // 위젯 드래그·크기 조절: 위젯 블러 22px(데스크톱 최강) 정지
     expect(DESKTOP_CSS).toContain('.dt-widget.is-dragging')
     expect(DESKTOP_CSS).toContain('.dt-widget.is-resizing')
     // 두 규칙 모두 backdrop-filter를 none으로 한다
     const dragBlock = DESKTOP_CSS.slice(DESKTOP_CSS.indexOf('.dt-dragging .dt-titlebar'))
     expect(dragBlock).toContain('backdrop-filter: none !important')
-    const missionBlock = DESKTOP_CSS.slice(DESKTOP_CSS.indexOf('.dt-mission-dragging .dt-mission-bg'))
+    const missionBlock = DESKTOP_CSS.slice(
+      DESKTOP_CSS.indexOf('#dt-root.dt-mission-dragging ~ .dt-mission-bg'),
+    )
     expect(missionBlock).toContain('backdrop-filter: none !important')
     const widgetBlock = DESKTOP_CSS.slice(DESKTOP_CSS.indexOf('.dt-widget.is-dragging'))
     expect(widgetBlock).toContain('backdrop-filter: none !important')
+  })
+
+  test('미션 블러 정지 선택자가 실제 DOM 구조에 매칭된다', () => {
+    // 문자열 존재만 확인하던 기존 테스트는 자손 선택자의 불일치를 못
+    // 잡았다 — CSS에서 선택자를 뽑아 실제 미션 DOM에 질의한다.
+    const noComments = DESKTOP_CSS.replace(/\/\*[\s\S]*?\*\//g, '')
+    const m = noComments.match(/([^{}]*?dt-mission-dragging[^{}]*?\.dt-mission-bg[^{}]*?)\s*\{/)
+    expect(m).not.toBeNull()
+    const selector = (m as RegExpMatchArray)[1].trim()
+    const mgr = makeManager()
+    mgr.openModule('memo')
+    mgr.toggleMission()
+    expect(mgr.isMissionOpen()).toBe(true)
+    const doc = getDoc()
+    const bg = doc.querySelector('.dt-mission-bg')
+    expect(bg).not.toBeNull()
+    const root = doc.getElementById('dt-root')
+    root.classList.add('dt-mission-dragging')
+    // 구 자손 선택자는 클래스가 붙어도 형제 구조에서 절대 매칭되지 않는다 (버그 재현).
+    expect(doc.querySelector('.dt-mission-dragging .dt-mission-bg')).toBeNull()
+    expect(doc.querySelector(selector)).toBe(bg)
+    root.classList.remove('dt-mission-dragging')
+    expect(doc.querySelector(selector)).toBeNull()
   })
 })
 

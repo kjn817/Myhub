@@ -9,10 +9,10 @@ import { loadPage, until, jsonRes, PUB, type LoadedPage, type Handler } from './
 /* ================= F2-2 채팅 앱 ================= */
 describe('F2-2 채팅 앱 (chat.html + chat.js)', () => {
   const personas = [
-    { id: 'concierge', name: '루미', avatar: '/avatars/rumi.webp', desc: '대표 비서' },
-    { id: 'keeper', name: '에코', avatar: '/avatars/echo.webp', desc: '기록 담당' },
-    { id: 'builder', name: '노바', avatar: '/avatars/nova.webp', desc: '만들기 담당' },
-    { id: 'scheduler', name: '캘리', avatar: '/avatars/cali.webp', desc: '일정·할일 담당' },
+    { id: 'concierge', name: '루미', avatar: '/avatars/rumi-128.webp', desc: '대표 비서' },
+    { id: 'keeper', name: '에코', avatar: '/avatars/echo-128.webp', desc: '기록 담당' },
+    { id: 'builder', name: '노바', avatar: '/avatars/nova-128.webp', desc: '만들기 담당' },
+    { id: 'scheduler', name: '캘리', avatar: '/avatars/cali-128.webp', desc: '일정·할일 담당' },
   ]
   // 서버 실제 동작: /api/ai/chat이 대화를 저장하고, 이후 room-history가
   // 저장된 메시지를 돌려줘 화면이 다시 그려진다 — 스텁도 같은 상태 전이를 따른다.

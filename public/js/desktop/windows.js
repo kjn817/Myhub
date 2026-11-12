@@ -2650,6 +2650,7 @@
     var missionDrag = null;
     var missionWired = false;
     var MISSION_ANIM_MS = 280;
+    var missionBlurTimer = null;
     var missionClosing = false;
     var missionCloseTimer = null;
     function missionBusy() { return missionOpen || missionClosing; }
@@ -2676,6 +2677,8 @@
       missionOpen = false;
       missionSel = null;
       missionDrag = null;
+      // 드래그 중 닫히면 finishMissionDrag가 안 불려 클래스가 남는다 — 여기서도 끈다.
+      root.classList.remove('dt-mission-dragging');
       clearMissionSpread();
       if (!wasOpen) { sync(); return; }
       pulseMissionAnim();
@@ -2871,9 +2874,12 @@
         rec.el.style.transform = 'translate(' + (base.dx + d.mdx) + 'px,' + (base.dy + d.mdy) + 'px) scale(' + base.scale + ')';
       }
       // 미션 드래그 중에는 배경 블러를 끈다 (2026-11-12 성능 점검:
-      // .dt-mission-bg 전폭 블러 14px이 미션 드래그 프레임을 지배한다 —
-      // 하네스 실측에서 끄면 느린 프레임 80건→0건. 드래그 중에만 끄고
-      // 끝나면 복원하므로 정적 외관은 원본과 동일하다. 사용자가
+      // .dt-mission-bg 전폭 블러 14px이 미션 드래그 프레임을 지배한다.
+      // 주의: 1라운드 당시 CSS 선택자가 자손 선택자라 형제인 배경에
+      // 매칭되지 않아 실제로는 꺼지지 않았다 — 2026-11-13 3라운드에서
+      // 형제 선택자(#dt-root.dt-mission-dragging ~ .dt-mission-bg)로
+      // 고친 뒤에야 느린 프레임 80건→3건으로 줄었다. 드래그 중에만
+      // 끄고 끝나면 복원하므로 정적 외관은 원본과 동일하다. 사용자가
       // "버벅임은 없는지, 빠릿빠릿한 게 생명"이라고 직접 제기해 적용).
       if (d.moved) root.classList.add('dt-mission-dragging');
       var over = missionCardAtCached(d);
@@ -2917,7 +2923,16 @@
       missionDrag = null;
       var rec = entries.get(d.id);
       if (rec) rec.el.classList.remove('dt-mission-drag');
-      root.classList.remove('dt-mission-dragging');
+      // 블러 복원은 스프레드 정착(0.28s 트랜지션) 뒤로 미룬다: 드롭 직후
+      // 창들이 새 자리로 미끄러지는 동안 블러가 켜져 있으면 매 프레임
+      // 전폭 블러를 다시 샘플링해 드롭 구간이 버벅인다 (하네스 실측:
+      // 드롭 p95 83ms·느린 프레임 7건). 280ms 뒤에 끄고, 그 사이 새
+      // 드래그가 시작됐으면 건드리지 않는다 (새 드래그의 finish가 처리).
+      if (missionBlurTimer !== null) clearTimeout(missionBlurTimer);
+      missionBlurTimer = setTimeout(function () {
+        missionBlurTimer = null;
+        if (!missionDrag) root.classList.remove('dt-mission-dragging');
+      }, MISSION_ANIM_MS);
       missionCardsArr.forEach(function (c) { c.el.classList.remove('is-drop-hot'); });
       if (missionAddEl) missionAddEl.classList.remove('is-drop-hot');
       var w = findWin(d.id);

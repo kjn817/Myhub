@@ -17,12 +17,11 @@
 (function () {
   'use strict';
 
-  // 전역 라이브러리(xlsx/jszip/mammoth)의 호스트 페이지가 정적
-  // <script>로 미리 불 러도 넣고(office.html), 가 없는 loadLib본다
-  // 그 라이브러리를 처음 푸는 시간 동적 import로 지연 로딩한다
-  // (finder.html 목 록 만 이름 본다 받기 위해. 동적
-  // <script> 생성이 CSP 블로커인 가닥으로 인해 import만 이룬다).
-  // rhwp 가정 문서로 HWP를 등 본다 동적 import로 지연 로딩한다.
+  // 전역 라이브러리(xlsx/jszip/mammoth/purify)는 호스트 페이지가 미리
+  // 로딩하지 않는다 — loadLib이 처음 필요할 때 동적 import로 지연
+  // 로딩한다 (2026-11-13 성능 4라운드에서 office.html의 eager 태그
+  // 3개를 제거; 이미 전역에 있으면 그걸 그대로 쓴다). 동적 <script>
+  // 생성은 CSP에 걸리므로 import()만 쓴다.
   var LIBS = { xlsx: 'XLSX', jszip: 'JSZip', mammoth: 'mammoth', purify: 'DOMPurify' };
   var LIB_URLS = {
     xlsx: '/vendor/xlsx.full.min.js',

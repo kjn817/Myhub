@@ -97,7 +97,7 @@ describe('decideCacheStrategy — 전략 판정', () => {
       '/css/login.css?v=89abcdef',
       '/nav.js?v=abcdef01',
       '/icon-192.png?v=12345678',
-      '/avatars/rumi.webp?v=87654321',
+      '/avatars/rumi-128.webp?v=87654321',
       '/manifest.json?v=11223344',
     ]) {
       expect(decideCacheStrategy(req(ORIGIN + path))).toBe('cache-first')

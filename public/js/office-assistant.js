@@ -509,7 +509,7 @@
             type: 'myhub:assistant-declare',
             personaId: 'builder',
             personaName: '노바',
-            avatar: '/avatars/nova.webp',
+            avatar: '/avatars/nova-128.webp',
             flavor: 'office',
           },
           origin,
@@ -668,7 +668,7 @@
   var floatBtn = el('button', 'office-assistant-float');
   floatBtn.type = 'button';
   floatBtn.setAttribute('aria-label', '노바 비서');
-  floatBtn.innerHTML = '<img src="/avatars/nova.webp" alt="노바">';
+  floatBtn.innerHTML = '<img src="/avatars/nova-128.webp" alt="노바">';
   floatBtn.hidden = true;
   floatBtn.addEventListener('click', togglePanel);
   doc.body.appendChild(floatBtn);

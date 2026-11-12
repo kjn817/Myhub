@@ -16,7 +16,7 @@
 // 사용법 (widget-init.js 와 처음 등 data-* 같은 설정의 태그가 읽는다):
 //   <script src="/assistant-widget.js"></script>
 //   <script src="/js/assistant-bridge.js" data-persona-id="builder"
-//     data-persona-name="노바" data-avatar="/avatars/nova.webp"></script>
+//     data-persona-name="노바" data-avatar="/avatars/nova-128.webp"></script>
 (function () {
   'use strict';
   if (typeof window === 'undefined' || typeof document === 'undefined') return;

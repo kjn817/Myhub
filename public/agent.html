@@ -209,7 +209,7 @@ body.sb-collapsed .sidebar { display: none; }
     <div class="chat-scroll" id="chatScroll">
       <div class="chat-inner" id="chatInner">
         <div class="welcome" id="welcomePane">
-          <div class="w-icon"><img src="/avatars/nova.webp" alt="노바"></div>
+          <div class="w-icon"><img src="/avatars/nova-128.webp" alt="노바"></div>
           <h2>안녕하세요, JN님</h2>
           <p>오늘은 무엇을 도와드릴까요?</p>
           </div>
@@ -478,7 +478,7 @@ function newChat() {
   previewCache = { key: null, html: null }; // 미리보기 캐시 초기화
   renderSidebar();
   document.getElementById('chatInner').innerHTML = `
-    <div class="welcome" id="welcomePane"><div class="w-icon"><img src="/avatars/nova.webp" alt="노바"></div>
+    <div class="welcome" id="welcomePane"><div class="w-icon"><img src="/avatars/nova-128.webp" alt="노바"></div>
     <h2>안녕하세요, JN님</h2><p>오늘은 무엇을 도와드릴까요?</p>
     </div>`;
   if (window.MyHubStudioSetTitle) window.MyHubStudioSetTitle('제목 없음.ai');
@@ -547,7 +547,7 @@ function renderChatMsg(m, inner) {
     tmp.querySelector('.bubble').insertAdjacentHTML('beforeend', timeHtml);
   } else {
     tmp.className = 'msg msg-nova';
-    tmp.innerHTML = `<div class="avatar"><img src="/avatars/nova.webp" alt="노바"></div><div class="body"><p></p>${timeHtml}</div>`;
+    tmp.innerHTML = `<div class="avatar"><img src="/avatars/nova-128.webp" alt="노바"></div><div class="body"><p></p>${timeHtml}</div>`;
     tmp.querySelector('p').textContent = m.content;
   }
   inner.appendChild(tmp);
@@ -560,7 +560,7 @@ function renderResultCard(versionNo, createdAt, inner) {
   tmp.className = 'msg msg-nova';
   const timeStr = createdAt ? new Date(createdAt + 'Z').toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }) : '';
   const timeHtml = timeStr ? `<div class="msg-time">${timeStr}</div>` : '';
-  tmp.innerHTML = `<div class="avatar"><img src="/avatars/nova.webp" alt="노바"></div><div class="body">
+  tmp.innerHTML = `<div class="avatar"><img src="/avatars/nova-128.webp" alt="노바"></div><div class="body">
     <div class="result-card" id="${cardId}">
       <div class="result-header">
         <span class="result-badge">v${versionNo}</span>
@@ -721,7 +721,7 @@ function addMsg(who, html, save = true) {
   const timeStr = new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
   div.innerHTML = who === 'user'
     ? `<div class="bubble">${html}<div class="msg-time">${timeStr}</div></div>`
-    : `<div class="avatar"><img src="/avatars/nova.webp" alt="노바"></div><div class="body">${html}<div class="msg-time">${timeStr}</div></div>`;
+    : `<div class="avatar"><img src="/avatars/nova-128.webp" alt="노바"></div><div class="body">${html}<div class="msg-time">${timeStr}</div></div>`;
   inner.appendChild(div); scrollBottom();
   // 캐시 업데이트 (오픈소스 세션 상태 패턴)
   if (currentChatKey) {
@@ -834,7 +834,7 @@ function addMsgHtml(who, html) {
   const timeStr = new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
   div.innerHTML = who === 'user'
     ? `<div class="bubble">${html}<div class="msg-time">${timeStr}</div></div>`
-    : `<div class="avatar"><img src="/avatars/nova.webp" alt="노바"></div><div class="body">${html}<div class="msg-time">${timeStr}</div></div>`;
+    : `<div class="avatar"><img src="/avatars/nova-128.webp" alt="노바"></div><div class="body">${html}<div class="msg-time">${timeStr}</div></div>`;
   inner.appendChild(div); scrollBottom();
   // 캐시 업데이트
   if (currentChatKey) {

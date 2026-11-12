@@ -103,7 +103,7 @@ const plugin = {
   },
 };
 
-const outfile = new URL('./kordoc.bundle.js', import.meta.url).pathname;
+const outfile = new URL('./kordoc.js', import.meta.url).pathname;
 const result = await build({
   entryPoints: [new URL('./build-kordoc-entry.js', import.meta.url).pathname],
   bundle: true,

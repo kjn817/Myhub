@@ -26,7 +26,7 @@ const PUB = path.join(ROOT, 'public')
 const BRIDGE_SRC = fs.readFileSync(path.join(PUB, 'js/assistant-bridge.js'), 'utf-8')
 
 const PAGES = ['schedule.html', 'todo.html']
-const EXPECTED = { personaId: 'scheduler', personaName: '캘리', avatar: '/avatars/cali.webp' }
+const EXPECTED = { personaId: 'scheduler', personaName: '캘리', avatar: '/avatars/cali-128.webp' }
 
 function bridgeTag(html: string): { attrs: string; index: number } | null {
   const m = html.match(/<script[^>]*src="\/js\/assistant-bridge\.js"[^>]*>/)
