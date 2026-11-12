@@ -398,15 +398,29 @@
       // 같은 날 네 번째 지적("거의 유사해졌는데 요일이 살짝 볼드하게
       // 좀더 잘보이도록 뚜렷하게"): 9.7px 요일은 400 굵기에서 잘 안
       // 보여 요일만 600(semibold)으로 올렸다. 날짜는 400 유지.
+      // 같은 날 다섯 번째 지적("여전히 맥과 좀달라: 더 볼드하고
+      // 튀어나온 느낌, 1-2 간격이 더 좁아, 더 둥근 폰트, 백색이
+      // 아주 살짝 쩅해"): 진짜 맥 실측(side-by-side)으로 원인을
+      // 확인했다. ① 진짜 맥 글자색은 순검정이 아니라 RGB 39~40
+      // (#282828) — MyHub 순검정 #000이 대비를 높여 볼드하고
+      // 튀어나와 보였다. 글자색을 #282828로 바꿨다. ② 진짜 맥
+      // 날짜 획 비율 0.062 대 MyHub 400 굵기 0.083 — 날짜를 300
+      // (light)으로 낮췄다 (얇은 획이 1-2 사이 시각 간격도 넓힌다).
+      // ③ 더 둥근 폰트: 날짜 폰트 스택 맨 앞에 ui-rounded를 넣어
+      // 맥에서는 SF Rounded를 쓰게 했다 (미지원 브라우저는
+      // -apple-system으로 폴백). ④ 1-2 간격: 날짜에
+      // letter-spacing 1을 넣어 애플의 0.070 간격에 맞췄다.
+      // ⑤ 백색 쩅함: 글자색 완화가 주 처방이고, 그라데이션도
+      // #fff→#ebebeb에서 #fafafa→#e9e9e9로 살짝 낮췄다.
       // 장부: ~/workspace/calendar-tile-20261110.md
       var now = new Date();
       var WEEKDAY_KO = ['일요일', '월요일', '화요일', '수요일', '목요일', '금요일', '토요일'];
       return (
         '<svg viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">' +
-        '<defs><linearGradient id="mta-cal-bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#ebebeb"/></linearGradient></defs>' +
+        '<defs><linearGradient id="mta-cal-bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fafafa"/><stop offset="1" stop-color="#e9e9e9"/></linearGradient></defs>' +
         '<rect x="0" y="0" width="48" height="48" rx="12" fill="url(#mta-cal-bg)"/>' +
-        '<text x="24" y="15.1" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, \'Segoe UI\', \'Malgun Gothic\', sans-serif" font-size="9.7" font-weight="600" fill="#000000">' + WEEKDAY_KO[now.getDay()] + '</text>' +
-        '<text x="24" y="40.8" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, \'Segoe UI\', \'Malgun Gothic\', sans-serif" font-size="30.5" font-weight="400" fill="#000000">' + now.getDate() + '</text>' +
+        '<text x="24" y="15.1" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, \'Segoe UI\', \'Malgun Gothic\', sans-serif" font-size="9.7" font-weight="600" fill="#282828">' + WEEKDAY_KO[now.getDay()] + '</text>' +
+        '<text x="24" y="40.8" text-anchor="middle" font-family="ui-rounded, -apple-system, BlinkMacSystemFont, \'Segoe UI\', \'Malgun Gothic\', sans-serif" font-size="30.5" font-weight="300" letter-spacing="1" fill="#282828">' + now.getDate() + '</text>' +
         '</svg>'
       );
     },

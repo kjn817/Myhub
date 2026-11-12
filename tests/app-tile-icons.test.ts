@@ -132,13 +132,13 @@ describe('appTileFor — pdf·일정 인라인 SVG 타일', () => {
     const now = new Date()
     const svg = fi.appTileFor('schedule')
     expect(svg).not.toContain('<image')
-    // 흰 squircle(위 #fff → 아래 #ebebeb 그라데이션) + 한글 요일(검정) +
+    // 흰 squircle(위 #fafafa → 아래 #e9e9e9 그라데이션) + 한글 요일 +
     // 큰 날짜 — 영문 월 약어·빨간 밴드는 2026-11-08 확정으로 폐기된
-    // 구 디자인이라 남아 있으면 실패해야 한다. 굵기는 400 (2026-11-12
-    // 진짜 맥 대조로 800 볼드에서 변경), 배경은 순백 평면이 아니다.
+    // 구 디자인이라 남아 있으면 실패해야 한다. 글자색은 순검정이 아니라
+    // 진짜 맥 실측 RGB 39~40(#282828), 배경은 순백 평면이 아니다.
     expect(svg).toContain('fill="url(#mta-cal-bg)"')
-    expect(svg).toContain('stop-color="#ffffff"')
-    expect(svg).toContain('stop-color="#ebebeb"')
+    expect(svg).toContain('stop-color="#fafafa"')
+    expect(svg).toContain('stop-color="#e9e9e9"')
     expect(svg).toContain('>' + WEEKDAY_KO[now.getDay()] + '<')
     expect(svg).toContain('>' + now.getDate() + '<')
     expect(svg).not.toContain('>' + MONTH_ABBR[now.getMonth()] + '<')
@@ -154,16 +154,21 @@ describe('appTileFor — pdf·일정 인라인 SVG 타일', () => {
     // 7.4/700·24.6/400)이 돌아오면 이 테스트가 실패해야 한다.
     // 2026-11-12 진짜 맥 대조: 요일·날짜 굵기는 800 볼드가 아니라 400
     // (진짜 맥이 볼드가 아님, 사용자 지적·실측). 타일 배경은 순백 평면이
-    // 아니라 진짜 맥과 같은 위 #fff → 아래 #ebebeb 세로 그라데이션
-    // (순백 평면은 어두운 배경화면 위에서 메모·할 일보다 튀었다).
+    // 아니라 진짜 맥과 같은 세로 그라데이션 (순백 평면은 어두운 배경화면
+    // 위에서 메모·할 일보다 튀었다). 다섯 번째 지적에서 그라데이션은
+    // #fafafa→#e9e9e9로 살짝 낮추고 글자색은 진짜 맥 실측 #282828로.
     // 같은 날 세 번째 지적("애플 비율·간격·글씨를 그대로 못하냐")에
     // 진짜 맥 독 아이콘(60px)을 픽셀 실측해 치수를 맞췄다: 요일 글자
     // 높이 0.183·위 여백 0.133, 날짜 글자 높이 0.450·위 0.400·아래
     // 여백 0.150, 요일-날짜 간격 0.083 (타일 높이 대비). 그에 맞춰
-    // 요일 9.7/600·y 15.1, 날짜 30.5/400·y 40.8로 교정했다 (이전
+    // 요일 9.7/600·y 15.1, 날짜 30.5/300·y 40.8로 교정했다 (이전
     // 10.3·31.6·39.6은 요일·날짜가 크고 간격이 절반이라 답답했다).
     // 요일만 600인 이유: 9.7px 요일은 400에서 잘 안 보여 사용자가
-    // 살짝 볼드하게 해달라고 했다 (2026-11-12). 날짜는 400 유지.
+    // 살짝 볼드하게 해달라고 했다 (2026-11-12). 날짜는 다섯 번째
+    // 지적에서 300으로 낮췄다 — 진짜 맥 날짜 획 비율 0.062 대 MyHub
+    // 400 굵기 0.083이라 400이 볼드하게 보였다. 날짜 폰트 스택 맨
+    // 앞에는 ui-rounded(SF Rounded)를 넣어 더 둥글게, letter-spacing
+    // 1로 1-2 간격을 애플의 0.070에 맞췄다. 글자색 둘 다 #282828.
     // 장부: ~/workspace/calendar-tile-20261110.md
     const WEEKDAY_KO = ['일요일', '월요일', '화요일', '수요일', '목요일', '금요일', '토요일']
     const now = new Date()
@@ -181,11 +186,12 @@ describe('appTileFor — pdf·일정 인라인 SVG 타일', () => {
     expect(rx / TILE).toBeGreaterThanOrEqual(0.24)
     expect(rx / TILE).toBeLessThanOrEqual(0.26)
     expect(svg).not.toContain('stroke')
-    // 타일 배경 그라데이션 (진짜 맥 실측 위 254 → 아래 235)
+    // 타일 배경 그라데이션 (진짜 맥 실측 위 254 → 아래 235, 다섯 번째
+    // 지적에서 쩅함을 줄이려고 #fafafa→#e9e9e9로 살짝 낮춤)
     expect(rectTag).toContain('fill="url(#mta-cal-bg)"')
     expect(svg).toContain('<linearGradient id="mta-cal-bg"')
-    expect(svg).toContain('<stop offset="0" stop-color="#ffffff"/>')
-    expect(svg).toContain('<stop offset="1" stop-color="#ebebeb"/>')
+    expect(svg).toContain('<stop offset="0" stop-color="#fafafa"/>')
+    expect(svg).toContain('<stop offset="1" stop-color="#e9e9e9"/>')
     const textTag = (body: string): string => {
       const m = svg.match(new RegExp('<text[^>]*>' + body + '<'))
       expect(m).not.toBeNull()
@@ -196,14 +202,16 @@ describe('appTileFor — pdf·일정 인라인 SVG 타일', () => {
     expect(Number(attr(wd, 'font-size')) / TILE).toBeGreaterThanOrEqual(0.195)
     expect(Number(attr(wd, 'font-size')) / TILE).toBeLessThanOrEqual(0.21)
     expect(attr(wd, 'font-weight')).toBe('600')
-    expect(attr(wd, 'fill')).toBe('#000000')
+    expect(attr(wd, 'fill')).toBe('#282828')
     expect(Number(attr(wd, 'y')) / TILE).toBeGreaterThanOrEqual(0.305)
     expect(Number(attr(wd, 'y')) / TILE).toBeLessThanOrEqual(0.325)
     const dt = textTag(String(now.getDate()))
     expect(Number(attr(dt, 'font-size')) / TILE).toBeGreaterThanOrEqual(0.625)
     expect(Number(attr(dt, 'font-size')) / TILE).toBeLessThanOrEqual(0.645)
-    expect(attr(dt, 'font-weight')).toBe('400')
-    expect(attr(dt, 'fill')).toBe('#000000')
+    expect(attr(dt, 'font-weight')).toBe('300')
+    expect(attr(dt, 'fill')).toBe('#282828')
+    expect(attr(dt, 'letter-spacing')).toBe('1')
+    expect(attr(dt, 'font-family')).toContain('ui-rounded')
     expect(Number(attr(dt, 'y')) / TILE).toBeGreaterThanOrEqual(0.84)
     expect(Number(attr(dt, 'y')) / TILE).toBeLessThanOrEqual(0.86)
   })
