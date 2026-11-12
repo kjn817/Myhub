@@ -211,7 +211,13 @@ describe('appTileFor — pdf·일정 인라인 SVG 타일', () => {
     // 꺾인 모서리(Helvetica식) — -apple-system이 SF로 안 풀리고
     // sans-serif로 떨어진 것이다. SF 광학 사이징에 따라 날짜(32px)
     // 에는 "SF Pro Display"를, 요일(9px)에는 "SF Pro Text"를 스택
-    // 맨 앞에 명시했다.
+    // 맨 앞에 명시했다. 열 번째 지적("해결안되었는데? 그리고
+    // 목요일이랑 12사이에 여백도 띄워지 너무 붙어있어"): "SF Pro
+    // Display" 명시가 사용자 맥 Chrome에서 SF로 안 풀리고 여전히
+    // Helvetica로 떨어졌다. SF 자체 호스팅은 라이선스 위반이라
+    // SF와 가장 가까운 OFL 폰트 Inter를 자체 호스팅해 날짜에 쓴다
+    // (desktop.css @font-face, /fonts/inter-400.woff2). 요일-날짜
+    // 간격은 요일 기준선 15.1→13.6으로 올려 ~4.8px로 벌렸다.
     // 장부: ~/workspace/calendar-tile-20261110.md
     const WEEKDAY_KO = ['일요일', '월요일', '화요일', '수요일', '목요일', '금요일', '토요일']
     const now = new Date()
@@ -243,7 +249,7 @@ describe('appTileFor — pdf·일정 인라인 SVG 타일', () => {
       return (m as RegExpMatchArray)[0]
     }
     const attr = (tag: string, name: string): string => tag.match(new RegExp(name + '="([^"]+)"'))![1]
-    const wd = textByY('15.1')
+    const wd = textByY('13.6')
     expect(Number(attr(wd, 'font-size')) / TILE).toBeGreaterThanOrEqual(0.18)
     expect(Number(attr(wd, 'font-size')) / TILE).toBeLessThanOrEqual(0.195)
     expect(attr(wd, 'font-weight')).toBe('800')
@@ -252,11 +258,11 @@ describe('appTileFor — pdf·일정 인라인 SVG 타일', () => {
     expect(attr(wd, 'font-family')).toContain('SF Pro Text')
     expect(wd).not.toContain('filter=')
     // 요일 그림자: 같은 내용의 복제 텍스트가 1px 아래에 있다.
-    const wdShadow = textByY('16.1')
+    const wdShadow = textByY('14.6')
     expect(attr(wdShadow, 'fill')).toBe('#000000')
     expect(attr(wdShadow, 'opacity')).toBe('0.05')
-    expect(Number(attr(wd, 'y')) / TILE).toBeGreaterThanOrEqual(0.305)
-    expect(Number(attr(wd, 'y')) / TILE).toBeLessThanOrEqual(0.325)
+    expect(Number(attr(wd, 'y')) / TILE).toBeGreaterThanOrEqual(0.275)
+    expect(Number(attr(wd, 'y')) / TILE).toBeLessThanOrEqual(0.295)
     const dt = textByY('40.8')
     expect(Number(attr(dt, 'font-size')) / TILE).toBeGreaterThanOrEqual(0.66)
     expect(Number(attr(dt, 'font-size')) / TILE).toBeLessThanOrEqual(0.68)
@@ -267,7 +273,10 @@ describe('appTileFor — pdf·일정 인라인 SVG 타일', () => {
     // macOS Safari도 SF Pro로 폴백). 진짜 맥 아이콘도 일반 SF다.
     expect(attr(dt, 'font-family')).not.toContain('SF Pro Rounded')
     expect(attr(dt, 'font-family')).not.toContain('ui-rounded')
-    // 날짜(32px)는 SF Pro Display 변형을 쓴다 (광학 사이징).
+    // 날짜(32px)는 SF와 가장 가까운 자체 호스팅 Inter를 쓴다
+    // (SF는 웹에서 이름으로 부를 수 없고 자체 호스팅은 라이선스
+    // 위반이라 Inter가 해법이다). SF Pro Display는 폴백으로 유지.
+    expect(attr(dt, 'font-family')).toContain('Inter')
     expect(attr(dt, 'font-family')).toContain('SF Pro Display')
     expect(dt).not.toContain('filter=')
     // 두 자리 날짜는 두 번째 자릿수를 dx="-3"로 당긴다.

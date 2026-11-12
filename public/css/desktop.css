@@ -1,6 +1,22 @@
 /* MyHub 모듈형 데스크톱 워크스페이스 셸 (desktop.html 전용) */
 /* 색: 흰/회/검 기반 + 파스텔 블루 강조. 아이콘은 Lucide만. */
 
+/* 달력 타일 숫자용 Inter (2026-11-12 열 번째 지적: 맥의 "2"는
+   대각선이 곡선으로 부드럽게 이어지는데 웹의 시스템 폰트 스택
+   (-apple-system·system-ui·"SF Pro Display" 명시)은 사용자 맥
+   Chrome에서 SF로 안 풀리고 Helvetica(꺾인 모서리)로 떨어졌다.
+   SF는 라이선스상 자체 호스팅이 안 되므로 SF와 가장 가까운
+   OFL 폰트 Inter를 자체 호스팅한다. latin 서브셋 woff2 23KB.
+   fonts.js가 등록하는 Inter-Regular.ttf(411KB)와 같은 패밀리라
+   충돌하지 않는다. */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/inter-400.woff2') format('woff2');
+}
+
 :root {
   --dt-accent: #a5c8ff;
   --dt-accent-soft: #eff6ff;

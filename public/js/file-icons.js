@@ -472,6 +472,17 @@
       // 래스터화해서 Retina에서 뿌옇게 보인다. 필터를 없애고
       // 그림자를 벡터 복제 텍스트(1px 아래·불투명도 0.05)로 바꿔
       // 그림자는 유지하면서 선명도를 되돌렸다.
+      // 같은 날 열 번째 지적(사용자): "해결안되었는데? 그리고
+      // 목요일이랑 12사이에 여백도 띄워지 너무 붙어있어".
+      // "SF Pro Display" 명시가 사용자 맥 Chrome에서 SF로 안 풀리고
+      // 여전히 Helvetica로 떨어졌다 (웹에서는 SF를 이름으로 부를 수
+      // 없고, system-ui·-apple-system도 이 환경에서 안 먹힌다).
+      // SF 자체 호스팅은 라이선스 위반이라, SF와 가장 가까운 OFL
+      // 폰트 Inter를 자체 호스팅해 날짜에 쓴다 (desktop.css의
+      // @font-face, /fonts/inter-400.woff2 latin 서브셋 23KB).
+      // Inter의 "2"는 SF처럼 대각선이 곡선으로 부드럽게 이어진다.
+      // 요일-날짜 간격: 요일 기준선 15.1→13.6으로 올려 간격을
+      // ~3.3px→~4.8px로 벌렸다 (맥 4.0px보다 살짝 넓게).
       // 장부: ~/workspace/calendar-tile-20261110.md
       var now = new Date();
       var WEEKDAY_KO = ['일요일', '월요일', '화요일', '수요일', '목요일', '금요일', '토요일'];
@@ -485,10 +496,10 @@
         '<svg viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">' +
         '<defs><linearGradient id="mta-cal-bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fafafa"/><stop offset="1" stop-color="#e9e9e9"/></linearGradient></defs>' +
         '<rect x="0" y="0" width="48" height="48" rx="12" fill="url(#mta-cal-bg)"/>' +
-        '<text x="24" y="16.1" text-anchor="middle" font-family="\'SF Pro Text\', system-ui, -apple-system, BlinkMacSystemFont, \'Segoe UI\', \'Malgun Gothic\', sans-serif" font-size="9.0" font-weight="800" letter-spacing="-0.5" fill="#000000" opacity="0.05">' + weekdayStr + '</text>' +
-        '<text x="24" y="15.1" text-anchor="middle" font-family="\'SF Pro Text\', system-ui, -apple-system, BlinkMacSystemFont, \'Segoe UI\', \'Malgun Gothic\', sans-serif" font-size="9.0" font-weight="800" letter-spacing="-0.5" fill="#0a0a0a">' + weekdayStr + '</text>' +
-        '<text x="24" y="41.8" text-anchor="middle" font-family="\'SF Pro Display\', system-ui, -apple-system, BlinkMacSystemFont, \'Segoe UI\', \'Malgun Gothic\', sans-serif" font-size="32" font-weight="400" fill="#000000" opacity="0.05">' + dateInner + '</text>' +
-        '<text x="24" y="40.8" text-anchor="middle" font-family="\'SF Pro Display\', system-ui, -apple-system, BlinkMacSystemFont, \'Segoe UI\', \'Malgun Gothic\', sans-serif" font-size="32" font-weight="400" fill="#0a0a0a">' + dateInner + '</text>' +
+        '<text x="24" y="14.6" text-anchor="middle" font-family="\'SF Pro Text\', system-ui, -apple-system, BlinkMacSystemFont, \'Segoe UI\', \'Malgun Gothic\', sans-serif" font-size="9.0" font-weight="800" letter-spacing="-0.5" fill="#000000" opacity="0.05">' + weekdayStr + '</text>' +
+        '<text x="24" y="13.6" text-anchor="middle" font-family="\'SF Pro Text\', system-ui, -apple-system, BlinkMacSystemFont, \'Segoe UI\', \'Malgun Gothic\', sans-serif" font-size="9.0" font-weight="800" letter-spacing="-0.5" fill="#0a0a0a">' + weekdayStr + '</text>' +
+        '<text x="24" y="41.8" text-anchor="middle" font-family="\'Inter\', \'SF Pro Display\', system-ui, -apple-system, BlinkMacSystemFont, \'Segoe UI\', \'Malgun Gothic\', sans-serif" font-size="32" font-weight="400" fill="#000000" opacity="0.05">' + dateInner + '</text>' +
+        '<text x="24" y="40.8" text-anchor="middle" font-family="\'Inter\', \'SF Pro Display\', system-ui, -apple-system, BlinkMacSystemFont, \'Segoe UI\', \'Malgun Gothic\', sans-serif" font-size="32" font-weight="400" fill="#0a0a0a">' + dateInner + '</text>' +
         '</svg>'
       );
     },
