@@ -370,7 +370,7 @@
       );
     },
     schedule: function () {
-      // 일정 타일: 흰 squircle에 한글 요일 전체 이름(검정 볼드) + 큰 날짜
+      // 일정 타일: 흰 squircle에 한글 요일 전체 이름(검정) + 큰 날짜
       // 숫자, 오늘 값으로 실시간 렌더 (2026-11-08 사용자 확정 디자인이
       // 2026-11-03의 영문 월 약어(NOV) 방식을 대체). 날짜가 바뀌므로
       // appTileFor 캐시를 타지 않는다.
@@ -378,16 +378,26 @@
       // (2026-11-12 사용자 지시). 사용자가 "다른 앱과 동일하게"라 지적해
       // 2026-11-12에 전체를 키웠다: 흰 타일을 39.5(0.82 정렬)에서 다른 앱
       // 타일과 같은 full-bleed 48로, 글자도 같은 비율(48/39.5)로 키워
-      // 요일 10.3/800·날짜 31.6/800으로. 반경은 다른 앱 타일 실측(PNG
+      // 요일 10.3·날짜 31.6으로. 반경은 다른 앱 타일 실측(PNG
       // 코너 0.25)과 맞춰 rx 12로 했다. 스트로크 없음·순검정 유지.
+      // 2026-11-12 진짜 맥 대조(사용자 지적): 진짜 맥 독 일정 아이콘은
+      // 요일·날짜 둘 다 볼드가 아니라 일반 굵기라, 800 볼드를 400으로
+      // 바꿨다 (실측: 진짜 맥 날짜 획 중간값 3px 대 MyHub 800 굵기 5px).
+      // 같은 날 두 번째 지적("메모·할 일과 비교해도 너무 튀어")의 원인도
+      // 실측으로 확인했다: 진짜 맥 타일은 위 254 → 아래 235의 세로
+      // 그라데이션이고 메모·할 일 PNG의 흰색도 246~250인데, MyHub 타일만
+      // 순백(#fff) 평면이라 어두운 배경화면 위에서 유독 튀었다. 그래서
+      // 타일에 진짜 맥과 같은 위 #fff → 아래 #ebebeb 그라데이션을 넣었다
+      // (pdf 타일의 mta-pdf-bg 패턴과 동일). 스트로크는 넣지 않는다.
       // 장부: ~/workspace/calendar-tile-20261110.md
       var now = new Date();
       var WEEKDAY_KO = ['일요일', '월요일', '화요일', '수요일', '목요일', '금요일', '토요일'];
       return (
         '<svg viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">' +
-        '<rect x="0" y="0" width="48" height="48" rx="12" fill="#ffffff"/>' +
-        '<text x="24" y="15.1" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, \'Segoe UI\', \'Malgun Gothic\', sans-serif" font-size="10.3" font-weight="800" fill="#000000">' + WEEKDAY_KO[now.getDay()] + '</text>' +
-        '<text x="24" y="39.6" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, \'Segoe UI\', \'Malgun Gothic\', sans-serif" font-size="31.6" font-weight="800" fill="#000000">' + now.getDate() + '</text>' +
+        '<defs><linearGradient id="mta-cal-bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#ebebeb"/></linearGradient></defs>' +
+        '<rect x="0" y="0" width="48" height="48" rx="12" fill="url(#mta-cal-bg)"/>' +
+        '<text x="24" y="15.1" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, \'Segoe UI\', \'Malgun Gothic\', sans-serif" font-size="10.3" font-weight="400" fill="#000000">' + WEEKDAY_KO[now.getDay()] + '</text>' +
+        '<text x="24" y="39.6" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, \'Segoe UI\', \'Malgun Gothic\', sans-serif" font-size="31.6" font-weight="400" fill="#000000">' + now.getDate() + '</text>' +
         '</svg>'
       );
     },

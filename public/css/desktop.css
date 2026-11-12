@@ -812,18 +812,9 @@ body.dt-fullscreen .settings-btn { color: #fff; }
 
 .myhub-oq-btn:hover { background: rgba(15, 23, 42, 0.06); }
 
-/* 접기 셰브론 (창 바 빠른 실행 자리 — myhub:office-fold 채널).
-   로컬 행 셰브론(.dt-office-tab-chevron)과 같은 결: 테두리로 그린
-   꺽쇠를 회전해 방향을 만든다. */
-.myhub-win-chevron {
-  box-sizing: border-box; width: 7px; height: 7px;
-  border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor;
-  display: block;
-}
-
-.myhub-win-chevron-up { transform: translateY(2px) rotate(225deg); }
-
-.myhub-win-chevron-down { transform: translateY(-2px) rotate(45deg); }
+/* 접기 버튼 아이콘은 Lucide 셰브론(chevron-up/down)이다 — CSS 테두리로
+   그리던 접기 꺽쇠 규칙은 2026-11-12에 제거했다 (옆의 Lucide 빠른
+   실행 아이콘들과 결이 달라 제목줄에서 튀었다는 사용자 지적). */
 
 /* 문서 내 검색 캡슐 (제목 줄 우측 끝 — image-120 정본 위치).
    Finder 검색 캡슐과 같은 결: 둥근 캡슐 + 안쪽 아이콘·입력. */
@@ -1934,9 +1925,8 @@ body.dt-body::-webkit-scrollbar { display: none; }
 
 #dt-office-tabs:not(:empty) { display: flex; }
 
-.dt-office-tab-menu-icon { display: inline-flex; }
-
-.dt-office-tab-menu-icon svg { width: 12px; height: 12px; display: block; }
+/* 오피스 메뉴 라벨 뒤 꺽쇠 아이콘 없음 (2026-11-12 사용자 지적):
+   메뉴 꺽쇠 아이콘 규칙은 함께 제거했다. */
 
 #dt-bar-assistant { display: flex; align-items: center; }
 

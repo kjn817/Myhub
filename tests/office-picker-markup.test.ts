@@ -60,14 +60,19 @@ describe('office-picker DOM 계약', () => {
   })
 })
 
-describe('데스크톱 오피스 탭 셰브론 스프라이트 (회귀: 심볼 누락 시 탭 348px 팽창)', () => {
+describe('데스크톱 오피스 탭 메뉴 꺽쇠 제거 (2026-11-12 사용자 지적)', () => {
   const html = fs.readFileSync(path.join(ROOT, 'public', 'desktop.html'), 'utf8');
   const css = fs.readFileSync(path.join(ROOT, 'public', 'css', 'desktop.css'), 'utf8');
-  test('desktop.html에 #i-chevron-down 심볼이 정의돼 있다', () => {
-    expect(html).toContain('id="i-chevron-down"');
+  const win = fs.readFileSync(path.join(ROOT, 'public', 'js', 'desktop', 'windows.js'), 'utf8');
+  test('오피스 메뉴 탭에 꺽쇠 아이콘을 붙이지 않는다 (macOS 메뉴 막대·MyHubMenus와 동일)', () => {
+    // macOS 메뉴 막대 항목과 MyHubMenus 버튼에는 꺽쇠가 없다. 오피스
+    // 메뉴에만 꺽쇠가 붙어 상단바에서 튀어 디자인을 해쳤다는 지적.
+    expect(win).not.toContain('dt-office-tab-menu-icon');
+    expect(win).not.toContain('#i-chevron-down');
+    expect(css).not.toContain('.dt-office-tab-menu-icon');
   });
-  test('desktop.css에 메뉴 아이콘 크기 규칙이 있다', () => {
-    expect(css).toMatch(/\.dt-office-tab-menu-icon svg \{[^}]*width: 12px/);
+  test('죽은 #i-chevron-down 스프라이트 심볼이 없다 (유일한 사용처가 메뉴 아이콘이었다)', () => {
+    expect(html).not.toContain('id="i-chevron-down"');
   });
 });
 

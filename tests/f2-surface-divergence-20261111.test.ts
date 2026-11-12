@@ -16,8 +16,9 @@
  *   사용자 결정으로 제거 — 위와 같은 이유), 웰컴 정본 문구, 입력
  *   placeholder, 좌측 '검색…' 입력란+필터, 공유 win-action, 기본
  *   문서 제목 '제목 없음.ai' 게시.
- * - 시트 호스트: 문서가 열리면 OfficeTabs에 Excel 메뉴 8종을
- *   kind 'menu'로 게시하고, menu-request에 provideMenuItems로 답한다.
+ * - 시트 호스트: 상단바 메뉴를 게시하지 않는다 (Excel 메뉴 8종은
+ *   항목 미회수로 빈 항목만 답하는 죽은 메뉴라 2026-11-12 사용자
+ *   결정으로 제거 — 빈 메뉴는 게시하지 않는다).
  */
 import * as fs from 'fs'
 import * as path from 'path'
@@ -197,13 +198,18 @@ describe('AI 스튜디오 (메뉴·웰컴·검색·제목·공유)', () => {
   })
 })
 
-/* ================= Excel(시트 호스트) 메뉴 게시 ================= */
-describe('시트 호스트 OfficeTabs 메뉴 게시', () => {
-  it('문서가 열리면 메뉴 8종을 게시하고 menu-request에 빈 항목으로 답한다', async () => {
+/* ================= Excel(시트 호스트) 메뉴 미게시 ================= */
+describe('시트 호스트 OfficeTabs 메뉴 미게시', () => {
+  it('문서가 열려도 상단바 메뉴를 게시하지 않는다 (죽은 메뉴 제거, 2026-11-12)', async () => {
+    // 2026-11-12 사용자 지적·실브라우저 실증: Excel 메뉴 8종은 항목
+    // 내용이 미회수라 menu-request에 빈 항목으로 답했고, 클릭해도
+    // 드롭다운이 열리지 않는 죽은 메뉴였다. 게시하는 메뉴는 전부
+    // 실동작해야 한다는 원칙에 따라 메뉴 자체를 올리지 않는다.
+    // 메뉴 게시(setState tabs)나 빈 항목 답장(provideMenuItems [])이
+    // 되돌아오면 이 테스트가 실패해야 한다.
     const w: any = (globalThis as any).window
     const registered: Record<string, Function> = {}
     const states: any[] = []
-    const commands: Record<string, Function> = {}
     const provided: any[] = []
     w.MyHubFinderViewer = {
       registerFormat: (ext: string, fn: Function) => {
@@ -212,9 +218,7 @@ describe('시트 호스트 OfficeTabs 메뉴 게시', () => {
     }
     w.MyHubOfficeTabs = {
       setState: (app: string, state: any) => states.push({ app, state }),
-      onCommand: (app: string, fn: Function) => {
-        commands[app] = fn
-      },
+      onCommand: () => {},
       onQuick: () => {},
       setQuick: () => {},
       provideMenuItems: (app: string, id: string, items: any[], seq: number) =>
@@ -239,19 +243,32 @@ describe('시트 호스트 OfficeTabs 메뉴 게시', () => {
         saveBtn: null,
       }
       await registered['xlsx'](ctx)
+      // Excel 앱에 대한 메뉴 탭 게시가 없어야 한다.
       const pub = states.find((s) => s.app === 'excel' && s.state && Array.isArray(s.state.tabs))
-      expect(pub).toBeTruthy()
-      expect(pub.state.tabs.map((t: any) => t.label)).toEqual([
-        '파일', '편집', '보기', '삽입', '데이터', '도구', '자동화', '설정',
-      ])
-      expect(pub.state.tabs.every((t: any) => t.kind === 'menu')).toBe(true)
-      expect(pub.state.menuShell).toBe(true)
-      expect(typeof commands['excel']).toBe('function')
-      commands['excel']({ type: 'menu-request', id: 'file', seq: 7 })
-      expect(provided).toEqual([{ app: 'excel', id: 'file', items: [], seq: 7 }])
+      expect(pub).toBeUndefined()
+      // menu-request 답장(빈 항목)도 없어야 한다.
+      expect(provided).toEqual([])
+      // 빠른 실행(onQuick)은 메뉴와 무관하게 살아 있다.
+      expect(read('js/finder-format-sheet.js')).toContain("onQuick('excel'")
     } finally {
       delete w.MyHubFinderViewer
       delete w.MyHubOfficeTabs
     }
+  })
+})
+
+/* ================= 한글·PDF 메뉴는 유지 (작동 확인됨) ================= */
+describe('한글·PDF 호스트 메뉴 게시 유지', () => {
+  it('한글·PDF 호스트는 엔진 메뉴를 상단바에 계속 게시한다 (2026-11-12 실증)', () => {
+    // Excel 메뉴만 제거 대상이다. 한글·PDF 메뉴는 실브라우저로
+    // 드롭다운 열림·항목 실행(한글 줌 100%→110%·환경 설정 다이얼로그,
+    // PDF menu-exec 디스패치)까지 확인했으므로 게시를 유지한다.
+    // 이 테스트는 "오피스 메뉴 전부 제거" 같은 과잉 정리를 막는 가드다.
+    const hwp = read('js/finder-format-hwp.js')
+    expect(hwp).toContain("setState('hangul'")
+    expect(hwp).toContain("kind: 'menu'")
+    const pdf = read('js/finder-format-pdf.js')
+    expect(pdf).toContain("provideMenuItems('pdf'")
+    expect(pdf).toContain('shellMenuNodes')
   })
 })

@@ -237,41 +237,15 @@
       });
     }
 
-    // 상단 메뉴 게시 (운영 정본 [파일·편집·보기·삽입·데이터·도구·자동화·
-    // 설정] — 2026-11-11 앱 대조 카탈로그). 한글 호스트
-    // (finder-format-hwp.js)·PDF 호스트와 같은 OfficeTabs 게시 계약으로
-    // 셸 상단바에 메뉴를 올린다. 각 메뉴의 항목 내용은 원본 자료
-    // (전사본·회수본·엔진 문자열) 어디에도 없어 미회수이므로,
-    // menu-request에는 빈 항목으로 답한다 (발명 금지).
-    var SHEET_MENUS = [
-      { id: 'file', label: '파일' },
-      { id: 'edit', label: '편집' },
-      { id: 'view', label: '보기' },
-      { id: 'insert', label: '삽입' },
-      { id: 'data', label: '데이터' },
-      { id: 'tools', label: '도구' },
-      { id: 'automate', label: '자동화' },
-      { id: 'settings', label: '설정' },
-    ];
-    if (officeSurface && typeof window.MyHubOfficeTabs.setState === 'function') {
-      window.MyHubOfficeTabs.setState('excel', {
-        tabs: SHEET_MENUS.map(function (m) {
-          return { id: m.id, label: m.label, kind: 'menu' };
-        }),
-        activeId: null,
-        collapsed: false,
-        canCollapse: false,
-        menuShell: true,
-      });
-      if (typeof window.MyHubOfficeTabs.onCommand === 'function') {
-        window.MyHubOfficeTabs.onCommand('excel', function (cmd) {
-          if (!ctx.isCurrent()) return;
-          if (cmd.type === 'menu-request') {
-            window.MyHubOfficeTabs.provideMenuItems('excel', cmd.id, [], cmd.seq);
-          }
-        });
-      }
-    }
+    // 상단 메뉴 게시 안 함 (2026-11-12 사용자 지적·실브라우저 실증):
+    // 운영 정본 메뉴 8종[파일·편집·보기·삽입·데이터·도구·자동화·설정]은
+    // 항목 내용이 원본 자료 어디에도 없어 미회수라 menu-request에 빈
+    // 항목으로 답했고, 클릭해도 드롭다운이 열리지 않는 죽은 메뉴였다.
+    // 게시하는 메뉴는 전부 실동작해야 한다는 원칙에 따라 메뉴 자체를
+    // 올리지 않는다 (빈 메뉴를 게시하지 않는다 — 2026-11-12 정리 1차의
+    // 빈 메뉴 6종 제거와 같은 방식). 파일 열기·저장은 제목줄 빠른
+    // 실행(저장 등)과 엔진 자체 리본의 파일 탭이 맡는다. 항목 내용이
+    // 회수되면 그때 메뉴를 다시 게시한다.
 
     // 파일 실행 접근: 아래 시트 넣소재 리본/아래 영역(.fortune-workarea)
     // 등 함께 모서리 등 엔진을 그림으로 알고 chrome만 남긴다.

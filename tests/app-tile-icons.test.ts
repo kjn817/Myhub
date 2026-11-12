@@ -132,9 +132,13 @@ describe('appTileFor — pdf·일정 인라인 SVG 타일', () => {
     const now = new Date()
     const svg = fi.appTileFor('schedule')
     expect(svg).not.toContain('<image')
-    // 흰 squircle + 한글 요일(검정 볼드) + 큰 날짜 — 영문 월 약어·빨간 밴드는
-    // 2026-11-08 확정으로 폐기된 구 디자인이라 남아 있으면 실패해야 한다.
-    expect(svg).toContain('fill="#ffffff"')
+    // 흰 squircle(위 #fff → 아래 #ebebeb 그라데이션) + 한글 요일(검정) +
+    // 큰 날짜 — 영문 월 약어·빨간 밴드는 2026-11-08 확정으로 폐기된
+    // 구 디자인이라 남아 있으면 실패해야 한다. 굵기는 400 (2026-11-12
+    // 진짜 맥 대조로 800 볼드에서 변경), 배경은 순백 평면이 아니다.
+    expect(svg).toContain('fill="url(#mta-cal-bg)"')
+    expect(svg).toContain('stop-color="#ffffff"')
+    expect(svg).toContain('stop-color="#ebebeb"')
     expect(svg).toContain('>' + WEEKDAY_KO[now.getDay()] + '<')
     expect(svg).toContain('>' + now.getDate() + '<')
     expect(svg).not.toContain('>' + MONTH_ABBR[now.getMonth()] + '<')
@@ -144,10 +148,14 @@ describe('appTileFor — pdf·일정 인라인 SVG 타일', () => {
   test('schedule 타일 비율이 2026-11-12 확대 규격과 같다 (full-bleed·반경 0.25)', () => {
     // 규격 (2026-11-12 사용자 지시: 새로 만든 타일을 이전 운영으로 되돌리지
     // 않고 크기 키우고 라운드 맞추기): 흰 타일을 39.5(0.82 정렬)에서 다른 앱
-    // 타일과 같은 full-bleed 48로, 글자도 같은 비율로 키워 요일 10.3/800·
-    // 날짜 31.6/800으로. 반경은 다른 앱 타일 실측(PNG 코너 0.25)과 맞춰
+    // 타일과 같은 full-bleed 48로, 글자도 같은 비율로 키워 요일 10.3·
+    // 날짜 31.6으로. 반경은 다른 앱 타일 실측(PNG 코너 0.25)과 맞춰
     // rx 12. 예전 값(39.5 inset·요일 8.5·날짜 26·rx 9, 또는 591dc77의
     // 7.4/700·24.6/400)이 돌아오면 이 테스트가 실패해야 한다.
+    // 2026-11-12 진짜 맥 대조: 요일·날짜 굵기는 800 볼드가 아니라 400
+    // (진짜 맥이 볼드가 아님, 사용자 지적·실측). 타일 배경은 순백 평면이
+    // 아니라 진짜 맥과 같은 위 #fff → 아래 #ebebeb 세로 그라데이션
+    // (순백 평면은 어두운 배경화면 위에서 메모·할 일보다 튀었다).
     // 장부: ~/workspace/calendar-tile-20261110.md
     const WEEKDAY_KO = ['일요일', '월요일', '화요일', '수요일', '목요일', '금요일', '토요일']
     const now = new Date()
@@ -165,6 +173,11 @@ describe('appTileFor — pdf·일정 인라인 SVG 타일', () => {
     expect(rx / TILE).toBeGreaterThanOrEqual(0.24)
     expect(rx / TILE).toBeLessThanOrEqual(0.26)
     expect(svg).not.toContain('stroke')
+    // 타일 배경 그라데이션 (진짜 맥 실측 위 254 → 아래 235)
+    expect(rectTag).toContain('fill="url(#mta-cal-bg)"')
+    expect(svg).toContain('<linearGradient id="mta-cal-bg"')
+    expect(svg).toContain('<stop offset="0" stop-color="#ffffff"/>')
+    expect(svg).toContain('<stop offset="1" stop-color="#ebebeb"/>')
     const textTag = (body: string): string => {
       const m = svg.match(new RegExp('<text[^>]*>' + body + '<'))
       expect(m).not.toBeNull()
@@ -174,14 +187,14 @@ describe('appTileFor — pdf·일정 인라인 SVG 타일', () => {
     const wd = textTag(WEEKDAY_KO[now.getDay()])
     expect(Number(attr(wd, 'font-size')) / TILE).toBeGreaterThanOrEqual(0.205)
     expect(Number(attr(wd, 'font-size')) / TILE).toBeLessThanOrEqual(0.225)
-    expect(attr(wd, 'font-weight')).toBe('800')
+    expect(attr(wd, 'font-weight')).toBe('400')
     expect(attr(wd, 'fill')).toBe('#000000')
     expect(Number(attr(wd, 'y')) / TILE).toBeGreaterThanOrEqual(0.305)
     expect(Number(attr(wd, 'y')) / TILE).toBeLessThanOrEqual(0.325)
     const dt = textTag(String(now.getDate()))
     expect(Number(attr(dt, 'font-size')) / TILE).toBeGreaterThanOrEqual(0.645)
     expect(Number(attr(dt, 'font-size')) / TILE).toBeLessThanOrEqual(0.67)
-    expect(attr(dt, 'font-weight')).toBe('800')
+    expect(attr(dt, 'font-weight')).toBe('400')
     expect(attr(dt, 'fill')).toBe('#000000')
     expect(Number(attr(dt, 'y')) / TILE).toBeGreaterThanOrEqual(0.815)
     expect(Number(attr(dt, 'y')) / TILE).toBeLessThanOrEqual(0.835)

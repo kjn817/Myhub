@@ -1070,7 +1070,11 @@
         var inner = tab.kind === 'separator' ? '' : '<span class="dt-office-tab-label">' + (tab.label || tab.id) + '</span>';
         if (tab.kind === 'menu') {
           b.classList.add('has-menu');
-          inner += '<span class="dt-office-tab-menu-icon"><svg><use href="#i-chevron-down"></use></svg></span>';
+          // 메뉴 라벨 뒤 꺽쇠 아이콘 없음 (2026-11-12 사용자 지적):
+          // macOS 메뉴 막대 항목과 MyHubMenus 버튼(.myhub-menubar-btn)
+          // 에는 꺽쇠가 없다. 오피스 메뉴에만 꺽쇠가 붙어 상단바에서
+          // 튀어 디자인을 해쳤다. 클릭하면 드롭다운이 열리는 동작은
+          // 그대로다.
         }
         b.innerHTML = inner;
         if (tab.kind !== 'menu') {
@@ -1735,12 +1739,15 @@
         fb.setAttribute('aria-label', fb.title);
         fb.setAttribute('aria-expanded', foldSt.folded ? 'false' : 'true');
         fb.setAttribute('data-fold-state', foldSt.folded ? 'folded' : 'open');
-        var chev = document.createElement('span');
-        chev.className =
-          'myhub-win-chevron ' +
-          (foldSt.folded ? 'myhub-win-chevron-down' : 'myhub-win-chevron-up');
-        chev.setAttribute('aria-hidden', 'true');
-        fb.appendChild(chev);
+        // 접기 아이콘은 Lucide 셰브론으로 (2026-11-12 사용자 지적):
+        // CSS 테두리로 그린 7px 꺽쇠는 옆의 Lucide 빠른 실행 아이콘들과
+        // 결이 달라 제목줄에서 튀었다. 상태별 방향은
+        // 그대로(펼침=위, 접힘=아래)이며, renderOfficeQuick 말미의
+        // refreshIcons()가 <i>를 SVG로 바꾼다.
+        fb.innerHTML =
+          '<i data-lucide="' +
+          (foldSt.folded ? 'chevron-down' : 'chevron-up') +
+          '"></i>';
         fb.addEventListener('click', function () {
           postToModule(winId, {
             type: 'myhub:office-fold-toggle',

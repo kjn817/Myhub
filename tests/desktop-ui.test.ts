@@ -358,6 +358,32 @@ describe('데스크톱 셸 — 오피스 메뉴 탭 유지 (회귀: 창 전환 �
     pointer(winEl('hangul'), 'pointerdown')
     expect(labels()).toEqual(['파일', '편집', '보기', '입력', '서식', '쪽', '표', '도구'])
   })
+
+  test('오피스 메뉴 탭에 꺽쇠 아이콘이 붙지 않는다 (2026-11-12 사용자 지적)', () => {
+    // macOS 메뉴 막대 항목과 MyHubMenus 버튼에는 꺽쇠가 없다. 오피스
+    // 메뉴에만 꺽쇠(.dt-office-tab-menu-icon)가 붙어 상단바에서 튀어
+    // 디자인을 해쳤다는 지적. 라벨은 그대로, 아이콘만 없어야 한다.
+    const storage = new MemoryStorage()
+    const m = makeManager(storage)
+    m.openModule('hangul')
+    const frame = winEl('hangul').querySelector('iframe.dt-frame')
+    const tabs = ['파일', '편집', '보기'].map((label, i) => ({
+      id: ['file', 'edit', 'view'][i],
+      label,
+      kind: 'menu',
+    }))
+    const ev = new (getWin().MessageEvent)('message', {
+      data: { type: 'myhub:office-tabs', app: 'hangul', menuShell: true, tabs },
+      origin: getWin().location.origin,
+      source: frame.contentWindow,
+    } as any)
+    getWin().dispatchEvent(ev)
+    const btns = [...getDoc().querySelectorAll('#dt-office-tabs button')]
+    expect(btns.length).toBe(3)
+    expect(btns.map((b: any) => b.textContent.trim())).toEqual(['파일', '편집', '보기'])
+    expect(getDoc().querySelectorAll('#dt-office-tabs .dt-office-tab-menu-icon').length).toBe(0)
+    expect(getDoc().querySelectorAll('#dt-office-tabs .dt-office-tab.has-menu').length).toBe(3)
+  })
 })
 
 describe('nav.js — 설정 버튼과 데스크톱 진입', () => {

@@ -154,11 +154,17 @@ describe('제목줄 — Finder 투톤·오피스 배치·검색 캡슐', () => {
     expect(css).toMatch(/\.dt-win-office \.myhub-win-search\s*\{\s*order: 4/)
   })
 
-  test('접기 셰브론을 그리는 CSS가 있다 (빈 span이면 버튼이 안 보인다)', () => {
-    // 운영본(2026-11-10 회수): 우·하 테두리 1.5px currentColor + 회전으로 그린다.
-    expect(css).toMatch(/\.myhub-win-chevron\s*\{[^}]*border-right: 1.5px solid currentColor[^}]*border-bottom: 1.5px solid currentColor/)
-    expect(css).toMatch(/\.myhub-win-chevron-up\s*\{\s*transform: translateY\(2px\) rotate\(225deg\)/)
-    expect(css).toMatch(/\.myhub-win-chevron-down\s*\{\s*transform: translateY\(-2px\) rotate\(45deg\)/)
+  test('접기 버튼 아이콘은 Lucide 셰브론이다 (CSS 테두리 꺽쇠 제거, 2026-11-12)', () => {
+    // CSS 테두리로 그린 7px 꺽쇠(.myhub-win-chevron)는 옆의 Lucide 빠른
+    // 실행 아이콘들과 결이 달라 제목줄에서 튀었다는 사용자 지적. 접기
+    // 버튼은 Lucide chevron-up(펼침)/chevron-down(접힘) 아이콘을 쓰고,
+    // 접기 기능(myhub:office-fold-toggle)은 그대로 유지한다.
+    expect(win).toContain('myhub-win-fold')
+    expect(win).toContain("foldSt.folded ? 'chevron-down' : 'chevron-up'")
+    expect(win).toContain('data-lucide')
+    expect(win).toContain("type: 'myhub:office-fold-toggle'")
+    expect(win).not.toContain('myhub-win-chevron')
+    expect(css).not.toContain('.myhub-win-chevron')
   })
 
   test('오피스 검색 입력 placeholder는 문서 내 검색이다', () => {
