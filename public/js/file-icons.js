@@ -412,6 +412,14 @@
       // letter-spacing 1을 넣어 애플의 0.070 간격에 맞췄다.
       // ⑤ 백색 쩅함: 글자색 완화가 주 처방이고, 그라데이션도
       // #fff→#ebebeb에서 #fafafa→#e9e9e9로 살짝 낮췄다.
+      // 같은 날 여섯 번째 지적("많이 유사해졌어. 글씨가 좀 잘 안
+      // 보이거든 픽셀 높여주고, 요일은 더 볼드하게, 날짜도 살짝
+      // 더 볼드하게 너무 얇아"): 가독성 우선으로 키웠다. 요일
+      // 9.7→10.5·600→700, 날짜 30.5→32·300→400. 날짜 400은
+      // #282828 색상 + SF Rounded과 함께라 이전의 순검정 400보다
+      // 부드럽다. 기준선(요일 15.1·날짜 40.8)은 유지 — 글자가
+      // 커져 요일-날짜 간격이 4.3px에서 3.3px로 좁아지지만 답답한
+      // 수준은 아니다.
       // 장부: ~/workspace/calendar-tile-20261110.md
       var now = new Date();
       var WEEKDAY_KO = ['일요일', '월요일', '화요일', '수요일', '목요일', '금요일', '토요일'];
@@ -419,8 +427,8 @@
         '<svg viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">' +
         '<defs><linearGradient id="mta-cal-bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fafafa"/><stop offset="1" stop-color="#e9e9e9"/></linearGradient></defs>' +
         '<rect x="0" y="0" width="48" height="48" rx="12" fill="url(#mta-cal-bg)"/>' +
-        '<text x="24" y="15.1" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, \'Segoe UI\', \'Malgun Gothic\', sans-serif" font-size="9.7" font-weight="600" fill="#282828">' + WEEKDAY_KO[now.getDay()] + '</text>' +
-        '<text x="24" y="40.8" text-anchor="middle" font-family="ui-rounded, -apple-system, BlinkMacSystemFont, \'Segoe UI\', \'Malgun Gothic\', sans-serif" font-size="30.5" font-weight="300" letter-spacing="1" fill="#282828">' + now.getDate() + '</text>' +
+        '<text x="24" y="15.1" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, \'Segoe UI\', \'Malgun Gothic\', sans-serif" font-size="10.5" font-weight="700" fill="#282828">' + WEEKDAY_KO[now.getDay()] + '</text>' +
+        '<text x="24" y="40.8" text-anchor="middle" font-family="ui-rounded, -apple-system, BlinkMacSystemFont, \'Segoe UI\', \'Malgun Gothic\', sans-serif" font-size="32" font-weight="400" letter-spacing="1" fill="#282828">' + now.getDate() + '</text>' +
         '</svg>'
       );
     },

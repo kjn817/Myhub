@@ -169,6 +169,11 @@ describe('appTileFor — pdf·일정 인라인 SVG 타일', () => {
     // 400 굵기 0.083이라 400이 볼드하게 보였다. 날짜 폰트 스택 맨
     // 앞에는 ui-rounded(SF Rounded)를 넣어 더 둥글게, letter-spacing
     // 1로 1-2 간격을 애플의 0.070에 맞췄다. 글자색 둘 다 #282828.
+    // 여섯 번째 지적("많이 유사해졌어. 글씨가 좀 잘 안 보이거든
+    // 픽셀 높여주고, 요일은 더 볼드하게, 날짜도 살짝 더 볼드하게
+    // 너무 얇아"): 가독성 우선으로 요일 10.5/700·날짜 32/400으로
+    // 키웠다. 날짜 400은 #282828 + SF Rounded과 함께라 이전의
+    // 순검정 400보다 부드럽다. 기준선은 유지(요일 15.1·날짜 40.8).
     // 장부: ~/workspace/calendar-tile-20261110.md
     const WEEKDAY_KO = ['일요일', '월요일', '화요일', '수요일', '목요일', '금요일', '토요일']
     const now = new Date()
@@ -199,16 +204,16 @@ describe('appTileFor — pdf·일정 인라인 SVG 타일', () => {
     }
     const attr = (tag: string, name: string): string => tag.match(new RegExp(name + '="([^"]+)"'))![1]
     const wd = textTag(WEEKDAY_KO[now.getDay()])
-    expect(Number(attr(wd, 'font-size')) / TILE).toBeGreaterThanOrEqual(0.195)
-    expect(Number(attr(wd, 'font-size')) / TILE).toBeLessThanOrEqual(0.21)
-    expect(attr(wd, 'font-weight')).toBe('600')
+    expect(Number(attr(wd, 'font-size')) / TILE).toBeGreaterThanOrEqual(0.21)
+    expect(Number(attr(wd, 'font-size')) / TILE).toBeLessThanOrEqual(0.23)
+    expect(attr(wd, 'font-weight')).toBe('700')
     expect(attr(wd, 'fill')).toBe('#282828')
     expect(Number(attr(wd, 'y')) / TILE).toBeGreaterThanOrEqual(0.305)
     expect(Number(attr(wd, 'y')) / TILE).toBeLessThanOrEqual(0.325)
     const dt = textTag(String(now.getDate()))
-    expect(Number(attr(dt, 'font-size')) / TILE).toBeGreaterThanOrEqual(0.625)
-    expect(Number(attr(dt, 'font-size')) / TILE).toBeLessThanOrEqual(0.645)
-    expect(attr(dt, 'font-weight')).toBe('300')
+    expect(Number(attr(dt, 'font-size')) / TILE).toBeGreaterThanOrEqual(0.66)
+    expect(Number(attr(dt, 'font-size')) / TILE).toBeLessThanOrEqual(0.68)
+    expect(attr(dt, 'font-weight')).toBe('400')
     expect(attr(dt, 'fill')).toBe('#282828')
     expect(attr(dt, 'letter-spacing')).toBe('1')
     expect(attr(dt, 'font-family')).toContain('ui-rounded')
