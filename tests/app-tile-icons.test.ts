@@ -160,8 +160,10 @@ describe('appTileFor — pdf·일정 인라인 SVG 타일', () => {
     // 진짜 맥 독 아이콘(60px)을 픽셀 실측해 치수를 맞췄다: 요일 글자
     // 높이 0.183·위 여백 0.133, 날짜 글자 높이 0.450·위 0.400·아래
     // 여백 0.150, 요일-날짜 간격 0.083 (타일 높이 대비). 그에 맞춰
-    // 요일 9.7/400·y 15.1, 날짜 30.5/400·y 40.8로 교정했다 (이전
+    // 요일 9.7/600·y 15.1, 날짜 30.5/400·y 40.8로 교정했다 (이전
     // 10.3·31.6·39.6은 요일·날짜가 크고 간격이 절반이라 답답했다).
+    // 요일만 600인 이유: 9.7px 요일은 400에서 잘 안 보여 사용자가
+    // 살짝 볼드하게 해달라고 했다 (2026-11-12). 날짜는 400 유지.
     // 장부: ~/workspace/calendar-tile-20261110.md
     const WEEKDAY_KO = ['일요일', '월요일', '화요일', '수요일', '목요일', '금요일', '토요일']
     const now = new Date()
@@ -193,7 +195,7 @@ describe('appTileFor — pdf·일정 인라인 SVG 타일', () => {
     const wd = textTag(WEEKDAY_KO[now.getDay()])
     expect(Number(attr(wd, 'font-size')) / TILE).toBeGreaterThanOrEqual(0.195)
     expect(Number(attr(wd, 'font-size')) / TILE).toBeLessThanOrEqual(0.21)
-    expect(attr(wd, 'font-weight')).toBe('400')
+    expect(attr(wd, 'font-weight')).toBe('600')
     expect(attr(wd, 'fill')).toBe('#000000')
     expect(Number(attr(wd, 'y')) / TILE).toBeGreaterThanOrEqual(0.305)
     expect(Number(attr(wd, 'y')) / TILE).toBeLessThanOrEqual(0.325)

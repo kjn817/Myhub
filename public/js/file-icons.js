@@ -395,6 +395,9 @@
       // 여백 0.150, 요일-날짜 간격 0.083 (타일 높이 대비). MyHub는
       // 요일이 크고 날짜가 크며 간격이 절반(0.05)이어서 답답해 보였다.
       // 요일 10.3→9.7·날짜 31.6→30.5·날짜 기준선 39.6→40.8로 교정했다.
+      // 같은 날 네 번째 지적("거의 유사해졌는데 요일이 살짝 볼드하게
+      // 좀더 잘보이도록 뚜렷하게"): 9.7px 요일은 400 굵기에서 잘 안
+      // 보여 요일만 600(semibold)으로 올렸다. 날짜는 400 유지.
       // 장부: ~/workspace/calendar-tile-20261110.md
       var now = new Date();
       var WEEKDAY_KO = ['일요일', '월요일', '화요일', '수요일', '목요일', '금요일', '토요일'];
@@ -402,7 +405,7 @@
         '<svg viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">' +
         '<defs><linearGradient id="mta-cal-bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#ebebeb"/></linearGradient></defs>' +
         '<rect x="0" y="0" width="48" height="48" rx="12" fill="url(#mta-cal-bg)"/>' +
-        '<text x="24" y="15.1" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, \'Segoe UI\', \'Malgun Gothic\', sans-serif" font-size="9.7" font-weight="400" fill="#000000">' + WEEKDAY_KO[now.getDay()] + '</text>' +
+        '<text x="24" y="15.1" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, \'Segoe UI\', \'Malgun Gothic\', sans-serif" font-size="9.7" font-weight="600" fill="#000000">' + WEEKDAY_KO[now.getDay()] + '</text>' +
         '<text x="24" y="40.8" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, \'Segoe UI\', \'Malgun Gothic\', sans-serif" font-size="30.5" font-weight="400" fill="#000000">' + now.getDate() + '</text>' +
         '</svg>'
       );
