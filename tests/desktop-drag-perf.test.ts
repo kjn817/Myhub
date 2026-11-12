@@ -297,10 +297,44 @@ describe('드래그 중 블러 정지 — 클래스 신호와 CSS 규칙', () =>
     expect(DESKTOP_CSS).toContain('.dt-dragging .dt-titlebar')
     // 미션 드래그: 미션 배경 전폭 블러 14px 정지
     expect(DESKTOP_CSS).toContain('.dt-mission-dragging .dt-mission-bg')
+    // 위젯 드래그·크기 조절: 위젯 블러 22px(데스크톱 최강) 정지
+    expect(DESKTOP_CSS).toContain('.dt-widget.is-dragging')
+    expect(DESKTOP_CSS).toContain('.dt-widget.is-resizing')
     // 두 규칙 모두 backdrop-filter를 none으로 한다
     const dragBlock = DESKTOP_CSS.slice(DESKTOP_CSS.indexOf('.dt-dragging .dt-titlebar'))
     expect(dragBlock).toContain('backdrop-filter: none !important')
     const missionBlock = DESKTOP_CSS.slice(DESKTOP_CSS.indexOf('.dt-mission-dragging .dt-mission-bg'))
     expect(missionBlock).toContain('backdrop-filter: none !important')
+    const widgetBlock = DESKTOP_CSS.slice(DESKTOP_CSS.indexOf('.dt-widget.is-dragging'))
+    expect(widgetBlock).toContain('backdrop-filter: none !important')
+  })
+})
+
+describe('다른 드래그 경로 — rAF 합치기 (2026-11-12 성능 점검)', () => {
+  // 창 이동과 같은 어설픈 코드가 위젯·아이콘·독 드래그에도 있었다:
+  // move 이벤트마다 transform을 직접 쓰고 레이아웃을 읽었다.
+  // 이 테스트들은 rAF 합치기 패턴이 각 파일에 들어갔는지 확인한다.
+  // (동작은 기존 레이아웃·플로우 테스트 29건이 종단 검증한다.)
+  const WIDGETS_JS = read('public/js/desktop/widgets.js')
+  const ICONS_JS = read('public/js/desktop/desktop-icons.js')
+  const DOCK_JS = read('public/js/desktop/dock.js')
+
+  test('위젯 이동·크기 조절은 rAF로 합쳐진다', () => {
+    expect(WIDGETS_JS).toContain('applyWidgetFrame')
+    expect(WIDGETS_JS).toContain('applyResizeFrame')
+    expect(WIDGETS_JS).toContain('wdrag.rafId')
+    expect(WIDGETS_JS).toContain('wrz.rafId')
+  })
+
+  test('아이콘 이동·영역 선택은 rAF로 합쳐지고 rect를 캐시한다', () => {
+    expect(ICONS_JS).toContain('applyIconFrame')
+    expect(ICONS_JS).toContain('applyBandFrame')
+    expect(ICONS_JS).toContain('trashRect')
+    expect(ICONS_JS).toContain('iconRects')
+  })
+
+  test('독 밖 드래그는 rAF로 합쳐지고 컨테이너 rect를 캐시한다', () => {
+    expect(DOCK_JS).toContain('applyDockDragFrame')
+    expect(DOCK_JS).toContain('containerRect')
   })
 })

@@ -123,6 +123,17 @@
     if (!tilesApi) throw new Error('createDock: tilesApi가 필요합니다');
     var doc = container.ownerDocument || document;
     var items = deps.items || [];
+
+    function raf(fn) {
+      var w = doc.defaultView || (typeof window !== 'undefined' ? window : null);
+      if (w && typeof w.requestAnimationFrame === 'function') return w.requestAnimationFrame(fn);
+      return setTimeout(fn, 0);
+    }
+    function cancelRaf(id) {
+      var w = doc.defaultView || (typeof window !== 'undefined' ? window : null);
+      if (w && typeof w.cancelAnimationFrame === 'function') w.cancelAnimationFrame(id);
+      else clearTimeout(id);
+    }
     var onActivate = typeof deps.onActivate === 'function' ? deps.onActivate : function () {};
 
     var inner = doc.createElement('div');
@@ -166,9 +177,14 @@
       var dragOut = null;
       var suppressClick = false;
       btn.addEventListener('pointerdown', function (e) {
+        // 독 컨테이너 rect를 드래그 시작 시 캐시한다 — move마다
+        // getBoundingClientRect를 읽으면 레이아웃 스래싱이다.
+        var cr = container.getBoundingClientRect();
         dragOut = {
           pointerId: e.pointerId, startX: e.clientX, startY: e.clientY,
           dx: 0, dy: 0, active: false, removeReady: false, lastX: e.clientX,
+          lastY: e.clientY, rafId: null,
+          containerRect: cr ? { left: cr.left, top: cr.top, right: cr.right, bottom: cr.bottom, width: cr.width } : null,
         };
         try {
           if (typeof btn.setPointerCapture === 'function' && e.pointerId !== undefined) {
@@ -210,23 +226,34 @@
           deps.onReorder(order);
         }
       }
+      // 독 밖 드래그도 rAF로 합친다 (2026-11-12 성능 점검 — move마다
+      // transform 직접 쓰기 + 컨테이너 rect 읽기가 어설픈 코드였다).
+      function applyDockDragFrame() {
+        if (!dragOut) return;
+        dragOut.rafId = null;
+        if (!dragOut.active) return;
+        btn.style.transform = 'translate(' + dragOut.dx + 'px,' + dragOut.dy + 'px)';
+        var r = dragOut.containerRect;
+        var outside = r && r.width > 0 &&
+          (dragOut.lastX < r.left - 48 || dragOut.lastX > r.right + 48 ||
+           dragOut.lastY < r.top - 48 || dragOut.lastY > r.bottom + 48);
+        dragOut.removeReady = !!outside;
+        btn.classList.toggle('is-remove-ready', dragOut.removeReady);
+      }
       btn.addEventListener('pointermove', function (e) {
         if (!dragOut || (dragOut.pointerId !== undefined && e.pointerId !== undefined && e.pointerId !== dragOut.pointerId)) return;
         dragOut.dx = e.clientX - dragOut.startX;
         dragOut.dy = e.clientY - dragOut.startY;
         dragOut.lastX = e.clientX;
+        dragOut.lastY = e.clientY;
         if (!dragOut.active && Math.hypot(dragOut.dx, dragOut.dy) > DRAG_OUT_THRESHOLD) {
           dragOut.active = true;
           btn.classList.add('is-dragging-out');
         }
         if (dragOut.active) {
-          btn.style.transform = 'translate(' + dragOut.dx + 'px,' + dragOut.dy + 'px)';
-          var r = container.getBoundingClientRect();
-          var outside = r && r.width > 0 &&
-            (e.clientX < r.left - 48 || e.clientX > r.right + 48 ||
-             e.clientY < r.top - 48 || e.clientY > r.bottom + 48);
-          dragOut.removeReady = !!outside;
-          btn.classList.toggle('is-remove-ready', dragOut.removeReady);
+          if (dragOut.rafId === null || dragOut.rafId === undefined) {
+            dragOut.rafId = raf(applyDockDragFrame);
+          }
         }
       });
 
@@ -235,6 +262,14 @@
         var wasActive = dragOut.active;
         var removeReady = dragOut.removeReady;
         var lastX = dragOut.lastX;
+        if (dragOut.rafId !== null && dragOut.rafId !== undefined) {
+          cancelRaf(dragOut.rafId);
+          dragOut.rafId = null;
+          // 대기 중이던 마지막 move 프레임을 동기 반영해 드롭 판정이
+          // pointerup 직전 최신 좌표를 쓰게 한다 (dragOut을 null로 하기 전).
+          applyDockDragFrame();
+          removeReady = dragOut.removeReady;
+        }
         dragOut = null;
         btn.style.transform = '';
         btn.classList.remove('is-dragging-out');

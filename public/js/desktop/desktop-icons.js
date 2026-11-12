@@ -320,6 +320,15 @@
     var selectedId = null;
     var drag = null;
     var band = null;
+
+    function raf(fn) {
+      if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') return window.requestAnimationFrame(fn);
+      return setTimeout(fn, 0);
+    }
+    function cancelRaf(id) {
+      if (typeof window !== 'undefined' && typeof window.cancelAnimationFrame === 'function') window.cancelAnimationFrame(id);
+      else clearTimeout(id);
+    }
     var destroyed = false;
     var lastTap = null; // 더블탭 열기 추적 { id, time }
     var lastFired = {}; // id -> 400ms 중복 가능
@@ -400,6 +409,11 @@
           group: inGroup, pointerId: e.pointerId,
           startX: e.clientX, startY: e.clientY, dx: 0, dy: 0,
           moved: false, overRemove: false, overDock: false,
+          rafId: null, lastX: e.clientX, lastY: e.clientY,
+          // 드롭 타깃 판정용 rect를 드래그 시작 시 캐시한다 — move마다
+          // getBoundingClientRect를 읽으면 레이아웃 스래싱이 일어난다.
+          trashRect: rectOf(typeof deps.getTrashEl === 'function' ? deps.getTrashEl() : deps.trashEl),
+          dockRect: onDragToDock ? rectOf(dockEl) : null,
         };
       });
       el.addEventListener('dblclick', function () {
@@ -579,11 +593,23 @@
       return x >= r.left && x <= r.right && y >= r.top && y <= r.bottom;
     }
 
+    // rect를 한 번 읽어 캐시용 plain 객체로 만든다 (드래그 시작 시 사용).
+    function rectOf(el) {
+      if (!el || el.hidden) return null;
+      var r = typeof el.getBoundingClientRect === 'function' ? el.getBoundingClientRect() : null;
+      if (!r || (r.width === 0 && r.height === 0)) return null;
+      return { left: r.left, top: r.top, right: r.right, bottom: r.bottom };
+    }
+    function hitRect(r, x, y) {
+      return !!r && x >= r.left && x <= r.right && y >= r.top && y <= r.bottom;
+    }
+
     function setDragTargets(s, x, y) {
       var trashEl = typeof deps.getTrashEl === 'function' ? deps.getTrashEl() : deps.trashEl;
-      s.overTrash = hitTest(trashEl, x, y);
+      // 캐시한 rect가 있으면 그걸 쓰고, 없으면(구 경로) live로 읽는다.
+      s.overTrash = s.trashRect !== undefined ? hitRect(s.trashRect, x, y) : hitTest(trashEl, x, y);
       s.trashEl = trashEl || null;
-      s.overDock = onDragToDock ? hitTest(dockEl, x, y) : false;
+      s.overDock = onDragToDock ? (s.dockRect !== undefined ? hitRect(s.dockRect, x, y) : hitTest(dockEl, x, y)) : false;
       if (dockEl) dockEl.classList.toggle('dt-dock-drop-hot', s.overDock && !s.overTrash);
       if (s.trashEl) s.trashEl.classList.toggle('dt-trash-hot', s.overTrash);
     }
@@ -598,34 +624,73 @@
       void on;
     }
 
+    // 아이콘 이동·영역 선택도 창 이동과 같은 이유로 rAF로 합친다:
+    // move 이벤트마다 transform을 직접 쓰고 휴지통·독 rect를 읽으면
+    // 한 프레임에 여러 번 스타일 재계산·레이아웃이 일어난다.
+    // 영역 선택은 아이콘마다 getBoundingClientRect를 읽던 것을 밴드
+    // 시작 시 한 번 캐시한 rect로 바꾼다 (선택 중 아이콘은 안 움직인다).
+    // (2026-11-12 성능 점검에서 발견한 어설픈 코드)
+    function applyIconFrame() {
+      var s = drag;
+      if (!s) return;
+      s.rafId = null;
+      if (!s.moved) return;
+      s.ids.forEach(function (id) {
+        s.els[id].style.transform = 'translate(' + s.dx + 'px,' + s.dy + 'px)';
+      });
+      setDragTargets(s, s.lastX, s.lastY);
+    }
+    function applyBandFrame() {
+      var b = band;
+      if (!b) return;
+      b.rafId = null;
+      updateBand(b.lastX, b.lastY);
+    }
     function onPointerMove(e) {
       if (band) {
         if (band.pointerId !== undefined && e.pointerId !== undefined && e.pointerId !== band.pointerId) return;
-        updateBand(e.clientX, e.clientY);
+        band.lastX = e.clientX;
+        band.lastY = e.clientY;
+        if (band.rafId === null || band.rafId === undefined) {
+          band.rafId = raf(applyBandFrame);
+        }
         return;
       }
       if (!drag) return;
       if (drag.pointerId !== undefined && e.pointerId !== undefined && e.pointerId !== drag.pointerId) return;
       drag.dx = e.clientX - drag.startX;
       drag.dy = e.clientY - drag.startY;
+      drag.lastX = e.clientX;
+      drag.lastY = e.clientY;
       if (Math.abs(drag.dx) > DRAG_THRESHOLD || Math.abs(drag.dy) > DRAG_THRESHOLD) drag.moved = true;
       if (drag.moved) {
         setDragPerf(true);
-        drag.ids.forEach(function (id) {
-          drag.els[id].style.transform = 'translate(' + drag.dx + 'px,' + drag.dy + 'px)';
-        });
-        setDragTargets(drag, e.clientX, e.clientY);
+        if (drag.rafId === null || drag.rafId === undefined) {
+          drag.rafId = raf(applyIconFrame);
+        }
       }
     }
 
     function onPointerUp(e) {
       if (band) {
+        if (band.rafId !== null && band.rafId !== undefined) {
+          cancelRaf(band.rafId);
+          band.rafId = null;
+          applyBandFrame();
+        }
         finishBand();
         return;
       }
       if (!drag) return;
       if (drag.pointerId !== undefined && e && e.pointerId !== undefined && e.pointerId !== drag.pointerId) return;
       var s = drag;
+      if (s.rafId !== null && s.rafId !== undefined) {
+        cancelRaf(s.rafId);
+        s.rafId = null;
+        // 대기 중이던 마지막 move 프레임을 동기 반영해 드롭 판정이
+        // pointerup 직전 최신 좌표를 쓰게 한다 (drag를 null로 하기 전).
+        applyIconFrame();
+      }
       drag = null;
       setDragPerf(false);
       s.ids.forEach(function (id) {
@@ -703,11 +768,21 @@
     function startBand(e) {
       if (e.button !== undefined && e.button !== 0) return;
       var additive = !!e.shiftKey;
+      // 아이콘 rect를 밴드 시작 시 한 번 캐시한다 — move마다 아이콘
+      // 전부에 getBoundingClientRect를 호출하면 레이아웃 스래싱이다.
+      // 선택 중에는 아이콘이 움직이지 않으므로 캐시가 유효하다.
+      var iconRects = new Map();
+      records.forEach(function (rec, id) {
+        var r = iconClientRect(id);
+        if (r) iconRects.set(id, r);
+      });
       band = {
         pointerId: e.pointerId,
         startX: e.clientX, startY: e.clientY,
         base: additive ? new Set(selection) : new Set(),
         el: null,
+        lastX: e.clientX, lastY: e.clientY, rafId: null,
+        iconRects: iconRects,
       };
       if (!additive) clearSelection();
     }
@@ -729,8 +804,9 @@
       band.el.style.width = w + 'px';
       band.el.style.height = h + 'px';
       var hits = [];
+      var rects = band.iconRects || null;
       records.forEach(function (rec, id) {
-        var r = iconClientRect(id);
+        var r = rects ? rects.get(id) : iconClientRect(id);
         if (r && r.left < left + w && r.right > left && r.top < top + h && r.bottom > top) {
           hits.push(id);
         }
@@ -741,6 +817,10 @@
     }
 
     function finishBand() {
+      if (band && band.rafId !== null && band.rafId !== undefined) {
+        cancelRaf(band.rafId);
+        band.rafId = null;
+      }
       if (band && band.el) band.el.remove();
       band = null;
     }

@@ -1305,6 +1305,15 @@ html, body { overscroll-behavior-x: none; }
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
 }
+/* 위젯 드래그·크기 조절 중에도 위젯 블러 22px(데스크톱 최강)을 끈다.
+   위젯 카드의 is-dragging/is-resizing 클래스가 신호다 (2026-11-12
+   성능 점검 — 위젯 드래그도 move마다 직접 transform을 쓰는 어설픈
+   코드여서 rAF 합치기와 함께 적용했다). */
+.dt-widget.is-dragging,
+.dt-widget.is-resizing {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
 
 /* 배경·띠·창 스프레드는 하나의 시간축(0.28s, 같은 이징)으로 움직인다 —
    따로 놀면 진입이 어긋나 보인다. 닫힘은 is-leaving 페이드아웃이

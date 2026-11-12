@@ -513,6 +513,15 @@
     var wdrag = null;
     var wrz = null;
 
+    function raf(fn) {
+      if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') return window.requestAnimationFrame(fn);
+      return setTimeout(fn, 0);
+    }
+    function cancelRaf(id) {
+      if (typeof window !== 'undefined' && typeof window.cancelAnimationFrame === 'function') window.cancelAnimationFrame(id);
+      else clearTimeout(id);
+    }
+
     // 드래그 중 블러 정확히 2026-11-06 지시로 자의이다 (머티리얼
     // 일관성). 노출 지시만 빈 몸체로 남긴다.
     function setDragPerf(on) {
@@ -538,6 +547,7 @@
           pos: { x: positions[id].x, y: positions[id].y },
           others: otherRects(id),
           cur: { w: s0.w, h: s0.h }, changed: false,
+          lastX: e.clientX, lastY: e.clientY, rafId: null,
         };
         card.classList.add('is-resizing');
         setDragPerf(true);
@@ -551,28 +561,53 @@
         startX: e.clientX, startY: e.clientY,
         startPos: { x: positions[id].x, y: positions[id].y },
         w: size.w, h: size.h, dx: 0, dy: 0, moved: false,
-        others: otherRects(id), snapped: null,
+        others: otherRects(id), snapped: null, rafId: null,
       };
+    }
+    // 위젯 이동·크기 조절도 창 이동과 같은 이유로 rAF로 합친다:
+    // move 이벤트마다 transform/width·height를 직접 쓰면 한 프레임에
+    // 여러 번 스타일 재계산·레이아웃이 일어나고, 그려지는 건 마지막
+    // 한 번뿐이다 (2026-11-12 성능 점검에서 발견한 어설픈 코드).
+    function applyWidgetFrame() {
+      var d = wdrag;
+      if (!d) return;
+      d.rafId = null;
+      // 자성 스냅: 다른 위젯의 가까우면 모서리·간격이 붙는 위치로 보인다
+      var raw = { x: d.startPos.x + d.dx, y: d.startPos.y + d.dy };
+      var snapped = snapWidgetPos(raw, { w: d.w, h: d.h }, d.others);
+      d.snapped = snapped;
+      d.card.style.transform =
+        'translate(' + (snapped.x - d.startPos.x) + 'px,' + (snapped.y - d.startPos.y) + 'px)';
+    }
+    function applyResizeFrame() {
+      var r = wrz;
+      if (!r) return;
+      r.rafId = null;
+      var a = area();
+      var nw = Math.min(Math.max(MIN_W, r.startW + (r.lastX - r.startX)), Math.max(MIN_W, a.w - r.pos.x));
+      var nh = Math.min(Math.max(MIN_H, r.startH + (r.lastY - r.startY)), Math.max(MIN_H, a.h - r.pos.y));
+      // 오른쪽·하단 모서리도 자성: 다른 위젯 모서리·간격이 위치를 붙인다
+      var rxCands = [];
+      var byCands = [];
+      r.others.forEach(function (o) {
+        rxCands.push(o.x - MAG_GAP, o.x, o.x + o.w, o.x + o.w + MAG_GAP);
+        byCands.push(o.y - MAG_GAP, o.y, o.y + o.h, o.y + o.h + MAG_GAP);
+      });
+      nw = Math.max(MIN_W, snapEdge(r.pos.x + nw, rxCands) - r.pos.x);
+      nh = Math.max(MIN_H, snapEdge(r.pos.y + nh, byCands) - r.pos.y);
+      r.cur = { w: Math.round(nw), h: Math.round(nh) };
+      r.changed = r.cur.w !== r.startW || r.cur.h !== r.startH;
+      r.card.style.width = r.cur.w + 'px';
+      r.card.style.height = r.cur.h + 'px';
     }
     function onWidgetPointerMove(e) {
       if (wrz) {
         if (wrz.pointerId !== undefined && e.pointerId !== undefined && e.pointerId !== wrz.pointerId) return;
-        var a = area();
-        var nw = Math.min(Math.max(MIN_W, wrz.startW + (e.clientX - wrz.startX)), Math.max(MIN_W, a.w - wrz.pos.x));
-        var nh = Math.min(Math.max(MIN_H, wrz.startH + (e.clientY - wrz.startY)), Math.max(MIN_H, a.h - wrz.pos.y));
-        // 오른쪽·하단 모서리도 자성: 다른 위젯 모서리·간격이 위치를 붙인다
-        var rxCands = [];
-        var byCands = [];
-        wrz.others.forEach(function (o) {
-          rxCands.push(o.x - MAG_GAP, o.x, o.x + o.w, o.x + o.w + MAG_GAP);
-          byCands.push(o.y - MAG_GAP, o.y, o.y + o.h, o.y + o.h + MAG_GAP);
-        });
-        nw = Math.max(MIN_W, snapEdge(wrz.pos.x + nw, rxCands) - wrz.pos.x);
-        nh = Math.max(MIN_H, snapEdge(wrz.pos.y + nh, byCands) - wrz.pos.y);
-        wrz.cur = { w: Math.round(nw), h: Math.round(nh) };
-        wrz.changed = wrz.cur.w !== wrz.startW || wrz.cur.h !== wrz.startH;
-        wrz.card.style.width = wrz.cur.w + 'px';
-        wrz.card.style.height = wrz.cur.h + 'px';
+        wrz.lastX = e.clientX;
+        wrz.lastY = e.clientY;
+        if (wrz.rafId === null || wrz.rafId === undefined) {
+          wrz.rafId = raf(applyResizeFrame);
+        }
         return;
       }
       if (!wdrag) return;
@@ -585,17 +620,21 @@
         wdrag.card.classList.add('is-dragging');
         setDragPerf(true);
       }
-      // 자성 스냅: 다른 위젯의 가까우면 모서리·간격이 붙는 위치로 보인다
-      var raw = { x: wdrag.startPos.x + wdrag.dx, y: wdrag.startPos.y + wdrag.dy };
-      var snapped = snapWidgetPos(raw, { w: wdrag.w, h: wdrag.h }, wdrag.others);
-      wdrag.snapped = snapped;
-      wdrag.card.style.transform =
-        'translate(' + (snapped.x - wdrag.startPos.x) + 'px,' + (snapped.y - wdrag.startPos.y) + 'px)';
+      if (wdrag.rafId === null || wdrag.rafId === undefined) {
+        wdrag.rafId = raf(applyWidgetFrame);
+      }
     }
 
     function finishWidgetDrag(commit) {
       if (!wdrag) return;
       var d = wdrag;
+      if (d.rafId !== null && d.rafId !== undefined) {
+        cancelRaf(d.rafId);
+        d.rafId = null;
+        // 대기 중이던 마지막 move 프레임을 동기 반영해 드롭 위치가
+        // pointerup 직전 최신 좌표를 쓰게 한다 (wdrag를 null로 하기 전).
+        applyWidgetFrame();
+      }
       wdrag = null;
       setDragPerf(false);
       d.card.classList.remove('is-dragging');
@@ -612,6 +651,13 @@
     function finishResize(commit) {
       if (!wrz) return;
       var r = wrz;
+      if (r.rafId !== null && r.rafId !== undefined) {
+        cancelRaf(r.rafId);
+        r.rafId = null;
+        // 대기 중이던 마지막 move 프레임을 동기 반영해 최종 크기가
+        // pointerup 직전 최신 좌표를 쓰게 한다 (wrz를 null로 하기 전).
+        applyResizeFrame();
+      }
       wrz = null;
       setDragPerf(false);
       r.card.classList.remove('is-resizing');
