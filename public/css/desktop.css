@@ -1288,6 +1288,14 @@ html, body { overscroll-behavior-x: none; }
 
 .dt-mission-bg[hidden] { display: none; }
 
+/* 부팅 로딩 오버레이 애니메이션 (2026-11-12 사용자 요청).
+   레이아웃은 desktop.html의 인라인 style 속성(CSP 허용)이고, 회전·
+   페이드아웃만 여기서 담당한다 (keyframes는 인라인으로 못 쓰니까). */
+#dt-boot { transition: opacity 0.25s ease; }
+#dt-boot.dt-boot-done { opacity: 0; pointer-events: none; }
+.dt-boot-spin { animation: dt-boot-spin 0.8s linear infinite; }
+@keyframes dt-boot-spin { to { transform: rotate(360deg); } }
+
 /* 드래그 중 블러 정지 (2026-11-12 성능 점검 — 사용자가 "버벅임은
    없는지, 빠릿빠릿한 게 생명"이라고 직접 제기해 적용).
    backdrop-filter는 드래그 중 매 프레임 재계산돼 프레임을 지배한다:

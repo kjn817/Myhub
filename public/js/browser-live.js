@@ -20,10 +20,17 @@
   'use strict';
 
   /* 원격 세션 시작: Promise<{ status, body }> 테 스트 주입 지난과 같은 모양 */
-  function defaultLiveStart(url) {
+  function defaultLiveStart(url, viewport) {
     if (typeof fetch !== 'function') return Promise.resolve({ status: 0, body: null });
     var init = { method: 'POST', headers: { 'Content-Type': 'application/json' } };
-    if (url) init.body = JSON.stringify({ url: url });
+    var payload = {};
+    if (url) payload.url = url;
+    // iframe 크기를 보내 원격 뷰포트를 맞춘다 (2026-11-12: 기본
+    // 1280x720이 창보다 넓으면 Live View가 짤린다).
+    if (viewport && viewport.width > 0 && viewport.height > 0) {
+      payload.viewport = { width: Math.round(viewport.width), height: Math.round(viewport.height) };
+    }
+    if (Object.keys(payload).length) init.body = JSON.stringify(payload);
     return fetch('/api/browse/live-session', init)
       .then(function (r) {
         return r
@@ -133,7 +140,14 @@
       liveState = 'starting';
       var gen = ++liveGen;
       onChange();
-      return liveStart(url || null).then(function (res) {
+      // iframe 크기를 재서 원격 뷰포트를 맞춘다 (기본 1280x720이
+      // 창보다 넓으면 Live View가 짤린다 — 2026-11-12 사용자 지적).
+      var viewport = null;
+      if (liveFrame && typeof liveFrame.getBoundingClientRect === 'function') {
+        var r = liveFrame.getBoundingClientRect();
+        if (r && r.width > 0 && r.height > 0) viewport = { width: r.width, height: r.height };
+      }
+      return liveStart(url || null, viewport).then(function (res) {
         if (gen !== liveGen) {
           // 시작 응답이 늦은 후에 내부 종료하면 등 반환 메모 세션을 반환한다
           if (res && res.status === 200 && res.body && res.body.ok) liveStop();

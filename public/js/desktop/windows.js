@@ -3131,7 +3131,23 @@
       if (before && before.space !== state.activeSpace) {
         commit(stateApi.setActiveSpace(state, before.space));
       }
+      var isNew = !before;
       commit(stateApi.openModule(state, id, getViewport()));
+      // 기본 전체화면 모듈(브라우저)은 새로 열 때 바로 최대화한다
+      // (2026-11-12 사용자 지적: 브라우저가 작게 열려 원격 화면이 짤림).
+      // 이미 열려 있는 창을 다시 여는 경우(복원)는 건드리지 않는다.
+      if (isNew) {
+        var mod = findModule(id);
+        if (mod && mod.defMode === 'full') {
+          var vp = getViewport();
+          var cur = findWin(id);
+          if (cur) {
+            commit(stateApi.resizeWindow(
+              stateApi.setWindowMode(state, id, 'full', { x: cur.x, y: cur.y, w: cur.w, h: cur.h }),
+              id, fullRect(vp), vp));
+          }
+        }
+      }
     }
 
     function postToModule(id, message) {

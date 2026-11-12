@@ -68,7 +68,7 @@ describe('상수와 모듈 정의 (설계 4절)', () => {
     // 글리프는 오피스 4종만 들고, 나머지는 tiles.js TILE_DEFS가 소유한다.
     expect(S.MODULES).toEqual([
       { id: 'finder', title: 'Finder', url: '/finder.html', defW: 920, defH: 620 },
-      { id: 'browser', title: '브라우저', url: '/browser.html', defW: 1080, defH: 700 },
+      { id: 'browser', title: '브라우저', url: '/browser.html', defW: 1080, defH: 700, defMode: 'full' },
       { id: 'memo', title: '메모', url: '/memo.html', defW: 880, defH: 620 },
       { id: 'schedule', title: '일정', url: '/schedule.html', defW: 880, defH: 620 },
       { id: 'todo', title: '할 일', url: '/todo.html', defW: 640, defH: 560 },

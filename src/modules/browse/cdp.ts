@@ -30,23 +30,33 @@ export const defaultCdpConnect: CdpConnectFn = async (wsUrl, headers) => {
 
 export const NAVIGATE_TIMEOUT_MS = 5000
 
-export type NavigateStage = 'ok' | 'connect' | 'targets' | 'attach' | 'navigate'
+export type NavigateStage = 'ok' | 'connect' | 'targets' | 'attach' | 'navigate' | 'viewport'
 export interface NavigateResult {
   ok: boolean
   stage: NavigateStage
 }
 
+export interface ViewportSize {
+  width: number
+  height: number
+}
+
 /**
  * 세션의 페이지 타깃에 targetUrl 이동을 지시한다.
  * 타깃 attach가 안 되는 환경에서는 세션 소켓에 직접 navigate하는 폴백을 쓴다.
+ * viewport가 주어지면 attach 직후 Emulation.setDeviceMetricsOverride로
+ * 원격 뷰포트를 맞춘 뒤 이동한다 (2026-11-12: 원격 브라우저 기본
+ * 뷰포트 1280x720이 MyHub 창보다 넓으면 Live View가 짤려서).
+ * 뷰포트 설정 실패는 이동을 막지 않는다 (경고 없이 navigate로 진행).
  */
 export async function navigateSession(
   webSocketDebuggerUrl: string,
   targetUrl: string,
   connect: CdpConnectFn = defaultCdpConnect,
-  opts: { headers?: Record<string, string>; timeoutMs?: number } = {}
+  opts: { headers?: Record<string, string>; timeoutMs?: number; viewport?: ViewportSize } = {}
 ): Promise<NavigateResult> {
   const timeoutMs = opts.timeoutMs ?? NAVIGATE_TIMEOUT_MS
+  const viewport = opts.viewport
   let sock: CdpSocket | null = null
   try {
     sock = await connect(webSocketDebuggerUrl, opts.headers)
@@ -63,6 +73,7 @@ export async function navigateSession(
       let phase: NavigateStage = 'targets'
       let targetsId = -1
       let attachId = -1
+      let viewportId = -1
       let navigateId = -1
       let directId = -1
       let targetTries = 0
@@ -100,6 +111,22 @@ export async function navigateSession(
         targetTries += 1
         targetsId = send('Target.getTargets')
       }
+      const sendNavigate = () => {
+        phase = 'navigate'
+        navigateId = send('Page.navigate', { url: targetUrl }, true)
+      }
+      const sendViewportOrNavigate = () => {
+        if (!viewport || viewport.width <= 0 || viewport.height <= 0) {
+          sendNavigate()
+          return
+        }
+        phase = 'viewport'
+        viewportId = send(
+          'Emulation.setDeviceMetricsOverride',
+          { width: Math.round(viewport.width), height: Math.round(viewport.height), deviceScaleFactor: 1, mobile: false },
+          true
+        )
+      }
       socket.addEventListener('message', (ev) => {
         let msg: any
         try {
@@ -131,8 +158,10 @@ export async function navigateSession(
             return
           }
           sessionId = attached
-          phase = 'navigate'
-          navigateId = send('Page.navigate', { url: targetUrl }, true)
+          sendViewportOrNavigate()
+        } else if (viewportId !== -1 && msg.id === viewportId) {
+          // 뷰포트 설정 실패여도 이동은 진행한다 (기본 뷰포트로 표시됨).
+          sendNavigate()
         } else if (navigateId !== -1 && msg.id === navigateId) {
           finish(msg.error ? { ok: false, stage: 'navigate' } : { ok: true, stage: 'ok' })
         } else if (directId !== -1 && msg.id === directId) {

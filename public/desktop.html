@@ -15,6 +15,14 @@
 <script src="/vendor/lucide/lucide.min.js" defer></script>
 </head>
 <body class="dt-body">
+<!-- 부팅 로딩 오버레이 (2026-11-12 사용자 요청: 시스템 시작 시 로딩이
+     안 뜬다고 해서 추가). CSP가 style 블록을 막으므로(style-src-elem
+     'self') 레이아웃은 인라인 style 속성으로 둔다(style-src-attr은
+     'unsafe-inline' 허용 — 외부 CSS 로드를 기다리지 않고 바로 그려진다).
+     스피너 회전·페이드아웃은 desktop.css의 클래스(dt-boot-spin·
+     dt-boot-done)가 담당한다. 상단바를 포함한 전체 뷰포트를 덮어
+     로딩 중에는 상단바가 안 보인다. main.js가 준비 완료 시 끈다. -->
+<div id="dt-boot" aria-hidden="true" style="position:fixed;inset:0;z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;background:#ffffff;"><div style="font-size:28px;font-weight:700;letter-spacing:-0.02em;color:#18181b;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">MyHub</div><div class="dt-boot-spin" style="width:22px;height:22px;border-radius:50%;border:2px solid #e5e7eb;border-top-color:#3b82f6;"></div></div>
 <header class="g-nav">
   <a href="/" class="brand-logo" aria-label="MyHub 홈"><img src="/icon-192.png" alt="JN"></a>
   <button type="button" id="dt-active-title" class="dt-active-title">데스크톱</button>

@@ -85,7 +85,7 @@ export function registerLiveRoutes(app: Hono<{ Bindings: Env }>): void {
   app.post('/live-session', async (c) => {
     const token = c.env.BROWSER_RUN_TOKEN
     if (!token) return c.json({ ok: false, error: 'LIVE_NOT_CONFIGURED' }, 503)
-    const body = await c.req.json().catch(() => null) as { url?: unknown } | null
+    const body = await c.req.json().catch(() => null) as { url?: unknown; viewport?: unknown } | null
     let startUrl: string | null = null
     if (body && body.url !== undefined && body.url !== null && body.url !== '') {
       if (typeof body.url !== 'string' || body.url.length > 2048) {
@@ -101,6 +101,18 @@ export function registerLiveRoutes(app: Hono<{ Bindings: Env }>): void {
         return c.json({ ok: false, error: 'INVALID_URL' }, 400)
       }
       startUrl = parsed.toString()
+    }
+    // 원격 뷰포트 (2026-11-12: 기본 1280x720이 MyHub 창보다 넓으면
+    // Live View가 짤린다 — 클라이언트가 iframe 크기를 보내면 맞춘다).
+    // 범위를 벗어나면 무시하고 기본 뷰포트로 진행한다.
+    let viewport: { width: number; height: number } | undefined
+    if (body && body.viewport !== undefined && body.viewport !== null) {
+      const v = body.viewport as { width?: unknown; height?: unknown }
+      const w = typeof v.width === 'number' ? Math.round(v.width) : 0
+      const h = typeof v.height === 'number' ? Math.round(v.height) : 0
+      if (w >= 320 && w <= 3840 && h >= 240 && h <= 2160) {
+        viewport = { width: w, height: h }
+      }
     }
     const kv = c.env.KV
     const nowSec = Math.floor(Date.now() / 1000)
@@ -138,6 +150,7 @@ export function registerLiveRoutes(app: Hono<{ Bindings: Env }>): void {
         navSource = endpoint.source
         const result = await navigateSession(endpoint.url, startUrl, undefined, {
           headers: { Authorization: `Bearer ${token}` },
+          viewport,
         }).catch(() => ({ ok: false, stage: 'connect' as const }))
         nav = result.ok ? 'ok' : 'fail'
         navStage = result.stage

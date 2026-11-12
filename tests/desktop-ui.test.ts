@@ -172,6 +172,40 @@ describe('데스크톱 셸 — 창 생성과 keep-alive', () => {
     expect(lastDockRunning(m)).toEqual({ memo: true })
   })
 
+  test('브라우저는 새로 열 때 바로 최대화된다 (2026-11-12 사용자 지적: 작게 열려 원격 화면 짤림)', () => {
+    const storage = new MemoryStorage()
+    const m = makeManager(storage)
+
+    m.openModule('browser')
+
+    const win = m.getState().windows.find((w: any) => w.module === 'browser')
+    expect(win).toBeDefined()
+    expect(win.mode).toBe('full')
+    // 전체화면 rect: 좌상단 원점, 뷰포트 너비, 상단바를 뺀 높이
+    // (jsdom에서는 상단바 오프셋이 0이라 뷰포트 높이와 같다)
+    expect(win.x).toBe(0)
+    expect(win.y).toBe(0)
+    expect(win.w).toBe(VIEWPORT.w)
+    expect(win.h).toBeLessThanOrEqual(VIEWPORT.h)
+    expect(win.h).toBeGreaterThan(0)
+    // 이전 크기(prev)가 저장돼 최대화 해제 시 돌아갈 수 있다
+    expect(win.prev).not.toBeNull()
+    expect(win.prev.w).toBe(1080)
+    expect(win.prev.h).toBe(700)
+  })
+
+  test('브라우저가 아닌 모듈은 기본 크기로 열린다', () => {
+    const storage = new MemoryStorage()
+    const m = makeManager(storage)
+
+    m.openModule('memo')
+
+    const win = m.getState().windows.find((w: any) => w.module === 'memo')
+    expect(win.mode).toBeNull()
+    expect(win.w).toBe(880)
+    expect(win.h).toBe(620)
+  })
+
   test('keep-alive: 이미 열린 모듈을 다시 열어도 iframe이 교체·재생성되지 않는다', () => {
     const storage = new MemoryStorage()
     const m = makeManager(storage)
@@ -479,5 +513,37 @@ describe('desktop.html 배선', () => {
       expect(list.files).toContain(f)
     }
     expect(list.versioned).toContain('/desktop.html')
+  })
+
+  test('부팅 로딩 오버레이가 있고 상단바를 덮는다 (2026-11-12 사용자 요청)', () => {
+    // #dt-boot 오버레이가 상단바보다 앞에 있다 (HTML 순서상 먼저)
+    expect(DESKTOP_HTML).toContain('id="dt-boot"')
+    expect(DESKTOP_HTML.indexOf('id="dt-boot"')).toBeLessThan(DESKTOP_HTML.indexOf('<header class="g-nav"'))
+    // 스피너가 있다
+    expect(DESKTOP_HTML).toContain('dt-boot-spin')
+    // CSP가 <style> 블록을 막으므로(style-src-elem 'self') 레이아웃은
+    // 인라인 style 속성으로 둔다 (style-src-attr 'unsafe-inline' 허용)
+    expect(DESKTOP_HTML).not.toContain('<style>')
+    const bootTag = DESKTOP_HTML.slice(DESKTOP_HTML.indexOf('id="dt-boot"'), DESKTOP_HTML.indexOf('>', DESKTOP_HTML.indexOf('id="dt-boot"')))
+    expect(bootTag).toContain('position:fixed')
+    expect(bootTag).toContain('inset:0')
+    expect(bootTag).toMatch(/z-index:9999/)
+    // 스피너 회전·페이드아웃 클래스는 desktop.css에 있다
+    const DESKTOP_CSS = fs.readFileSync(path.join(ROOT, 'public', 'css', 'desktop.css'), 'utf-8')
+    expect(DESKTOP_CSS).toContain('.dt-boot-spin')
+    expect(DESKTOP_CSS).toContain('@keyframes dt-boot-spin')
+    expect(DESKTOP_CSS).toContain('#dt-boot.dt-boot-done')
+  })
+
+  test('main.js가 init 완료 시 로딩 오버레이를 끄고 Drive 파일 목록을 백그라운드로 읽는다', () => {
+    const MAIN_JS = fs.readFileSync(path.join(ROOT, 'public', 'js', 'desktop', 'main.js'), 'utf-8')
+    // init 끝에서 hideBootOverlay를 호출한다
+    expect(MAIN_JS).toContain('hideBootOverlay()')
+    expect(MAIN_JS).toContain("document.getElementById('dt-boot')")
+    // Drive 파일 목록이 init을 막지 않는다 — Promise.all로 기다리지 않는다
+    expect(MAIN_JS).not.toContain('Promise.all([artifactReady, loadDesktopFileItems()])')
+    expect(MAIN_JS).toContain('loadDesktopFileItemsDeferred')
+    // 백그라운드 로드는 registerItems + addItem으로 파일 아이콘을 추가한다
+    expect(MAIN_JS).toContain('iconsMgr.registerItems(items)')
   })
 })

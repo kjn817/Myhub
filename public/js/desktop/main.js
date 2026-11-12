@@ -449,7 +449,19 @@
     // 전부 SVG로 바꾼다 (매니저별 노출은 있지만).
     var tiles = window.MyHubDesktopTiles;
     if (tiles && tiles.refreshIcons) tiles.refreshIcons();
+    // 부팅 로딩 오버레이를 끈다 (2026-11-12 사용자 요청으로 추가).
+    // 데스크톱이 준비됐으므로 페이드아웃 후 DOM에서 제거한다.
+    hideBootOverlay();
     return manager;
+  }
+
+  function hideBootOverlay() {
+    var boot = document.getElementById('dt-boot');
+    if (!boot) return;
+    boot.classList.add('dt-boot-done');
+    setTimeout(function () {
+      if (boot.parentNode) boot.parentNode.removeChild(boot);
+    }, 300);
   }
 
   /**
@@ -484,14 +496,17 @@
    * 등록은 state load보다 앱이어야 저장한 앱 스튜디오 앱 창이
    * parse에서 버려지지 않고 복원한다. 목록 조회가 실패하거나
    * 1500ms를 내어면 기본 모듈만으로 진행한다 앱 어떤 경우에도
-   * 데스크톱 붙임이 멈추지 않는다. 바탕화면 파일 아이콘도 같은
-   * 원칙으로, 조회가 끝나기 기다리면 실패하면 없이 진행한다.
+   * 데스크톱 붙임이 멈추지 않는다.
+   * 바탕화면 Drive 파일 목록은 init을 막지 않는다 (2026-11-12 성능
+   * 점검: 최대 2.5s 대기가 시작을 늦췄다). init 뒤 백그라운드로
+   * 읽어 파일 아이콘을 추가한다 — 앱 아이콘은 바로 보인다.
    */
   function start() {
     var stateApi = window.MyHubDesktopState;
     if (!stateApi || typeof stateApi.registerModules !== 'function' ||
         typeof stateApi.moduleFromArtifact !== 'function' || typeof fetch !== 'function') {
       init();
+      loadDesktopFileItemsDeferred();
       return;
     }
     var controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
@@ -513,8 +528,23 @@
       .then(function () {
         if (timer) clearTimeout(timer);
       });
-    Promise.all([artifactReady, loadDesktopFileItems()]).then(function (results) {
-      init(results[1]);
+    artifactReady.then(function () {
+      init([]);
+      loadDesktopFileItemsDeferred();
+    });
+  }
+
+  // Drive 바탕화면 파일 목록을 백그라운드로 읽어 파일 아이콘을 추가한다.
+  // init을 막지 않으므로 데스크톱이 먼저 보인다.
+  function loadDesktopFileItemsDeferred() {
+    loadDesktopFileItems().then(function (items) {
+      if (!items || !items.length) return;
+      var iconsMgr = window.MyHubDesktopIconsManager;
+      if (!iconsMgr) return;
+      var added = iconsMgr.registerItems(items);
+      added.forEach(function (id) {
+        iconsMgr.addItem(id);
+      });
     });
   }
 

@@ -125,6 +125,64 @@ describe('navigateSession — 정상 경로', () => {
   })
 })
 
+describe('navigateSession — 뷰포트 (2026-11-12 원격 화면 짤림 수정)', () => {
+  function viewportHandler(msg: Record<string, any>, emit: (m: unknown) => void): void {
+    if (msg.method === 'Target.getTargets') {
+      emit({ id: msg.id, result: { targetInfos: [{ type: 'page', targetId: 'page-1' }] } })
+    } else if (msg.method === 'Target.attachToTarget') {
+      emit({ id: msg.id, result: { sessionId: 'sess-1' } })
+    } else if (msg.method === 'Emulation.setDeviceMetricsOverride') {
+      emit({ id: msg.id, result: {} })
+    } else if (msg.method === 'Page.navigate') {
+      emit({ id: msg.id, result: {} })
+    }
+  }
+
+  test('viewport가 주어지면 attach 후 뷰포트를 맞추고 나서 이동한다', async () => {
+    const sock = new FakeSocket(viewportHandler)
+    const r = await navigateSession(WS_URL, TARGET, async () => sock as CdpSocket, {
+      viewport: { width: 1440, height: 860 },
+    })
+    expect(r).toEqual({ ok: true, stage: 'ok' })
+    const methods = sock.sent.map((m) => m.method)
+    expect(methods).toEqual([
+      'Target.getTargets',
+      'Target.attachToTarget',
+      'Emulation.setDeviceMetricsOverride',
+      'Page.navigate',
+    ])
+    const vp = sock.sent.find((m) => m.method === 'Emulation.setDeviceMetricsOverride')
+    expect(vp.params).toEqual({ width: 1440, height: 860, deviceScaleFactor: 1, mobile: false })
+    expect(vp.sessionId).toBe('sess-1')
+  })
+
+  test('viewport가 없으면 뷰포트 명령 없이 바로 이동한다', async () => {
+    const sock = new FakeSocket(happyHandler)
+    const r = await navigateSession(WS_URL, TARGET, async () => sock as CdpSocket)
+    expect(r).toEqual({ ok: true, stage: 'ok' })
+    expect(sock.sent.map((m) => m.method)).not.toContain('Emulation.setDeviceMetricsOverride')
+  })
+
+  test('뷰포트 설정이 실패해도 이동은 진행한다', async () => {
+    const sock = new FakeSocket((msg, emit) => {
+      if (msg.method === 'Target.getTargets') {
+        emit({ id: msg.id, result: { targetInfos: [{ type: 'page', targetId: 'page-1' }] } })
+      } else if (msg.method === 'Target.attachToTarget') {
+        emit({ id: msg.id, result: { sessionId: 'sess-1' } })
+      } else if (msg.method === 'Emulation.setDeviceMetricsOverride') {
+        emit({ id: msg.id, error: { message: 'nope' } })
+      } else if (msg.method === 'Page.navigate') {
+        emit({ id: msg.id, result: {} })
+      }
+    })
+    const r = await navigateSession(WS_URL, TARGET, async () => sock as CdpSocket, {
+      viewport: { width: 1440, height: 860 },
+    })
+    expect(r).toEqual({ ok: true, stage: 'ok' })
+    expect(sock.sent.map((m) => m.method)).toContain('Page.navigate')
+  })
+})
+
 describe('navigateSession — 연결·단계 실패', () => {
   test('connect가 null을 돌려주거나 던지면 stage=connect', async () => {
     await expect(navigateSession(WS_URL, TARGET, async () => null)).resolves.toEqual({ ok: false, stage: 'connect' })
