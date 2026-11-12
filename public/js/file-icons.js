@@ -483,23 +483,32 @@
       // Inter의 "2"는 SF처럼 대각선이 곡선으로 부드럽게 이어진다.
       // 요일-날짜 간격: 요일 기준선 15.1→13.6으로 올려 간격을
       // ~3.3px→~4.8px로 벌렸다 (맥 4.0px보다 살짝 넓게).
+      // 같은 날 열한 번째 지적(사용자, image-25): "오맞아 근데
+      // 날짜1이랑 2사이 간격을 살짝 벌려주기만하면 딱좋을거같아.
+      // 12를 폰트크기를 아주 살짝 작게하고 간격을 좀만벌리면
+      // 딱일거같은데. 그리고 목요일이 명확하게 보이도록 못하나?
+      // 뭉게진거같아". Inter 2는 맞다고 확인됨. 수정: 날짜 32→31
+      // (아주 살짝 작게 — 하네스 실측 높이 0.484로 맥과 일치),
+      // dx -3→-2 (간격 1px 벌림). 요일 뭉게짐은 800 굵기 + 1px
+      // 그림자가 9px 작은 글자에서 획을 뭉개는 것이다 — 요일 굵기
+      // 800→700으로 낮추고 요일 그림자를 없앴다 (날짜 그림자는
+      // 크기가 커서 유지). 요일 크기 9.0·자간 -0.5·기준선 13.6 유지.
       // 장부: ~/workspace/calendar-tile-20261110.md
       var now = new Date();
       var WEEKDAY_KO = ['일요일', '월요일', '화요일', '수요일', '목요일', '금요일', '토요일'];
       var dateStr = String(now.getDate());
       // 두 자리 날짜는 두 번째 자릿수를 dx로 당겨 자릿수 간격을 좁힌다.
       var dateInner = dateStr.length === 2
-        ? dateStr[0] + '<tspan dx="-3">' + dateStr[1] + '</tspan>'
+        ? dateStr[0] + '<tspan dx="-2">' + dateStr[1] + '</tspan>'
         : dateStr;
       var weekdayStr = WEEKDAY_KO[now.getDay()];
       return (
         '<svg viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">' +
         '<defs><linearGradient id="mta-cal-bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fafafa"/><stop offset="1" stop-color="#e9e9e9"/></linearGradient></defs>' +
         '<rect x="0" y="0" width="48" height="48" rx="12" fill="url(#mta-cal-bg)"/>' +
-        '<text x="24" y="14.6" text-anchor="middle" font-family="\'SF Pro Text\', system-ui, -apple-system, BlinkMacSystemFont, \'Segoe UI\', \'Malgun Gothic\', sans-serif" font-size="9.0" font-weight="800" letter-spacing="-0.5" fill="#000000" opacity="0.05">' + weekdayStr + '</text>' +
-        '<text x="24" y="13.6" text-anchor="middle" font-family="\'SF Pro Text\', system-ui, -apple-system, BlinkMacSystemFont, \'Segoe UI\', \'Malgun Gothic\', sans-serif" font-size="9.0" font-weight="800" letter-spacing="-0.5" fill="#0a0a0a">' + weekdayStr + '</text>' +
-        '<text x="24" y="41.8" text-anchor="middle" font-family="\'Inter\', \'SF Pro Display\', system-ui, -apple-system, BlinkMacSystemFont, \'Segoe UI\', \'Malgun Gothic\', sans-serif" font-size="32" font-weight="400" fill="#000000" opacity="0.05">' + dateInner + '</text>' +
-        '<text x="24" y="40.8" text-anchor="middle" font-family="\'Inter\', \'SF Pro Display\', system-ui, -apple-system, BlinkMacSystemFont, \'Segoe UI\', \'Malgun Gothic\', sans-serif" font-size="32" font-weight="400" fill="#0a0a0a">' + dateInner + '</text>' +
+        '<text x="24" y="13.6" text-anchor="middle" font-family="\'SF Pro Text\', system-ui, -apple-system, BlinkMacSystemFont, \'Segoe UI\', \'Malgun Gothic\', sans-serif" font-size="9.0" font-weight="700" letter-spacing="-0.5" fill="#0a0a0a">' + weekdayStr + '</text>' +
+        '<text x="24" y="41.8" text-anchor="middle" font-family="\'Inter\', \'SF Pro Display\', system-ui, -apple-system, BlinkMacSystemFont, \'Segoe UI\', \'Malgun Gothic\', sans-serif" font-size="31" font-weight="400" fill="#000000" opacity="0.05">' + dateInner + '</text>' +
+        '<text x="24" y="40.8" text-anchor="middle" font-family="\'Inter\', \'SF Pro Display\', system-ui, -apple-system, BlinkMacSystemFont, \'Segoe UI\', \'Malgun Gothic\', sans-serif" font-size="31" font-weight="400" fill="#0a0a0a">' + dateInner + '</text>' +
         '</svg>'
       );
     },

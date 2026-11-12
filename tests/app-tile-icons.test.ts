@@ -135,19 +135,20 @@ describe('appTileFor — pdf·일정 인라인 SVG 타일', () => {
     // 흰 squircle(위 #fafafa → 아래 #e9e9e9 그라데이션) + 한글 요일 +
     // 큰 날짜 — 영문 월 약어·빨간 밴드는 2026-11-08 확정으로 폐기된
     // 구 디자인이라 남아 있으면 실패해야 한다. 글자색은 진짜 맥 실측
-    // RGB 7~9(#0a0a0a), 배경은 순백 평면이 아니다. 텍스트 아래 1px에
+    // RGB 7~9(#0a0a0a), 배경은 순백 평면이 아니다. 날짜 아래 1px에
     // 불투명도 0.05의 복제 그림자 텍스트가 있다 (맥 실측: 날짜 아래
     // 띠가 배경보다 8포인트 어두움. feDropShadow 필터는 래스터화해서
-    // Retina에서 흐려지므로 쓰지 않는다).
+    // Retina에서 흐려지므로 쓰지 않는다. 요일에는 그림자가 없다 —
+    // 9px 작은 글자에서 그림자가 획을 뭉개기 때문이다).
     expect(svg).toContain('fill="url(#mta-cal-bg)"')
     expect(svg).toContain('stop-color="#fafafa"')
     expect(svg).toContain('stop-color="#e9e9e9"')
     expect(svg).toContain('>' + WEEKDAY_KO[now.getDay()] + '<')
-    // 날짜: 두 자리면 두 번째 자릿수를 tspan dx="-3"로 당겨 자릿수
-    // 간격을 좁힌다 (여덟 번째 지적; dx=-5는 너무 붙었다).
+    // 날짜: 두 자리면 두 번째 자릿수를 tspan dx="-2"로 당겨 자릿수
+    // 간격을 좁힌다 (열한 번째 지적; dx=-3은 너무 붙었다).
     const dateStr = String(now.getDate())
     if (dateStr.length === 2) {
-      expect(svg).toContain('>' + dateStr[0] + '<tspan dx="-3">' + dateStr[1] + '</tspan><')
+      expect(svg).toContain('>' + dateStr[0] + '<tspan dx="-2">' + dateStr[1] + '</tspan><')
     } else {
       expect(svg).toContain('>' + dateStr + '<')
     }
@@ -218,6 +219,13 @@ describe('appTileFor — pdf·일정 인라인 SVG 타일', () => {
     // SF와 가장 가까운 OFL 폰트 Inter를 자체 호스팅해 날짜에 쓴다
     // (desktop.css @font-face, /fonts/inter-400.woff2). 요일-날짜
     // 간격은 요일 기준선 15.1→13.6으로 올려 ~4.8px로 벌렸다.
+    // 열한 번째 지적("오맞아 근데 날짜1이랑 2사이 간격을 살짝
+    // 벌려주기만하면 딱좋을거같아. 12를 폰트크기를 아주 살짝 작게하고
+    // 간격을 좀만벌리면 딱일거같은데. 그리고 목요일이 명확하게
+    // 보이도록 못하나? 뭉게진거같아"): Inter 2는 맞다고 확인됨.
+    // 날짜 32→31, dx -3→-2. 요일 뭉게짐은 800 굵기 + 1px 그림자가
+    // 9px 작은 글자에서 획을 뭉개는 것이다 — 요일 800→700으로 낮추고
+    // 요일 그림자를 없앴다 (날짜 그림자는 유지).
     // 장부: ~/workspace/calendar-tile-20261110.md
     const WEEKDAY_KO = ['일요일', '월요일', '화요일', '수요일', '목요일', '금요일', '토요일']
     const now = new Date()
@@ -252,20 +260,18 @@ describe('appTileFor — pdf·일정 인라인 SVG 타일', () => {
     const wd = textByY('13.6')
     expect(Number(attr(wd, 'font-size')) / TILE).toBeGreaterThanOrEqual(0.18)
     expect(Number(attr(wd, 'font-size')) / TILE).toBeLessThanOrEqual(0.195)
-    expect(attr(wd, 'font-weight')).toBe('800')
+    expect(attr(wd, 'font-weight')).toBe('700')
     expect(attr(wd, 'fill')).toBe('#0a0a0a')
     expect(attr(wd, 'letter-spacing')).toBe('-0.5')
     expect(attr(wd, 'font-family')).toContain('SF Pro Text')
     expect(wd).not.toContain('filter=')
-    // 요일 그림자: 같은 내용의 복제 텍스트가 1px 아래에 있다.
-    const wdShadow = textByY('14.6')
-    expect(attr(wdShadow, 'fill')).toBe('#000000')
-    expect(attr(wdShadow, 'opacity')).toBe('0.05')
+    // 요일에는 그림자 복제 텍스트가 없다 (9px에서 그림자가 획을 뭉갠다).
+    expect(svg.match(/<text[^>]*y="14.6"[^>]*>/g)).toBeNull()
     expect(Number(attr(wd, 'y')) / TILE).toBeGreaterThanOrEqual(0.275)
     expect(Number(attr(wd, 'y')) / TILE).toBeLessThanOrEqual(0.295)
     const dt = textByY('40.8')
-    expect(Number(attr(dt, 'font-size')) / TILE).toBeGreaterThanOrEqual(0.66)
-    expect(Number(attr(dt, 'font-size')) / TILE).toBeLessThanOrEqual(0.68)
+    expect(Number(attr(dt, 'font-size')) / TILE).toBeGreaterThanOrEqual(0.64)
+    expect(Number(attr(dt, 'font-size')) / TILE).toBeLessThanOrEqual(0.66)
     expect(attr(dt, 'font-weight')).toBe('400')
     expect(attr(dt, 'fill')).toBe('#0a0a0a')
     expect(dt).not.toContain('letter-spacing')
@@ -273,16 +279,16 @@ describe('appTileFor — pdf·일정 인라인 SVG 타일', () => {
     // macOS Safari도 SF Pro로 폴백). 진짜 맥 아이콘도 일반 SF다.
     expect(attr(dt, 'font-family')).not.toContain('SF Pro Rounded')
     expect(attr(dt, 'font-family')).not.toContain('ui-rounded')
-    // 날짜(32px)는 SF와 가장 가까운 자체 호스팅 Inter를 쓴다
+    // 날짜(31px)는 SF와 가장 가까운 자체 호스팅 Inter를 쓴다
     // (SF는 웹에서 이름으로 부를 수 없고 자체 호스팅은 라이선스
     // 위반이라 Inter가 해법이다). SF Pro Display는 폴백으로 유지.
     expect(attr(dt, 'font-family')).toContain('Inter')
     expect(attr(dt, 'font-family')).toContain('SF Pro Display')
     expect(dt).not.toContain('filter=')
-    // 두 자리 날짜는 두 번째 자릿수를 dx="-3"로 당긴다.
+    // 두 자리 날짜는 두 번째 자릿수를 dx="-2"로 당긴다.
     const dateStr = String(now.getDate())
     if (dateStr.length === 2) {
-      expect(dt).toContain('<tspan dx="-3">' + dateStr[1] + '</tspan>')
+      expect(dt).toContain('<tspan dx="-2">' + dateStr[1] + '</tspan>')
     }
     // 날짜 그림자: 같은 내용의 복제 텍스트가 1px 아래에 있다.
     const dtShadow = textByY('41.8')
@@ -328,10 +334,10 @@ describe('tiles.createTile — 렌더 위임', () => {
   test('schedule 타일은 오늘 날짜를 품는다', () => {
     const span = tiles.createTile(getWin().document, 'schedule')
     expect(span.classList.contains('dt-tile-svg')).toBe(true)
-    // 날짜: 두 자리면 두 번째 자릿수를 tspan dx="-3"로 당긴다.
+    // 날짜: 두 자리면 두 번째 자릿수를 tspan dx="-2"로 당긴다.
     const dateStr = String(new Date().getDate())
     if (dateStr.length === 2) {
-      expect(span.innerHTML).toContain('>' + dateStr[0] + '<tspan dx="-3">' + dateStr[1] + '</tspan><')
+      expect(span.innerHTML).toContain('>' + dateStr[0] + '<tspan dx="-2">' + dateStr[1] + '</tspan><')
     } else {
       expect(span.innerHTML).toContain('>' + dateStr + '<')
     }
