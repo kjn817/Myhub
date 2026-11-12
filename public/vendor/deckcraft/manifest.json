@@ -1,15 +1,18 @@
 {
   "app": "deckcraft",
+  "version": "0.18.1",
+  "sourceCommit": "5e533be92c17c08fad306c35aa565927f6dc2ddd",
   "entry": "index.html",
   "html": "index.html",
-  "js": "deckcraft-web-8ae1e3433627f177.js",
-  "wasm": "deckcraft-web-8ae1e3433627f177_bg.wasm",
-  "wasmBytes": 21565556,
+  "js": "deckcraft-web-37264730cdbb1f6a.js",
+  "wasm": "deckcraft-web-37264730cdbb1f6a_bg.wasm",
+  "wasmBytes": 21840746,
   "files": [
     "deckcraft-b8fcbb36ecec0385.ico",
-    "deckcraft-web-8ae1e3433627f177.js",
-    "deckcraft-web-8ae1e3433627f177_bg.wasm",
+    "deckcraft-web-37264730cdbb1f6a.js",
+    "deckcraft-web-37264730cdbb1f6a_bg.wasm",
     "index.html",
+    "manifest.json",
     "snippets/eframe-d31a8450ea12dfc1/inline0.js"
   ]
 }

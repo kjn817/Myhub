@@ -12,12 +12,19 @@ import { join } from 'node:path';
 const DIST = new URL('./pdfcraft/dist/web/', import.meta.url).pathname;
 const OUT = process.argv[2]; // 배치 대상 디렉터리
 if (!OUT) throw new Error('usage: node package-pdfcraft.mjs <outdir>');
-const SOURCE_COMMIT = 'ca64a31c6ccc61d326970cc576e00043671d3f57';
+const SOURCE_COMMIT = '665db6524dfe241e5a9b2e78b278fdd8c77f43ba'; // myhub-v0.21.1 HEAD
+const VERSION = '0.21.1';
 
 const files = readdirSync(DIST);
-const glue = files.find((f) => f.endsWith('.js'));
-const wasmName = files.find((f) => f.endsWith('_bg.wasm'));
+// v0.21.1 adds an OCR worker (pdfcraft-ocr-worker-*.js/_bg.wasm/_loader.js):
+// match the main app files by prefix, not by suffix alone.
+const glue = files.find((f) => f.startsWith('pdfcraft-web-') && f.endsWith('.js'));
+const wasmName = files.find((f) => f.startsWith('pdfcraft-web-') && f.endsWith('_bg.wasm'));
+const ocrJs = files.find((f) => f.startsWith('pdfcraft-ocr-worker-') && f.endsWith('.js') && !f.endsWith('_loader.js'));
+const ocrWasm = files.find((f) => f.startsWith('pdfcraft-ocr-worker-') && f.endsWith('_bg.wasm'));
+const ocrLoader = files.find((f) => f.startsWith('pdfcraft-ocr-worker-') && f.endsWith('_loader.js'));
 if (!glue || !wasmName) throw new Error('dist/web에서 글루/WASM을 찾지 못함');
+if (!ocrJs || !ocrWasm || !ocrLoader) throw new Error('dist/web에서 OCR 워커 파일을 찾지 못함');
 
 const wasm = readFileSync(join(DIST, wasmName));
 const HALF = Math.ceil(wasm.length / 2);
@@ -28,6 +35,10 @@ mkdirSync(OUT, { recursive: true });
 writeFileSync(join(OUT, part0), wasm.subarray(0, HALF));
 writeFileSync(join(OUT, part1), wasm.subarray(HALF));
 copyFileSync(join(DIST, glue), join(OUT, glue));
+// OCR 워커 파일군 (v0.21.1 신규): 앱이 <meta name="pdfcraft-ocr-worker">로 찾는다.
+copyFileSync(join(DIST, ocrJs), join(OUT, ocrJs));
+copyFileSync(join(DIST, ocrWasm), join(OUT, ocrWasm));
+copyFileSync(join(DIST, ocrLoader), join(OUT, ocrLoader));
 // snippets 트리 복사
 const copyTree = (src, dst) => {
   mkdirSync(dst, { recursive: true });
@@ -67,6 +78,7 @@ const shell = `<!doctype html>
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="pdfcraft-ocr-worker" content="./${ocrLoader}" />
     <title>PdfCraft</title>
     <style>
       html, body { margin: 0; height: 100%; overflow: hidden; background: #f1f1f3; }
@@ -82,16 +94,45 @@ const shell = `<!doctype html>
 `;
 writeFileSync(join(OUT, 'index.html'), shell);
 
+// 라이선스 파일 (업스트림 저장소 루트)
+const REPO = new URL('./pdfcraft/', import.meta.url).pathname;
+for (const lic of ['LICENSE-APACHE', 'LICENSE-MIT', 'NOTICE']) {
+  copyFileSync(join(REPO, lic), join(OUT, lic));
+}
+
+const snippetFiles = readdirSync(join(DIST, 'snippets'), { withFileTypes: true })
+  .flatMap((d) => d.isDirectory()
+    ? readdirSync(join(DIST, 'snippets', d.name)).map((f) => `snippets/${d.name}/${f}`)
+    : [`snippets/${d.name}`]);
 const manifest = {
+  app: 'pdfcraft',
+  version: VERSION,
   sourceCommit: SOURCE_COMMIT,
-  glue,
+  entry: 'index.html',
+  html: 'index.html',
+  js: glue,
   wasm: wasmName,
   wasmBytes: wasm.length,
   wasmParts: [part0, part1],
   wasmPartBytes: [HALF, wasm.length - HALF],
+  ocrWorker: { js: ocrJs, wasm: ocrWasm, loader: ocrLoader },
+  files: [
+    'LICENSE-APACHE',
+    'LICENSE-MIT',
+    'NOTICE',
+    'index.html',
+    'loader.js',
+    glue,
+    ocrJs,
+    ocrWasm,
+    ocrLoader,
+    part0,
+    part1,
+    ...snippetFiles,
+  ],
 };
 writeFileSync(join(OUT, 'manifest.json'), JSON.stringify(manifest, null, 2));
 console.log('packaged:', Object.keys(manifest).length, 'meta');
-for (const f of [part0, part1, glue, 'loader.js', 'index.html', 'manifest.json']) {
+for (const f of [part0, part1, glue, ocrWasm, 'loader.js', 'index.html', 'manifest.json']) {
   console.log(f, statSync(join(OUT, f)).size);
 }

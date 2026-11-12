@@ -3,21 +3,16 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="pdfcraft-ocr-worker" content="./pdfcraft-ocr-worker-6d7970b1a6cd0ddb_loader.js" />
     <title>PdfCraft</title>
     <style>
       html, body { margin: 0; height: 100%; overflow: hidden; background: #f1f1f3; }
       canvas { width: 100%; height: 100%; display: block; outline: none; }
-      #pdfcraft-loading {
-        position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
-        font-family: system-ui, -apple-system, "Segoe UI", sans-serif; font-size: 14px; color: #666;
-        pointer-events: none;
-      }
       @media (prefers-color-scheme: dark) { html, body { background: #19191c; } }
     </style>
     <script type="module" src="./loader.js"></script>
   </head>
   <body>
     <canvas id="pdfcraft"></canvas>
-    <div id="pdfcraft-loading">편집기를 불러오는 중…</div>
   </body>
 </html>

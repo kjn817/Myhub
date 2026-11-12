@@ -11,8 +11,20 @@
   - gridcraft: 패치 9커밋 + 미커밋 워크트리 패치 1건, base 7bb397a3..a5772e98
   - pdfcraft: 패치 6커밋, 빌드 핀 ca64a31c (ca64a31c6ccc61d326970cc576e00043671d3f57)
   - deckcraft: 패치 29커밋, 핀 61528c50
+- **2026-11-12 최신 리베이스 (myhub-v* 브랜치, ~/workspace/craft-upstream/):**
+  - pdfcraft **v0.21.1**, HEAD `665db6524dfe241e5a9b2e78b278fdd8c77f43ba` (패치 6커밋, myhub-v0.21.1)
+  - gridcraft **v0.19.1**, HEAD `6e97dca1` (패치 11커밋, myhub-v0.19.1)
+  - deckcraft **v0.18.1**, HEAD `5e533be92c17c08fad306c35aa565927f6dc2ddd` (패치 31커밋, myhub-v0.18.1)
+  - craft-i18n 한국어 보강 브랜치 `myhub-ko` (`bc91a797`) — pdfcraft 빌드 시
+    `CRAFT_I18N_DIR=$HOME/workspace/craft-upstream/craft-i18n` + `CRAFT_I18N_REQUIRED=1` 필수
+    (myhub-ko 체크아웃 상태여야 함).
+  - 업스트림이 호스트 브릿지를 `craft-web-host` 크레이트로 리팩터링함 — MyHub 전용
+    메시지는 craft-web-host를 우회하는 작은 직접 postMessage 리스너로 구현
+    (js_string/js_object/post_to_parent 헬퍼, 각 host 모듈에 있음).
 - 빌드: trunk 0.21.14 `trunk build --release` (앱 디렉터리에서). 산출 dist를
   `public/vendor/<engine>/`에 배치하고 해시 파일명은 index.html 상대 참조로 정합시킨다.
+  **/tmp는 512MB tmpfs라 cargo 작업은 반드시 `CARGO_TARGET_DIR=$HOME/workspace/cargo-build/<dir>` 지정.**
+  trunk 0.22.1이 나와 있으나 이번 라운드는 0.21.14로 통일 (다음 라운드에 업그레이드 검토).
 
 ### gridcraft 크기 오버라이드 (확정 레시피 — 필수)
 
@@ -34,6 +46,17 @@
 - 패키징 스크립트: `scripts/build-pdfcraft-package.mjs`
   (`node build-pdfcraft-package.mjs <outdir>`, 스크립트 옆에 `pdfcraft/dist/web/`가
   있는 레이아웃에서 실행). manifest.json에 wasmParts와 sourceCommit을 기록한다.
+  레이아웃 준비 (심링크, 커밋하지 않음):
+  `mkdir -p scripts/pdfcraft/dist && ln -sfn ~/workspace/craft-upstream/pdfcraft/dist/web scripts/pdfcraft/dist/web`
+  + LICENSE-APACHE/LICENSE-MIT/NOTICE 3개도 같은 방식으로 심링크.
+- **v0.21.1부터 OCR 워커 신규** (`pdfcraft-ocr-worker-*.js/_bg.wasm/_loader.js`):
+  패키징 스크립트가 3개 파일을 함께 복사하고 커스텀 셸에
+  `<meta name="pdfcraft-ocr-worker" content="./..._loader.js">`를 넣는다 (없으면 OCR이
+  조용히 안 뜸). 글루/WASM 매칭은 `pdfcraft-web-` 접두사로 한다 (접미사만으로는
+  OCR 워커 파일을 잘못 잡는다).
+- WASM 크기 추이: v0.18.0 36,070,191B → **v0.21.1 47,266,981B** (+31%, 업스트림 기능
+  추가분). 조각은 각 ~23.6MB로 25MB 한도 안. gridcraft v0.19.1 18,061,738B
+  (이전 17,259,748B, +4.6%), deckcraft v0.18.1 21,840,746B (이전 21,565,556B, +1.3%).
 
 ## rhwp-studio (한글 편집기)
 
