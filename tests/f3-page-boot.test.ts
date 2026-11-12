@@ -27,47 +27,6 @@ describe('F3 부팅: backup', () => {
   })
 })
 
-describe('F3 부팅: briefing', () => {
-  test('브리핑을 불러와 렌더하고, 재시도 버튼이 다시 fetch한다', async () => {
-    let fail = true
-    const page = loadPage('briefing.html', async (url: string) => {
-      if (url.includes('/api/briefing/today')) {
-        if (fail) return jsonRes({ ok: false }, 500)
-        return jsonRes({ date: '2026-11-07', timezone: 'Asia/Seoul', schedules: [], todos: [], memos: [], memories: [] })
-      }
-      return jsonRes({ ok: true })
-    })
-    // DOMContentLoaded 핸들러가 첫 로드를 건다
-    page.document.dispatchEvent(new page.window.Event('DOMContentLoaded'))
-    expect(await until(() => page.document.getElementById('btn-retry').style.display === 'inline-block')).toBe(true)
-    fail = false
-    page.document.getElementById('btn-retry').click()
-    expect(await until(() => page.document.getElementById('briefing-date').textContent.includes('2026-11-07'))).toBe(true)
-    expect(page.errors).toEqual([])
-    expect(page.externalSkipped).toEqual([])
-  })
-})
-
-describe('F3 부팅: search', () => {
-  test('검색 결과가 data-href 카드로 렌더된다 (인라인 onclick 없음)', async () => {
-    const page = loadPage('search.html', async (url: string) => {
-      if (url.includes('/api/search')) {
-        return jsonRes({ results: [{ source_type: 'memo', title: '검색 제목', snippet: '본문 일부', created_at: '2026-11-07T00:00:00' }] })
-      }
-      return jsonRes({ ok: true })
-    })
-    expect(page.errors).toEqual([])
-    expect(page.externalSkipped).toEqual([])
-    page.document.getElementById('q').value = '검색'
-    page.document.getElementById('searchBtn').click()
-    expect(await until(() => page.document.querySelector('.result') !== null)).toBe(true)
-    const card = page.document.querySelector('.result')
-    expect(card.getAttribute('data-href')).toBe('/memo.html')
-    expect(card.getAttribute('onclick')).toBeNull()
-    expect(card.querySelector('.title').textContent).toBe('검색 제목')
-  })
-})
-
 describe('F3 부팅: todo', () => {
   test('할 일 목록이 렌더되고 refreshAfterAI가 전역에 있다', async () => {
     const page = loadPage('todo.html', async (url: string) => {

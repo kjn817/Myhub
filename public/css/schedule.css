@@ -18,6 +18,8 @@
   button .lucide { pointer-events: none; }
 
   .wrap { max-width: 720px; margin: 0 auto; padding: 24px 24px 80px; }
+  /* 일정 알림 안내 문구 (달력 위, 최소 형태 — 원본 스타일 미회수) */
+  .push-notice { margin: 0 0 16px; padding: 10px 14px; background: var(--accent-soft); color: var(--ink); border-radius: 10px; font-size: 13px; line-height: 1.55; }
   @media (min-width: 900px) {
     .wrap { max-width: 1200px; padding: 24px 40px 80px; }
   }

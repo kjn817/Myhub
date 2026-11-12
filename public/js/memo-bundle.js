@@ -1701,13 +1701,10 @@ function rowTitle(text) {
   // 호출한다 (2026-11-03 사용자 보고). 태그만 넣는 첫 줄에 건너뛰고
   // 실제 내용이 넣는 줄을 제목으로 삼는다.
   const plain = plainPreview(text);
-  const line = (plain.split('\n').find(l => l.trim()) || '').slice(0, 60)
-    // 의도된 발산 (2026-11-08 결정 유지): 목록 제목만 엔티티 디코딩·공백 정규화.
-    // 서버 extractMemoTitle·통합 검색은 원본 계약(원문 절단)을 유지한다.
-    .replace(/&lt;/g, '<').replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"').replace(/&#39;/g, "'")
-    .replace(/&amp;/g, '&')
-    .replace(/\s+/g, ' ');
+  // 목록 제목도 원본 계약: 엔티티 디코딩·공백 정규화를 하지 않는다.
+  // (2026-11-08 사용자 결정 '전부 원본 복귀' — 백엔드 8412813에 이어
+  // 프론트는 이번에 완료. 서버 extractMemoTitle·통합 검색과 동일 계약.)
+  const line = (plain.split('\n').find(l => l.trim()) || '').slice(0, 60);
   return line
     .replace(/~~([^~]+)~~/g, '$1')
     .replace(/^#{1,6}\s+/, '')
@@ -4203,7 +4200,7 @@ window.MyHubMenus = [
     ],
   },
   {
-    label: '보여줄',
+    label: '보기',
     items: () => {
       const items = [
         {

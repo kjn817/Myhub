@@ -901,7 +901,7 @@ window.MyHubMenus = [
     ],
   },
   {
-    label: '보여줄',
+    label: '보기',
     items: () => {
       const items = [
         {

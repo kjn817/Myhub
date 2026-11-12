@@ -113,9 +113,10 @@ describe('CSP 실태 — public 전체', () => {
       .filter((n) => n.endsWith('.html'))
       .filter((n) => inlineScriptBlocks(read(n)) > 0)
       .sort()
+    // 2026-11-12 정리: 옛 데스크톱 프론트 index.html(인라인 있음)을
+    // 삭제해 목록에서 빠졌다. 남은 3개는 GENERAL 정책 페이지다.
     expect(withInline).toEqual([
       'agent.html',
-      'index.html',
       'memo.html',
       'memory.html',
     ])

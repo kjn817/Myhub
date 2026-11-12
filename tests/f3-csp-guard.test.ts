@@ -59,10 +59,10 @@ for (const [page, constName] of pageCsp) {
 }
 
 describe('CSP enforce 페이지 집합 (src/index.ts 매핑 파싱)', () => {
-  test('알려진 enforce 페이지 15개가 전부 잡힌다 (매핑 파싱 rot 방지)', () => {
+  test('알려진 enforce 페이지 13개가 전부 잡힌다 (매핑 파싱 rot 방지)', () => {
     const known = [
       '/login.html', '/desktop.html', '/key-rotation.html', '/backup.html',
-      '/trace.html', '/offline.html', '/briefing.html', '/search.html',
+      '/trace.html', '/offline.html',
       '/chat.html', '/finder.html', '/office.html', '/schedule.html',
       '/todo.html', '/browser.html', '/sheet.html',
     ]

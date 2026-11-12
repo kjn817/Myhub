@@ -374,18 +374,20 @@
       // 숫자, 오늘 값으로 실시간 렌더 (2026-11-08 사용자 확정 디자인이
       // 2026-11-03의 영문 월 약어(NOV) 방식을 대체). 날짜가 바뀌므로
       // appTileFor 캐시를 타지 않는다.
-      // 비율은 2026-11-10 사용자가 첨부한 실제 Apple Calendar 아이콘
-      // 사진 실측에 맞춘 값이다 (타일 한 변=1 기준): 모서리 반경 0.245,
-      // 테두리 스트로크 없음, 요일 잉크 [상단 0.133·높이 0.173] 볼드,
-      // 날짜 잉크 [상단 0.388·높이 0.449] 레귤러(획/높이 0.114 실측),
-      // 잉크 색 순검정. 장부: ~/workspace/calendar-tile-20261110.md
+      // 새로 만든 타일이라 이전 운영(사고직전)의 NOV 타일로 되돌리지 않는다
+      // (2026-11-12 사용자 지시). 사용자가 "다른 앱과 동일하게"라 지적해
+      // 2026-11-12에 전체를 키웠다: 흰 타일을 39.5(0.82 정렬)에서 다른 앱
+      // 타일과 같은 full-bleed 48로, 글자도 같은 비율(48/39.5)로 키워
+      // 요일 10.3/800·날짜 31.6/800으로. 반경은 다른 앱 타일 실측(PNG
+      // 코너 0.25)과 맞춰 rx 12로 했다. 스트로크 없음·순검정 유지.
+      // 장부: ~/workspace/calendar-tile-20261110.md
       var now = new Date();
       var WEEKDAY_KO = ['일요일', '월요일', '화요일', '수요일', '목요일', '금요일', '토요일'];
       return (
         '<svg viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">' +
-        '<rect x="4.25" y="4.25" width="39.5" height="39.5" rx="9.7" fill="#ffffff"/>' +
-        '<text x="24" y="15.7" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, \'Segoe UI\', \'Malgun Gothic\', sans-serif" font-size="7.4" font-weight="700" fill="#000000">' + WEEKDAY_KO[now.getDay()] + '</text>' +
-        '<text x="24" y="37.3" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, \'Segoe UI\', \'Malgun Gothic\', sans-serif" font-size="24.6" font-weight="400" fill="#000000">' + now.getDate() + '</text>' +
+        '<rect x="0" y="0" width="48" height="48" rx="12" fill="#ffffff"/>' +
+        '<text x="24" y="15.1" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, \'Segoe UI\', \'Malgun Gothic\', sans-serif" font-size="10.3" font-weight="800" fill="#000000">' + WEEKDAY_KO[now.getDay()] + '</text>' +
+        '<text x="24" y="39.6" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, \'Segoe UI\', \'Malgun Gothic\', sans-serif" font-size="31.6" font-weight="800" fill="#000000">' + now.getDate() + '</text>' +
         '</svg>'
       );
     },

@@ -247,10 +247,6 @@ const TRACE_CSP =
   "default-src 'none'; script-src 'self'; script-src-attr 'none'; style-src-elem 'self'; style-src-attr 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; manifest-src 'self'; form-action 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'self'"
 const OFFLINE_CSP =
   "default-src 'none'; script-src 'self'; style-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'self'"
-const BRIEFING_CSP =
-  "default-src 'none'; script-src 'self'; script-src-attr 'none'; style-src-elem 'self'; style-src-attr 'none'; connect-src 'self'; form-action 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'self'"
-const SEARCH_CSP =
-  "default-src 'none'; script-src 'self'; script-src-attr 'none'; style-src-elem 'self'; style-src-attr 'none'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; manifest-src 'self'; worker-src 'self'; form-action 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'self'"
 const CHAT_CSP =
   "default-src 'none'; script-src 'self'; script-src-attr 'none'; style-src-elem 'self'; style-src-attr 'unsafe-inline'; img-src 'self' data: blob: https://image.pollinations.ai https://res.cloudinary.com; font-src 'self'; connect-src 'self'; media-src 'self' blob:; manifest-src 'self'; form-action 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'self'"
 const FINDER_CSP =
@@ -297,8 +293,6 @@ app.get('/*', async (c) => {
       else if (pathname === '/backup.html') headers.set('Content-Security-Policy', BACKUP_CSP)
       else if (pathname === '/trace.html') headers.set('Content-Security-Policy', TRACE_CSP)
       else if (pathname === '/offline.html') headers.set('Content-Security-Policy', OFFLINE_CSP)
-      else if (pathname === '/briefing.html') headers.set('Content-Security-Policy', BRIEFING_CSP)
-      else if (pathname === '/search.html') headers.set('Content-Security-Policy', SEARCH_CSP)
       else if (pathname === '/chat.html') headers.set('Content-Security-Policy', CHAT_CSP)
       else if (pathname === '/finder.html') headers.set('Content-Security-Policy', FINDER_CSP)
       else if (pathname === '/office.html') headers.set('Content-Security-Policy', OFFICE_CSP)

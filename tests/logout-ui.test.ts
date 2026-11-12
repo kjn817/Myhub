@@ -204,7 +204,7 @@ describe('설정 버튼·메뉴 — 상단바 마운트와 로그아웃 배선',
 })
 
 describe('배선 — 주요 화면과 정적 에셋', () => {
-  const MAIN_PAGES = ['index.html', 'memo.html', 'schedule.html', 'todo.html', 'chat.html', 'agent.html', 'trace.html', 'memory.html', 'search.html', 'backup.html']
+  const MAIN_PAGES = ['memo.html', 'schedule.html', 'todo.html', 'chat.html', 'agent.html', 'trace.html', 'memory.html', 'backup.html']
 
   test.each(MAIN_PAGES)('%s는 공용 nav.js를 로드한다 (로그아웃 버튼이 닿는 화면)', (page) => {
     const html = fs.readFileSync(path.join(ROOT, 'public', page), 'utf-8')

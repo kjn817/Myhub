@@ -258,6 +258,7 @@
           };
     var listEl = doc.getElementById('finderList');
     var statusEl = doc.getElementById('finderStatus');
+    var selStatusEl = doc.getElementById('finderSelStatus');
     var titleEl = doc.getElementById('finderTitle');
     var uploadBtn = doc.getElementById('finderUploadBtn');
     var newFolderBtn = doc.getElementById('finderNewFolderBtn');
@@ -1266,7 +1267,12 @@
     }
     function publishDocTitle() {
       if (!isEmbedded()) return;
-      postToParent({ type: 'myhub:doc-title', name: lastTitle, dirty: false });
+      // 창 제목은 운영 정본 '찾기 / 보관함' 형태다 (2026-11-11 앱 대조
+      // 카탈로그): 보관함(drive) 보기에서는 '찾기 / '를 붙여 게시하고,
+      // 페이지 안 제목(#finderTitle)은 폴더명 그대로 둔다.
+      var name =
+        state.view === 'drive' && lastTitle ? '찾기 / ' + lastTitle : lastTitle;
+      postToParent({ type: 'myhub:doc-title', name: name, dirty: false });
     }
     function publishToolbar() {
       if (!isEmbedded()) return;
@@ -1360,6 +1366,7 @@
         if (statusEl) {
           statusEl.textContent = state.actionMsg || apps.length + '개 응용 프로그램';
         }
+        if (selStatusEl) selStatusEl.textContent = '응용 프로그램 선택';
         refreshIcons();
         return;
       }
@@ -1394,6 +1401,20 @@
         }
         listEl.appendChild(rowEl);
       });
+      if (selStatusEl) {
+        // 하단 좌측 선택 표시 (운영 정본 '보관함 선택' — 오른쪽 'N개 항목'
+        // 상태와 한 쌍, 2026-11-11 앱 대조 카탈로그). 선택이 있으면
+        // 'N개 선택'으로 바뀐다.
+        var selN = selectedRows(rows).length;
+        var locName = state.search
+          ? '검색 결과'
+          : state.view === 'recent'
+            ? '최근 항목'
+            : state.view === 'trash'
+              ? '휴지통'
+              : displayFolderName(currentFolder().name);
+        selStatusEl.textContent = selN > 0 ? selN + '개 선택' : locName + ' 선택';
+      }
       if (statusEl) {
         if (state.search) {
           // 방금 두 동작은 고정(올리기 결과·이름 변경 등)가 검색 요약을
@@ -2497,6 +2518,10 @@
             return items;
           },
         },
+        // 도움말: 운영 정본 상단바 [파일·보기·이동·도움말]의 4번째 메뉴였으나
+        // 항목 내용이 원본 자료 어디에도 없어 미회수 — 빈 라벨만 게시돼
+        // 눌러도 아무 일도 안 하던 것을 2026-11-12 사용자 결정으로 제거한다
+        // (게시하는 메뉴는 전부 실동작해야 한다).
       ];
     }
 

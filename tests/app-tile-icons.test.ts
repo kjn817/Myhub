@@ -141,20 +141,29 @@ describe('appTileFor — pdf·일정 인라인 SVG 타일', () => {
     expect(svg).not.toContain('#F4615B')
   })
 
-  test('schedule 타일 비율이 실제 Apple Calendar 아이콘 실측과 같다 (2026-11-10)', () => {
-    // 정본: 사용자가 첨부한 실제 아이콘 사진 PIL 실측 (타일 한 변=1):
-    // 반경 0.245·스트로크 없음·요일 잉크 높이 0.173 볼드·날짜 잉크 높이
-    // 0.449 레귤러(획/높이 0.114)·순검정. 비율이 어긋나면 실패해야 한다.
+  test('schedule 타일 비율이 2026-11-12 확대 규격과 같다 (full-bleed·반경 0.25)', () => {
+    // 규격 (2026-11-12 사용자 지시: 새로 만든 타일을 이전 운영으로 되돌리지
+    // 않고 크기 키우고 라운드 맞추기): 흰 타일을 39.5(0.82 정렬)에서 다른 앱
+    // 타일과 같은 full-bleed 48로, 글자도 같은 비율로 키워 요일 10.3/800·
+    // 날짜 31.6/800으로. 반경은 다른 앱 타일 실측(PNG 코너 0.25)과 맞춰
+    // rx 12. 예전 값(39.5 inset·요일 8.5·날짜 26·rx 9, 또는 591dc77의
+    // 7.4/700·24.6/400)이 돌아오면 이 테스트가 실패해야 한다.
     // 장부: ~/workspace/calendar-tile-20261110.md
     const WEEKDAY_KO = ['일요일', '월요일', '화요일', '수요일', '목요일', '금요일', '토요일']
     const now = new Date()
     const svg = fi.appTileFor('schedule')
-    const TILE = 39.5 // rect width/height (viewBox 48, offset 4.25)
+    const TILE = 48 // viewBox 48 — 흰 타일이 다른 앱 타일과 같은 full-bleed
     const rect = svg.match(/<rect[^>]*>/)
     expect(rect).not.toBeNull()
-    const rx = Number((rect as RegExpMatchArray)[0].match(/rx="([\d.]+)"/)![1])
-    expect(rx / TILE).toBeGreaterThanOrEqual(0.235)
-    expect(rx / TILE).toBeLessThanOrEqual(0.255)
+    const rectTag = (rect as RegExpMatchArray)[0]
+    const num = (tag: string, name: string): number => Number(tag.match(new RegExp(name + '="([\\d.]+)"'))![1])
+    expect(num(rectTag, 'x')).toBe(0)
+    expect(num(rectTag, 'y')).toBe(0)
+    expect(num(rectTag, 'width')).toBe(48)
+    expect(num(rectTag, 'height')).toBe(48)
+    const rx = num(rectTag, 'rx')
+    expect(rx / TILE).toBeGreaterThanOrEqual(0.24)
+    expect(rx / TILE).toBeLessThanOrEqual(0.26)
     expect(svg).not.toContain('stroke')
     const textTag = (body: string): string => {
       const m = svg.match(new RegExp('<text[^>]*>' + body + '<'))
@@ -163,19 +172,19 @@ describe('appTileFor — pdf·일정 인라인 SVG 타일', () => {
     }
     const attr = (tag: string, name: string): string => tag.match(new RegExp(name + '="([^"]+)"'))![1]
     const wd = textTag(WEEKDAY_KO[now.getDay()])
-    expect(Number(attr(wd, 'font-size')) / TILE).toBeGreaterThanOrEqual(0.18)
-    expect(Number(attr(wd, 'font-size')) / TILE).toBeLessThanOrEqual(0.195)
-    expect(attr(wd, 'font-weight')).toBe('700')
+    expect(Number(attr(wd, 'font-size')) / TILE).toBeGreaterThanOrEqual(0.205)
+    expect(Number(attr(wd, 'font-size')) / TILE).toBeLessThanOrEqual(0.225)
+    expect(attr(wd, 'font-weight')).toBe('800')
     expect(attr(wd, 'fill')).toBe('#000000')
-    expect((Number(attr(wd, 'y')) - 4.25) / TILE).toBeGreaterThanOrEqual(0.28)
-    expect((Number(attr(wd, 'y')) - 4.25) / TILE).toBeLessThanOrEqual(0.3)
+    expect(Number(attr(wd, 'y')) / TILE).toBeGreaterThanOrEqual(0.305)
+    expect(Number(attr(wd, 'y')) / TILE).toBeLessThanOrEqual(0.325)
     const dt = textTag(String(now.getDate()))
-    expect(Number(attr(dt, 'font-size')) / TILE).toBeGreaterThanOrEqual(0.605)
-    expect(Number(attr(dt, 'font-size')) / TILE).toBeLessThanOrEqual(0.645)
-    expect(attr(dt, 'font-weight')).toBe('400')
+    expect(Number(attr(dt, 'font-size')) / TILE).toBeGreaterThanOrEqual(0.645)
+    expect(Number(attr(dt, 'font-size')) / TILE).toBeLessThanOrEqual(0.67)
+    expect(attr(dt, 'font-weight')).toBe('800')
     expect(attr(dt, 'fill')).toBe('#000000')
-    expect((Number(attr(dt, 'y')) - 4.25) / TILE).toBeGreaterThanOrEqual(0.825)
-    expect((Number(attr(dt, 'y')) - 4.25) / TILE).toBeLessThanOrEqual(0.85)
+    expect(Number(attr(dt, 'y')) / TILE).toBeGreaterThanOrEqual(0.815)
+    expect(Number(attr(dt, 'y')) / TILE).toBeLessThanOrEqual(0.835)
   })
 })
 

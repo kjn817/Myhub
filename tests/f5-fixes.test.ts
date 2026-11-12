@@ -28,29 +28,34 @@ function readPub(p: string): string {
   return fs.readFileSync(path.join(PUB, p), 'utf-8')
 }
 
-describe('F5-1 셸 액션 프록시 — 비서 버튼 제외 + img 크기 상한', () => {
+describe('F5-1 셸 액션 프록시 제거 (2026-11-12 사용자 결정)', () => {
   const win = readPub('/js/desktop/windows.js')
   const css = readPub('/css/desktop.css')
 
-  test('syncAppActions가 비서 아바타 버튼을 프록시 생성 전에 제외한다', () => {
-    // 운영 원본의 메커니즘: syncAppActions가 활성 창 문서의 .g-nav 버튼을
-    // 수집할 때 awAvatarBtn(비서 아바타)을 건너뛰고 나머지만 프록시로 만든다.
-    // (재구축본의 proxyBtn/innerHTML 복사 방식은 운영에 없다.)
-    const start = win.indexOf('function syncAppActions()')
-    const end = win.indexOf('function buildButtonProxy', start)
-    expect(start).toBeGreaterThan(-1)
-    expect(end).toBeGreaterThan(start)
-    const region = win.slice(start, end)
-    expect(region).toContain("node.id === 'awAvatarBtn'")
-    expect(region).toContain("node.classList.contains('aw-avatar-btn')")
-    expect(region.indexOf("node.id === 'awAvatarBtn'")).toBeLessThan(region.indexOf('buildButtonProxy(node)'))
+  test('syncAppActions에 .g-nav 프록시 수집이 없다 (buildButtonProxy·buildSearchProxy 제거)', () => {
+    // 옛 프록시 수집(.g-nav 버튼·검색창을 상단바로 복사)은 모든 현행 앱이
+    // MyHubMenus를 갖거나 data-app-actions="none"이라 수집할 것이 없었고,
+    // 2026-11-04 결정대로 상단바 프록시는 원하지 않아 2026-11-12에 제거했다.
+    // 비서 아바타 제외 로직도 수집 자체가 없어져 함께 사라진다.
+    expect(win).not.toContain('function buildButtonProxy')
+    expect(win).not.toContain('function buildSearchProxy')
+    expect(win).not.toContain("querySelector('.g-nav')")
+    expect(win).not.toContain("querySelectorAll('.g-nav")
+    expect(win).not.toContain('dt-app-action')
+    // 메뉴 경로는 살아 있다: MyHubMenus가 있으면 상단바에 게시한다.
+    expect(win).toContain('function syncAppActions()')
+    expect(win).toContain('readAppMenus(doc)')
   })
 
-  test('desktop.css가 .dt-app-action img에 크기 상한을 둔다', () => {
-    const m = css.match(/\.dt-app-action img\s*\{[^}]*\}/)
-    expect(m).not.toBeNull()
-    expect(m![0]).toMatch(/max-width\s*:/)
-    expect(m![0]).toMatch(/max-height\s*:/)
+  test('desktop.css에 죽은 프록시 스타일(.dt-app-action·.dt-app-search)이 없다', () => {
+    // 프록시 버튼·검색창을 만드는 코드가 없어져 그 스타일도 함께 제거했다.
+    // 메뉴바 호스트인 컨테이너(#dt-app-actions·.dt-app-actions)는 남는다.
+    expect(css).not.toContain('.dt-app-action ')
+    expect(css).not.toContain('.dt-app-action{')
+    expect(css).not.toContain('.dt-app-action:')
+    expect(css).not.toContain('.dt-app-search')
+    expect(css).toContain('#dt-app-actions {')
+    expect(css).toContain('.dt-app-actions {')
   })
 })
 

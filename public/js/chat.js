@@ -823,7 +823,10 @@ $('newChatBtn').onclick = async () => {
    참여자 선택은 비서 카드 클릭과 같은 멘션 채우기 동작이다. */
 window.MyHubMenus = [
   {
-    label: '파일',
+    // 첫 메뉴 라벨은 운영 실측 정본 '대화' (2026-11-11 앱 대조 카탈로그:
+    // 상단바 'AI 채팅 대화 대화 목록 참여자'). 전사본은 라벨 문자열이
+    // 소실돼 교차 확인 불가 — 운영 관찰 기록이 유일한 근거이다.
+    label: '대화',
     items: [
       { label: '새 대화', run: () => $('newChatBtn').click() },
       { separator: true },

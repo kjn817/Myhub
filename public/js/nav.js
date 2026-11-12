@@ -55,7 +55,7 @@
   var LOGIN_URL = '/login.html';
   var LOGOUT_ERROR_MESSAGE = '로그아웃에 실패했어요. 네트워크를 확인하고 다시 시도해 주세요.';
   // Lucide "log-out" 아이콘 (ISC) — lucide 스크립트 로딩 순서와 무관하게
-  // 항상 보이도록 인라인 SVG로 넣는다 (index.html 설정 토글 버튼과 같은 방식).
+  // 항상 보이도록 인라인 SVG로 넣는다.
   var LOGOUT_ICON_SVG =
     '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-log-out" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" x2="9" y1="12" y2="12"/></svg>';
 

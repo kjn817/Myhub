@@ -10,8 +10,9 @@
  * 이스케이프 해제 → 첫 줄 60자 절단 → 마크다운 정리의 순서이며 엔티티
  * 디코딩·공백 정규화를 하지 않는다. 통합 검색은 본문 원문을 그대로
  * 잘라(제목 50자·요약 200자) 쓴다 — 태그 원문이 남는 것이 원본 동작이다.
- * 프론트 rowTitle(public/js/memo/list.js)은 번들 범위 밖이라 기존
- * 수정 동작(태그 제거 → 디코딩 → 정규화)을 그대로 검증한다.
+ * 프론트 rowTitle(public/js/memo/list.js)도 같은 결정의 대상이었으나
+ * 8412813의 실행이 백엔드에 그쳐 디코딩·정규화가 잔존했었다. 이번에
+ * 프론트까지 복귀 완료 — 서버와 동일하게 디코딩·정규화를 하지 않는다.
  */
 import * as fs from 'fs'
 import * as path from 'path'
@@ -59,8 +60,9 @@ describe('프론트 목록 rowTitle', () => {
     expect(title).not.toContain('<span')
   })
 
-  test('엔티티 디코딩과 공백 정규화', () => {
-    expect(rowTitle('A &amp;   B\n본문')).toBe('A & B')
+  test('엔티티 디코딩·공백 정규화를 하지 않는다 (원본 계약)', () => {
+    expect(rowTitle('A &amp;   B\n본문')).toBe('A &amp;   B')
+    expect(rowTitle('&lt;span&gt; 표기법\n본문')).toBe('&lt;span&gt; 표기법')
   })
 
   test('기존 계약 유지: 빈 메모·마크다운·이미지', () => {

@@ -325,6 +325,25 @@ def get_latest_version_id():
     items = result.get('items', [])
     return items[0]['id'] if items else None
 
+def wait_for_new_version(prev_version_id, timeout=90, interval=3):
+    """PUT 직후 새 버전 ID가 versions 목록에 나타날 때까지 폴링한다.
+
+    2026-11-12 실측: PUT이 버전 1185(80dd0313)를 만들고 즉시 활성화했는데도
+    직후 get_latest_version_id()는 stale한 1184(896b514d)를 반환했다. 스크립트는
+    그 stale ID를 승격했고, 라이브 검증은 구버전 에셋을 보고 실패해 a2702ca4로
+    롤백됐다. versions 목록의 eventual consistency lag이 원인이며, 승격 전
+    새 ID가 목록 최상단에 나타나는 것을 확인하는 것이 유일한 방책이다.
+    타임아웃 시 None을 반환한다 (호출자가 폴백·종료 판단)."""
+    import time
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        latest = get_latest_version_id()
+        if latest and latest != prev_version_id:
+            return latest
+        time.sleep(interval)
+    return None
+
+
 def deploy_version(version_id):
     """지정 버전을 100%로 배포 (승격·롤백 공용). 성공 여부 반환."""
     result = api_json('POST', f'/accounts/{ACCOUNT_ID}/workers/scripts/{SCRIPT_NAME}/deployments',
@@ -1008,7 +1027,16 @@ def main():
         print(f"시크릿 가드 PASS: 이름 {len(secret_names_after)}개 유지", file=sys.stderr)
 
     # 업로드 후 처리: 승격 → Cron 트리거 등록 → 라이브 검증 → 실패 시 자동 롤백
-    new_version_id = get_latest_version_id()
+    # PUT 직후 versions 목록이 stale할 수 있으므로(2026-11-12 실측) 새 ID가
+    # 목록에 나타날 때까지 기다린다. 타임아웃 시 PUT이 이미 활성화한 버전을
+    # deployments 목록에서 폴백으로 읽는다.
+    new_version_id = wait_for_new_version(prev_version_id)
+    if not new_version_id:
+        print("경고: versions 목록에서 새 버전을 확인하지 못했습니다 — deployments 목록으로 폴백합니다", file=sys.stderr)
+        new_version_id = get_active_version_id()
+    if not new_version_id or new_version_id == prev_version_id:
+        print("ERROR: PUT 후 새 버전을 식별하지 못했습니다 — 승격하지 않고 종료합니다", file=sys.stderr)
+        sys.exit(1)
     print(f"새 버전: {new_version_id}", file=sys.stderr)
     ok, outcome = post_upload_flow(
         prev_version_id, new_version_id,

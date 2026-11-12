@@ -237,6 +237,42 @@
       });
     }
 
+    // 상단 메뉴 게시 (운영 정본 [파일·편집·보기·삽입·데이터·도구·자동화·
+    // 설정] — 2026-11-11 앱 대조 카탈로그). 한글 호스트
+    // (finder-format-hwp.js)·PDF 호스트와 같은 OfficeTabs 게시 계약으로
+    // 셸 상단바에 메뉴를 올린다. 각 메뉴의 항목 내용은 원본 자료
+    // (전사본·회수본·엔진 문자열) 어디에도 없어 미회수이므로,
+    // menu-request에는 빈 항목으로 답한다 (발명 금지).
+    var SHEET_MENUS = [
+      { id: 'file', label: '파일' },
+      { id: 'edit', label: '편집' },
+      { id: 'view', label: '보기' },
+      { id: 'insert', label: '삽입' },
+      { id: 'data', label: '데이터' },
+      { id: 'tools', label: '도구' },
+      { id: 'automate', label: '자동화' },
+      { id: 'settings', label: '설정' },
+    ];
+    if (officeSurface && typeof window.MyHubOfficeTabs.setState === 'function') {
+      window.MyHubOfficeTabs.setState('excel', {
+        tabs: SHEET_MENUS.map(function (m) {
+          return { id: m.id, label: m.label, kind: 'menu' };
+        }),
+        activeId: null,
+        collapsed: false,
+        canCollapse: false,
+        menuShell: true,
+      });
+      if (typeof window.MyHubOfficeTabs.onCommand === 'function') {
+        window.MyHubOfficeTabs.onCommand('excel', function (cmd) {
+          if (!ctx.isCurrent()) return;
+          if (cmd.type === 'menu-request') {
+            window.MyHubOfficeTabs.provideMenuItems('excel', cmd.id, [], cmd.seq);
+          }
+        });
+      }
+    }
+
     // 파일 실행 접근: 아래 시트 넣소재 리본/아래 영역(.fortune-workarea)
     // 등 함께 모서리 등 엔진을 그림으로 알고 chrome만 남긴다.
     function postChrome() {

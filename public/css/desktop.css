@@ -198,36 +198,6 @@ body.dt-fullscreen .dt-office-tab-fold:hover { background: rgba(255, 255, 255, .
   .dt-office-tab { padding: 3px 5px; font-size: 12.5px; }
 }
 
-.dt-app-action {
-  display: inline-flex; align-items: center; justify-content: center;
-  width: 28px; height: 28px; padding: 0;
-  border: 0; border-radius: 6px;
-  background: transparent; color: #3c4043; cursor: pointer;
-}
-
-.dt-app-action:hover { background: rgba(60, 64, 67, .09); }
-
-.dt-app-action svg { width: 17px; height: 17px; }
-
-.dt-app-search {
-  display: inline-flex; align-items: center; gap: 6px;
-  height: 27px; padding: 0 9px;
-  border-radius: 7px; background: rgba(255, 255, 255, .55);
-  box-shadow: inset 0 0 0 1px rgba(60, 64, 67, .14);
-  color: #5f6368;
-}
-
-.dt-app-search svg { width: 14px; height: 14px; flex: none; }
-
-.dt-app-search input {
-  border: 0; background: transparent; outline: none;
-  font: inherit; font-size: 12.5px; width: 168px; color: #202124;
-}
-
-@media (max-width: 760px) {
-  .dt-app-search input { width: 92px; }
-}
-
 /* 전체화면 창이 있는 데스크톱에서는 상단바가 검정으로 바뀐다 */
 body.dt-fullscreen .g-nav {
   background: #000;
@@ -255,20 +225,6 @@ body.dt-fullscreen .dt-active-title { color: #fff; }
 body.dt-fullscreen #clock { color: #fff; }
 
 body.dt-fullscreen .settings-btn { color: #fff; }
-
-body.dt-fullscreen .dt-app-action { color: #e8eaed; }
-
-body.dt-fullscreen .dt-app-action:hover { background: rgba(255, 255, 255, .14); }
-
-body.dt-fullscreen .dt-app-search {
-  background: rgba(255, 255, 255, .16);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .25);
-  color: #e8eaed;
-}
-
-body.dt-fullscreen .dt-app-search input { color: #fff; }
-
-body.dt-fullscreen .dt-app-search input::placeholder { color: rgba(255, 255, 255, .55); }
 
 /* 활성 창의 상주 비서 아바타 (메인 상단바 오른쪽) */
 .dt-bar-assistant { display: flex; align-items: center; margin-right: 0; }
@@ -621,6 +577,16 @@ body.dt-fullscreen .dt-app-search input::placeholder { color: rgba(255, 255, 255
 .dt-window.dt-maximized .dt-rz { display: none; }
 
 #dt-root.dt-dragging .dt-window { will-change: transform; }
+
+/* 드래그 중인 창 들어올림 — 흰 창이 흰 창 위에 겹칠 때 경계가 묻혀
+   "흰 패널"로 보이는 문제(2026-11-12 할 일 창 지적)를 막는다.
+   활성 그림자는 아래로만 떨어져 상단 가장자리에는 번짐만 남아
+   경계 대비가 13 수준이라, 위쪽 그림자·진한 테두리로 상단을 분리한다.
+   하네스 실측: 상단 경계 대비가 정지 13 그대로, 드래그 중 13 → 63. */
+.dt-window.dt-win-dragging {
+  border-color: rgba(0, 0, 0, 0.30);
+  box-shadow: 0 32px 80px rgba(15, 23, 42, 0.40), 0 4px 16px rgba(15, 23, 42, 0.20), 0 -4px 20px rgba(15, 23, 42, 0.14);
+}
 
 .dt-titlebar {
   position: relative;
@@ -1295,11 +1261,22 @@ html, body { overscroll-behavior-x: none; }
   transition: transform 0.28s ease;
 }
 
+/* ---- Mission Control (전체 개요) ---- */
+/* 구조는 실제 Mac과 같다: ① 상단 데스크톱 썸네일 띠 ② 아래 선택된
+   데스크톱의 창 영역 ③ 맨 아래 독은 오버레이 위(z 70)에 그대로 보인다.
+   레이어 분리 (2026-11-02): 배경(딤·블러) z 58 < 실제 창 루트 z 60 <
+   띠·캡션 z 65 < 독 z 70. 창 미리보기는 가짜 타일이 아니라 실제 창
+   엘리먼트를 transform으로 축소한 스프레드라 작업 상태가 그대로 보인다. */
 .dt-mission-bg {
-  /* #dt-surface 안: 아이콘(z1)과 동층 최상단, 창 레이어(#dt-root z2) 아래.
-     바탕화면·아이콘만 딤/블러하고 창 미리보기는 선명하게 위에 둔다. */
-  position: absolute; inset: 0; z-index: 1;
-  background: rgba(16,16,20,.45); backdrop-filter: blur(14px);
+  position: fixed;
+  inset: 0;
+  z-index: 58;
+  background-color: rgba(15, 17, 20, 0.42);
+  background-image: linear-gradient(rgba(15, 17, 20, 0.42), rgba(15, 17, 20, 0.42)), var(--dt-mission-wp, none);
+  background-size: cover;
+  background-position: center;
+  backdrop-filter: blur(14px) saturate(1.3);
+  -webkit-backdrop-filter: blur(14px) saturate(1.3);
 }
 
 .dt-mission-bg[hidden] { display: none; }
@@ -1338,8 +1315,16 @@ html, body { overscroll-behavior-x: none; }
 #dt-root.dt-mission-mode .dt-frame { pointer-events: none; }
 
 .dt-mission-caption {
-  position: absolute; color: #fff; font-size: 12.5px; font-weight: 600;
-  text-align: center; text-shadow: 0 1px 6px rgba(0,0,0,.45); pointer-events: none;
+  position: absolute;
+  text-align: center;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #fff;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.45);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
 }
 
 @keyframes dt-mission-fade {
@@ -1447,18 +1432,27 @@ html, body { overscroll-behavior-x: none; }
 }
 
 .dt-mission-add {
-  position: absolute; right: 14px; top: 22px;
-  width: 28px; height: 28px; border-radius: 50%;
-  border: 1.5px solid rgba(255,255,255,.65);
-  background: rgba(255,255,255,.14); color: #fff; cursor: pointer;
-  display: flex; align-items: center; justify-content: center; padding: 0;
+  width: 44px;
+  height: 44px;
+  flex: none;
+  align-self: center;
+  margin-left: 8px;
+  border-radius: 50%;
+  border: 1.5px dashed rgba(255, 255, 255, 0.55);
+  background: none;
+  color: rgba(255, 255, 255, 0.9);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.25s ease-out, background 0.2s ease, box-shadow 0.2s ease;
 }
 
 .dt-mission-add:hover { background: rgba(255, 255, 255, 0.12); transform: scale(1.08); }
 
-.dt-mission-add.is-drop-hot { background: var(--dt-accent); border-color: transparent; }
+.dt-mission-add.is-drop-hot { box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.95); background: rgba(255, 255, 255, 0.18); }
 
-.dt-mission-add svg { width: 16px; height: 16px; }
+.dt-mission-add svg { width: 20px; height: 20px; }
 
 .dt-mission-card.is-drop-hot { box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.95); background: rgba(255, 255, 255, 0.14); }
 
@@ -1893,25 +1887,25 @@ body.dt-material-opaque {
 /* 바탕화면 파일 아이콘 타일 (desktop-icons.js — Drive 파일) */
 .dt-tile-file { background: linear-gradient(145deg, #bfdbfe 0%, #60a5fa 100%); }
 
-/* 텍스트형 앱 액션 (예: '노바 비서') — 28px 아이콘 칸 규칙을 폭 자동으로 덮는다 */
-.dt-app-actions .dt-app-action.dt-app-action-text {
-  width: auto; height: 28px; padding: 0 10px; gap: 6px; white-space: nowrap;
-}
-
 
 /* ════════════════════════════════════════════════════════════════════
    복원 병합 오버레이 (2026-11-10, 운영본 기준 복원 시 유지분)
    아래 규칙은 운영 서빙본 desktop.css에 없으나, 트리의 JS·HTML이
    방출하는 클래스·아이디에 결합돼 있어 제거하면 로컬 표면이 깨진다.
    운영에서의 원 소스 위치는 미확정이다 (prod-pull shell.css에도 없음).
-   - 미션 컨트롤 실제 Mac 방식 (사용자 승인 개선 2026-11-10, 커밋
-     848e034·d135bbd): #dt-mission·.dt-mission-bar·.dt-mission-label* 등
-   - 서브챗 패널(.myhub-subchat-*)·설정 메뉴/모달(.myhub-settings-*) —
+   - 미션 컨트롤: 848e034·d135bbd의 라벨 바 방식은 오구현으로 판정돼
+     2026-11-11 원본 카드 스트립으로 환원됐다 (바 규칙·#dt-mission
+     is-open 제거, 진단 desktop-transition-diagnosis-20261111.md).
+     본문 구간의 .dt-mission-bg·.dt-mission-add·.dt-mission-caption까지
+     운영본 원본 값으로 환원됐고, 오버레이에 남아 있던 미션 잔존 규칙
+     (.dt-mission-empty·창 그림자/원점·iframe 포인터·드래그 투명도)은
+     운영 CSS에 없어 전량 제거했다 (감사 B-4). 스프레드 원점·포인터
+     차단은 본문 공통 규칙(#dt-root.dt-mission-mode .dt-window /
+     .dt-frame)이 운영본과 동일하게 보장한다.
+   - 서브챗 패널(.myhub-subchat-*) — 트리 subchat.js가 방출 (설정 메뉴/모달 규칙은 2026-11-12 settings-menu.js와 함께 제거).
      트리 subchat.js·settings-menu.js가 방출
    - 창 도구(.myhub-win-tools 등)·오피스 탭·Finder 제목줄 결합 규칙
-   본문 위 운영본 구간에서는 미션 공통 규칙 5개(.dt-mission-add·
-   .dt-mission-bg·.dt-mission-caption 등)도 트리(Mac 방식) 값으로
-   교체돼 있다. 상세 분류는 front-identity-ledger-20261110.md 참조.
+   상세 분류는 front-identity-ledger-20261110.md 참조.
    ════════════════════════════════════════════════════════════════════ */
 
 body.dt-body {
@@ -1936,9 +1930,6 @@ body.dt-body::-webkit-scrollbar { display: none; }
 
 #dt-app-actions { display: flex; align-items: center; gap: 2px; min-width: 0; overflow: hidden; }
 
-/* 프록시된 버튼 안의 img는 원본 크기로 번지지 않게 상한을 둔다 (F5 결함 ① 방어선). */
-.dt-app-action img { max-width: 20px; max-height: 20px; object-fit: contain; display: block; }
-
 #dt-office-tabs { display: none; align-items: center; gap: 2px; min-width: 0; overflow: hidden; }
 
 #dt-office-tabs:not(:empty) { display: flex; }
@@ -1958,13 +1949,24 @@ body.dt-material-opaque.dt-fullscreen .g-nav { background: #000; }
 body.dt-material-opaque .dt-window { background: #fff; }
 
 /* ---------- 표면·레이어 ---------- */
-/* #dt-surface: 배경·아이콘·위젯·창 루트를 감싸는 바탕화면 표면 (원본 구조).
+/* #dt-surface: 배경·아이콘·위젯을 감싸는 바탕화면 표면.
  * 레이어 자식들은 position:fixed라 뷰포트 기준을 유지하고, 빈 영역 입력은
  * #dt-icons(pointer-events:none)를 통과해 #dt-wallpaper에 닿는다 —
- * 밴드·우클릭 메뉴의 전제 (main.js surface 계약). */
+ * 밴드·우클릭 메뉴의 전제 (main.js surface 계약).
+ * #dt-root(창 루트)는 이 표면의 자식이 아니라 body 직속 형제다:
+ * 원본 전사본 JS 전체·운영 회수 CSS에 'dt-surface' 참조가 0건이고
+ * (래퍼는 재구성 산물), 운영 CSS의 미션 레이어 산술(배경 58 < 창 루트
+ * 60 < 띠 65 < 독 70)이 전원 형제를 전제한다. fixed인 표면은 스태킹
+ * 컨텍스트를 만들어 내부 창 루트의 z 60을 가두므로, 루트가 안에 있으면
+ * 미션 배경(z 58)이 스프레드 창을 덮는다 (2026-11-11 실측 확정).
+ * 구조 계약은 tests/desktop-shell-restore.test.ts가 지킨다. */
 #dt-surface { position: fixed; inset: 0; top: calc(36px + env(safe-area-inset-top, 0px)); overflow: hidden; }
 
-#dt-wallpaper { position: fixed; inset: 0; top: calc(36px + env(safe-area-inset-top, 0px)); z-index: 0; background: #0b0b0f; overflow: hidden; }
+/* 원본 .dt-wallpaper와 동일하게 뷰포트 전체(inset:0)를 덮는다 — ID 규칙이
+   top:36px을 덧씌우면 상단바(0~36px) 뒤에 배경사진이 없어, 바의 블러가
+   어두운 body 배경만 샘플링해 회색 바가 되고, WCO에서 바 높이가 줄면
+   36px까지의 틈이 검은 테두리로 보인다 (2026-11-12 사용자 실화면 지적). */
+#dt-wallpaper { position: fixed; inset: 0; z-index: 0; background: #0b0b0f; overflow: hidden; }
 
 #dt-wp-caption {
   position: fixed; right: 14px; bottom: 10px; z-index: 1;
@@ -2077,88 +2079,48 @@ body.dt-material-opaque .dt-window { background: #fff; }
 
 .dt-dock-item .dt-tile { width: 48px; height: 48px; }
 
-/* ---------- 미션 컨트롤 ---------- */
-/* 실제 macOS 미션 컨트롤 형태 (사용자 실측 정본 2026-11-10):
-   화면 맨 위 60px 스페이스 바 — 이름 나열, 현재 스페이스만 알약 강조,
-   우상단 원형 + 버튼. 아래는 실제 창의 축소 스프레드. */
-/* 컨테이너는 포인터를 통과시켜 아래 창·딤 레이어에 닿게 한다 —
-   전면 div가 누르기를 전부 삼키면 창 클릭·드래그가 시작되지 않고
-   빈 곳 클릭(닫기)으로만 동작한다 (실브라우저 elementFromPoint 실측). */
-#dt-mission { position: fixed; inset: 0; z-index: 66; display: none; pointer-events: none; }
-
-#dt-mission.is-open { display: block; }
-
-.dt-mission-bar {
-  position: absolute; top: 0; left: 0; right: 0; height: 60px;
-  background: rgba(22,26,34,.30); backdrop-filter: blur(20px);
-  border-bottom: 1px solid rgba(255,255,255,.16);
-  pointer-events: auto;
-}
-
-.dt-mission-labels {
-  position: absolute; top: 35px; left: 0; right: 0; height: 22px;
-  display: flex; align-items: center; justify-content: center; gap: 8px;
-  padding: 0 64px;
-}
-
-.dt-mission-label {
-  position: relative; display: inline-flex; align-items: center; gap: 2px;
-  height: 22px; padding: 0 10px; border: 0; border-radius: 999px;
-  background: transparent; color: #fff;
-  font-size: 14px; font-weight: 500; line-height: 1;
-  cursor: pointer; white-space: nowrap;
-}
-
-.dt-mission-label.is-current { background: rgba(6,10,16,.48); }
-
-.dt-mission-label.is-drop-hot { background: var(--dt-accent); }
-
-.dt-mission-label-x {
-  display: inline-flex; align-items: center; justify-content: center;
-  width: 15px; height: 15px; border-radius: 50%;
-  background: rgba(255,255,255,.85); color: #1c1c1e;
-  opacity: 0; pointer-events: none;
-}
-
-.dt-mission-label:hover .dt-mission-label-x { opacity: 1; pointer-events: auto; }
-
-.dt-mission-label-x svg { width: 10px; height: 10px; }
-
-.dt-mission-empty {
-  position: absolute; left: 0; right: 0; top: 46%;
-  color: rgba(255,255,255,.78); font-size: 13.5px; text-align: center; pointer-events: none;
-}
-
-.dt-window.dt-mission-win { box-shadow: 0 10px 30px rgba(0,0,0,.4); }
-
-/* 미션 스프레드/드래그의 transform 수식은 좌상단 원점 기준인데 기본값
-   (중앙)이면 (1-scale)×절반만큼 밀려 캡션·격자와 어긋난다 (실측 확정). */
-.dt-window.dt-mission-win, .dt-window.dt-mission-drag { transform-origin: 0 0; }
-
-/* 미션 중 창 본문(iframe)은 축소 미리보기일 뿐이라 눌러도 반응하지
-   않는 게 맥 방식이고, iframe이 포인터를 삼키면 창 클릭·드래그 자체가
-   시작되지 않는다. */
-.dt-mission-mode .dt-window iframe { pointer-events: none; }
-
-.dt-window.dt-mission-drag { opacity: .85; }
-
-.dt-mission-anim { transition: transform .22s ease, left .22s ease, top .22s ease, width .22s ease, height .22s ease; }
-
-.dt-space-anim { transition: transform .25s ease; }
-
 /* ---------- 서브챗 (비서 패널) ---------- */
 #dt-bar-assistant .myhub-subchat-avatar.is-active { outline: 2px solid var(--dt-accent); outline-offset: 1px; }
 
+/* 서브챗 패널 표시 계약 (2026-11-12 수정): JS(원본 전사 그대로)는
+   hidden 속성만 토글하고 is-open 클래스를 건드리지 않는다. 기본
+   규칙에 display:none을 두면 hidden을 풀어도 영영 안 보인다 — 실제
+   아바타 클릭이 무응답이던 원인. 이 코드베이스의 정본 패턴(미션·
+   브라우저 탭과 동일)은 기본 display:flex + [hidden]{display:none}이다. */
 .myhub-subchat-panel {
   position: fixed; top: calc(44px + env(safe-area-inset-top, 0px)); right: 12px; z-index: 80;
   width: min(360px, calc(100vw - 24px)); height: min(540px, calc(100dvh - 130px));
   background: rgba(255,255,255,.94); backdrop-filter: blur(20px);
   border: 1px solid rgba(0,0,0,.08); border-radius: 18px;
   box-shadow: 0 24px 60px rgba(0,0,0,.3);
-  display: none; flex-direction: column; overflow: hidden;
+  display: flex; flex-direction: column; overflow: hidden;
 }
 
-.myhub-subchat-panel.is-open { display: flex; }
+.myhub-subchat-panel[hidden] { display: none; }
+
+/* 패널 내부 배치 — 원본 회수본에 이 규칙들이 없어(재구성 누락),
+   열려도 헤드·메시지·입력이 쌓여 입력이 잘렸다. 동작에 필요한 최소 배치만 둔다. */
+.myhub-subchat-head { display: flex; align-items: center; gap: 10px; padding: 12px 12px 10px; border-bottom: 1px solid rgba(0,0,0,.06); }
+.myhub-subchat-head-avatar { width: 32px; height: 32px; border-radius: 50%; object-fit: cover; flex: none; }
+.myhub-subchat-head-info { flex: 1; min-width: 0; }
+.myhub-subchat-head-name { font-size: 14px; font-weight: 700; }
+.myhub-subchat-head-sub { font-size: 12px; color: var(--dt-text-dim); }
+.myhub-subchat-state { font-size: 12px; color: var(--dt-text-dim); white-space: nowrap; }
+.myhub-subchat-close { display: inline-flex; align-items: center; justify-content: center; background: none; border: none; cursor: pointer; color: var(--dt-text-dim); padding: 6px; border-radius: 999px; flex: none; }
+.myhub-subchat-close:hover { color: #111; background: rgba(0,0,0,.05); }
+.myhub-subchat-close svg { width: 16px; height: 16px; display: block; }
+.myhub-subchat-msgs { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding: 12px; }
+.myhub-subchat-msgs[hidden] { display: none; }
+.myhub-subchat-reply { padding: 0 12px 4px; font-size: 13px; color: var(--dt-text-dim); white-space: pre-wrap; }
+.myhub-subchat-findings { list-style: none; margin: 0; padding: 0 12px 4px; }
+.myhub-subchat-input-row { display: flex; gap: 8px; padding: 10px 12px 12px; border-top: 1px solid rgba(0,0,0,.06); }
+.myhub-subchat-input { flex: 1; min-width: 0; font: inherit; font-size: 13.5px; padding: 8px 12px; border: 1px solid rgba(0,0,0,.12); border-radius: 999px; outline: none; background: #fff; }
+.myhub-subchat-input:focus { border-color: var(--dt-accent); }
+.myhub-subchat-send { flex: none; width: 34px; height: 34px; border: none; border-radius: 50%; background: var(--dt-accent); color: #fff; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
+.myhub-subchat-send svg { width: 16px; height: 16px; display: block; }
+.myhub-subchat-office-row { display: flex; gap: 8px; padding: 0 12px 12px; }
+.myhub-subchat-office-row[hidden] { display: none; }
+.myhub-subchat-memo-btn, .myhub-subchat-mail-btn { flex: 1; font: inherit; font-size: 13px; padding: 8px 10px; border: 1px solid rgba(0,0,0,.12); border-radius: 999px; background: #fff; cursor: pointer; }
 
 .myhub-subchat-msg {
   max-width: 85%; padding: 8px 11px; border-radius: 14px; font-size: 13.5px; line-height: 1.5;
@@ -2243,75 +2205,8 @@ body.dt-material-opaque .dt-window { background: #fff; }
 
 .dt-ctx-item:disabled .dt-ctx-sub { color: #9ca3af; }
 
-/* ---------- 설정 메뉴 (js/desktop/settings-menu.js 전용) ----------
-   주의: .myhub-settings-item 등 클래스명은 nav.js 설정 패널과 공유되므로
-   반드시 .myhub-settings-menu 컨테이너로 범위를 한정한다. 한정하지 않으면
-   desktop.css가 shell.css보다 뒤에 로드돼 nav.js 항목의 hover 배경·글꼴·
-   여백을 덮어, 원본 캡처(2026-11-10)의 파란 선택 배경이 사라진다. */
-.myhub-settings-menu {
-  position: fixed; z-index: 130; min-width: 263px; padding: 5px;
-  background: rgba(255,255,255,.92); backdrop-filter: blur(24px);
-  -webkit-backdrop-filter: blur(24px);
-  border: 1px solid rgba(0,0,0,.08); border-radius: 12px;
-  box-shadow: 0 12px 32px rgba(0,0,0,.16);
-  display: flex; flex-direction: column;
-}
-
-.myhub-settings-menu .myhub-settings-item {
-  border: 0; background: none; text-align: left; padding: 6px 8px; border-radius: 7px;
-  font-size: 13.5px; cursor: pointer; color: var(--dt-text);
-  display: flex; align-items: center; gap: 6px; white-space: nowrap;
-}
-
-/* hover·danger·서브메뉴 폭은 실측된 기어 메뉴 값(shell.css 운용 패널·원본
- * 캡처)과 동일하게 맞춘다 — 틴트 hover와 180px은 재구성 값이었다. */
-.myhub-settings-menu .myhub-settings-item:hover:not(:disabled) { background: #0a84ff; color: #fff; }
-
-.myhub-settings-menu .myhub-settings-item:disabled { color: #a1a1aa; cursor: default; }
-
-.myhub-settings-menu .myhub-settings-item-danger { color: #d13239; }
-
-.myhub-settings-menu .myhub-settings-item .myhub-settings-check { width: 14px; color: #0a84ff; font-weight: 700; flex: 0 0 14px; }
-
-.myhub-settings-menu .myhub-settings-item .myhub-settings-arrow { margin-left: auto; color: #a1a1aa; font-size: 11px; }
-
-.myhub-settings-menu .myhub-settings-sep { height: 1px; background: rgba(0,0,0,.08); margin: 4px 6px; }
-
-.myhub-settings-menu .myhub-settings-sub { min-width: 236px; }
-
-.myhub-settings-modal-back {
-  position: fixed; inset: 0; z-index: 140; background: rgba(20,20,24,.4);
-  display: flex; align-items: center; justify-content: center;
-}
-
-.myhub-settings-modal {
-  background: #fff; border-radius: 16px; padding: 20px; width: min(360px, calc(100vw - 40px));
-  box-shadow: 0 24px 60px rgba(0,0,0,.35); display: flex; flex-direction: column; gap: 10px;
-}
-
-.myhub-settings-modal h3 { margin: 0; font-size: 15px; }
-
-.myhub-settings-modal p { margin: 0; font-size: 13px; color: var(--dt-text-dim); line-height: 1.55; }
-
-.myhub-settings-modal input {
-  border: 1px solid var(--dt-border); border-radius: 9px; padding: 9px 12px; font-size: 13.5px; outline: none;
-}
-
-.myhub-settings-modal input:focus { border-color: var(--dt-accent); }
-
-.myhub-settings-modal-row { display: flex; gap: 8px; justify-content: flex-end; margin-top: 4px; }
-
-.myhub-settings-modal-row button {
-  border: 0; border-radius: 9px; padding: 8px 16px; font-size: 13px; font-weight: 600; cursor: pointer;
-  background: #f4f4f5; color: var(--dt-text);
-}
-
-.myhub-settings-modal-row button.myhub-settings-primary { background: var(--dt-accent); color: #12315e; }
-
 @media (max-width: 767px) {
   .dt-dock-inner { max-width: calc(100vw - 12px); overflow-x: auto; padding: 8px 10px 11px; gap: 9px; }
   .dt-dock-item { width: 44px; height: 44px; flex: 0 0 44px; }
   .dt-dock-item .dt-tile { width: 44px; height: 44px; }
-  .dt-mission-labels { justify-content: flex-start; overflow-x: auto; padding: 0 56px 0 12px; }
-  .dt-app-search input { width: 110px; }
 }

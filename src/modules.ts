@@ -52,7 +52,7 @@ export const modules: ModuleDef[] = [
   { id: 'schedule', name: '일정', desc: '스케줄 관리', path: '/schedule.html', app: scheduleApp },
   { id: 'todo', name: '할일', desc: '할일 체크리스트', path: '/todo.html', app: todoApp },
   { id: 'studio', name: 'AI 스튜디오', desc: '노바와 함께 앱 만들기', path: '/agent.html', app: new HonoBase<{ Bindings: Env }>() },
-  { id: 'artifact', name: '아티팩트', desc: '노바의 창작 공간', path: '/index.html', app: artifactApp, hidden: true },
+  { id: 'artifact', name: '아티팩트', desc: '노바의 창작 공간', path: '', app: artifactApp, hidden: true }, // 정적 프론트 없음 — 내용은 artifactApp이 서빙한다. 옛 데스크톱(index.html)을 가리키던 경로는 2026-11-12 정리 때 제거했다.
   { id: 'briefing', name: '오늘 브리핑', desc: '오늘 일정·할일 요약', path: '/schedule.html', app: briefingApp, hidden: true },
   { id: 'pptx', name: 'PPT 내보내기', desc: '아침 브리핑·주간 보고서 PPTX 내보내기', path: '', app: pptxApp, hidden: true },
   { id: 'push', name: '푸시 알림', desc: '일정 알림 구독', path: '/schedule.html', app: pushApp, hidden: true },

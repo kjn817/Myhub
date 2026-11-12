@@ -303,7 +303,6 @@
         renderBrowserTabs(win.id);
         assistantByWin.delete(win.id);
         if (state.activeId === mod.id) {
-          harvestDoc = null;
           barDoc = null;
           syncAppActions();
           syncAssistantAvatar();
@@ -381,10 +380,25 @@
           // preventDefault가 없으면 드래그 이동 중 브라우저 텍스트
           // 선택이 시작돼 창·라벨이 선택 틴트로 덮인다 (실브라우저 실측).
           e.preventDefault();
+          // 카드·+ 버튼의 hit rect를 드래그 시작 시 한 번만 읽어 둔다.
+          // 미션 카드·버튼은 드래그 중 움직이지 않으므로 캐시가 유효하고,
+          // move마다 getBoundingClientRect를 부르면 스타일 변경
+          // (is-drop-hot 토글) 뒤 강제 동기 레이아웃이 매번 돈다.
+          var cardRects = missionCardsArr.map(function (c) {
+            var r = c.el.getBoundingClientRect();
+            return { spaceId: c.spaceId, left: r.left, right: r.right, top: r.top, bottom: r.bottom, width: r.width, height: r.height };
+          });
+          var addRect = null;
+          if (missionAddEl) {
+            var ar = missionAddEl.getBoundingClientRect();
+            addRect = { left: ar.left, right: ar.right, top: ar.top, bottom: ar.bottom, width: ar.width, height: ar.height };
+          }
           missionDrag = {
             id: win.id, pointerId: e.pointerId,
             startX: e.clientX, startY: e.clientY,
             moved: false, hotSpace: null, hotAdd: false,
+            cardRects: cardRects, addRect: addRect,
+            lastX: e.clientX, lastY: e.clientY, mdx: 0, mdy: 0, rafId: null,
           };
           return;
         }
@@ -516,6 +530,9 @@
     function startDrag(session) {
       drag = session;
       root.classList.add('dt-dragging');
+      // 드래그 중인 창은 들어올림(lift) — 흰 창이 흰 창 위에 겹칠 때 경계가
+      // 묻혀 "흰 패널"로 보이는 문제(2026-11-12 할 일 창 지적)를 막는다.
+      if (session.el) session.el.classList.add('dt-win-dragging');
       setDragPerf(true);
     }
     function computeResizeRect(s) {
@@ -537,6 +554,46 @@
       drag.el.style.width = drag.lastRect.w + 'px';
       drag.el.style.height = drag.lastRect.h + 'px';
     }
+    // 창 이동은 pointermove마다 transform을 직접 쓰지 않고 rAF로 합친다.
+    // 고주파 마우스(125Hz~)에서는 한 프레임에 여러 move 이벤트가 와서
+    // 매번 스타일 재계산·컴포지터 커밋이 돌았고, 그려지는 건 마지막 한 번뿐이다.
+    // dx/dy·최종 좌표는 동기 갱신해 pointerup 커밋이 최신 값을 쓰게 하고,
+    // 그리기만 다음 프레임으로 미룬다 — 보이는 움직임은 동일하다.
+    function applyMoveFrame() {
+      if (!drag) return;
+      drag.rafId = null;
+      if (drag.mode !== 'move') return;
+      if (drag.unzoomPrev && (Math.abs(drag.dx) > 4 || Math.abs(drag.dy) > 4)) {
+        var prevRect = drag.unzoomPrev;
+        drag.unzoomPrev = null;
+        commit(stateApi.resizeWindow(
+          stateApi.setWindowMode(state, drag.id, null, null),
+          drag.id, prevRect, getViewport()));
+        drag.origX = prevRect.x;
+        drag.origY = prevRect.y;
+      }
+      drag.el.style.transform = 'translate(' + drag.dx + 'px,' + drag.dy + 'px)';
+      var vp = getViewport();
+      var edgeX = drag.lastClientX !== undefined ? drag.lastClientX : drag.startX + drag.dx;
+      var dir = edgeX <= 1 ? -1 : edgeX >= vp.w - 1 ? 1 : 0;
+      if (dir === 0) {
+        drag.edgeDir = 0;
+        drag.edgeSince = 0;
+      } else if (drag.edgeDir !== dir) {
+        drag.edgeDir = dir;
+        drag.edgeSince = Date.now();
+      } else if (Date.now() - drag.edgeSince > 550) {
+        drag.edgeDir = 0;
+        drag.edgeSince = 0;
+        var idx = state.spaces.indexOf(state.activeSpace);
+        var target = state.spaces[idx + dir];
+        if (target !== undefined) {
+          commit(stateApi.moveWindowToSpace(state, drag.id, target));
+          commit(stateApi.setActiveSpace(state, target));
+          commit(stateApi.focusWindow(state, drag.id));
+        }
+      }
+    }
     function onPointerMove(e) {
       if (missionDrag) { onMissionMove(e); return; }
       if (!drag) return;
@@ -544,34 +601,9 @@
       drag.dx = e.clientX - drag.startX;
       drag.dy = e.clientY - drag.startY;
       if (drag.mode === 'move') {
-        if (drag.unzoomPrev && (Math.abs(drag.dx) > 4 || Math.abs(drag.dy) > 4)) {
-          var prevRect = drag.unzoomPrev;
-          drag.unzoomPrev = null;
-          commit(stateApi.resizeWindow(
-            stateApi.setWindowMode(state, drag.id, null, null),
-            drag.id, prevRect, getViewport()));
-          drag.origX = prevRect.x;
-          drag.origY = prevRect.y;
-        }
-        drag.el.style.transform = 'translate(' + drag.dx + 'px,' + drag.dy + 'px)';
-        var vp = getViewport();
-        var dir = e.clientX <= 1 ? -1 : e.clientX >= vp.w - 1 ? 1 : 0;
-        if (dir === 0) {
-          drag.edgeDir = 0;
-          drag.edgeSince = 0;
-        } else if (drag.edgeDir !== dir) {
-          drag.edgeDir = dir;
-          drag.edgeSince = Date.now();
-        } else if (Date.now() - drag.edgeSince > 550) {
-          drag.edgeDir = 0;
-          drag.edgeSince = 0;
-          var idx = state.spaces.indexOf(state.activeSpace);
-          var target = state.spaces[idx + dir];
-          if (target !== undefined) {
-            commit(stateApi.moveWindowToSpace(state, drag.id, target));
-            commit(stateApi.setActiveSpace(state, target));
-            commit(stateApi.focusWindow(state, drag.id));
-          }
+        drag.lastClientX = e.clientX;
+        if (drag.rafId === null || drag.rafId === undefined) {
+          drag.rafId = raf(applyMoveFrame);
         }
       } else if (drag.rafId === null || drag.rafId === undefined) {
         drag.rafId = raf(applyDragFrame);
@@ -583,6 +615,7 @@
       if (drag.pointerId !== undefined && e && e.pointerId !== undefined && e.pointerId !== drag.pointerId) return;
       var s = drag;
       drag = null;
+      if (s.el) s.el.classList.remove('dt-win-dragging');
       if (s.rafId !== null && s.rafId !== undefined) cancelRaf(s.rafId);
       root.classList.remove('dt-dragging');
       setDragPerf(false);
@@ -742,8 +775,6 @@
       taskbar.classList.toggle('dt-autohide', hide);
       if (!hide) taskbar.classList.remove('dt-dock-peek');
     }
-    var harvestWin = undefined;
-    var harvestDoc = null;
     var barWin = undefined;
     var barDoc = null;
     var barSig = '';
@@ -929,8 +960,6 @@
     }
     function syncAppActions() {
       syncMenuChrome();
-      var box = deps.appActionsEl;
-      if (!box) return;
       var doc = currentActiveDoc();
       var bar = getMenuBar();
       var defs = bar && doc ? readAppMenus(doc) : null;
@@ -948,65 +977,18 @@
         bar.setMenus(defs, { compact: isMobile() });
         return;
       }
+      // 메뉴가 없는 앱: 상단바 메뉴를 비운다. 2026-11-12에 옛 프록시 수집
+      // (.g-nav 버튼·검색창을 상단바로 복사하던 분기 + buildButtonProxy·
+      // buildSearchProxy)을 제거했다 — 모든 현행 앱은 MyHubMenus를 갖거나
+      // data-app-actions="none"이라 수집할 것이 없었고, 2026-11-04 결정대로
+      // 상단바 프록시는 원하지 않는다.
       if (barMode === 'menu') {
-        barMode = 'legacy';
+        barMode = 'none';
         barWin = undefined;
         barDoc = null;
         barSig = '';
         if (bar) bar.setMenus(null);
-        harvestWin = undefined;
-        harvestDoc = null;
       }
-      if (state.activeId === harvestWin && doc === harvestDoc) return;
-      harvestWin = state.activeId;
-      harvestDoc = doc;
-      box.innerHTML = '';
-      if (!doc) return;
-      var navEl = doc.querySelector('.g-nav');
-      if (navEl && navEl.getAttribute('data-app-actions') === 'none') return;
-      var nodes = doc.querySelectorAll('.g-nav .nav-search-wrap, .g-nav button');
-      Array.prototype.forEach.call(nodes, function (node) {
-        if (node.id === 'settingsBtn' || node.classList.contains('settings-btn')) return;
-        if (node.id === 'awAvatarBtn' || node.classList.contains('aw-avatar-btn')) return;
-        if (node.tagName === 'BUTTON' && node.closest && node.closest('.nav-search-wrap')) return;
-        var input = node.tagName === 'INPUT' ? node : node.querySelector('input');
-        if (input) box.appendChild(buildSearchProxy(node, input));
-        else box.appendChild(buildButtonProxy(node));
-      });
-      refreshIcons();
-    }
-    function buildButtonProxy(node) {
-      var btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = 'dt-app-action';
-      if ((node.textContent || '').trim()) btn.classList.add('dt-app-action-text');
-      var label = node.getAttribute('aria-label') || node.getAttribute('title') || '';
-      if (label) {
-        btn.title = label;
-        btn.setAttribute('aria-label', label);
-      }
-      btn.innerHTML = node.innerHTML;
-      btn.addEventListener('click', function () {
-        node.click();
-      });
-      return btn;
-    }
-    function buildSearchProxy(wrap, input) {
-      var box = document.createElement('label');
-      box.className = 'dt-app-search';
-      var icon = wrap.querySelector('svg');
-      if (icon) box.appendChild(document.importNode(icon, true));
-      var proxy = document.createElement('input');
-      proxy.type = 'search';
-      proxy.placeholder = input.getAttribute('placeholder') || '';
-      proxy.value = input.value || '';
-      proxy.setAttribute('aria-label', proxy.placeholder || '');
-      proxy.addEventListener('input', function () {
-        var Evt = view && view.Event ? view.Event : window.Event;
-        input.dispatchEvent(new Evt('input', { bubbles: true }));
-      });
-      box.appendChild(proxy);
-      return box;
     }
 
     var officeTabsByWin = new Map();
@@ -2675,15 +2657,7 @@
       missionBg = document.createElement('div');
       missionBg.className = 'dt-mission-bg';
       missionBg.hidden = true;
-      // 딤 레이어는 바탕화면 표면(#dt-surface) 안에 둔다: 표면은 fixed라
-      // 자체 스태킹 컨텍스트여서, body에 둔 레이어는 창 레이어(#dt-root
-      // z2)까지 통째로 덮어 스프레드 창이 블러에 가려지고 클릭도
-      // 가로막혔다 (실브라우저 실측). 표면 안 z1(아이콘과 동층·최상단,
-      // 창 z2 아래)이면 바탕화면·아이콘만 딤되고 창 미리보기는 선명하게
-      // 위에 남으며 포인터도 창에 닿는다.
-      var surface = document.getElementById('dt-surface');
-      if (surface) surface.appendChild(missionBg);
-      else anchor.parentNode.insertBefore(missionBg, anchor);
+      anchor.parentNode.insertBefore(missionBg, anchor);
       missionBg.addEventListener('pointerdown', function () {
         if (missionOpen) confirmMission();
       });
@@ -2722,7 +2696,6 @@
       if (el) {
         el.hidden = true;
         el.innerHTML = '';
-        el.classList.remove('is-open');
         el.classList.remove('is-entering');
         el.classList.remove('is-leaving');
       }
@@ -2778,7 +2751,7 @@
       if (target !== null && target !== state.activeSpace) switchSpace(target);
     }
     var MISSION_AREA_X = 56;
-    var MISSION_AREA_TOP = 84;
+    var MISSION_AREA_TOP = 176;
     var MISSION_GAP = 28;
     var MISSION_CAPTION_H = 30;
     function clearMissionSpread() {
@@ -2860,52 +2833,74 @@
         el.appendChild(cap);
       });
     }
-    function missionCardAt(x, y) {
+    // 미션 드래그의 hit 판정은 드래그 시작 시 캐시한 rect로만 한다
+    // (onMissionMove에서 레이아웃을 읽지 않는다 — 위 missionDrag 생성처 참조).
+    function pointInCachedRect(x, y, r) {
+      return !!r && r.width > 0 && x >= r.left && x <= r.right && y >= r.top && y <= r.bottom;
+    }
+    function missionCardAtCached(d) {
       var found = null;
-      missionCardsArr.forEach(function (c) {
-        var r = c.el.getBoundingClientRect();
-        if (r && r.width > 0 && x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) {
-          found = c.spaceId;
-        }
-      });
+      var rects = d.cardRects || [];
+      for (var i = 0; i < rects.length; i++) {
+        var c = rects[i];
+        if (pointInCachedRect(d.lastX, d.lastY, c)) found = c.spaceId;
+      }
       return found;
     }
-    function isOverMissionAdd(x, y) {
-      if (!missionAddEl) return false;
-      var r = missionAddEl.getBoundingClientRect();
-      return !!(r && r.width > 0 && x >= r.left && x <= r.right && y >= r.top && y <= r.bottom);
+    function isOverMissionAddCached(d) {
+      return pointInCachedRect(d.lastX, d.lastY, d.addRect);
     }
-    function onMissionMove(e) {
+    // 미션 드래그도 창 이동과 같은 이유로 rAF로 합친다: move 이벤트마다
+    // transform 쓰기 + hot 클래스 토글이 돌면 한 프레임에 여러 번
+    // 스타일 재계산이 일어나고, 그려지는 건 마지막 한 번뿐이다.
+    function applyMissionFrame() {
       var d = missionDrag;
       if (!d) return;
-      if (d.pointerId !== undefined && e.pointerId !== undefined && e.pointerId !== d.pointerId) return;
-      var mdx = e.clientX - d.startX;
-      var mdy = e.clientY - d.startY;
-      if (!d.moved && Math.hypot(mdx, mdy) < 6) return;
-      d.moved = true;
+      d.rafId = null;
       var rec = entries.get(d.id);
       var base = missionLayout.get(d.id);
       if (rec && base) {
         rec.el.classList.add('dt-mission-drag');
-        rec.el.style.transform = 'translate(' + (base.dx + mdx) + 'px,' + (base.dy + mdy) + 'px) scale(' + base.scale + ')';
+        rec.el.style.transform = 'translate(' + (base.dx + d.mdx) + 'px,' + (base.dy + d.mdy) + 'px) scale(' + base.scale + ')';
       }
-      var over = missionCardAt(e.clientX, e.clientY);
+      var over = missionCardAtCached(d);
       if (over !== d.hotSpace) {
         d.hotSpace = over;
         missionCardsArr.forEach(function (c) {
           c.el.classList.toggle('is-drop-hot', c.spaceId === over);
         });
       }
-      var overAdd = isOverMissionAdd(e.clientX, e.clientY);
+      var overAdd = isOverMissionAddCached(d);
       if (overAdd !== d.hotAdd) {
         d.hotAdd = overAdd;
         if (missionAddEl) missionAddEl.classList.toggle('is-drop-hot', overAdd);
+      }
+    }
+    function onMissionMove(e) {
+      var d = missionDrag;
+      if (!d) return;
+      if (d.pointerId !== undefined && e.pointerId !== undefined && e.pointerId !== d.pointerId) return;
+      d.lastX = e.clientX;
+      d.lastY = e.clientY;
+      d.mdx = e.clientX - d.startX;
+      d.mdy = e.clientY - d.startY;
+      if (!d.moved && Math.hypot(d.mdx, d.mdy) < 6) return;
+      d.moved = true;
+      if (d.rafId === null || d.rafId === undefined) {
+        d.rafId = raf(applyMissionFrame);
       }
     }
     function finishMissionDrag(e) {
       var d = missionDrag;
       if (!d) return;
       if (e && d.pointerId !== undefined && e.pointerId !== undefined && e.pointerId !== d.pointerId) return;
+      if (d.rafId !== null && d.rafId !== undefined) {
+        cancelRaf(d.rafId);
+        d.rafId = null;
+        // 대기 중이던 마지막 move 프레임을 동기 반영해 드롭 판정
+        // (hotSpace/hotAdd)이 pointerup 직전 최신 좌표를 쓰게 한다.
+        applyMissionFrame();
+      }
       missionDrag = null;
       var rec = entries.get(d.id);
       if (rec) rec.el.classList.remove('dt-mission-drag');
@@ -2939,7 +2934,7 @@
       if (d.hotSpace !== null && d.hotSpace !== w.space) {
         lastMissionDrop = Date.now();
         commit(stateApi.moveWindowToSpace(state, w.id, d.hotSpace));
-        openMission();
+        refreshMissionCards();
         return;
       }
       var base = missionLayout.get(d.id);
@@ -2956,8 +2951,48 @@
       el.addEventListener('pointerdown', function (e) {
         if (!missionOpen) return;
         var t = e.target;
-        var onEmpty = t === el || (t.classList && (t.classList.contains('dt-mission-bar') || t.classList.contains('dt-mission-labels')));
+        var onEmpty = t === el || (t.classList && t.classList.contains('dt-mission-spaces'));
         if (onEmpty) confirmMission();
+      });
+    }
+
+    // 카드 썸네일 안의 창 위치(winrect)를 채운다 — openMission과
+    // refreshMissionCards가 같은 기하를 쓴다 (한 곳만 고치면 양쪽이 바뀐다).
+    function appendMissionWinrects(stage, spaceId, vp) {
+      state.windows.forEach(function (w) {
+        if (w.space !== spaceId || w.minimized) return;
+        var rect = document.createElement('div');
+        rect.className = 'dt-mission-winrect';
+        if (isMobile()) {
+          rect.style.left = '0%';
+          rect.style.top = '0%';
+          rect.style.width = '100%';
+          rect.style.height = '100%';
+        } else {
+          rect.style.left = (w.x / vp.w) * 100 + '%';
+          rect.style.top = (w.y / vp.h) * 100 + '%';
+          rect.style.width = (w.w / vp.w) * 100 + '%';
+          rect.style.height = (w.h / vp.h) * 100 + '%';
+        }
+        stage.appendChild(rect);
+      });
+    }
+    // 드롭 후 미션 전체를 다시 만들지 않고 카드 썸네일의 winrect만 갱신한다.
+    // openMission()은 카드·이름·닫기 버튼·+ 버튼을 전부 재생성하고 진입
+    // 애니메이션·아이콘 새로고침·sync까지 다시 돌려 드롭 정착이 끊겼다.
+    // 스페이스 수가 그대로인 드롭(다른 데스크톱으로 이동)에서는 카드 DOM을
+    // 유지한 채 winrect만 바꾸고, 스프레드는 직전 commit의 sync가 이미
+    // layoutMissionSpread로 갱신했다. + 버튼으로 스페이스가 늘어나는
+    // 드롭은 카드 자체가 늘어나 openMission()을 그대로 쓴다.
+    function refreshMissionCards() {
+      var el = deps.missionEl;
+      if (!el || !missionOpen) return;
+      var vp = getViewport();
+      missionCardsArr.forEach(function (c) {
+        var stage = c.el.querySelector('.dt-mission-stage');
+        if (!stage) return;
+        stage.querySelectorAll('.dt-mission-winrect').forEach(function (n) { n.remove(); });
+        appendMissionWinrects(stage, c.spaceId, vp);
       });
     }
 
@@ -2979,30 +3014,29 @@
       var bg = ensureMissionBg();
       if (bg) applyMissionWallpaper(bg);
       el.innerHTML = '';
+      var vp = getViewport();
       var viewSpace = missionSel;
-      // 실제 macOS 미션 컨트롤 형태: 화면 맨 위 스페이스 바에 이름만
-      // 나열하고, 보고 있는 스페이스만 알약으로 강조한다 (사용자 실측
-      // 정본 2026-11-10: 바 60px·라벨 14px·알약 높이 22px·+ 원형 우상단).
-      var bar = document.createElement('div');
-      bar.className = 'dt-mission-bar';
-      var labels = document.createElement('div');
-      labels.className = 'dt-mission-labels';
+      var strip = document.createElement('div');
+      strip.className = 'dt-mission-spaces';
       missionCardsArr = [];
-      var missionSpaces = missionCardsArr;
+      var missionCards = missionCardsArr;
       state.spaces.forEach(function (spaceId, i) {
-        var label = document.createElement('button');
-        label.type = 'button';
-        label.className = 'dt-mission-label' + (spaceId === viewSpace ? ' is-current' : '');
-        label.dataset.spaceId = String(spaceId);
-        missionSpaces.push({ spaceId: spaceId, el: label });
-        var text = document.createElement('span');
-        text.className = 'dt-mission-label-text';
-        text.textContent = '데스크톱 ' + (i + 1);
-        label.appendChild(text);
+        var card = document.createElement('div');
+        card.className = 'dt-mission-card' + (spaceId === state.activeSpace ? ' is-active' : '') + (spaceId === viewSpace ? ' is-selected' : '');
+        card.dataset.spaceId = String(spaceId);
+        missionCards.push({ spaceId: spaceId, el: card });
+        var stage = document.createElement('div');
+        stage.className = 'dt-mission-stage';
+        appendMissionWinrects(stage, spaceId, vp);
+        var name = document.createElement('div');
+        name.className = 'dt-mission-name';
+        name.textContent = '데스크톱 ' + (i + 1);
+        card.appendChild(stage);
+        card.appendChild(name);
         if (state.spaces.length > 1) {
-          var closeBtn = document.createElement('span');
-          closeBtn.className = 'dt-mission-label-x';
-          closeBtn.setAttribute('role', 'button');
+          var closeBtn = document.createElement('button');
+          closeBtn.type = 'button';
+          closeBtn.className = 'dt-mission-close';
           closeBtn.setAttribute('aria-label', '데스크톱 ' + (i + 1) + ' 닫기');
           closeBtn.innerHTML = '<i data-lucide="x"></i>';
           closeBtn.addEventListener('click', function (ev) {
@@ -3011,31 +3045,29 @@
             if (missionSel === spaceId) missionSel = state.activeSpace;
             openMission();
           });
-          label.appendChild(closeBtn);
+          card.appendChild(closeBtn);
         }
-        label.addEventListener('click', function () {
+        card.addEventListener('click', function () {
           if (Date.now() - lastMissionDrop < 350) return;
           missionSel = spaceId;
           confirmMission();
         });
-        labels.appendChild(label);
+        strip.appendChild(card);
       });
-      bar.appendChild(labels);
-      var addBtn = document.createElement('button');
-      addBtn.type = 'button';
-      addBtn.className = 'dt-mission-add';
-      addBtn.setAttribute('aria-label', '데스크톱 추가');
-      addBtn.innerHTML = '<i data-lucide="plus"></i>';
-      addBtn.addEventListener('click', function () {
+      var addCard = document.createElement('button');
+      addCard.type = 'button';
+      addCard.className = 'dt-mission-add';
+      addCard.setAttribute('aria-label', '데스크톱 추가');
+      addCard.innerHTML = '<i data-lucide="plus"></i>';
+      addCard.addEventListener('click', function () {
         addSpace();
         openMission();
       });
-      bar.appendChild(addBtn);
-      el.appendChild(bar);
-      missionAddEl = addBtn;
+      strip.appendChild(addCard);
+      el.appendChild(strip);
+      missionAddEl = addCard;
       wireMissionEmptyClick();
       refreshIcons();
-      el.classList.add('is-open');
       el.hidden = false;
       if (bg) bg.hidden = false;
       root.classList.add('dt-mission-mode');
@@ -3107,6 +3139,7 @@
         menuBar.destroy();
         menuBar = null;
       }
+      if (drag && drag.el) drag.el.classList.remove('dt-win-dragging');
       drag = null;
       window.removeEventListener('message', onDocTitleMessage);
       window.removeEventListener('message', onBrowserTabsMessage);

@@ -19,7 +19,7 @@ const PUBLIC = path.join(ROOT, 'public')
 const ASSET_LIST = path.join(ROOT, 'scripts', 'static-assets.json')
 
 // 직접 URL로만 여는 페이지 (어디에서도 링크하지 않지만 운영에서 서빙 중이라 집합 유지)
-const DIRECTLY_SERVED = new Set(['/backup.html', '/briefing.html'])
+const DIRECTLY_SERVED = new Set(['/backup.html'])
 
 // 엔진·벤더 서브트리: 내부 파일끼리 상대 경로·동적 로딩으로 참조해 정적
 // 정규식 스캔으로는 참조를 잡을 수 없다. 이 서브트리들은 통째로 업로드

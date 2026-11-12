@@ -152,6 +152,7 @@ function pointer(target: any, type: string, x = 0, y = 0): void {
   const ev = new (getWin().MouseEvent)(type, { bubbles: true, cancelable: true, clientX: x, clientY: y })
   target.dispatchEvent(ev)
 }
+const wait = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
 describe('데스크톱 셸 — 창 생성과 keep-alive', () => {
   test('openModule → 창 DOM·iframe이 정확히 1개 생성되고 src가 모듈 url이다', () => {
@@ -274,7 +275,7 @@ describe('데스크톱 셸 — 포커스와 드래그', () => {
     expect(m.getState().windows[0].z).toBe(zBefore)
   })
 
-  test('제목줄 드래그: 이동 중에는 요소 위치만, 종료 시 상태·저장에 확정된다', () => {
+  test('제목줄 드래그: 이동 중에는 요소 위치만, 종료 시 상태·저장에 확정된다', async () => {
     const storage = new MemoryStorage()
     const m = makeManager(storage)
     m.openModule('memo')
@@ -284,7 +285,9 @@ describe('데스크톱 셸 — 포커스와 드래그', () => {
     pointer(bar, 'pointerdown', 200, 200)
     pointer(getDoc(), 'pointermove', 240, 230)
     // 드래그 중: 운영 계약은 transform으로만 따라가고 left/top·상태는
-    // 확정되지 않는다 (windows.js onPointerMove의 move 분기)
+    // 확정되지 않는다. 그리기만 rAF로 합쳐지므로 다음 프레임에 반영된다
+    // (windows.js applyMoveFrame — 고주파 move 이벤트의 스타일 재계산 방지).
+    await wait(50)
     expect(winEl('memo').style.transform).toBe('translate(40px,30px)')
     expect(winEl('memo').style.left).toBe(before.x + 'px')
     expect(winEl('memo').style.top).toBe(before.y + 'px')

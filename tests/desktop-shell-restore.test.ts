@@ -14,10 +14,12 @@
  * - 확대 버튼 aria-label이 모드 동기화에서 지워지지 않는다
  *   (full이면 '원래 크기로', 아니면 '확대').
  * - 독 항목 라벨(설정·휴지통)이 aria-label로 실제 렌더된다.
- * - desktop.html/CSS의 구조 계약: #dt-surface가 배경·아이콘 레이어를
- *   감싸고, JN은 텍스트 마크이며, #dt-icons는 pointer-events:none +
- *   아이콘만 auto (빈 영역 입력이 배경화면에 닿는 전제), .dt-desk-icon은
- *   투명 배경 (UA 버튼 면 #efefef 회귀 방지), shell.css는 운영 원본이다
+ * - desktop.html/CSS의 구조 계약: #dt-surface가 배경·아이콘·위젯
+ *   레이어를 감싸고 #dt-root(창 루트)는 body 직속 형제다 (아래 구조
+ *   계약 테스트의 개정 사유 참조), JN은 텍스트 마크이며, #dt-icons는
+ *   pointer-events:none + 아이콘만 auto (빈 영역 입력이 배경화면에
+ *   닿는 전제), .dt-desk-icon은 투명 배경 (UA 버튼 면 #efefef 회귀
+ *   방지), shell.css는 운영 원본이다
  *   (--aws-* 토큰 명명은 원본의 잔존 명명 — 2026-11-11 바이트 회수로 정정).
  * - 컨텍스트 메뉴 hover·활성 선택 색이 원본 값(#0a84ff/#dc2626 솔리드 +
  *   흰 글자)이다 — #eff6ff 틴트로 되돌리면 실패한다.
@@ -82,8 +84,8 @@ function setupShell() {
   <div id="dt-wp-caption"></div>
   <div id="dt-icons"></div>
   <div id="dt-widgets"></div>
-  <div id="dt-root"></div>
 </main>
+<div id="dt-root"></div>
 <div id="dt-mission"></div>
 <nav id="dt-dock"></nav>`
 }
@@ -169,13 +171,50 @@ describe('독 항목 라벨', () => {
 })
 
 describe('desktop.html / CSS 구조 계약', () => {
-  test('#dt-surface가 배경·아이콘·위젯·창 루트를 감싼다', () => {
+  // 구조 계약 개정 (2026-11-11): 종전 계약은 "#dt-surface가 창 루트까지
+  // 감싼다"였으나 원본 구조로 정정한다. 근거:
+  // - 원본 증거에 #dt-surface가 없다 — 운영 전사본 JS 전체
+  //   (~/workspace/prod-pull/files/)와 운영 회수 desktop.css 어디에도
+  //   'dt-surface' 참조가 0건이다. 래퍼는 재구성 산물이다.
+  // - 운영 CSS의 미션 레이어 산술(배경 z 58 < 창 루트 z 60 < 미션 띠
+  //   z 65 < 독 z 70)은 네 레이어가 전부 body 형제일 때만 성립한다.
+  // - position:fixed인 #dt-surface는 스태킹 컨텍스트를 만들어 내부
+  //   #dt-root의 z 60을 통째로 가둔다 — 실제로 미션 컨트롤에서 배경
+  //   (z 58)이 스프레드 창 위에 깔려 창 본문이 블러에 묻히는 결함이
+  //   실브라우저 elementsFromPoint로 확정됐다 (진단 후속 실측).
+  // #dt-root는 position:fixed라 부모와 무관하게 뷰포트 기준이며,
+  // 히트 테스트 계약(루트 pointer-events:none·창만 auto)과 밴드 표면
+  // (배경화면 레이어) 계약은 부모 이동과 무관하게 유지된다.
+  test('#dt-surface는 배경·아이콘·위젯을 감싸고 창 루트는 감싸지 않는다', () => {
     const surface = DESKTOP_HTML.match(/<main id="dt-surface">([\s\S]*?)<\/main>/)
     expect(surface).not.toBeNull()
     const inner = (surface as RegExpMatchArray)[1]
-    for (const id of ['dt-wallpaper', 'dt-icons', 'dt-widgets', 'dt-root']) {
+    for (const id of ['dt-wallpaper', 'dt-icons', 'dt-widgets']) {
       expect(inner).toContain(`id="${id}"`)
     }
+    expect(inner).not.toContain('id="dt-root"')
+  })
+
+  test('#dt-root는 body 직속 형제로 #dt-surface 다음·#dt-mission 앞에 있다', () => {
+    const mainEnd = DESKTOP_HTML.indexOf('</main>')
+    const rootIdx = DESKTOP_HTML.indexOf('id="dt-root"')
+    const missionIdx = DESKTOP_HTML.indexOf('id="dt-mission"')
+    expect(mainEnd).toBeGreaterThan(-1)
+    expect(rootIdx).toBeGreaterThan(mainEnd)
+    expect(missionIdx).toBeGreaterThan(rootIdx)
+  })
+
+  test('미션 레이어 z 산술이 원본대로다 (배경 58 < 창 루트 60 < 띠 65 < 독 70)', () => {
+    const zOf = (re: RegExp) => {
+      const m = DESKTOP_CSS.match(re)
+      expect(m).not.toBeNull()
+      return parseInt((m as RegExpMatchArray)[1], 10)
+    }
+    const bg = zOf(/\.dt-mission-bg\s*\{[^}]*z-index:\s*(\d+)/)
+    const root = zOf(/#dt-root\.dt-mission-mode\s*\{\s*z-index:\s*(\d+)/)
+    const strip = zOf(/\.dt-mission\s*\{[^}]*z-index:\s*(\d+)/)
+    const dock = zOf(/#dt-dock\s*\{[^}]*z-index:\s*(\d+)/)
+    expect([bg, root, strip, dock]).toEqual([58, 60, 65, 70])
   })
 
   test('JN 마크는 운영 메커니즘이다: brand-logo img + desktop.css ::after 텍스트', () => {
@@ -289,14 +328,14 @@ describe('설정 메뉴 — 원본 캡처(2026-11-10) 계약', () => {
     expect(SHELL_CSS).toContain('.myhub-connect-panel')
   })
 
-  test('desktop.css의 설정 항목 규칙은 .myhub-settings-menu 안으로만 한정된다', () => {
-    // .myhub-settings-item은 nav.js 패널과 settings-menu.js가 공유하는 클래스명.
-    // desktop.css가 shell.css 뒤에 로드되므로 무한정 규칙이 있으면 nav 항목의
-    // hover 배경(#0a84ff 솔리드)이 틴트로 덮여 원본과 달라진다.
+  test('desktop.css에 죽은 설정 메뉴 블록이 없다 (settings-menu.js 전용 규칙 제거, 2026-11-12)', () => {
+    // settings-menu.js는 2026-11-12에 삭제됐고, 그 전용이던 .myhub-settings-menu·
+    // .myhub-settings-modal 규칙 19개도 desktop.css에서 함께 제거했다.
+    // nav.js 설정 패널은 shell.css가 스타일하므로 desktop.css에는 이
+    // 클래스들의 규칙이 남아 있으면 안 된다. 돌아오면 이 테스트가 잡는다.
     const stripped = DESKTOP_CSS.replace(/\/\*[\s\S]*?\*\//g, '')
-    expect(stripped).not.toMatch(/(^|\n)\.myhub-settings-item/)
-    expect(stripped).not.toMatch(/(^|\n)\.myhub-settings-sep/)
-    expect(stripped).toContain('.myhub-settings-menu .myhub-settings-item')
+    expect(stripped).not.toContain('.myhub-settings-menu')
+    expect(stripped).not.toContain('.myhub-settings-modal')
   })
 })
 
@@ -340,13 +379,5 @@ describe('컨텍스트 메뉴 기하 — 운영 서빙본 복원 (2026-11-10 회
     const sc = rule('.dt-ctx-shortcut')
     expect(sc).toContain('font-size: 12.5px')
     expect(sc).toContain('color: #9ca3af')
-  })
-
-  test('설정 메뉴 블록: hover는 원본 솔리드 #0a84ff, 서브메뉴 폭 236px', () => {
-    const hover = DESKTOP_CSS.match(/\.myhub-settings-menu \.myhub-settings-item:hover:not\(:disabled\)\s*\{([^}]*)\}/)
-    expect(hover).not.toBeNull()
-    expect((hover as RegExpMatchArray)[1]).toContain('background: #0a84ff')
-    expect((hover as RegExpMatchArray)[1]).toContain('color: #fff')
-    expect(rule('.myhub-settings-menu .myhub-settings-sub')).toContain('min-width: 236px')
   })
 })
