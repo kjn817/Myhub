@@ -1041,7 +1041,7 @@
   function fallbackPreview(ctx, state) {
     if (ctx.file.kind !== 'hwpx') {
       state.surface = 'preview';
-      ctx.showMessage('구형 한글(hwp) 파일은 앱에서 미리보기가 안 됩니다. 가져와서 서명스튜디오로 여세요.');
+      ctx.showMessage('구형 한글(hwp) 파일은 미리보기가 안 됩니다. 가져와서 한글 편집기로 여세요.');
       return Promise.resolve();
     }
     return ctx

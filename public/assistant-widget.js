@@ -231,7 +231,7 @@
       msgDiv.className = 'aw-msg assistant'; // N-10: 일반한 msg -> aw- 체계 (assistant-widget.css의 .aw-msg.assistant 규칙과 정합)
       
       var label = document.createElement('div');
-      label.textContent = '앱을 앱에서 발견했어요. 선택해주세요:';
+      label.textContent = '비슷한 항목이 여러 개 있어요. 선택해주세요:';
       label.style.marginBottom = '8px';
       msgDiv.appendChild(label);
       

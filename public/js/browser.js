@@ -415,7 +415,7 @@
           elsewhereMsg.textContent =
             '브라우저 \'' +
             tabTitle(owner) +
-            '\' 앱에서 실행 중이예요. 원격 브라우저는 한 번에 한 탭에서만 열려요.';
+            '\' 탭에서 실행 중이에요. 원격 브라우저는 한 번에 한 탭에서만 열려요.';
         }
       }
       if (urlInput) {

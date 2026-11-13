@@ -111,7 +111,7 @@
     if (report && report.census && report.census.live) {
       msg += ' (서버 실시간 census 기준 ' + countsText(report.census.live) + ')';
     }
-    show('errorBox', msg + ' 실행을 중단합니다. 이 건수만 Claude에 알려주세요.');
+    show('errorBox', msg + ' 실행을 중단합니다. 이 건수만 Muse에 알려주세요.');
   }
 
   window.krDryRun = async function () {
@@ -168,7 +168,7 @@
         return;
       }
       if (!countsEqual(report.rotated, lastPending)) {
-        show('errorBox', '전환 완료 건수가 dry-run 대상과 다릅니다 — rotated: ' + countsText(report.rotated) + ' / pending: ' + countsText(lastPending) + '. 대시보드 교체로 넘어가지 말고 이 건수를 Claude에 알려주세요.');
+        show('errorBox', '전환 완료 건수가 dry-run 대상과 다릅니다 — rotated: ' + countsText(report.rotated) + ' / pending: ' + countsText(lastPending) + '. 대시보드 교체로 넘어가지 말고 이 건수를 Muse에 알려주세요.');
         return;
       }
       show('successBox', '로테이션 완료 — ' + countsText(report.rotated) + ' 전부 새 키로 전환됐습니다.');

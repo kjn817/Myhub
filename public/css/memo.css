@@ -112,7 +112,6 @@ html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
     border-radius: 12px; padding: 4px 11px; cursor: pointer; color: var(--accent-ink);
   }
   .tag:hover { border-color: var(--accent); }
-  .tag.on { background: var(--accent); border-color: var(--accent); color: #fff; }
   .tag.on { background: var(--accent-soft); border-color: var(--text); color: var(--text); font-weight: 700; }
   .tag .n { color: var(--dim); font-weight: 400; margin-left: 4px; }
   .tag.on .n { color: var(--accent-ink); }
@@ -619,7 +618,6 @@ html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
   }
   @media (max-width: 1023.98px) {
     .col-left, .col-mid, .col-right { display: contents; }
-    #panes { display: none !important; }
     #pager { display: none !important; }
     #searchBox { order: 1; }
     #activeFilters { order: 2; }
@@ -697,6 +695,9 @@ html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
 .myhub-stepup-btns button, .memo-confirm-btns button {
   padding: 8px 20px; border-radius: 6px; border: 1px solid #ddd;
   background: #fff; cursor: pointer; font-size: 14px;
+}
+.myhub-stepup-btns .myhub-stepup-yes {
+  background: #007aff; color: #fff; border-color: #007aff;
 }
 .memo-confirm-btns .memo-confirm-yes.danger {
   background: #dc3545; color: #fff; border-color: #dc3545;

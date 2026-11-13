@@ -846,8 +846,11 @@
       });
       items.push({
         label: '백업',
-        disabled: !hasSettings,
-        onSelect: openShellSettings,
+        onSelect: function () {
+          // JN 메뉴 '백업'은 백업 모듈을 직접 연다 (nav.js
+          // openBackupInDesktop과 같은 계약 — 설정 메뉴를 경유하지 않는다).
+          openModule('backup');
+        },
       });
       var nav =
         deps.navApi || (typeof window !== 'undefined' ? window.MyHubNav : null);

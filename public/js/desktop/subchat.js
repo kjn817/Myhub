@@ -396,7 +396,7 @@
               }
             }
             if (candidateHit) {
-              pushMsg(s, 'assistant', '앱을 앱에서 발견했어요. 선택해주세요:', candidateHit.candidates, candidateHit.toolName);
+              pushMsg(s, 'assistant', '비슷한 항목이 여러 개 있어요. 선택해주세요:', candidateHit.candidates, candidateHit.toolName);
               s.sending = false;
               renderSession();
               return;
@@ -409,7 +409,7 @@
                     postToModule(targetWinId, { type: 'myhub:ui-action', action: action });
                   });
                 } else {
-                  pushMsg(s, 'assistant', '앱 동작은 해당 앱 창이 앞에 있을 때 실행해요.');
+                  pushMsg(s, 'assistant', '이 동작은 해당 앱 창이 앞에 있을 때 실행해요.');
                 }
               }
               if (data.dataChanged && targetWinId) {

@@ -19,7 +19,7 @@ async function createBackup() {
     return;
   }
   if (password.length < 8) {
-    showError('비밀 번호는 특수문자를 포함한 8글자 이상이어야 합니다.');
+    showError('비밀번호는 특수문자를 포함한 8글자 이상이어야 합니다.');
     return;
   }
   if (password !== passwordConfirm) {
@@ -41,13 +41,13 @@ async function createBackup() {
       body: JSON.stringify({ password: password })
     };
     const response = window._fetchStepUp
-      ? await window._fetchStepUp('/api/backup/encrypted', backupOpts, '백업 파일을 여는 비밀번호 확인 하세요.')
+      ? await window._fetchStepUp('/api/backup/encrypted', backupOpts, '백업 파일을 여는 비밀번호를 확인하세요.')
       : await fetch('/api/backup/encrypted', backupOpts);
 
     if (!response.ok) {
       const err = await response.json().catch(() => ({}));
       if (err.code === 'STEP_UP_REQUIRED') {
-        throw new Error('PIN 등록이 필요 합니다 백업 파일을. PIN만들수없다 을 등록하는 실행.');
+        throw new Error('백업하려면 먼저 PIN을 등록하세요.');
       }
       throw new Error(err.error || '백업이 실패했습니다.');
     }
@@ -70,7 +70,7 @@ async function createBackup() {
     // const memos = backup.data && backup.data.memos ? backup.data.memos : [];
     // TODO: 추출된 비밀 번호 상태로 경로 한도 공개 방식도 배정한 여는 복원본 문구로도 유럽 실행하다.
 
-    showSuccess('백업이 완료됐! 습니다 file이 파일은, 비밀 번호로 보호되니 안전한 곳에 보관하세요.');
+    showSuccess('백업이 완료됐습니다. 백업 파일은 비밀번호로 보호되니 안전한 곳에 보관하세요.');
     document.getElementById('password').value = '';
     document.getElementById('passwordConfirm').value = '';
   } catch (error) {
