@@ -102,9 +102,11 @@
 
   /**
    * deps = { layer, caption, storage, fetchFn?, imageCtor? }
-   * - layer: 배경을 거는 요소 (클래스·ackgroundImage를 관리한다).
-   *   부팅 레이어(.dt-wp-boot)는 앱 요소의 앱으로 앱는다 앱 사진이
-   *   레이어 자체의 배경이어야 미션 컨트롤이 배경을 읽어 갈 앱 있다.
+   * - layer: 배경을 거는 요소 (클래스·backgroundImage를 관리한다).
+   *   사진은 레이어 자체의 배경이어야 미션 컨트롤이 배경을 읽어 간다.
+   *   사진이 준비되기 전에는 레이어의 근검정 배경색(.dt-wallpaper)이
+   *   그대로 보인다 — JN 마크+진행 막대의 부팅 레이어는 2026-11-13
+   *   사용자 지시로 삭제했다 (MyHub 로딩 원형과 중첩된다는 지적).
    * - caption: 캡션 요소 (textContent와 hidden을 관리한다)
    * - 배경 선택 UI는 nav.js 설정 메뉴에 등록한다 (registerSettingsItems)
    */
@@ -118,51 +120,10 @@
     var pref = loadPref(storage);
     var destroyed = false;
     var seq = 0; // 적용 앱 앱 앱께 끝난 이전 시도가 화면을 앱 못하게
-    var photoShown = false;
-
-    function ensureBoot() {
-      var boot = layer.querySelector ? layer.querySelector('.dt-wp-boot') : null;
-      if (boot) return boot;
-      var doc = layer.ownerDocument || document;
-      boot = doc.createElement('div');
-      boot.className = 'dt-wp-boot';
-      boot.setAttribute('aria-hidden', 'true');
-      var mark = doc.createElement('span');
-      mark.className = 'dt-wp-boot-mark';
-      mark.textContent = 'JN';
-      var bar = doc.createElement('span');
-      bar.className = 'dt-wp-boot-bar';
-      var fill = doc.createElement('span');
-      fill.className = 'dt-wp-boot-bar-fill';
-      bar.appendChild(fill);
-      boot.appendChild(mark);
-      boot.appendChild(bar);
-      layer.appendChild(boot);
-      return boot;
-    }
-
-    function showBoot() {
-      var boot = ensureBoot();
-      boot.classList.remove('is-off');
-      boot.classList.remove('is-stopped');
-    }
-
-    function stopBoot() {
-      // 이미지 실패: 부팅 레이어는 유지하므로 진행 바만 멈춘다
-      var boot = ensureBoot();
-      boot.classList.add('is-stopped');
-    }
-
-    function hideBoot() {
-      var boot = ensureBoot();
-      boot.classList.add('is-off');
-    }
 
     function applyPhoto(url) {
       layer.className = 'dt-wallpaper dt-wp-photo';
       layer.style.backgroundImage = 'url("' + url + '")';
-      photoShown = true;
-      hideBoot();
     }
 
     // ---- 설치된 PWA 타이틀바 앱 동기 (Window Controls Overlay) ----
@@ -236,15 +197,15 @@
         syncToneFromImage(probe);
       };
       probe.onerror = function () {
+        // 이미지 실패: 아무 표시도 하지 않는다 — 레이어의 근검정
+        // 배경이 그대로 남는다 (부팅 레이어는 2026-11-13 삭제).
         if (destroyed || mySeq !== seq) return;
-        if (!photoShown) stopBoot();
       };
       probe.src = url;
     }
 
     function applyToday() {
       var mySeq = ++seq;
-      if (!photoShown) showBoot();
       // 이미지부터 받기 시작한다 앱 메타데이터를 기다리지 않는다.
       var dateStr = kstDateString(new Date());
       probeImage(imageUrlFor(dateStr), mySeq);
