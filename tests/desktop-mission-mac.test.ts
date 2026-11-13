@@ -26,10 +26,12 @@
  *   (insertBefore), CSS는 fixed·z 58·배경화면 이미지를 직접 칠하며
  *   (--dt-mission-wp 소비) blur(14px) saturate(1.3)를 건다. 애니메이션
  *   동안에는 body.dt-mission-anim 목록이 그 블러를 끈다.
- * - 미션 배경은 상단바 아래에서 시작한다 (top: 상단바 높이) — macOS는
- *   미션 컨트롤에서 메뉴바를 숨기지만 MyHub 상단바는 사라지지 않고
- *   밝은 채로 남아야 한다 (2026-11-13 사용자 지시). 상단바 z 60이
- *   배경 z 58보다 위인 것도 함께 고정한다.
+ * - 미션 배경의 박스는 뷰포트 전체(inset: 0)이고 상단바 높이만큼
+ *   clip-path로 잘라낸다 — 박스를 top으로 줄이면 cover 기하가
+ *   달라져 진입할 때 배경화면이 상단바 높이만큼 툭 떨어져 보인다
+ *   (2026-11-13 사용자 실화면 지적). 클립이 상단바 뒤를 비우므로
+ *   상단바는 밝은 채로 남는다. 상단바 z 60이 배경 z 58보다 위인
+ *   것도 함께 고정한다.
  * - + 버튼은 스페이스 밴드 우상단 점선 원형(44px, dashed)이며
  *   클릭하면 데스크톱이 추가되고 오버레이는 열린 채 카드가
  *   늘어난다. (카드 뒤 인라인이던 시절과 다르다 — 2026-11-13
@@ -302,16 +304,17 @@ describe('미션 컨트롤 — macOS 스페이스 바 (2026-11-13)', () => {
     expect((hover as RegExpMatchArray)[1]).toContain('translateY(-50%)')
   })
 
-  test('미션 배경은 상단바 아래에서 시작하고 상단바가 배경보다 위에 있다', () => {
+  test('미션 배경은 전체 박스 + 상단 클립이고 상단바가 배경보다 위에 있다', () => {
     const bg = DESKTOP_CSS.match(/\.dt-mission-bg\s*\{([^}]*)\}/)
     expect(bg).not.toBeNull()
     const body = (bg as RegExpMatchArray)[1]
-    // inset: 0이면 상단바 뒤까지 어둡게 덮어 상단바가 어두워진다.
-    expect(body).not.toContain('inset: 0')
-    expect(body).toContain('top: calc(var(--topnav-h')
-    expect(body).toContain('left: 0')
-    expect(body).toContain('right: 0')
-    expect(body).toContain('bottom: 0')
+    // 박스는 뷰포트 전체여야 한다 — top으로 박스를 줄이면 cover
+    // 기하가 달라져 진입할 때 배경화면이 상단바 높이만큼 툭
+    // 떨어져 보인다 (2026-11-13 사용자 실화면 지적). 상단바 뒤는
+    // clip-path로 비운다 (클립 없이는 상단바가 어두워진다).
+    expect(body).toContain('inset: 0')
+    expect(body).not.toContain('top: calc(var(--topnav-h')
+    expect(body).toContain('clip-path: inset(calc(var(--topnav-h, 34px) + max(env(safe-area-inset-top), 4px)) 0 0 0)')
     // 상단바(.g-nav) z 60 > 미션 배경 z 58 — 상단바가 가려지지 않는다.
     // ^ 앵커 필수 — 앞에 html.myhub-embedded .g-nav 규칙이 있어
     // 앵커 없으면 그쪽이 먼저 잡힌다.

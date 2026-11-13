@@ -1229,14 +1229,15 @@ html, body { overscroll-behavior-x: none; }
    엘리먼트를 transform으로 축소한 스프레드라 작업 상태가 그대로 보인다. */
 /* 미션 배경은 상단바 아래에서 시작한다 (2026-11-13): macOS는 미션
    컨트롤에서 메뉴바를 숨기지만 MyHub 상단바는 사라지지 않고 밝은
-   채로 남아야 한다. inset: 0이면 상단바 뒤까지 어둡게 덮어 상단바
-   블러가 어두운 배경을 샘플링해 회색으로 가라앉는다. */
+   채로 남아야 한다. 상단바 뒤를 비우는 방법은 clip-path다 —
+   top으로 박스를 줄이면 cover 기하가 달라져 진입할 때 배경화면이
+   상단바 높이만큼 툭 떨어져 보인다 (2026-11-13 사용자 실화면 지적).
+   박스는 뷰포트 전체(inset: 0)로 바탕화면과 기하를 일치시키고,
+   클립이 상단바 뒤의 페인트(어둡게 + 블러)만 잘라낸다. */
 .dt-mission-bg {
   position: fixed;
-  top: calc(var(--topnav-h, 34px) + max(env(safe-area-inset-top), 4px));
-  left: 0;
-  right: 0;
-  bottom: 0;
+  inset: 0;
+  clip-path: inset(calc(var(--topnav-h, 34px) + max(env(safe-area-inset-top), 4px)) 0 0 0);
   z-index: 58;
   background-color: rgba(15, 17, 20, 0.42);
   background-image: linear-gradient(rgba(15, 17, 20, 0.42), rgba(15, 17, 20, 0.42)), var(--dt-mission-wp, none);

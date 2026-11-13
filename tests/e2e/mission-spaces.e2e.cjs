@@ -59,10 +59,21 @@ runScenario('mission-spaces', async (t) => {
     out.topbar = { y: nr.y, h: nr.height, opacity: getComputedStyle(nav).opacity };
     const hit = document.elementFromPoint(100, 16);
     out.topbarHitInsideNav = !!(hit && hit.closest && hit.closest('.g-nav'));
-    // 상단바 밝기: 미션 배경이 상단바 뒤를 덮으면 어두워진다.
-    // 배경 요소의 top이 상단바 높이 이상이면 상단바 뒤는 배경화면 그대로다.
+    // 미션 배경: 박스는 뷰포트 전체여야 배경화면 cover 기하가
+    // 바탕화면과 일치해 진입할 때 배경이 떨어지지 않는다. 상단바
+    // 뒤는 clip-path로 비운다 (박스를 top으로 줄이던 시절과 다름).
     const bg = document.querySelector('.dt-mission-bg');
-    out.missionBgTop = bg ? bg.getBoundingClientRect().top : null;
+    if (bg) {
+      const br = bg.getBoundingClientRect();
+      const clip = getComputedStyle(bg).clipPath || '';
+      const mClip = clip.match(/inset\(([\d.]+)px/);
+      out.missionBg = {
+        top: br.top, bottom: br.bottom,
+        clipTop: mClip ? parseFloat(mClip[1]) : null, clip,
+      };
+    } else {
+      out.missionBg = null;
+    }
     out.cards = Array.from(document.querySelectorAll('.dt-mission-card')).map((c) => {
       const name = c.querySelector('.dt-mission-name').getBoundingClientRect();
       const stage = c.querySelector('.dt-mission-stage').getBoundingClientRect();
@@ -111,10 +122,14 @@ runScenario('mission-spaces', async (t) => {
   });
 
   // 1. 상단바: 보이고, 클릭 가능하고, 미션 배경이 그 뒤를 덮지 않는다.
+  // 미션 배경 박스는 뷰포트 전체(배경화면 기하 일치) + 상단 클립.
   assertEq(m.topbar.y, 0, '상단바가 뷰포트 최상단에 있어야 한다');
   assert(m.topbarHitInsideNav, '상단바 중앙을 눌렀을 때 상단바 요소가 잡혀야 한다 (미션 오버레이에 가려지면 안 된다)');
-  assert(m.missionBgTop !== null && m.missionBgTop >= m.topbar.h - 1,
-    `미션 배경이 상단바 아래에서 시작해야 한다 (배경 top: ${m.missionBgTop}, 상단바 높이: ${m.topbar.h})`);
+  assert(m.missionBg, '미션 배경 레이어가 있어야 한다');
+  assertNear(m.missionBg.top, 0, 1, '미션 배경 박스가 뷰포트 최상단에서 시작해야 한다 (전체 박스)');
+  assertNear(m.missionBg.bottom, m.vp.h, 1, '미션 배경 박스가 뷰포트 최하단까지 가야 한다 (전체 박스)');
+  assert(m.missionBg.clipTop !== null && Math.abs(m.missionBg.clipTop - m.topbar.h) <= 1,
+    `미션 배경 클립이 상단바 높이와 일치해야 한다 (클립: ${m.missionBg.clipTop}px, 상단바: ${m.topbar.h}px, clip: ${m.missionBg.clip})`);
 
   // 2. 스페이스 바는 상단 전체를 차지하는 밴드다 (구분선 포함).
   assert(m.strip, '스페이스 밴드가 있어야 한다');
