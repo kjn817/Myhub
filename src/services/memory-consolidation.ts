@@ -32,7 +32,7 @@ import {
   fetchAllActiveMemories,
 } from './memory-scan'
 
-export { contentTokens, hasNegationMarker, NEGATION_MARKERS } from './memory-scan'
+export { contentTokens, hasNegationMarker } from './memory-scan'
 
 /** 수면 통합 실행 시각 (KST). Cron은 5분마다 틱하므로 03:00~03:59 중 첫 틱에 1회 실행. */
 export const CONSOLIDATION_HOUR_KST = 3

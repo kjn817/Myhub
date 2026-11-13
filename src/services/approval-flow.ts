@@ -28,8 +28,6 @@ export {
   describeToolAction,
   isPossibleApprovalReply,
   parseApprovalReply,
-  type ApprovalReplyKind,
-  type ToolActionDescription,
 } from './approval-text'
 
 /** 승인 대기 타임아웃 — 10분 안에 답이 없으면 요청 만료 */

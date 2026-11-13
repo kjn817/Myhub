@@ -1,7 +1,5 @@
 import { MAX_OPS } from './office-ops-shared';
 
-export { validateSlideOps, SLIDE_OPS_GUIDE } from './office-ops-slide';
-
 export type SheetCellValue = string | number | boolean | null;
 export type SheetCellInput = { value: SheetCellValue } | { formula: string };
 

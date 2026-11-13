@@ -174,40 +174,11 @@ body.dt-fullscreen .g-nav [data-menubar-trigger].is-open { background: rgba(255,
 /* 활성 표기도 메뉴 트리거와 같은 캡슐로 통일한다 (기준 사진 결) */
 .dt-office-tab.is-active { color: #111827; font-weight: 700; background: rgba(60, 64, 67, .14); }
 
-.dt-office-tab-file { font-weight: 600; color: #1f2937; }
-
-/* 묶음 구분 (PDF: 메뉴 | 모드 탭) — 버튼이 아닌 가는 세로선 */
-.dt-office-tab-sep { flex: none; width: 1px; height: 16px; margin: 0 5px; background: rgba(60, 64, 67, .25); }
-
-.dt-office-tab-fold {
-  flex: none; margin-left: 2px;
-  display: inline-flex; align-items: center; justify-content: center;
-  width: 24px; height: 24px;
-  border: 0; border-radius: 6px; background: none;
-  color: #6b7280; cursor: pointer;
-}
-
-.dt-office-tab-fold:hover { background: rgba(60, 64, 67, .09); }
-
-.dt-office-tab-chevron {
-  box-sizing: border-box; width: 7px; height: 7px;
-  border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor;
-  display: block;
-}
-
-.dt-office-tab-chevron-up { transform: translateY(2px) rotate(225deg); }
-
-.dt-office-tab-chevron-down { transform: translateY(-2px) rotate(45deg); }
-
 body.dt-fullscreen .dt-office-tab { color: #d1d5db; }
 
 body.dt-fullscreen .dt-office-tab:hover { background: rgba(255, 255, 255, .14); color: #fff; }
 
 body.dt-fullscreen .dt-office-tab.is-active { color: #fff; background: rgba(255, 255, 255, .2); }
-
-body.dt-fullscreen .dt-office-tab-fold { color: #d1d5db; }
-
-body.dt-fullscreen .dt-office-tab-fold:hover { background: rgba(255, 255, 255, .14); }
 
 @media (max-width: 760px) {
   .dt-office-tabs { margin-left: 4px; }
@@ -2128,8 +2099,6 @@ body.dt-material-opaque .dt-window { background: #fff; }
 .myhub-win-tools:not(.is-compact) .myhub-ft-more { display: none; }
 
 .dt-win-btabs-on .myhub-btab { background: rgba(255,255,255,.75); }
-
-#dt-dock.dt-dock-peek { }
 
 .dt-dock-item:active { filter: brightness(1.12); }
 

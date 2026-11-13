@@ -45,21 +45,17 @@ import {
 } from './news-source-legs'
 
 export {
-  LEG_FETCH_TIMEOUT_MS,
   PRESS_RSS_FEEDS,
   PRESS_RSS_KO_FEEDS,
   fetchGoogleNewsRss,
   fetchPressRssHeadlines,
   parseGoogleNewsRss,
-  parseNaverNewsResponse,
   parseRssItems,
   pressQueryTokens,
   searchExaNews,
   searchNaverNews,
   searchTavilyNews,
-  type FetchFn,
   type NewsEnv,
-  type PressRssFeed,
 } from './news-source-legs'
 
 export type NewsSourceName = 'naver' | 'press-rss' | 'gnews-rss' | 'tavily' | 'exa'

@@ -132,5 +132,3 @@ async function handle(c: any, mode: 'rotate' | 'rollback') {
 
 keyRotationApp.post('/rotate', (c) => handle(c, 'rotate'))
 keyRotationApp.post('/rollback', (c) => handle(c, 'rollback'))
-
-export default keyRotationApp

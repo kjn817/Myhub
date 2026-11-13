@@ -1696,30 +1696,6 @@
       render();
     }
 
-    function trashFolder(row) {
-      callApi('/api/drive/folders/' + row.folderId + '/trash', { method: 'POST' })
-        .then(function () {
-          state.trashData = null;
-          state.actionMsg = '휴지통으로 보냈습니다';
-          return reloadListing();
-        })
-        .catch(function () {
-          fail('휴지통으로 보내지 못했습니다');
-        });
-    }
-
-    function trashFile(row) {
-      callApi('/api/drive/files/' + row.fileId + '/trash', { method: 'POST' })
-        .then(function () {
-          state.trashData = null;
-          state.actionMsg = '휴지통으로 보냈습니다';
-          return reloadListing();
-        })
-        .catch(function () {
-          fail('휴지통으로 보내지 못했습니다');
-        });
-    }
-
     function renameFolder(row) {
       Promise.resolve(promptFn('폴더 이름', row.name)).then(function (answer) {
         if (answer === null || answer === undefined) return;

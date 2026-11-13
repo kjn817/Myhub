@@ -13,9 +13,11 @@
  *   finder.html·office.html 양쪽의 #fvBody가 finder-viewer-body
  *   클래스를 가진다. 클래스가 없으면 JS가 붙이는 fv-fill만으로는
  *   규칙이 영원히 매칭되지 않는다.
- * - 높이 전파 체인이 끊기지 않는다: .fv-window가 세로 flex로
- *   크롬과 본문을 쌓고, office 루트(.office-viewer)도 세로 flex이며,
- *   본문(.finder-viewer-body)이 flex:1 + min-height:0을 가진다.
+ * - 높이 전파 체인이 끊기지 않는다: 뷰어 루트(.finder-viewer)가
+ *   세로 flex로 크롬과 본문을 쌓고, office 루트(.office-viewer)도
+ *   세로 flex이며, 본문(.finder-viewer-body)이 flex:1 + min-height:0을
+ *   가진다. (.fv-window는 DOM에 존재하지 않는 유령 중간 고리라
+ *   2단계 정리에서 제거됐다 — 루트 자체가 세로 flex다.)
  * - Finder 뷰어 루트는 finder-viewer 오버레이 + hidden 시작이다
  *   (닫힌 상태는 목록 표면과 간섭 없음, 열면 전체 화면 다이얼로그).
  */
@@ -83,16 +85,21 @@ describe('뷰어 임베드 채움 계약', () => {
     expect(tag![0]).toContain('hidden')
   })
 
-  test('높이 전파 체인: .fv-window와 .office-viewer가 세로 flex다', () => {
-    const win = ruleBody(FINDER_CSS, '.fv-window {')
-    expect(win).toMatch(/display:\s*flex/)
-    expect(win).toMatch(/flex-direction:\s*column/)
-    expect(win).toMatch(/min-height:\s*0/)
+  test('높이 전파 체인: .finder-viewer와 .office-viewer가 세로 flex다', () => {
+    // 루트(.finder-viewer) 자체가 세로 flex — 크롬(.finder-viewer-head)과
+    // 본문(.finder-viewer-body)을 쌓는 고리는 루트이지 별도 껍질이 아니다.
+    const root = ruleBody(FINDER_CSS, '.finder-viewer {')
+    expect(root).toMatch(/display:\s*flex/)
+    expect(root).toMatch(/flex-direction:\s*column/)
     const officeViewer = ruleBody(OFFICE_CSS, '.office-viewer {')
     expect(officeViewer).toMatch(/display:\s*flex/)
     expect(officeViewer).toMatch(/flex-direction:\s*column/)
     const body = ruleBody(FINDER_CSS, '.finder-viewer-body {')
     expect(body).toMatch(/flex:\s*1 1 auto/)
     expect(body).toMatch(/min-height:\s*0/)
+  })
+
+  test('유령 규칙 .fv-window가 다시 생기지 않는다', () => {
+    expect(FINDER_CSS).not.toContain('.fv-window')
   })
 })

@@ -862,23 +862,6 @@ window._confirmDelete = function(msg) {
   return window._confirmAction(msg, '삭제', true);
 };
 
-// 모바일용: 메모를 바로 편집 모드로 열기
-window.openPaneForEdit = function(id) {
-  // 데스크톱 pane 시스템 사용
-  if (typeof selectMemo === 'function') {
-    selectMemo(id);
-    setTimeout(function() {
-      var pane = document.querySelector('.pane[data-pane="' + id + '"]');
-      if (pane) {
-        // 모바일에서는 pane을 모달로 표시
-        pane.classList.add('mobile-modal');
-        var eb = pane.querySelector('[data-act="edit"]');
-        if (eb) eb.click();
-      }
-    }, 150);
-  }
-};
-
 // 71차: 위젯에서 호출할 수 있도록 window에 노출
 window.openPane = openPane;
 

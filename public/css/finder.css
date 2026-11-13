@@ -528,10 +528,6 @@
   flex-direction: column;
 }
 .finder-viewer[hidden] { display: none; }
-/* 뷰어 창 껍질: 크롬(제목 행·탭)과 본문을 세로로 쌓고 본문이 남은
-   높이를 전부 가져가게 하는 중간 고리. 이 고리가 없으면 본문의
-   flex:1이 닿을 부모가 없어 시트 프레임이 자체 높이로 주저앉는다. */
-.fv-window { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; }
 .finder-viewer-head {
   display: flex;
   align-items: center;
@@ -727,30 +723,6 @@
   width: 64px; padding: 5px 7px; border-radius: 8px;
   border: 1px solid rgba(15, 23, 42, 0.16); font-size: 13px; font-family: inherit;
 }
-
-/* ── Finder AI 정리 패널 (finder-organize.js) ── */
-.fo-panel {
-  position: fixed; right: 16px; bottom: 16px; z-index: 60; width: min(420px, calc(100vw - 32px));
-  max-height: 70vh; overflow: auto; background: #fff; border-radius: 16px;
-  border: 1px solid rgba(15, 23, 42, 0.12); box-shadow: 0 12px 32px rgba(15, 23, 42, 0.18);
-  padding: 14px 16px;
-}
-.fo-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
-.fo-close {
-  padding: 5px 10px; border-radius: 8px; border: 1px solid rgba(15, 23, 42, 0.14);
-  background: #f8fafc; font-family: inherit; font-size: 12px; cursor: pointer;
-}
-.fo-body { font-size: 13px; color: #1e293b; }
-.fo-summary { color: #475569; margin: 0 0 8px; }
-.fo-item { display: flex; gap: 8px; align-items: flex-start; padding: 6px 0; border-top: 1px solid rgba(15, 23, 42, 0.06); }
-.fo-error { color: #b45309; font-size: 12px; }
-.fo-empty { color: #64748b; }
-.fo-apply {
-  margin-top: 10px; padding: 8px 14px; border-radius: 10px; border: 1px solid #bfdbfe;
-  background: #dbeafe; font-weight: 600; font-family: inherit; font-size: 13px; cursor: pointer;
-}
-.fo-apply:disabled { opacity: 0.5; }
-.fo-result { margin-top: 8px; color: #334155; }
 
 /* 임베드 화면(시트·한글 편집기·PDF)은 뷰어 본문 가로폭에 꽉 차게 뜬다
    (2026-11-03). 본문 패딩과 편집기 둘레가 함께 있으면 그 안에

@@ -28,7 +28,7 @@ import {
 import { sanitizeForAI } from './ai-access'
 import { readBooleanSetting } from '../lib/d1-setting'
 
-export { MAX_GRAPH_RESULTS, expandGraphFacts, getFactNeighbors, getRelatedFacts } from './fact-graph-expand'
+export { expandGraphFacts, getFactNeighbors, getRelatedFacts } from './fact-graph-expand'
 export { closeFactTemporalEdges, reopenFactTemporalEdges } from './fact-temporal-edges'
 
 const DEDUP_PAGE_SIZE = 200

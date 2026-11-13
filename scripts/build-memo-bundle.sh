@@ -16,13 +16,12 @@ ORDER=(
   "public/js/memo/tags.js"         # 섹션 6
   "public/js/memo/calendar.js"     # 섹션 7
   "public/js/memo/list.js"         # 섹션 8
-  "public/js/memo/inedit.js"       # 섹션 9
   "public/js/memo/imgtools.js"     # 섹션 10
   "public/js/memo/lightbox.js"     # 섹션 11
   "public/js/memo/editor-core.js"  # 섹션 없음
   "public/js/memo/toolbar.js"      # 섹션 없음
   "public/js/memo/pane.js"         # 섹션 없음
-  "public/js/memo/init.js"         # 섹션 11 (시작)
+  "public/js/memo/init.js"         # 섹션 12 (시작)
 )
 
 OUTPUT="public/js/memo-bundle.js"

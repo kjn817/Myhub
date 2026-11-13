@@ -49,7 +49,6 @@ import { aiAdminApp } from './admin-routes'
 export { callSingleAssistant } from './assistant-call'
 export { processToolMarkers } from './tool-markers'
 export { AssistantInputError } from './assistant-types'
-export type { RawChatMessage, AssistantCallResult } from './assistant-types'
 
 export const aiApp = new Hono<{ Bindings: Env }>()
 

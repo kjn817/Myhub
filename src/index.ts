@@ -2,7 +2,6 @@ import { Hono } from 'hono'
 import type { Env } from './types'
 import { modules } from './modules'
 import { authApp, verifySessionForEnv } from './modules/auth/routes'
-import { pushApp } from './modules/push/routes'
 import { handleScheduled, handleCronJobs, handleSleepConsolidation, handleGoogleSync, handleLogPrune, handleDecryptHealth } from './scheduled'
 import { CONFIG } from './config'
 
@@ -200,12 +199,10 @@ app.get('/api/modules', (c) =>
 )
 
 // 각 모듈의 라우트를 /api/<모듈id> 밑에 장착
+// (push 포함 — modules.ts의 hidden 항목이라 대시보드에는 안 뜬다)
 for (const m of modules) {
   app.route(`/api/${m.id}`, m.app)
 }
-
-// Web Push 구독 관리 (대시보드 아이콘 없이 /api/push 로 직접 장착)
-app.route('/api/push', pushApp)
 
 // 정적 에셋 서빙 (인증 미들웨어 통과 후, 모든 API 라우트 뒤에 위치)
 // run_worker_first=true이므로 모든 요청이 Worker를 먼저 통과함.

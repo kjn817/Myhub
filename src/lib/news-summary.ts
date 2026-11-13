@@ -11,7 +11,6 @@ export {
   normalizeSourceUrl,
   dedupeSources,
   filterFreshSources,
-  SOURCE_MAX_AGE_DAYS,
   type SearchSource,
 } from './news-core'
 export {
@@ -21,7 +20,6 @@ export {
   extractUrlsFromText,
   mergeSearchSources,
   validateItemSources,
-  type SourceLink,
 } from './news-source-links'
 
 /** 질의가 뉴스 의도인지 판정한다. */

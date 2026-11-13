@@ -739,7 +739,7 @@
       Array.prototype.slice.call(el.attributes).forEach(function (attr) {
         var name = String(attr.name || '').toLowerCase();
         var value = String(attr.value || '')
-          .replace(/[ - ]+/g, '')
+          .replace(/[\x00- \x7f]+/g, '')
           .toLowerCase();
         if (name.indexOf('on') === 0) {
           el.removeAttribute(attr.name);

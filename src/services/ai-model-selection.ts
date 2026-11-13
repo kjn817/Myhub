@@ -37,14 +37,6 @@ export function isModelSelectableForPolicy(m: ModelDef, policy: TaskPolicy): boo
 }
 
 export async function selectModel(db: D1Database, policy: TaskPolicy, exclude: Set<string> = new Set(), execContext?: { providerCallAttempted: boolean; lastProviderError: any }): Promise<ModelDef> {
-  // GPT 94차: 진입 시점 진단
-  console.error('selectModel_enter', {
-    persona: (policy as any).personaId,
-    providerPin: policy.providerPin,
-    capability: policy.capability,
-    privacy: policy.privacy,
-    sensitivity: (policy as any).sensitivity,
-  })
   // Phase 3D-P S0.1/S0.2: 민감도 결정 (fail-closed)
   // - policy.sensitivity > personaId 하한 > capability 추론 순
   // - privacy='private'이면 workers-ai 전용이지만 데이터 정책 검사는 수행
@@ -72,10 +64,8 @@ export async function selectModel(db: D1Database, policy: TaskPolicy, exclude: S
     const modelId = codeOverride || 'gemini-3.5-flash-lite'
     const m = MODELS.find((x) => x.id === modelId && x.provider === 'gemini')
     if (m && isModelSelectableForPolicy(m, policy) && !exclude.has(m.id) && (!policy.providerPin || policy.providerPin === m.provider) && !(isPrivate && m.provider !== 'workers-ai') && isProviderAllowed(m.provider)) {
-      console.error('selectModel_builder_direct', { modelId: m.id, provider: m.provider })
       return m
     }
-    console.error('selectModel_builder_fallthrough', { modelId, excluded: exclude.has(modelId) })
   }
 
   // 비서별 전용 프로바이더 고정 (2026-10-13, 사용자 확정 매핑)

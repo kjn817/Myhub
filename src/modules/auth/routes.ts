@@ -4,12 +4,11 @@ import {
   getAuthEmail, isValidPin, verifyPin, createSession, verifySessionForEnv, verifySessionInfo,
   bumpSessionVersion, checkRateLimit, isValidB64, SESSION_COOKIE_MAX_AGE, STEP_UP_TTL_MS,
 } from './primitives'
-import { maskAuthEmail, registerAuthOtpRoutes } from './routes-otp'
+import { registerAuthOtpRoutes } from './routes-otp'
 import { registerAuthPinRoutes } from './routes-pin'
 
 // 기존 import 경로 호환: 프리미티브는 routes.ts에서도 재노출한다.
 export * from './primitives'
-export { maskAuthEmail }
 
 const authApp = new Hono<{ Bindings: Env }>()
 registerAuthOtpRoutes(authApp)

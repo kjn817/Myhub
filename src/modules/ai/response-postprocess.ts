@@ -48,21 +48,6 @@ function mapSentences(text: string, fn: (sentence: string) => string): string {
   return parts.map((part, i) => (i % 2 === 0 ? fn(part) : part)).join('')
 }
 
-export function findSuccessClaims(text: string): Array<{ domain: SuccessDomain; sentence: string }> {
-  const hits: Array<{ domain: SuccessDomain; sentence: string }> = []
-  for (const sentence of splitSentences(text)) {
-    if (!COMPLETION_RE.test(sentence)) continue
-    if (NON_CLAIM_RE.test(sentence)) continue
-    for (const { domain, re } of DOMAIN_PATTERNS) {
-      if (re.test(sentence)) {
-        hits.push({ domain, sentence })
-        break
-      }
-    }
-  }
-  return hits
-}
-
 export function guardUnverifiedSuccessClaims(
   text: string,
   executions: ToolExecutionSummary[]

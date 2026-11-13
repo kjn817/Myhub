@@ -80,11 +80,6 @@ function isImage(mime, name) {
   const ext = String(name || '').split('.').pop().toLowerCase().split('?')[0];
   return IMG_EXTS.includes(ext);
 }
-function extractTags(text) {
-  const set = new Set();
-  for (const m of String(text).matchAll(/#([가-힣a-zA-Z0-9_]+)/g)) set.add(m[1]);
-  return [...set];
-}
 // 인라인 이미지 마커: ![이름](file:123), 너비 포함 시 ![이름|300](file:123)
 function markerIds(text) {
   const set = new Set();
