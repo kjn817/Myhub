@@ -97,6 +97,7 @@
     "/js/login.js",
     "/js/memo-bundle.js",
     "/js/office-assistant.js",
+    "/js/office-boot.js",
     "/js/office-fetch.js",
     "/js/office-memory.js",
     "/js/office-picker.js",
