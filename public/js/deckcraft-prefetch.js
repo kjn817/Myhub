@@ -13,96 +13,72 @@
 // 바뀌어도 그대로 따라간다. HTML 자체는 Worker가 no-store로 주므로
 // 데울 수 없고 상대도 아니다.
 //
+// 얇은 래퍼다: drain·체인·발견·once·부팅 게이트는 공용 코어
+// (craft-prefetch-core.js)가 맡고, 여기서는 DeckCraft 설정(SHELL_URL·
+// BASE·플래그명·API 이름)만 남긴다. 코어는 이 파일보다 먼저 받아야
+// 한다 (office.html 정적 순서·finder.js 동적 import 체인). 코어가
+// 없으면 프리패치를 조용히 건너뛴다.
+//
 // 규칙은 gridcraft-prefetch·finder-pdfcraft와 같다: 문서는 한 번, 유효
 // 시간은, 데이터 예약 모드에서는 건너뛰고, 실패는 조용히 무시한다
 // (프리패치는 최적화일 뿐 — 못 데우면 앱 그때 그대로 받으면 된다).
+// finder-deckcraft.js 내장 prefetch와 __myhubDeckcraftPrefetched
+// 플래그를 공유한다 — 한쪽이 데우면 다른 쪽이 건너뛴다.
 (function () {
   'use strict';
 
   var SHELL_URL = '/vendor/deckcraft/index.html';
   var BASE = '/vendor/deckcraft/';
+  var FLAG = '__myhubDeckcraftPrefetched';
 
-  // 본문은 끝까지 내려보내 HTTP 캐시만 데운다 (21.5MB를 통째로 메모리에
-  // 올리지 않는다). 스트림이 없으면 arrayBuffer로 받아 버린다.
-  function drain(res) {
-    if (!res || !res.body || typeof res.body.getReader !== 'function') {
-      return res && typeof res.arrayBuffer === 'function'
-        ? res.arrayBuffer().then(function () { return undefined; })
-        : Promise.resolve();
+  var warnedMissingCore = false;
+  function getCore() {
+    var core =
+      typeof window !== 'undefined' ? window.MyHubCraftPrefetchCore : null;
+    if (!core && !warnedMissingCore) {
+      warnedMissingCore = true;
+      if (typeof console !== 'undefined' && console.warn) {
+        console.warn(
+          '[deckcraft-prefetch] 코어(craft-prefetch-core.js)가 없어 프리패치를 건너뜁니다'
+        );
+      }
     }
-    var reader = res.body.getReader();
-    function pump() {
-      return reader.read().then(function (step) {
-        return step.done ? undefined : pump();
-      });
-    }
-    return pump();
+    return core;
   }
 
-  /**
-   * 두 HTML에서 preload/modulepreload로 선언한 자산 상대 경로를 뽑는다.
-   * .js/.wasm만, 선언 순서 유지, 중복 제거. 아이콘(.ico) 같은 선언은 제외.
-   */
-  function extractAssetPaths(html) {
-    var out = [];
-    var seen = {};
-    var re = /href="\.\/([^"]+)"/g;
-    var m;
-    while ((m = re.exec(String(html || '')))) {
-      var rel = m[1];
-      if (!/\.(js|wasm)$/.test(rel)) continue;
-      if (seen[rel]) continue;
-      seen[rel] = true;
-      out.push(rel);
-    }
-    return out;
-  }
-
-  /**
-   * 줄을 읽어 선언한 자산은 전부 받아 캐시를 데운다.
-   * deps = { fetchFn, win } (테스트 주입용).
-   * @returns {Promise<string[]>} 실제로 받은 URL 목록
-   */
-  function prefetch(deps) {
-    deps = deps || {};
-    var win = deps.win || (typeof window !== 'undefined' ? window : null);
-    var fetchFn =
-      deps.fetchFn ||
-      (win && typeof win.fetch === 'function' ? win.fetch.bind(win) : null);
-    if (!fetchFn) return Promise.resolve([]);
-    if (win && win.__myhubDeckcraftPrefetched) return Promise.resolve([]);
-    if (win) win.__myhubDeckcraftPrefetched = true;
+  function discover(fetchFn) {
+    var core = getCore();
     return fetchFn(SHELL_URL)
       .then(function (res) {
         if (!res || !res.ok) throw new Error('shell http ' + (res && res.status));
         return res.text();
       })
       .then(function (html) {
-        var urls = extractAssetPaths(html).map(function (rel) {
+        return core.extractAssetPaths(html).map(function (rel) {
           return BASE + rel;
         });
-        var done = [];
-        var chain = Promise.resolve();
-        urls.forEach(function (u) {
-          chain = chain
-            .then(function () {
-              return fetchFn(u);
-            })
-            .then(function (res) {
-              if (res && res.ok) done.push(u);
-              return drain(res);
-            })
-            .catch(function () {
-              return undefined; // 개별 실패는 무시한다 (프리패치는 최적화일 뿐)
-            });
-        });
-        return chain.then(function () {
-          return done;
-        });
-      })
-      .catch(function () {
-        return [];
       });
+  }
+
+  var prefetchImpl = null;
+  /**
+   * 줄을 읽어 선언한 자산은 전부 받아 캐시를 데운다.
+   * deps = { fetchFn, win } (테스트 주입용).
+   * @returns {Promise<string[]>} 실제로 받은 URL 목록
+   */
+  function prefetch(deps) {
+    var core = getCore();
+    if (!core) return Promise.resolve([]);
+    if (!prefetchImpl) {
+      prefetchImpl = core.createPrefetch({ flag: FLAG, discover: discover });
+    }
+    return prefetchImpl(deps);
+  }
+
+  function extractAssetPaths(html) {
+    var core = getCore();
+    if (!core) return [];
+    return core.extractAssetPaths(html);
   }
 
   var api = {
@@ -113,38 +89,12 @@
   if (typeof window !== 'undefined') window.MyHubDeckcraftPrefetch = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 
-  // 오피스 서면 판정: office.html은 한 번에 두 형식(?app=)만 열고 그
-  // 엔진 문서를 두 번 iframe이 직접 받으므로, 진입 시점의 두 엔진
-  // 데우는 자동 프리패치를 오피스에서는 하지 않는다 (지연 로드 두 엔진
-  // 한 때만 로드). Finder에서는 종전대로 데운다.
-  function isOfficeSurface() {
-    return (
-      typeof window !== 'undefined' &&
-      !!window.location &&
-      typeof window.location.pathname === 'string' &&
-      /(^|\/)office\.html$/.test(window.location.pathname)
-    );
-  }
-
   // 자동 프리패치: 두 모듈이 정적으로 로드하는 문서(finder.html·
   // office.html)에서만 알고, 문서는 한 번, 유효 시간은 있다. 데이터
   // 예약 모드에서는 건너뛴다 (21.5MB 전송을 강요하지 않는다). 오피스
-  // 서면에서는 앱 게이트로 건너뛴다.
+  // 서면에서는 앱 게이트로 건너뛴다 — 게이트·예약은 코어가 맡는다.
   if (typeof window !== 'undefined' && typeof document !== 'undefined') {
-    var conn = typeof navigator !== 'undefined' ? navigator.connection : null;
-    if (!isOfficeSurface() && !(conn && conn.saveData)) {
-      var boot = function () {
-        prefetch();
-      };
-      if (typeof window.requestIdleCallback === 'function') {
-        window.requestIdleCallback(boot, { timeout: 5000 });
-      } else if (document.readyState === 'complete') {
-        setTimeout(boot, 1500);
-      } else {
-        window.addEventListener('load', function () {
-          setTimeout(boot, 1500);
-        });
-      }
-    }
+    var core = getCore();
+    if (core) core.scheduleAutoBoot(prefetch);
   }
 })();

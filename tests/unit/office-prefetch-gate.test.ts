@@ -15,6 +15,9 @@ import * as path from 'path'
 
 const ROOT = path.resolve(__dirname, '..', '..')
 const SRC = fs.readFileSync(path.join(ROOT, 'public', 'js', 'desktop', 'office-prefetch.js'), 'utf-8')
+// office-prefetch.js는 공용 코어(craft-prefetch-core.js) 위에서 돈다 —
+// 실제 로드 순서(desktop.html 정적 순서)와 같이 코어를 먼저 받는다.
+const CORE_SRC = fs.readFileSync(path.join(ROOT, 'public', 'js', 'craft-prefetch-core.js'), 'utf-8')
 
 function loadModule(fetchFn: any, saveData = false): any {
   const sandbox: any = {
@@ -24,6 +27,8 @@ function loadModule(fetchFn: any, saveData = false): any {
     console,
   }
   sandbox.window.navigator = sandbox.navigator
+  const loadCore = new Function('window', 'navigator', 'fetch', 'console', CORE_SRC)
+  loadCore(sandbox.window, sandbox.navigator, fetchFn, console)
   const fn = new Function('window', 'navigator', 'fetch', 'console', SRC)
   fn(sandbox.window, sandbox.navigator, fetchFn, console)
   return sandbox.window.MyHubOfficePrefetch

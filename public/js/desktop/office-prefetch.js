@@ -18,36 +18,27 @@
 
   var prefetched = {}; // appId -> true
 
-  // 본문은 끝까지 내려보내 HTTP 캐시만 데운다 (17~36MB를 통째로 메모리에
-  // 올리지 않는다). 스트림이 없으면 arrayBuffer로 받아 버린다.
-  function drain(res) {
-    if (!res || !res.body || typeof res.body.getReader !== 'function') {
-      return res && typeof res.arrayBuffer === 'function'
-        ? res.arrayBuffer().then(function () { return undefined; })
-        : Promise.resolve();
+  // 프리패치 공용 코어(craft-prefetch-core.js) — drain·체인·발견을
+  // 맡는다. 코어는 이 파일보다 먼저 받아야 한다 (desktop.html 정적
+  // 순서). 코어가 없으면 프리패치를 조용히 건너뛴다 (프리패치는
+  // 최적화일 뿐).
+  var warnedMissingCore = false;
+  function getCore() {
+    var core =
+      typeof window !== 'undefined' ? window.MyHubCraftPrefetchCore : null;
+    if (!core && !warnedMissingCore) {
+      warnedMissingCore = true;
+      if (typeof console !== 'undefined' && console.warn) {
+        console.warn(
+          '[office-prefetch] 코어(craft-prefetch-core.js)가 없어 프리패치를 건너뜁니다'
+        );
+      }
     }
-    var reader = res.body.getReader();
-    function pump() {
-      return reader.read().then(function (r) {
-        if (r.done) return undefined;
-        return pump();
-      });
-    }
-    return pump().catch(function () { return undefined; });
-  }
-
-  function fetchAll(urls) {
-    var chain = Promise.resolve();
-    urls.forEach(function (u) {
-      chain = chain
-        .then(function () { return fetch(u); })
-        .then(function (res) { return drain(res); })
-        .catch(function () { return undefined; });
-    });
-    return chain;
+    return core;
   }
 
   function prefetchFromManifest(appId) {
+    var core = getCore();
     var cfg = APPS[appId];
     return fetch(cfg.manifest)
       .then(function (res) {
@@ -55,18 +46,19 @@
         return res.json();
       })
       .then(function (man) {
-        var urls = [];
-        if (man && man.js) urls.push(cfg.base + man.js);
-        if (man && man.wasm) urls.push(cfg.base + man.wasm);
-        if (man && Array.isArray(man.wasmParts)) {
-          man.wasmParts.forEach(function (rel) { urls.push(cfg.base + rel); });
-        }
-        return fetchAll(urls);
+        // 호버 프리패치는 js·wasm·wasmParts만 데운다 (finder 내장과
+        // 달리 snippets/loader.js는 받지 않는다 — 기존 동작 유지).
+        var urls = core.manifestAssetUrls(cfg.base, man, {
+          wasm: true,
+          wasmParts: true,
+        });
+        return core.fetchSequential(fetch, urls);
       })
       .catch(function () { return undefined; });
   }
 
   function prefetchFromIndex(appId) {
+    var core = getCore();
     var cfg = APPS[appId];
     return fetch(cfg.index)
       .then(function (res) {
@@ -74,17 +66,10 @@
         return res.text();
       })
       .then(function (html) {
-        var urls = [];
-        // preload·modulepreload 링크의 href를 모은다 (상대 경로는 base로 푼다).
-        var re = /<link[^>]+rel=["'](?:module)?preload["'][^>]*href=["']([^"']+)["']/gi;
-        var m;
-        while ((m = re.exec(html)) !== null) {
-          var href = m[1];
-          if (href.indexOf('./') === 0) href = href.slice(2);
-          if (href.charAt(0) !== '/') href = cfg.base + href;
-          if (urls.indexOf(href) < 0) urls.push(href);
-        }
-        return fetchAll(urls);
+        var urls = core.extractAssetPaths(html).map(function (rel) {
+          return cfg.base + rel;
+        });
+        return core.fetchSequential(fetch, urls);
       })
       .catch(function () { return undefined; });
   }
@@ -92,6 +77,7 @@
   function prefetch(appId) {
     if (!APPS[appId] || prefetched[appId]) return;
     if (typeof navigator !== 'undefined' && navigator.connection && navigator.connection.saveData) return;
+    if (!getCore()) return;
     prefetched[appId] = true;
     if (APPS[appId].manifest) prefetchFromManifest(appId);
     else prefetchFromIndex(appId);

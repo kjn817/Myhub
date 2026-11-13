@@ -711,73 +711,56 @@
     };
   }
 
-  // 본문은 끝까지 내려보내 HTTP 캐시만 데운다 (수십 MB를 통째로
-  // 메모리에 올리지 않는다). 스트림이 없으면 arrayBuffer로 받아 버린다.
-  function drain(res) {
-    if (!res || !res.body || typeof res.body.getReader !== 'function') {
-      return res ? res.arrayBuffer().then(function () { return undefined; }) : Promise.resolve();
+  // 프리패치 공용 코어(craft-prefetch-core.js) — drain·체인·발견·
+  // once·부팅 게이트를 맡는다. 코어는 이 파일보다 먼저 받아야 한다
+  // (office.html 정적 순서·finder.js 동적 import 체인). 코어가
+  // 없으면 프리패치를 조용히 건너뛴다 (프리패치는 최적화일 뿐).
+  var warnedMissingCore = false;
+  function getPrefetchCore() {
+    var core =
+      typeof window !== 'undefined' ? window.MyHubCraftPrefetchCore : null;
+    if (!core && !warnedMissingCore) {
+      warnedMissingCore = true;
+      if (typeof console !== 'undefined' && console.warn) {
+        console.warn(
+          '[finder-deckcraft] 코어(craft-prefetch-core.js)가 없어 프리패치를 건너뜁니다'
+        );
+      }
     }
-    var reader = res.body.getReader();
-    function pump() {
-      return reader.read().then(function (step) {
-        return step.done ? undefined : pump();
-      });
-    }
-    return pump();
+    return core;
   }
 
+  var prefetchImpl = null;
   /**
    * 매니호스트를 읽어 진입 자산(JS 글루·ASM·온라인)을 미리 받는다.
    * HTML은 Worker가 no-store로 주므로 데울 수 없이 상체에서는 제외.
    * 실패는 조용히 무시한다 — 프리패치는 최적화일 뿐.
    * deps = { fetchFn, win } (테스트 주입용).
+   * standalone deck 래퍼와 __myhubDeckcraftPrefetched 플래그를 공유한다.
    * @returns {Promise<string[]>} 실제로 받은 URL 목록
    */
   function prefetch(deps) {
-    deps = deps || {};
-    var win = deps.win || (typeof window !== 'undefined' ? window : null);
-    var fetchFn =
-      deps.fetchFn ||
-      (win && typeof win.fetch === 'function' ? win.fetch.bind(win) : null);
-    if (!fetchFn) return Promise.resolve([]);
-    if (win && win.__myhubDeckcraftPrefetched) return Promise.resolve([]);
-    if (win) win.__myhubDeckcraftPrefetched = true;
-    return fetchFn(versionedAssetUrl(MANIFEST_URL))
-      .then(function (res) {
-        if (!res || !res.ok) throw new Error('manifest http ' + (res && res.status));
-        return res.json();
-      })
-      .then(function (man) {
-        var urls = [];
-        if (man && man.js) urls.push('/vendor/deckcraft/' + man.js);
-        if (man && man.wasm) urls.push('/vendor/deckcraft/' + man.wasm);
-        if (man && Array.isArray(man.files)) {
-          man.files.forEach(function (rel) {
-            if (rel.indexOf('snippets/') === 0) urls.push('/vendor/deckcraft/' + rel);
-          });
-        }
-        var done = [];
-        var chain = Promise.resolve();
-        urls.forEach(function (u) {
-          chain = chain
-            .then(function () {
-              return fetchFn(u);
-            })
+    var core = getPrefetchCore();
+    if (!core) return Promise.resolve([]);
+    if (!prefetchImpl) {
+      prefetchImpl = core.createPrefetch({
+        flag: '__myhubDeckcraftPrefetched',
+        discover: function (fetchFn) {
+          return fetchFn(versionedAssetUrl(MANIFEST_URL))
             .then(function (res) {
-              if (res && res.ok) done.push(u);
-              return drain(res);
+              if (!res || !res.ok) throw new Error('manifest http ' + (res && res.status));
+              return res.json();
             })
-            .catch(function () {
-              return undefined; // 개별 실패는 무시한다 (프리패치는 최적화일 뿐)
+            .then(function (man) {
+              return core.manifestAssetUrls('/vendor/deckcraft/', man, {
+                wasm: true,
+                snippets: true,
+              });
             });
-        });
-        return chain.then(function () {
-          return done;
-        });
-      })
-      .catch(function () {
-        return [];
+        },
       });
+    }
+    return prefetchImpl(deps);
   }
 
   var api = {
@@ -796,38 +779,12 @@
   if (typeof window !== 'undefined') window.MyHubFinderDeckCraft = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 
-  // 오피스 서면 판정: office.html은 한 번에 두 형식(?app=)만 열고 그
-  // 엔진의 문서를 두 두 iframe이 직접 받으므로, 진입 시점의 두 엔진
-  // 데우는 자동 프리패치를 오피스에서는 하지 않는다 (지연 로드 두 엔진
-  // 한 때만 로드). Finder에서는 종전대로 데운다.
-  function isOfficeSurface() {
-    return (
-      typeof window !== 'undefined' &&
-      !!window.location &&
-      typeof window.location.pathname === 'string' &&
-      /(^|\/)office\.html$/.test(window.location.pathname)
-    );
-  }
-
   // 자동 프리패치: 두 모듈이 정적으로 로드하는 문서(finder.html·
   // office.html)에서만 알고, 문서는 한 번, 유효 시간은 있다. 데이터
   // 예약 모드에서는 건너뛴다 (36MB가 전송을 강요하지 않는다).
-  // 오피스 서면에서는 앱 게이트로 건너뛴다.
+  // 오피스 서면에서는 앱 게이트로 건너뛴다 — 게이트·예약은 코어가 맡는다.
   if (typeof window !== 'undefined' && typeof document !== 'undefined') {
-    var conn = typeof navigator !== 'undefined' ? navigator.connection : null;
-    if (!isOfficeSurface() && !(conn && conn.saveData)) {
-      var boot = function () {
-        prefetch();
-      };
-      if (typeof window.requestIdleCallback === 'function') {
-        window.requestIdleCallback(boot, { timeout: 5000 });
-      } else if (document.readyState === 'complete') {
-        setTimeout(boot, 1500);
-      } else {
-        window.addEventListener('load', function () {
-          setTimeout(boot, 1500);
-        });
-      }
-    }
+    var prefetchCore = getPrefetchCore();
+    if (prefetchCore) prefetchCore.scheduleAutoBoot(prefetch);
   }
 })();

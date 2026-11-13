@@ -2837,9 +2837,9 @@
       hwpx: ['/js/finder-format-hwp.js'],
       xlsx: ['/js/finder-format-sheet.js'],
       xls: ['/js/finder-format-sheet.js'],
-      pptx: ['/js/finder-deckcraft.js', '/js/finder-format-slide.js'],
+      pptx: ['/js/craft-prefetch-core.js', '/js/finder-deckcraft.js', '/js/finder-format-slide.js'],
       docx: ['/js/finder-format-doc.js'],
-      pdf: ['/js/finder-pdf-ops.js', '/js/finder-pdfcraft.js', '/js/finder-format-pdf.js'],
+      pdf: ['/js/finder-pdf-ops.js', '/js/craft-prefetch-core.js', '/js/finder-pdfcraft.js', '/js/finder-format-pdf.js'],
     };
     // 동적 로딩 URL은 공용 핼퍼(asset-url.js)가 배포 버전을 붙인다
     // (N-06 — 버전 없는 URL은 immutable 캐시가 고정할 수 있다).
@@ -2877,13 +2877,22 @@
       gridcraft: '/js/gridcraft-prefetch.js',
       deckcraft: '/js/deckcraft-prefetch.js',
     };
+    // 프리패치 래퍼는 공용 코어(craft-prefetch-core.js) 위에서 돈다 —
+    // 동적 import도 코어를 먼저 받아야 래퍼의 자동 부팅이 동작한다.
+    // 코어 import는 모듈 맵이 중복을 막아 두 엔진이 나눠 받아도 한 번만
+    // 실행된다.
+    var PREFETCH_CORE_URL = '/js/craft-prefetch-core.js';
     function startEnginePrefetch(engines) {
       engines.forEach(function (engine) {
         var url = PREFETCH_MODULE_URLS[engine];
         if (!url) return;
-        import(versionedAssetUrl(url)).catch(function () {
-          return null; // 프리패치는 최적화일 뿐 — 실패해도 열기 경로는 무관하다
-        });
+        import(versionedAssetUrl(PREFETCH_CORE_URL))
+          .then(function () {
+            return import(versionedAssetUrl(url));
+          })
+          .catch(function () {
+            return null; // 프리패치는 최적화일 뿐 — 실패해도 열기 경로는 무관하다
+          });
       });
     }
 
