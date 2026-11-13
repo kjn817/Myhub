@@ -47,7 +47,8 @@
     "lint:circular": "madge --circular --extensions ts src",
     "lint:duplication": "jscpd --min-tokens 50 --format typescript src",
     "test:mutation": "stryker run",
-    "test:runtime": "vitest run --config vitest.config.ts"
+    "test:runtime": "vitest run --config vitest.config.ts",
+    "test:e2e": "node tests/e2e/run.cjs"
   },
   "type": "module",
   "version": "0.1.0"
