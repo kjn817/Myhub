@@ -1,9 +1,10 @@
 /* MyHub 오피스 셸 (office.css) — Excel·한글 2020·PowerPoint·PDF 공용 셸.
    뷰어 셸은 finder.css의 .finder-viewer/.fv-*를 그대로 사용하고,
-   여기에는 셸 뼈대(툴바·시작 화면·최근 패널·진행 표시)만 둔다. */
+   여기에는 셸 뼈대(툴바·시작 화면·최근 패널·부팅 로딩)만 둔다. */
 
 .office-app-name { font-size: 14px; font-weight: 600; color: #1f2937; }
 .office-main {
+  position: relative;
   max-width: 1180px;
   margin: 0 auto;
   padding: 14px 16px 24px;
@@ -13,6 +14,31 @@
   min-height: calc(100vh - 52px);
   box-sizing: border-box;
 }
+
+/* ---- 부팅 로딩 화면 (2026-11-13) ----
+   앱 실행 시 로딩 페이지가 바로 나와야 한다 — 빈 셸·진행 막대 같은
+   로딩 전 페이지는 불필요하다는 사용자 지시. 정적 마크업이라 스크립트
+   실행 전에 그려지고, 첫 문서가 열리면 office.js가 치운다. 시각은
+   엔진 로딩 화면(.fv-hwp-loading·.sheet-gc-loading)과 동일 패턴
+   (흰 배경 + 앱 이름 + 파란 스피너 + 상태 문구)이라 엔진 화면으로
+   이어질 때 같은 화면이 계속되는 것처럼 보인다. */
+.office-boot-loading {
+  position: absolute; inset: 0; z-index: 20;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px;
+  background: #fff;
+}
+.office-boot-loading[hidden] { display: none; }
+.office-boot-loading-title {
+  font-size: 24px; font-weight: 700; letter-spacing: -0.02em; color: #18181b;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+.office-boot-loading-spin {
+  width: 22px; height: 22px; border-radius: 50%;
+  border: 2px solid #e5e7eb; border-top-color: #3b82f6;
+  animation: officeBootLoadingSpin 0.8s linear infinite;
+}
+@keyframes officeBootLoadingSpin { to { transform: rotate(360deg); } }
+.office-boot-loading-status { font-size: 13px; color: #64748b; }
 
 /* ---- 툴바 ---- */
 /* 최상위 툴바 행 배경이 창 바 머티리얼과 같은 값이면 "그 위에 뜬"이 아니라
@@ -31,37 +57,6 @@
 .office-brand-name { font-size: 16px; color: #111827; }
 .office-toolbar-actions { display: flex; gap: 6px; flex: none; margin-left: auto; }
 .office-toolbar .finder-upload-btn[disabled] { opacity: 0.45; cursor: default; }
-
-/* ---- 진행 표시 ---- */
-.office-progress {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-.office-progress[hidden] { display: none; }
-.office-progress-track {
-  flex: 1 1 auto;
-  height: 4px;
-  border-radius: 2px;
-  background: rgba(15, 23, 42, 0.1);
-  overflow: hidden;
-}
-.office-progress-fill {
-  height: 100%;
-  width: 0;
-  border-radius: 2px;
-  background: #4dabf7;
-  transition: width 0.15s ease;
-}
-.office-progress-fill.is-indeterminate {
-  width: 40%;
-  animation: officeProgressSlide 1.1s ease-in-out infinite;
-}
-@keyframes officeProgressSlide {
-  0% { transform: translateX(-110%); }
-  100% { transform: translateX(280%); }
-}
-.office-progress-label { font-size: 12.5px; color: #6b7280; flex: none; font-variant-numeric: tabular-nums; }
 
 /* ---- 시작 화면 ---- */
 .office-start {
