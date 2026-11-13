@@ -127,9 +127,13 @@
     var openBtn = el('officeOpenBtn');
     var newBtn = el('officeNewBtn');
     var closeBtn = el('officeCloseBtn');
-    var progressEl = el('officeProgress');
-    var progressFill = el('officeProgressFill');
-    var progressLabel = el('officeProgressLabel');
+    // 부팅 로딩 화면 (2026-11-13): 정적 마크업이라 스크립트 실행 전에
+    // 그려져 있다. 첫 문서가 열리면(성공·실패 모두) 치운다. 앱별
+    // 제목·문구는 office-boot.js가 먼저 넣어 둔다.
+    var bootLoadingEl = el('officeBootLoading');
+    function hideBootLoading() {
+      if (bootLoadingEl) bootLoadingEl.hidden = true;
+    }
 
     var viewer = null;
     var current = null; // { fileId, name, mime, version, folderId, folderName, isNew }
@@ -213,39 +217,11 @@
           invalidate: function () {},
         };
       }
-      fetchApi = factory({
-        fetchFn: baseFetch,
-        onProgress: function (p) {
-          if (p.phase === 'download') {
-            if (p.total) showProgress('받는 중 ' + Math.round((p.got / p.total) * 100) + '%', (p.got / p.total) * 100);
-            else showProgress('받는 중…', null);
-          } else if (p.phase === 'parse') {
-            // 다운로드가 끝나면 막대는 치운다 — 이후는 뷰어의 로딩 화면이
-            // 이어받는다. 막대를 계속 두면 막대형+원형 로딩이 겹쳐 보인다
-            // (2026-11-13 사용자 지적: 로딩 페이지 전에 뭐가 있다).
-            hideProgress();
-          }
-        },
-      });
+      // 진행 표시 콜백은 달지 않는다 (2026-11-13): 진행 막대는 부팅
+      // 로딩 화면으로 대체되어 삭제됐다. 다운로드를 받는 동안에도
+      // 로딩 화면 하나만 보인다.
+      fetchApi = factory({ fetchFn: baseFetch });
       return fetchApi;
-    }
-
-    function showProgress(label, pct) {
-      if (!progressEl) return;
-      progressEl.hidden = false;
-      if (progressLabel) progressLabel.textContent = label || '';
-      if (progressFill) {
-        if (pct === null || pct === undefined) {
-          progressFill.classList.add('is-indeterminate');
-          progressFill.style.width = '';
-        } else {
-          progressFill.classList.remove('is-indeterminate');
-          progressFill.style.width = Math.min(100, Math.max(0, pct)) + '%';
-        }
-      }
-    }
-    function hideProgress() {
-      if (progressEl) progressEl.hidden = true;
     }
 
     // ---------- 뷰어 (3B 코어 재사용) ----------
@@ -373,14 +349,13 @@
       openingFile = file;
       if (openBtn) openBtn.disabled = true;
       getFetchApi().expectVersion(file.fileId, file.version);
-      showProgress('받는 중…', null);
       var v;
       try {
         v = getViewer();
       } catch (e) {
         finishOpening();
         if (openBtn) openBtn.disabled = false;
-        hideProgress();
+        hideBootLoading();
         return Promise.resolve(false);
       }
       // v.open의 동기 throw가 있으면 opening을 영원히 고정한다 앱
@@ -393,7 +368,7 @@
         function () {
           finishOpening();
           if (openBtn) openBtn.disabled = false;
-          hideProgress();
+          hideBootLoading();
           current = {
             fileId: file.fileId, name: file.name, mime: file.mime || '',
             version: file.version || null,
@@ -408,7 +383,7 @@
         function () {
           finishOpening();
           if (openBtn) openBtn.disabled = false;
-          hideProgress();
+          hideBootLoading();
           return false;
         },
       );
@@ -417,7 +392,6 @@
     function newDocument() {
       if (!app.canCreate || opening) return Promise.resolve(false);
       opening = true;
-      showProgress('여는 중…', null);
       // 서식 파일(앱)한글 의 빈문서 바이트를 먼저 받아서 넣는다. 서식파일을
       // 못 받으면 문서를 열지 않는 앱 빈 껍데기만 첫 창하지 않는다.
       var bytesReady = app.templateUrl
@@ -442,7 +416,7 @@
         .then(
           function () {
             finishOpening();
-            hideProgress();
+            hideBootLoading();
             current = {
               fileId: 0, name: app.newTitle, mime: app.newMime, version: null,
               folderId: null, folderName: '', isNew: true,
@@ -453,7 +427,7 @@
           },
           function () {
             finishOpening();
-            hideProgress();
+            hideBootLoading();
             // 자동 진입이 실패했으면 시작 화면을 내보내거나 한다
             // (문서가 열려 있으면 updateChrome가 그대로 감춘 화면)
             updateChrome();
