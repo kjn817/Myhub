@@ -118,7 +118,12 @@ export async function computeRotationCensus(env: RotationEnv): Promise<RotationC
           if (b && typeof b.encrypted === 'string' && isEncrypted(b.encrypted)) census.memo_block++
         }
       }
-    } catch {
+    } catch (e) {
+      // 파싱 실패 시 해당 행이 census에서 조용히 빠진다 (dry-run 건수 대조에 영향).
+      // 행 내용은 찍지 않고 파싱 실패 사실만 남긴다.
+      const errorType = e instanceof Error ? e.name : 'Unknown'
+      const errorMessage = e instanceof Error ? e.message.slice(0, 200) : 'Unknown'
+      console.warn('ROTATION_CENSUS_ROW_SKIPPED', { errorType, errorMessage })
     }
   }
   const googleRows = (

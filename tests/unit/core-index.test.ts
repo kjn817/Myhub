@@ -732,6 +732,24 @@ describe('default.queue (Artifact Queue Consumer)', () => {
     expect(m.state.ackCount).toBe(1)
   })
 
+  test('DB 기록 실패 시 ARTIFACT_JOB_FAIL_RECORD_FAILED 경고가 남는다 (S2-8)', async () => {
+    mockProcessArtifactJob.mockRejectedValue(new Error('kaboom'))
+    const db = new MockDb()
+    db.runQueue.push(new Error('db down'))
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {})
+    try {
+      const m = msg(9)
+      await (def as any).queue(batchOf(m), makeEnv({ DB: db }))
+      expect(m.state.ackCount).toBe(1)
+      expect(warnSpy).toHaveBeenCalledWith(
+        'ARTIFACT_JOB_FAIL_RECORD_FAILED',
+        expect.objectContaining({ jobId: 9, errorType: 'Error' }),
+      )
+    } finally {
+      warnSpy.mockRestore()
+    }
+  })
+
   test('message 없는 에러는 unknown으로 기록한다 (|| 분기)', async () => {
     mockProcessArtifactJob.mockRejectedValue({})
     const db = new MockDb()

@@ -196,8 +196,12 @@ export async function gateFCToolCall(input: FCGateInput): Promise<FCGateOutcome>
       now,
     )
     if (session) return { action: 'allow', approvalTool }
-  } catch {
+  } catch (e) {
     // 세션 확인 실패는 ask로 진행한다 (실행은 하지 않음 — E1과 동일)
+    // 방향은 그대로 두고 실패 사실만 관측 가능하게 한다.
+    const errorType = e instanceof Error ? e.name : 'Unknown'
+    const errorMessage = e instanceof Error ? e.message.slice(0, 200) : 'Unknown'
+    console.warn('FC_SESSION_CHECK_FAILED', { personaId: input.personaId, approvalTool, conversationId, errorType, errorMessage })
   }
 
   const requestStore = new ToolApprovalRequestStore(db, input.cryptoEnv)
@@ -240,8 +244,12 @@ export async function gateFCToolCall(input: FCGateInput): Promise<FCGateOutcome>
       request: pending,
       approvalText: buildApprovalRequestText(pending),
     }
-  } catch {
+  } catch (e) {
     // 대기 요청을 만들지 못하면 실행하지 않는다 (fail-closed — E1과 동일)
+    // 방향은 그대로 두고 실패 사실만 관측 가능하게 한다.
+    const errorType = e instanceof Error ? e.name : 'Unknown'
+    const errorMessage = e instanceof Error ? e.message.slice(0, 200) : 'Unknown'
+    console.warn('FC_APPROVAL_REQUEST_FAILED', { personaId: input.personaId, approvalTool, conversationId, errorType, errorMessage })
     return { action: 'blocked', approvalTool, error: 'approval_required' }
   }
 }

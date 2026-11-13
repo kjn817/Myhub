@@ -440,6 +440,10 @@ ${secondResult.text}`;
       origin: options?.origin
     });
   } catch (e) {
+    // 도구 실행 누락을 관측 가능하게 한다. 오류는 도구 실행 경로에서
+    // 올라올 수 있어 메시지(도구 결과 포함 가능)는 찍지 않고 종류만 남긴다.
+    const errorType = e instanceof Error ? e.name : 'Unknown'
+    console.warn('TOOL_MARKERS_FAILED', { personaId, errorType })
   }
   try {
     if (personaId === 'builder' && result.text) {

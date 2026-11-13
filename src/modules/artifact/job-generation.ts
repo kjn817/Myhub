@@ -219,7 +219,12 @@ export async function saveJobResult(
              SELECT id FROM artifact_versions WHERE artifact_id=? ORDER BY version_no DESC LIMIT 50
            ) AND id != ?`
         ).bind(aid, aid, pubId).run()
-      } catch {}
+      } catch (e) {
+        // 버전 정리 실패 시 오래된 버전이 조용히 잔류한다 — 관측 가능하게 한다.
+        const errorType = e instanceof Error ? e.name : 'Unknown'
+        const errorMessage = e instanceof Error ? e.message.slice(0, 200) : 'Unknown'
+        console.warn('ARTIFACT_VERSION_PRUNE_FAILED', { artifactId: aid, errorType, errorMessage })
+      }
       // Codex 스타일: version.committed 이벤트
       await logJobEvent(env, jobId, 'version.committed', { artifact_id: aid, version_no: vno, version_id: newVersionId })
       // B5: 충돌이 있었으면 버전 분기로 명시적 기록 (실패가 아니라 분기 — 양쪽 작업물 모두 보존)

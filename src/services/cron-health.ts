@@ -236,7 +236,12 @@ export async function recordCronRun(env: { DB: D1Database }, handler: string, ou
       history,
     }
     await writeStore(env.DB, store)
-  } catch {
+  } catch (e) {
+    // health 기록 실패가 조용히 소실되면 모니터링 맹점이 된다.
+    // try 블록은 D1·JSON.parse만 포함하므로 드라이버 메시지는 안전하다.
+    const errorType = e instanceof Error ? e.name : 'Unknown'
+    const errorMessage = e instanceof Error ? e.message.slice(0, 200) : 'Unknown'
+    console.warn('CRON_HEALTH_RECORD_FAILED', { handler, errorType, errorMessage })
   }
 }
 
@@ -258,7 +263,11 @@ export async function recordCronJobRun(env: { DB: D1Database }, jobId: number, o
       lastOkAt: outcome.status === 'ok' ? at : prev?.lastOkAt ?? null,
     }
     await writeStore(env.DB, store)
-  } catch {
+  } catch (e) {
+    // job run 기록 실패가 조용히 소실되면 모니터링 맹점이 된다.
+    const errorType = e instanceof Error ? e.name : 'Unknown'
+    const errorMessage = e instanceof Error ? e.message.slice(0, 200) : 'Unknown'
+    console.warn('CRON_JOB_RUN_RECORD_FAILED', { jobId, errorType, errorMessage })
   }
 }
 

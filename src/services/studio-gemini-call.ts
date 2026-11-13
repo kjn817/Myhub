@@ -322,7 +322,13 @@ export async function callWithTools(
             arguments: JSON.parse(tc.function.arguments || '{}'),
             id: tc.id,
           } as any)
-        } catch {}
+        } catch (e) {
+          // 인자 파싱 실패 시 해당 도구 호출이 조용히 누락된다 — 도구명만 남긴다
+          // (인자 원문은 모델 출력이라 로그에 찍지 않는다).
+          const errorType = e instanceof Error ? e.name : 'Unknown'
+          const errorMessage = e instanceof Error ? e.message.slice(0, 200) : 'Unknown'
+          console.warn('STUDIO_TOOL_ARGS_PARSE_FAILED', { toolName: tc?.function?.name ?? 'unknown', errorType, errorMessage })
+        }
       }
     }
   }

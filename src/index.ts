@@ -349,7 +349,12 @@ export default {
           await env.DB.prepare(
             `UPDATE artifact_jobs SET status='failed', error=?, seen=0, updated_at=datetime('now') WHERE id=?`
           ).bind('Consumer 오류: ' + ((e as Error).message || 'unknown'), jobId).run()
-        } catch {}
+        } catch (recordErr) {
+          // 실패 기록 자체가 실패하면 관측이 불가능해진다 — 최소한 로그로 남긴다.
+          const errorType = recordErr instanceof Error ? recordErr.name : 'Unknown'
+          const errorMessage = recordErr instanceof Error ? recordErr.message.slice(0, 200) : 'Unknown'
+          console.warn('ARTIFACT_JOB_FAIL_RECORD_FAILED', { jobId, errorType, errorMessage })
+        }
         msg.ack()
       }
     }
