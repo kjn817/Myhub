@@ -834,7 +834,33 @@
     for (var j = 1; j < holders.length; j++) io.observe(holders[j]);
   }
 
+  // 편집기 부팅 중 로딩 화면 (시트·데스크톱 부팅과 같은 구성: 앱 이름 +
+  // 파란 스피너 + 상태 문구). 스튜디오가 뜨기 전까지 흰 빈 페이지만
+  // 보이는 것을 막는다 (2026-11-13 사용자 지적).
+  function buildLoadingEl(doc, title, status) {
+    var el = doc.createElement('div');
+    el.className = 'fv-hwp-loading';
+    var titleEl = doc.createElement('div');
+    titleEl.className = 'fv-hwp-loading-title';
+    titleEl.textContent = title;
+    var spin = doc.createElement('div');
+    spin.className = 'fv-hwp-loading-spin';
+    spin.setAttribute('aria-hidden', 'true');
+    var statusEl = doc.createElement('div');
+    statusEl.className = 'fv-hwp-loading-status';
+    statusEl.textContent = status;
+    el.appendChild(titleEl);
+    el.appendChild(spin);
+    el.appendChild(statusEl);
+    return el;
+  }
+
   function openEditor(ctx, state) {
+    var loading = null;
+    var removeLoading = function () {
+      if (loading && loading.parentNode) loading.parentNode.removeChild(loading);
+      loading = null;
+    };
     return ctx.loadLib('rhwpEditor').then(function (sdk) {
       if (!ctx.isCurrent()) return;
       if (!sdk || typeof sdk.createEditor !== 'function') {
@@ -847,6 +873,8 @@
       var container = ctx.doc.createElement('div');
       container.className = 'fv-hwp-editor';
       ctx.body.appendChild(container);
+      loading = buildLoadingEl(ctx.doc, '한글 2020', '한글 편집기를 불러오는 중');
+      container.appendChild(loading);
       return Promise.resolve(
         sdk.createEditor(container, {
           studioUrl: studioEmbedOn(ctx)
@@ -856,12 +884,17 @@
       ).then(function (editor) {
         if (!ctx.isCurrent()) {
           if (editor && typeof editor.destroy === 'function') editor.destroy();
+          removeLoading();
           return;
         }
         state.editor = editor;
         state.editorContainer = container;
         return editor.loadFile(state.buf, ctx.file.name).then(function () {
-          if (!ctx.isCurrent()) return;
+          if (!ctx.isCurrent()) {
+            removeLoading();
+            return;
+          }
+          removeLoading();
           state.surface = 'editor';
           if (ctx.saveBtn) ctx.saveBtn.hidden = false;
           attachDirtyWatch(ctx, state, container);
@@ -905,6 +938,11 @@
               ctx.setNote('한글 문서 쪽 편집 중');
         });
       });
+    }).catch(function (err) {
+      // 부팅 실패 시에도 로딩 화면이 남지 않게 한다 (호출부의
+      // renderView 폴백이 빈 몸통에서 시작한다).
+      removeLoading();
+      throw err;
     });
   }
 

@@ -563,6 +563,26 @@
    채우면 높이가 확정된 상자 기준이라 어느 진입 경로에서도 채워진다. */
 .finder-viewer-body.fv-fill .fv-hwp-editor { position: relative; }
 .finder-viewer-body.fv-fill .fv-hwp-editor iframe { position: absolute; inset: 0; }
+/* 한글 편집기 부팅 중 로딩 화면 — 시트(.sheet-gc-loading)·데스크톱
+   부팅 오버레이(#dt-boot)와 같은 정식 로딩 화면이다. 없으면 스튜디오가
+   뜨기 전까지 흰 빈 페이지가 보여 "무슨 페이지가 떴다"는 지적이 된다
+   (2026-11-13 사용자 지적). 컨테이너(.fv-hwp-editor)가 기준 상자다. */
+.fv-hwp-loading {
+  position: absolute; inset: 0; z-index: 5;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px;
+  background: #fff;
+}
+.fv-hwp-loading-title {
+  font-size: 24px; font-weight: 700; letter-spacing: -0.02em; color: #18181b;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+.fv-hwp-loading-spin {
+  width: 22px; height: 22px; border-radius: 50%;
+  border: 2px solid #e5e7eb; border-top-color: #3b82f6;
+  animation: fv-hwp-loading-spin 0.8s linear infinite;
+}
+@keyframes fv-hwp-loading-spin { to { transform: rotate(360deg); } }
+.fv-hwp-loading-status { font-size: 13px; color: #64748b; }
 /* 슬라이드 최소 리더 패치: fv-fill(패딩 0·flex) 안에서도 카드 목록이
    자기 영역에서 스크롤하고 여백을 그대로 유지한다 (DeckCraft 화면과 교환) */
 .finder-viewer-body.fv-fill .fv-slide-reader { flex: 1 1 auto; min-height: 0; overflow: auto; padding: 10px 14px; }

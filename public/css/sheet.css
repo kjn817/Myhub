@@ -85,9 +85,24 @@ body { font-family: 'Pretendard', -apple-system, 'Segoe UI', sans-serif; }
 
 /* GridCraft 화면 (sheet.html): 엔진 iframe과 로딩·대기 오버레이 */
 .sheet-gc-frame { width: 100%; height: 100%; border: 0; display: block; }
+/* 엔진 부팅 중 로딩 화면 — 데스크톱 부팅 오버레이(#dt-boot)와 같은
+   정식 로딩 화면이다. 예전의 회색 한 줄짜리 텍스트만으로는 흰 빈
+   페이지가 뜬 것처럼 보여 사용자가 "무슨 페이지가 떴다"고 느꼈다
+   (2026-11-13 사용자 지적). */
 .sheet-gc-loading {
   position: absolute; inset: 0;
-  display: flex; align-items: center; justify-content: center;
-  color: #64748b; font-size: 13px; background: #f8fafc;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px;
+  background: #fff;
 }
 .sheet-gc-loading[hidden] { display: none; }
+.sheet-gc-loading-title {
+  font-size: 24px; font-weight: 700; letter-spacing: -0.02em; color: #18181b;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+.sheet-gc-loading-spin {
+  width: 22px; height: 22px; border-radius: 50%;
+  border: 2px solid #e5e7eb; border-top-color: #3b82f6;
+  animation: sheet-gc-loading-spin 0.8s linear infinite;
+}
+@keyframes sheet-gc-loading-spin { to { transform: rotate(360deg); } }
+.sheet-gc-loading-status { font-size: 13px; color: #64748b; }
