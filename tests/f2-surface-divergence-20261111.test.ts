@@ -7,7 +7,9 @@
  *
  * 검증 성질 (깨지면 실패해야 한다):
  * - 채팅 상단 메뉴 첫 라벨이 운영 정본 '대화'다 (트리 발산: '파일').
- * - 일정 페이지 달력 위에 알림 안내 문구(#pushNotice)가 있다.
+ * - 일정 페이지에 알림 안내 문구(#pushNotice)가 없다 (2026-11-11에는
+ *   복원 항목으로 넣었으나 2026-11-13 사용자 지시로 제거 — 알림은 상단바
+ *   종 버튼으로 켜고 끈다. Google 연동 행도 같은 날 같은 이유로 제거됨).
  * - Finder: 상단 메뉴 [파일·보기·이동], 임베드 시 창 제목
  *   '찾기 / 보관함' 게시, 하단 좌측 선택 표시 '보관함 선택'.
  *   (도움말은 항목 내용 미회수로 빈 라벨만 게시되던 것을 2026-11-12
@@ -74,14 +76,14 @@ describe('일정 알림 안내 문구', () => {
     return jsonRes({})
   }
 
-  it('달력 위에 안내 문구가 있고 문구는 운영 실측 전문과 같다', async () => {
+  it('안내 문구(#pushNotice)와 Google 연동 행이 없다 (2026-11-13 사용자 지시로 제거)', async () => {
     const page = loadPage('schedule.html', handler)
-    const el = page.document.getElementById('pushNotice')
-    expect(el).toBeTruthy()
-    expect(el!.textContent).toBe('일정 알림은 이 기기에서 알림을 켠 경우에만 와요. 아이폰에서는 Safari의 공유 메뉴에서 ‘홈 화면에 추가’한 뒤, 그 아이콘으로 연 MyHub에서 알림 버튼을 켜야 해요.')
-    // 달력 격자보다 문서 순서상 앞에 있다 (달력 위 배치)
-    const grid = page.document.getElementById('calGrid')
-    expect(el!.compareDocumentPosition(grid!) & 4 /* DOCUMENT_POSITION_FOLLOWING */).toBeTruthy()
+    expect(page.document.getElementById('pushNotice')).toBeNull()
+    expect(page.document.getElementById('googleRow')).toBeNull()
+    expect(page.document.getElementById('googleStatusLabel')).toBeNull()
+    // 달력과 알림 종 버튼은 그대로 있다 (지우는 건 안내 문구뿐).
+    expect(page.document.getElementById('calGrid')).toBeTruthy()
+    expect(page.document.getElementById('pushBtn')).toBeTruthy()
   })
 })
 

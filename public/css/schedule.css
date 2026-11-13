@@ -18,8 +18,11 @@
   button .lucide { pointer-events: none; }
 
   .wrap { max-width: 720px; margin: 0 auto; padding: 24px 24px 80px; }
-  /* 일정 알림 안내 문구 (달력 위, 최소 형태 — 원본 스타일 미회수) */
-  .push-notice { margin: 0 0 16px; padding: 10px 14px; background: var(--accent-soft); color: var(--ink); border-radius: 10px; font-size: 13px; line-height: 1.55; }
+  /* 스크롤바 숨김 (2026-11-13 사용자 지시): 스크롤은 그대로 되고 막대만
+     안 보인다. Firefox는 scrollbar-width, WebKit/Blink은 ::-webkit-scrollbar로
+     가린다. 대상은 문서 스크롤과 내부 스크롤 영역(.day-sec·.modal). */
+  html, body, .day-sec, .modal { scrollbar-width: none; }
+  ::-webkit-scrollbar { display: none; }
   @media (min-width: 900px) {
     .wrap { max-width: 1200px; padding: 24px 40px 80px; }
   }

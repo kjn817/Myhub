@@ -384,88 +384,11 @@
     return root;
   }
 
-  /**
-   * 일정 페이지 상단의 인라인 상태 행(#googleStatusLabel 등)을 배선한다.
-   * 패널(#myhubConnectMenu)과 별개의 고정 요소라, 페이지 로드 시 상태를
-   * 한 번 불러와 describeGoogleStatus로 그리고 버튼을 연결한다.
-   * 요소가 없는 페이지에서는 아무 것도 하지 않는다.
-   * 반환: 상태를 다시 그리는 loadInline 함수 (요소가 없으면 null).
-   */
-  function wireInlineStatusRow(doc, fetchFn, loc) {
-    doc = doc || (typeof document !== 'undefined' ? document : null);
-    if (!doc || typeof doc.getElementById !== 'function') return null;
-    var label = doc.getElementById('googleStatusLabel');
-    if (!label) return null;
-    var desc = doc.getElementById('googleStatusDesc');
-    var connectBtn = doc.getElementById('googleConnectBtn');
-    var disconnectBtn = doc.getElementById('googleDisconnectBtn');
-    var writeEnabledInline = false;
-
-    function paint(status) {
-      var view = describeGoogleStatus(status);
-      label.textContent = view.label;
-      label.setAttribute('data-state', view.state);
-      if (desc) desc.textContent = view.desc;
-      if (connectBtn) {
-        connectBtn.textContent = view.connectLabel || '연결하기';
-        connectBtn.style.display = view.connectVisible ? '' : 'none';
-        if (view.connectDisabled) connectBtn.setAttribute('disabled', 'disabled');
-        else connectBtn.removeAttribute('disabled');
-      }
-      if (disconnectBtn) {
-        disconnectBtn.style.display = view.disconnectVisible ? '' : 'none';
-      }
-    }
-
-    function loadInline() {
-      if (!fetchFn) { paint(null); return Promise.resolve(null); }
-      return fetchFn(GOOGLE_STATUS_URL)
-        .then(function (res) { return res.json(); })
-        .then(function (data) {
-          writeEnabledInline = !!(data && data.writeEnabled);
-          paint(data);
-          return data;
-        })
-        .catch(function (err) {
-          console.warn('Google 연동 상태 조회 실패(인라인):', err);
-          paint(null);
-          return null;
-        });
-    }
-
-    if (connectBtn) {
-      connectBtn.addEventListener('click', function () {
-        if (connectBtn.hasAttribute('disabled')) return;
-        if (loc) loc.href = writeEnabledInline ? GOOGLE_OAUTH_START_URL + '?mode=write' : GOOGLE_OAUTH_START_URL;
-      });
-    }
-    if (disconnectBtn && fetchFn) {
-      disconnectBtn.addEventListener('click', function () {
-        disconnectBtn.setAttribute('disabled', 'disabled');
-        fetchFn(GOOGLE_DISCONNECT_URL, { method: 'POST' })
-          .then(function () { return loadInline(); })
-          .catch(function (err) {
-            console.warn('Google 연결 해제 실패(인라인):', err);
-            paint({ connected: false, configured: true });
-          })
-          .then(function () { disconnectBtn.removeAttribute('disabled'); });
-      });
-    }
-
-    loadInline();
-    return loadInline;
-  }
-
   // 브라우저 자동 마운트 (최상위 문서에서만 동작 등 프레임 판정과
   // createConnectMenu 안에 이다)
   if (typeof document !== 'undefined') {
     var autoMount = function () {
       createConnectMenu();
-      wireInlineStatusRow(
-        document,
-        typeof fetch === 'function' ? function (u, o) { return fetch(u, o); } : null,
-        typeof window !== 'undefined' ? window.location : null,
-      );
     };
     if (document.readyState === 'loading') {
       document.addEventListener('DOMContentLoaded', autoMount);
@@ -480,7 +403,6 @@
     GOOGLE_DISCONNECT_URL: GOOGLE_DISCONNECT_URL,
     GOOGLE_CONNECT_ICON_SVG: GOOGLE_CONNECT_ICON_SVG,
     describeGoogleStatus: describeGoogleStatus,
-    wireInlineStatusRow: wireInlineStatusRow,
     googleCallbackNotice: googleCallbackNotice,
     createConnectMenu: createConnectMenu,
   };
