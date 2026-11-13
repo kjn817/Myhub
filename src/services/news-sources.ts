@@ -113,6 +113,15 @@ export interface FetchNewsSourcesOpts {
 export const NEWS_CHAIN_TARGET = 5
 /** 체인 전체 시간 예산 (기본 20000ms — 30초 edge 제한 안에 마쳐야 함) */
 export const NEWS_CHAIN_TOTAL_TIMEOUT_MS = 20000
+/**
+ * 레그 시작 최소 잔여 예산 (10ms). 레그 타임아웃은 남은 예산 전부를 쓰므로
+ * 타임아웃 직후 남은 예산은 0ms 근처가 되는데, Date.now() 1ms 양자화 +
+ * 타이머/시계 오차로 0인지 1~2ms인지가 실행마다 달라져, 다음 레그를
+ * 1ms짜리로 시작하는 레이스가 생긴다 (2026-11-13 CI #76 flake — gnews가
+ * 'chain deadline exceeded' 대신 'news leg timeout: gnews-rss'을 받음).
+ * 10ms로는 fetch 한 번도 못 하니 시작하지 않는 게 맞다.
+ */
+export const NEWS_CHAIN_MIN_LEG_REMAINING_MS = 10
 
 /**
  * 뉴스 소스 체인 실행.
@@ -195,7 +204,9 @@ export async function fetchNewsSources(
     const step = steps[i]
     if (items.length >= target) break
     // 전체 deadline 소진 시 남은 레그는 시도하지 않고 정직하게 기록한다.
-    if (remainingMs(deadline) <= 0) {
+    // MIN_LEG_REMAINING_MS 이하도 소진으로 본다 — 경계 1~2ms 레이스 방지
+    // (NEWS_CHAIN_MIN_LEG_REMAINING_MS 주석 참조).
+    if (remainingMs(deadline) <= NEWS_CHAIN_MIN_LEG_REMAINING_MS) {
       timedOut = true
       for (let j = i; j < steps.length; j++) {
         statuses.push({

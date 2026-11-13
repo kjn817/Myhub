@@ -24,7 +24,9 @@
   html, body, .day-sec, .modal { scrollbar-width: none; }
   ::-webkit-scrollbar { display: none; }
   @media (min-width: 900px) {
-    .wrap { max-width: 1200px; padding: 24px 40px 80px; }
+    /* 아래쪽 80px은 스크롤 여유였는데, 높이 채움 레이아웃에서는 달력 아래
+       빈 공간이 돼 어색하다 — 위쪽과 같은 24px로 맞춘다 (2026-11-13). */
+    .wrap { max-width: 1200px; padding: 24px 40px 24px; }
   }
   @media (min-width: 1024px) {
     /* 유연 레이아웃: 고정 max-width를 버려 큰 화면에서 창 전체를 쓴다 (메모 구조 차용).
@@ -136,11 +138,31 @@
   /* 선택 날짜 일정 — 줄 목록 */
   .cal-layout { display: block; }
   @media (min-width: 900px) {
-    .cal-layout { display: grid; grid-template-columns: 1fr 380px; gap: 48px; align-items: start; }
+    .cal-layout { display: grid; grid-template-columns: 1fr 380px; gap: 48px; align-items: stretch; }
     .cal-layout.mode-day { grid-template-columns: 1fr; }
     .day-sec { margin-top: 0; position: sticky; top: 76px; max-height: calc(100dvh - 100px); overflow-y: auto; }
     .cal-grid { font-size: 15px; }
-    .cal-grid .cell { min-height: 88px; padding: 10px; }
+  }
+
+  /* 높이 채움 (2026-11-13 사용자 지시): 넓은 화면에서 달력이 창 높이에 딱 맞게
+     늘어나고, 창이 줄면 함께 준다. .g-main(min-height: 100vh) → .wrap →
+     .cal-layout → .cal-left → .cal-grid로 flex를 이어서 남는 높이를
+     그리드에 주고, 요일 행은 auto, 주 행들은 1fr로 균등 분배한다
+     (주 행이 5주든 6주든 첫 행만 auto라 개수와 무관하다).
+     min-height: 0을 두지 않은 건 의도다 — 창이 셀 최소 높이(84px × 주 수)보다
+     짧아지면 내용이 줄어들지 않고 페이지가 스크롤돼야 하기 때문이다. */
+  @media (min-width: 900px) {
+    .g-main { display: flex; flex-direction: column; }
+    /* margin: 0 auto를 지워야 flex stretch가 먹힌다 — auto 마진이 있으면
+       .wrap이 내용 너비로 쪼그라들어 달력이 좁아진다 (실브라우저 확인).
+       ≥900px에서는 max-width가 뷰포트보다 넓거나 없어서 어차피
+       가운데 정렬 효과가 없으니 지워도 안전하다. */
+    .wrap { flex: 1; display: flex; flex-direction: column; margin-left: 0; margin-right: 0; }
+    .cal-layout { flex: 1; }
+    .cal-left { display: flex; flex-direction: column; min-width: 0; }
+    .cal-grid { flex: 1; grid-template-rows: auto; grid-auto-rows: 1fr; }
+    .week-grid { flex: 1; }
+    .day-view { flex: 1; overflow-y: auto; }
   }
   .day-sec { margin-top: 28px; }
   .day-sec h3 { font-size: 14px; font-weight: 650; margin-bottom: 4px; letter-spacing: -0.2px; }
