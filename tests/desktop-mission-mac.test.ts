@@ -10,16 +10,18 @@
  * (진단: ~/workspace/desktop-transition-diagnosis-20261111.md).
  *
  * 검증 성질 (깨지면 실패해야 한다):
- * - 오버레이를 열면 .dt-mission-spaces 스트립에 스페이스별 카드가
- *   렌더된다: 이름 '데스크톱 N'이 썸네일 위에, 배경화면 썸네일
- *   stage + 창 위치 winrect가 아래에 (macOS 스페이스 바와 같은
- *   배치 — 2026-11-13 사용자 맥 캡처 기준, 이름이 아래던 시절과
- *   다르다). 현재 스페이스 카드는 is-active, 보고 있는 카드는
- *   is-selected. 라벨 바(.dt-mission-bar/.dt-mission-label)가
- *   돌아오면 실패한다.
+ * - 오버레이를 열면 상단 전체를 차지하는 스페이스 밴드
+ *   (.dt-mission-spaces)에 스페이스별 카드가 렌더된다: 배경화면
+ *   썸네일 stage + 창 위치 winrect가 위, 이름 '데스크톱 N'이
+ *   썸네일 아래 (macOS 스페이스 바와 같은 배치 — 2026-11-13 사용자
+ *   맥 캡처 3장 기준. 이름을 위로 올렸던 시도는 캡처를 잘못 읽은
+ *   오판이라 아래로 되돌렸다). 현재 스페이스 카드는 is-active,
+ *   보고 있는 카드는 is-selected. 라벨 바(.dt-mission-bar/
+ *   .dt-mission-label)가 돌아오면 실패한다.
  * - 표시는 [hidden] 토글이 정본 — is-open 클래스는 JS·CSS 어디에도
  *   없어야 하고, 닫히면 hidden=true로 돌아간다.
- * - 스프레드 기하 시작점은 MISSION_AREA_TOP 176 (바 시절 84가 아니다).
+ * - 스프레드 기하 시작점은 MISSION_AREA_TOP 240 (밴드 하단 ~219 +
+ *   여유 — 밴드가 생기기 전 176 시절과 다르다).
  * - 딤 레이어(.dt-mission-bg)는 #dt-mission 바로 앞에 형제로 삽입되고
  *   (insertBefore), CSS는 fixed·z 58·배경화면 이미지를 직접 칠하며
  *   (--dt-mission-wp 소비) blur(14px) saturate(1.3)를 건다. 애니메이션
@@ -28,10 +30,18 @@
  *   미션 컨트롤에서 메뉴바를 숨기지만 MyHub 상단바는 사라지지 않고
  *   밝은 채로 남아야 한다 (2026-11-13 사용자 지시). 상단바 z 60이
  *   배경 z 58보다 위인 것도 함께 고정한다.
- * - + 버튼은 스트립 우상단 점선 원형(44px, dashed)이며 클릭하면
- *   데스크톱이 추가되고 오버레이는 열린 채 카드가 늘어난다.
- *   (카드 뒤 인라인이던 시절과 다르다 — 2026-11-13 맥 캡처 기준.)
+ * - + 버튼은 스페이스 밴드 우상단 점선 원형(44px, dashed)이며
+ *   클릭하면 데스크톱이 추가되고 오버레이는 열린 채 카드가
+ *   늘어난다. (카드 뒤 인라인이던 시절과 다르다 — 2026-11-13
+ *   맥 캡처 기준.) 세로 중심은 썸네일 중심과 일치한다.
  * - 미션 중에는 바탕화면 아이콘·위젯이 숨겨진다 (body.dt-mission-open).
+ * - 썸네일 안 winrect는 창 위치를 5% 여유·90% 축소로 비례 표시한다 —
+ *   최대화한 창도 썸네일 가장자리에 닿지 않는다. 여유 없이 0~100%를
+ *   그대로 쓰면 흰 네모가 썸네일 밑둥에 달라붙어 잘린 것처럼 보인다
+ *   (2026-11-13 사용자 실화면 지적).
+ * - 빈 데스크톱 문구(.dt-mission-empty)는 스프레드 영역 중앙에 있다 —
+ *   스타일 없이 흐름 배치로 좌측에 붙던 시절과 다르다 (2026-11-13
+ *   사용자 실화면 지적).
  * - 카드 클릭 → 그 데스크톱으로 전환되고 오버레이가 닫힌다.
  * - 창이 있는 스페이스에서는 실제 창이 스프레드(dt-mission-win +
  *   transform)되고 캡션이 붙는다. 빈 스페이스에서는 빈 상태 문구가
@@ -163,17 +173,58 @@ describe('미션 컨트롤 — 카드 스트립 렌더 (원본 형태)', () => {
     expect(add.parentElement.classList.contains('dt-mission-spaces')).toBe(true)
   })
 
-  test('카드 썸네일에 실제 창 위치가 winrect로 비례 표시된다', () => {
+  test('카드 썸네일에 실제 창 위치가 winrect로 비례 표시된다 (5% 여유·90% 축소)', () => {
     const m = makeManager()
     m.openModule('memo')
     const w = m.getState().windows[0]
     m.toggleMission()
     const rect = cards()[0].querySelector('.dt-mission-winrect')
     expect(rect).not.toBeNull()
-    expect(rect.style.left).toBe((w.x / VIEWPORT.w) * 100 + '%')
-    expect(rect.style.top).toBe((w.y / VIEWPORT.h) * 100 + '%')
-    expect(rect.style.width).toBe((w.w / VIEWPORT.w) * 100 + '%')
-    expect(rect.style.height).toBe((w.h / VIEWPORT.h) * 100 + '%')
+    // 0~100% 그대로가 아니다 — 5% 여유를 두고 90%로 축소한다.
+    expect(rect.style.left).toBe(5 + (w.x / VIEWPORT.w) * 90 + '%')
+    expect(rect.style.top).toBe(5 + (w.y / VIEWPORT.h) * 90 + '%')
+    expect(rect.style.width).toBe((w.w / VIEWPORT.w) * 90 + '%')
+    expect(rect.style.height).toBe((w.h / VIEWPORT.h) * 90 + '%')
+  })
+
+  test('최대화한 창의 winrect도 썸네일 가장자리에 닿지 않는다', () => {
+    const m = makeManager()
+    m.openModule('memo')
+    const w = m.getState().windows[0]
+    m.toggleMaximize(w.id)
+    expect(m.isMaximized(w.id)).toBe(true)
+    m.toggleMission()
+    const rect = cards()[0].querySelector('.dt-mission-winrect')
+    expect(rect).not.toBeNull()
+    // 여유 없이 0~100%를 쓰면 left 0%·width 100%로 가장자리에
+    // 달라붙어 흰 네모 밑둥이 잘린 것처럼 보인다 (사용자 실화면).
+    const left = parseFloat(rect.style.left)
+    const top = parseFloat(rect.style.top)
+    const width = parseFloat(rect.style.width)
+    const height = parseFloat(rect.style.height)
+    expect(left).toBeGreaterThanOrEqual(4.9)
+    expect(top).toBeGreaterThanOrEqual(4.9)
+    expect(left + width).toBeLessThanOrEqual(95.1)
+    expect(top + height).toBeLessThanOrEqual(95.1)
+  })
+
+  test('빈 데스크톱 문구는 스프레드 영역 중앙에 있다 (CSS)', () => {
+    const m = makeManager()
+    m.toggleMission()
+    const empty = missionEl().querySelector('.dt-mission-empty')
+    expect(empty).not.toBeNull()
+    expect(empty.textContent).toBe('이 데스크톱에는 열린 창이 없어요')
+    // 스타일 규칙이 없으면 흐름 배치로 좌측 상단에 붙는다 (사용자 실화면).
+    const rule = DESKTOP_CSS.match(/^\.dt-mission-empty\s*\{([^}]*)\}/m)
+    expect(rule).not.toBeNull()
+    const body = (rule as RegExpMatchArray)[1]
+    expect(body).toContain('position: absolute')
+    expect(body).toContain('top: 240px')
+    expect(body).toContain('bottom: 148px')
+    expect(body).toContain('display: flex')
+    expect(body).toContain('align-items: center')
+    expect(body).toContain('justify-content: center')
+    expect(body).toContain('pointer-events: none')
   })
 
   test('스페이스가 3개면 카드 3개가 순서대로 나열되고 닫으면 hidden으로 돌아간다', async () => {
@@ -200,7 +251,7 @@ describe('미션 컨트롤 — 카드 스트립 렌더 (원본 형태)', () => {
 })
 
 describe('미션 컨트롤 — macOS 스페이스 바 (2026-11-13)', () => {
-  test('카드 이름이 썸네일 위에 있다 (DOM 순서: 이름 → stage, CSS absolute)', () => {
+  test('카드 이름이 썸네일 아래에 있다 (DOM 순서: stage → 이름)', () => {
     const m = makeManager()
     m.toggleMission()
     const card = cards()[0]
@@ -209,26 +260,40 @@ describe('미션 컨트롤 — macOS 스페이스 바 (2026-11-13)', () => {
     const stageIdx = kids.findIndex((el: any) => el.classList.contains('dt-mission-stage'))
     expect(nameIdx).toBeGreaterThanOrEqual(0)
     expect(stageIdx).toBeGreaterThanOrEqual(0)
-    expect(nameIdx).toBeLessThan(stageIdx)
-    // 이름은 카드 위쪽 바깥에 절대 배치된다 (썸네일 위 라벨).
+    expect(stageIdx).toBeLessThan(nameIdx)
+    // 이름은 썸네일 아래 흐름 배치 (margin-top 7px) — 절대 배치로
+    // 위로 올렸던 시도는 맥 캡처 오독이었다 (2026-11-13 정정).
     // ^ 앵커 필수 — 앞에 .dt-mission-card .dt-mission-name 후손
     // 규칙이 있어 앵커 없으면 그쪽이 먼저 잡힌다.
     const name = DESKTOP_CSS.match(/^\.dt-mission-name\s*\{([^}]*)\}/m)
     expect(name).not.toBeNull()
     const body = (name as RegExpMatchArray)[1]
-    expect(body).toContain('position: absolute')
-    expect(body).toContain('top: -26px')
+    expect(body).not.toContain('position: absolute')
+    expect(body).toContain('margin-top: 7px')
   })
 
-  test('+ 버튼이 스페이스 바 우상단에 고정된다 (absolute·right 0·썸네일 중앙)', () => {
+  test('스페이스 바는 상단 전체를 차지하는 밴드다 (배경 틴트 + 하단 구분선)', () => {
+    const strip = DESKTOP_CSS.match(/^\.dt-mission-spaces\s*\{([^}]*)\}/m)
+    expect(strip).not.toBeNull()
+    const body = (strip as RegExpMatchArray)[1]
+    // 좌우 마진 0 — 밴드가 뷰포트 전체 너비를 차지한다.
+    expect(body).toContain(') 0 0')
+    expect(body).toContain('background: rgba(255, 255, 255, 0.08)')
+    expect(body).toContain('border-bottom: 1px solid rgba(255, 255, 255, 0.16)')
+  })
+
+  test('+ 버튼이 스페이스 밴드 우상단에 고정된다 (absolute·right 28·썸네일 중앙)', () => {
     const add = DESKTOP_CSS.match(/\.dt-mission-add\s*\{([^}]*)\}/)
     expect(add).not.toBeNull()
     const body = (add as RegExpMatchArray)[1]
     expect(body).toContain('position: absolute')
-    expect(body).toContain('right: 0')
-    // 스트립 높이 = 이름 여유 26px + 카드 높이 — + 버튼 중심은
-    // 카드(썸네일) 중심과 일치해야 한다 (50% + 13px).
-    expect(body).toContain('top: calc(50% + 13px)')
+    expect(body).toContain('right: 28px')
+    // + 버튼 중심 = 썸네일 중심: 밴드 상단 패딩 16 + 카드 테두리·
+    // 패딩 8 + 썸네일 절반 55 = 79px. 썸네일은 카드 패딩 안쪽이라
+    // 너비 174, 높이 109다 (카드 너비 190으로 계산하면 5px 어긋남 —
+    // 실브라우저 실측). 이름은 썸네일 아래라 중심에 영향을 주지
+    // 않는다 — 고정값이라 폰트 메트릭과 무관하다.
+    expect(body).toContain('top: 79px')
     expect(body).toContain('transform: translateY(-50%)')
     // hover가 transform을 scale만으로 덮으면 버튼이 22px 아래로
     // 튄다 — hover도 translateY(-50%)를 유지해야 한다.
@@ -340,8 +405,11 @@ describe('미션 컨트롤 — 창 스프레드와 빈 상태', () => {
 })
 
 describe('미션 컨트롤 — 원본 기하·CSS 계약', () => {
-  test('스프레드 시작점은 MISSION_AREA_TOP 176이다 (바 시절 84가 아니다)', () => {
-    expect(WINDOWS_JS).toContain('var MISSION_AREA_TOP = 176;')
+  test('스프레드 시작점은 MISSION_AREA_TOP 240이다 (밴드 하단 ~219 + 여유)', () => {
+    // 밴드가 생기기 전 176 시절과 다르다 — 스프레드 창이 밴드와
+    // 겹치지 않으려면 시작점이 밴드 하단보다 아래여야 한다.
+    expect(WINDOWS_JS).toContain('var MISSION_AREA_TOP = 240;')
+    expect(WINDOWS_JS).not.toContain('MISSION_AREA_TOP = 176')
     expect(WINDOWS_JS).not.toContain('MISSION_AREA_TOP = 84')
   })
 
@@ -399,9 +467,12 @@ describe('미션 컨트롤 — 원본 기하·CSS 계약', () => {
     // (#dt-root.dt-mission-mode .dt-window / .dt-frame)의 몫이다.
     // 후단 오버레이에 남아 있던 미션 잔존 규칙(라벨 바 시대 값)은
     // 운영 CSS에 없으므로 트리에도 없어야 한다 (감사 B-4로 전량 제거).
+    // 단 .dt-mission-empty는 예외 — 운영 원본에 규칙이 없어 스타일
+    // 없이 좌측에 붙던 것이 사용자 실화면 결함 지적(2026-11-13)으로
+    // 본문 구간에 중앙 배치 규칙이 신설됐다. 그 규칙의 기하는 위의
+    // '빈 데스크톱 문구는 스프레드 영역 중앙에 있다' 테스트가 핀다.
     expect(DESKTOP_CSS).toMatch(/#dt-root\.dt-mission-mode \.dt-window\s*\{[^}]*transform-origin:\s*0 0/)
     expect(DESKTOP_CSS).toMatch(/#dt-root\.dt-mission-mode \.dt-frame\s*\{[^}]*pointer-events:\s*none/)
-    expect(DESKTOP_CSS).not.toMatch(/\.dt-mission-empty\s*\{/)
     expect(DESKTOP_CSS).not.toMatch(/\.dt-window\.dt-mission-win\s*\{[^}]*box-shadow/)
     expect(DESKTOP_CSS).not.toMatch(/\.dt-window\.dt-mission-win[^{]*\{[^}]*transform-origin/)
     expect(DESKTOP_CSS).not.toMatch(/\.dt-mission-mode \.dt-window iframe/)

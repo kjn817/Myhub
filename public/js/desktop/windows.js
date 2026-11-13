@@ -2762,7 +2762,11 @@
       if (target !== null && target !== state.activeSpace) switchSpace(target);
     }
     var MISSION_AREA_X = 56;
-    var MISSION_AREA_TOP = 176;
+    // 스프레드 시작점 240 = 스페이스 밴드 하단(~219: 상단바 36 +
+    // 밴드 패딩 30 + 카드 ~153) + 여유. 밴드와 겹치지 않으려면
+    // 시작점이 밴드 하단보다 아래여야 한다 (밴드 이전 176 시절과
+    // 다름, 2026-11-13).
+    var MISSION_AREA_TOP = 240;
     var MISSION_GAP = 28;
     var MISSION_CAPTION_H = 30;
     function clearMissionSpread() {
@@ -2999,10 +3003,14 @@
           rect.style.width = '100%';
           rect.style.height = '100%';
         } else {
-          rect.style.left = (w.x / vp.w) * 100 + '%';
-          rect.style.top = (w.y / vp.h) * 100 + '%';
-          rect.style.width = (w.w / vp.w) * 100 + '%';
-          rect.style.height = (w.h / vp.h) * 100 + '%';
+          // 5% 여유·90% 축소: 0~100%를 그대로 쓰면 최대화한 창의
+          // 흰 네모가 썸네일 가장자리(특히 밑둥)에 달라붙어 잘린
+          // 것처럼 보인다 (2026-11-13 사용자 실화면 지적). 여유를
+          // 두면 배경화면이 네모 둘레에 보여 창으로 읽힌다.
+          rect.style.left = (5 + (w.x / vp.w) * 90) + '%';
+          rect.style.top = (5 + (w.y / vp.h) * 90) + '%';
+          rect.style.width = ((w.w / vp.w) * 90) + '%';
+          rect.style.height = ((w.h / vp.h) * 90) + '%';
         }
         stage.appendChild(rect);
       });
@@ -3061,10 +3069,11 @@
         var name = document.createElement('div');
         name.className = 'dt-mission-name';
         name.textContent = '데스크톱 ' + (i + 1);
-        // macOS 스페이스 바: 이름이 썸네일 위에 (DOM 순서도 시각 순서와
-        // 같게 — 이름이 아래던 시절과 다르다, 2026-11-13).
-        card.appendChild(name);
+        // macOS 스페이스 바: 썸네일 위, 이름 아래 (DOM 순서도 시각
+        // 순서와 같게. 이름을 위로 올렸던 시도는 맥 캡처 오독이라
+        // 아래로 되돌렸다, 2026-11-13).
         card.appendChild(stage);
+        card.appendChild(name);
         if (state.spaces.length > 1) {
           var closeBtn = document.createElement('button');
           closeBtn.type = 'button';

@@ -1335,6 +1335,26 @@ html, body { overscroll-behavior-x: none; }
   pointer-events: none;
 }
 
+/* 빈 데스크톱 문구는 스프레드 영역 중앙에 뜬다. top 240은
+   MISSION_AREA_TOP, bottom 148은 상단바 36 + 독 96 + 여유 16 —
+   스프레드 영역과 같은 상하 경계다. 스타일이 없으면 흐름 배치로
+   좌측에 붙어 버그처럼 보인다 (2026-11-13 사용자 실화면 지적). */
+.dt-mission-empty {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 240px;
+  bottom: 148px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  font-size: 15px;
+  color: rgba(255, 255, 255, 0.75);
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.45);
+  pointer-events: none;
+}
+
 @keyframes dt-mission-fade {
   from { opacity: 0; }
   to { opacity: 1; }
@@ -1355,11 +1375,11 @@ html, body { overscroll-behavior-x: none; }
   animation: dt-mission-pop 0.28s cubic-bezier(0.32, 0.72, 0, 1) both;
 }
 
-/* 스페이스 바 (macOS 스페이스 바 배치, 2026-11-13): 이름이 썸네일
-   위에, + 버튼이 우상단에 있다. padding-top 26px은 카드 위 이름
-   라벨 자리 — 스트립은 상단바 바로 아래에서 시작하고 카드는
-   이전과 같은 y(상단바 아래 26px)에서 시작한다. position: relative는
-   + 버튼의 앵커다. */
+/* 스페이스 밴드 (macOS 스페이스 바, 2026-11-13): 상단 전체를
+   차지하는 띠로, 썸네일 + 아래 이름이 나열되고 + 버튼이 우상단에
+   있다. 배경 틴트와 하단 구분선으로 창 영역과 나뉜다 (맥 캡처
+   기준 — 이름을 위로 올렸던 시도는 캡처 오독이라 아래로 되돌림).
+   position: relative는 + 버튼의 앵커다. */
 .dt-mission-spaces {
   position: relative;
   display: flex;
@@ -1367,8 +1387,10 @@ html, body { overscroll-behavior-x: none; }
   justify-content: center;
   align-items: flex-start;
   flex-wrap: wrap;
-  margin: calc(var(--topnav-h, 34px) + max(env(safe-area-inset-top), 4px)) 28px 0;
-  padding-top: 26px;
+  margin: calc(var(--topnav-h, 34px) + max(env(safe-area-inset-top), 4px)) 0 0;
+  padding: 16px 28px 14px;
+  background: rgba(255, 255, 255, 0.08);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.16);
   pointer-events: auto;
 }
 
@@ -1439,14 +1461,9 @@ html, body { overscroll-behavior-x: none; }
   box-shadow: inset 0 3px 0 rgba(0, 0, 0, 0.08), 0 1px 4px rgba(0, 0, 0, 0.3);
 }
 
-/* 이름은 카드 위쪽 바깥에 절대 배치 (macOS: 라벨이 썸네일 위).
-   스트립의 padding-top 26px이 이 자리다. */
+/* 이름은 썸네일 아래 (macOS 스페이스 바와 같은 배치). */
 .dt-mission-name {
-  position: absolute;
-  top: -26px;
-  left: 0;
-  right: 0;
-  margin-top: 0;
+  margin-top: 7px;
   text-align: center;
   font-size: 12.5px;
   font-weight: 600;
@@ -1454,14 +1471,17 @@ html, body { overscroll-behavior-x: none; }
   text-shadow: 0 1px 4px rgba(0, 0, 0, 0.45);
 }
 
-/* + 버튼은 스페이스 바 우상단 (macOS와 같은 자리 — 카드 뒤 인라인이
-   아니다). top: calc(50% + 13px)는 스트립 높이(= 26px 이름 여유 +
-   카드 높이)의 절반에 13px을 더한 값으로, 카드(썸네일) 세로 중심과
-   정확히 일치한다: (26 + C) / 2 + 13 = 26 + C / 2. */
+/* + 버튼은 스페이스 밴드 우상단 (macOS와 같은 자리 — 카드 뒤 인라인이
+   아니다). top 79px은 썸네일 세로 중심: 밴드 상단 패딩 16 + 카드
+   테두리·패딩 8 + 썸네일 절반 55. 썸네일은 카드 패딩 안쪽이라 너비
+   174(190-16), 높이 109(174×10/16)이다 — 카드 너비 190으로 계산하면
+   5px 어긋난다 (실브라우저 실측). 이름은 썸네일 아래라 중심에
+   영향을 주지 않아 고정값이 폰트 메트릭과 무관하다. 띠가 2행으로
+   접혀도 1행 썸네일 중심에 그대로 붙는다. */
 .dt-mission-add {
   position: absolute;
-  right: 0;
-  top: calc(50% + 13px);
+  right: 28px;
+  top: 79px;
   transform: translateY(-50%);
   width: 44px;
   height: 44px;
