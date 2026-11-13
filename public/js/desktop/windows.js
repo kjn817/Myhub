@@ -2702,6 +2702,7 @@
       if (!missionClosing) return;
       missionClosing = false;
       root.classList.remove('dt-mission-mode');
+      if (document.body) document.body.classList.remove('dt-mission-open');
       var el = deps.missionEl;
       if (el) {
         el.hidden = true;
@@ -3060,8 +3061,10 @@
         var name = document.createElement('div');
         name.className = 'dt-mission-name';
         name.textContent = '데스크톱 ' + (i + 1);
-        card.appendChild(stage);
+        // macOS 스페이스 바: 이름이 썸네일 위에 (DOM 순서도 시각 순서와
+        // 같게 — 이름이 아래던 시절과 다르다, 2026-11-13).
         card.appendChild(name);
+        card.appendChild(stage);
         if (state.spaces.length > 1) {
           var closeBtn = document.createElement('button');
           closeBtn.type = 'button';
@@ -3100,6 +3103,8 @@
       el.hidden = false;
       if (bg) bg.hidden = false;
       root.classList.add('dt-mission-mode');
+      // 미션 중 바탕화면 아이콘·위젯 숨김 신호 (CSS body.dt-mission-open).
+      if (document.body) document.body.classList.add('dt-mission-open');
       void root.offsetWidth;
       el.classList.remove('is-entering');
       if (bg) bg.classList.remove('is-entering');

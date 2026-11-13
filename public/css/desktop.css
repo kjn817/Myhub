@@ -1227,9 +1227,16 @@ html, body { overscroll-behavior-x: none; }
    레이어 분리 (2026-11-02): 배경(딤·블러) z 58 < 실제 창 루트 z 60 <
    띠·캡션 z 65 < 독 z 70. 창 미리보기는 가짜 타일이 아니라 실제 창
    엘리먼트를 transform으로 축소한 스프레드라 작업 상태가 그대로 보인다. */
+/* 미션 배경은 상단바 아래에서 시작한다 (2026-11-13): macOS는 미션
+   컨트롤에서 메뉴바를 숨기지만 MyHub 상단바는 사라지지 않고 밝은
+   채로 남아야 한다. inset: 0이면 상단바 뒤까지 어둡게 덮어 상단바
+   블러가 어두운 배경을 샘플링해 회색으로 가라앉는다. */
 .dt-mission-bg {
   position: fixed;
-  inset: 0;
+  top: calc(var(--topnav-h, 34px) + max(env(safe-area-inset-top), 4px));
+  left: 0;
+  right: 0;
+  bottom: 0;
   z-index: 58;
   background-color: rgba(15, 17, 20, 0.42);
   background-image: linear-gradient(rgba(15, 17, 20, 0.42), rgba(15, 17, 20, 0.42)), var(--dt-mission-wp, none);
@@ -1348,13 +1355,20 @@ html, body { overscroll-behavior-x: none; }
   animation: dt-mission-pop 0.28s cubic-bezier(0.32, 0.72, 0, 1) both;
 }
 
+/* 스페이스 바 (macOS 스페이스 바 배치, 2026-11-13): 이름이 썸네일
+   위에, + 버튼이 우상단에 있다. padding-top 26px은 카드 위 이름
+   라벨 자리 — 스트립은 상단바 바로 아래에서 시작하고 카드는
+   이전과 같은 y(상단바 아래 26px)에서 시작한다. position: relative는
+   + 버튼의 앵커다. */
 .dt-mission-spaces {
+  position: relative;
   display: flex;
   gap: 16px;
   justify-content: center;
   align-items: flex-start;
   flex-wrap: wrap;
-  margin: calc(var(--topnav-h, 34px) + max(env(safe-area-inset-top), 4px) + 26px) 28px 0;
+  margin: calc(var(--topnav-h, 34px) + max(env(safe-area-inset-top), 4px)) 28px 0;
+  padding-top: 26px;
   pointer-events: auto;
 }
 
@@ -1416,15 +1430,23 @@ html, body { overscroll-behavior-x: none; }
   overflow: hidden;
 }
 
+/* winrect 위쪽 3px 밴드는 미니 창틀(타이틀바) — 흰 네모가 아니라
+   창으로 읽히게 한다. */
 .dt-mission-winrect {
   position: absolute;
   border-radius: 3px;
   background: rgba(255, 255, 255, 0.85);
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+  box-shadow: inset 0 3px 0 rgba(0, 0, 0, 0.08), 0 1px 4px rgba(0, 0, 0, 0.3);
 }
 
+/* 이름은 카드 위쪽 바깥에 절대 배치 (macOS: 라벨이 썸네일 위).
+   스트립의 padding-top 26px이 이 자리다. */
 .dt-mission-name {
-  margin-top: 7px;
+  position: absolute;
+  top: -26px;
+  left: 0;
+  right: 0;
+  margin-top: 0;
   text-align: center;
   font-size: 12.5px;
   font-weight: 600;
@@ -1432,12 +1454,18 @@ html, body { overscroll-behavior-x: none; }
   text-shadow: 0 1px 4px rgba(0, 0, 0, 0.45);
 }
 
+/* + 버튼은 스페이스 바 우상단 (macOS와 같은 자리 — 카드 뒤 인라인이
+   아니다). top: calc(50% + 13px)는 스트립 높이(= 26px 이름 여유 +
+   카드 높이)의 절반에 13px을 더한 값으로, 카드(썸네일) 세로 중심과
+   정확히 일치한다: (26 + C) / 2 + 13 = 26 + C / 2. */
 .dt-mission-add {
+  position: absolute;
+  right: 0;
+  top: calc(50% + 13px);
+  transform: translateY(-50%);
   width: 44px;
   height: 44px;
   flex: none;
-  align-self: center;
-  margin-left: 8px;
   border-radius: 50%;
   border: 1.5px dashed rgba(255, 255, 255, 0.55);
   background: none;
@@ -1449,13 +1477,24 @@ html, body { overscroll-behavior-x: none; }
   transition: transform 0.25s ease-out, background 0.2s ease, box-shadow 0.2s ease;
 }
 
-.dt-mission-add:hover { background: rgba(255, 255, 255, 0.12); transform: scale(1.08); }
+/* hover가 transform을 scale만으로 덮으면 버튼이 22px 아래로 튄다 —
+   translateY(-50%)를 반드시 유지한다. */
+.dt-mission-add:hover { background: rgba(255, 255, 255, 0.12); transform: translateY(-50%) scale(1.08); }
 
 .dt-mission-add.is-drop-hot { box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.95); background: rgba(255, 255, 255, 0.18); }
 
 .dt-mission-add svg { width: 20px; height: 20px; }
 
 .dt-mission-card.is-drop-hot { box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.95); background: rgba(255, 255, 255, 0.14); }
+
+/* 미션 컨트롤 중에는 바탕화면 아이콘·위젯을 숨긴다 (macOS처럼
+   깨끗한 데스크톱 — 블러 뒤로 아이콘 얼룩이 비치면 지저분하다).
+   body.dt-mission-open은 windows.js openMission/finalizeMissionClose가
+   토글한다. */
+body.dt-mission-open #dt-icons,
+body.dt-mission-open #dt-widgets {
+  visibility: hidden;
+}
 
 /* 최대화 시 자동 숨김: 아래로 내려가고, 하단 핫존·독 hover에서만 보인다 */
 #dt-dock.dt-autohide { transform: translate(-50%, calc(100% + 14px)); }

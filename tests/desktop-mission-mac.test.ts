@@ -11,8 +11,10 @@
  *
  * 검증 성질 (깨지면 실패해야 한다):
  * - 오버레이를 열면 .dt-mission-spaces 스트립에 스페이스별 카드가
- *   렌더된다: 배경화면 썸네일 stage + 창 위치 winrect + 아래 이름
- *   '데스크톱 N'. 현재 스페이스 카드는 is-active, 보고 있는 카드는
+ *   렌더된다: 이름 '데스크톱 N'이 썸네일 위에, 배경화면 썸네일
+ *   stage + 창 위치 winrect가 아래에 (macOS 스페이스 바와 같은
+ *   배치 — 2026-11-13 사용자 맥 캡처 기준, 이름이 아래던 시절과
+ *   다르다). 현재 스페이스 카드는 is-active, 보고 있는 카드는
  *   is-selected. 라벨 바(.dt-mission-bar/.dt-mission-label)가
  *   돌아오면 실패한다.
  * - 표시는 [hidden] 토글이 정본 — is-open 클래스는 JS·CSS 어디에도
@@ -22,8 +24,14 @@
  *   (insertBefore), CSS는 fixed·z 58·배경화면 이미지를 직접 칠하며
  *   (--dt-mission-wp 소비) blur(14px) saturate(1.3)를 건다. 애니메이션
  *   동안에는 body.dt-mission-anim 목록이 그 블러를 끈다.
- * - + 버튼은 스트립 안 점선 원형(44px, dashed)이며 클릭하면 데스크톱이
- *   추가되고 오버레이는 열린 채 카드가 늘어난다.
+ * - 미션 배경은 상단바 아래에서 시작한다 (top: 상단바 높이) — macOS는
+ *   미션 컨트롤에서 메뉴바를 숨기지만 MyHub 상단바는 사라지지 않고
+ *   밝은 채로 남아야 한다 (2026-11-13 사용자 지시). 상단바 z 60이
+ *   배경 z 58보다 위인 것도 함께 고정한다.
+ * - + 버튼은 스트립 우상단 점선 원형(44px, dashed)이며 클릭하면
+ *   데스크톱이 추가되고 오버레이는 열린 채 카드가 늘어난다.
+ *   (카드 뒤 인라인이던 시절과 다르다 — 2026-11-13 맥 캡처 기준.)
+ * - 미션 중에는 바탕화면 아이콘·위젯이 숨겨진다 (body.dt-mission-open).
  * - 카드 클릭 → 그 데스크톱으로 전환되고 오버레이가 닫힌다.
  * - 창이 있는 스페이스에서는 실제 창이 스프레드(dt-mission-win +
  *   transform)되고 캡션이 붙는다. 빈 스페이스에서는 빈 상태 문구가
@@ -43,6 +51,7 @@ const MENUBAR_JS = read('public/js/desktop/menubar.js')
 const DOCK_JS = read('public/js/desktop/dock.js')
 const WINDOWS_JS = read('public/js/desktop/windows.js')
 const DESKTOP_CSS = read('public/css/desktop.css')
+const SHELL_CSS = read('public/shell.css')
 
 const VIEWPORT = { w: 1280, h: 800 }
 const getWin = (): any => (globalThis as any).window
@@ -187,6 +196,84 @@ describe('미션 컨트롤 — 카드 스트립 렌더 (원본 형태)', () => {
     expect(bg.parentNode).toBe(missionEl().parentNode)
     expect(bg.nextElementSibling).toBe(missionEl())
     expect(bg.hidden).toBe(false)
+  })
+})
+
+describe('미션 컨트롤 — macOS 스페이스 바 (2026-11-13)', () => {
+  test('카드 이름이 썸네일 위에 있다 (DOM 순서: 이름 → stage, CSS absolute)', () => {
+    const m = makeManager()
+    m.toggleMission()
+    const card = cards()[0]
+    const kids = Array.from(card.children) as any[]
+    const nameIdx = kids.findIndex((el: any) => el.classList.contains('dt-mission-name'))
+    const stageIdx = kids.findIndex((el: any) => el.classList.contains('dt-mission-stage'))
+    expect(nameIdx).toBeGreaterThanOrEqual(0)
+    expect(stageIdx).toBeGreaterThanOrEqual(0)
+    expect(nameIdx).toBeLessThan(stageIdx)
+    // 이름은 카드 위쪽 바깥에 절대 배치된다 (썸네일 위 라벨).
+    // ^ 앵커 필수 — 앞에 .dt-mission-card .dt-mission-name 후손
+    // 규칙이 있어 앵커 없으면 그쪽이 먼저 잡힌다.
+    const name = DESKTOP_CSS.match(/^\.dt-mission-name\s*\{([^}]*)\}/m)
+    expect(name).not.toBeNull()
+    const body = (name as RegExpMatchArray)[1]
+    expect(body).toContain('position: absolute')
+    expect(body).toContain('top: -26px')
+  })
+
+  test('+ 버튼이 스페이스 바 우상단에 고정된다 (absolute·right 0·썸네일 중앙)', () => {
+    const add = DESKTOP_CSS.match(/\.dt-mission-add\s*\{([^}]*)\}/)
+    expect(add).not.toBeNull()
+    const body = (add as RegExpMatchArray)[1]
+    expect(body).toContain('position: absolute')
+    expect(body).toContain('right: 0')
+    // 스트립 높이 = 이름 여유 26px + 카드 높이 — + 버튼 중심은
+    // 카드(썸네일) 중심과 일치해야 한다 (50% + 13px).
+    expect(body).toContain('top: calc(50% + 13px)')
+    expect(body).toContain('transform: translateY(-50%)')
+    // hover가 transform을 scale만으로 덮으면 버튼이 22px 아래로
+    // 튄다 — hover도 translateY(-50%)를 유지해야 한다.
+    const hover = DESKTOP_CSS.match(/\.dt-mission-add:hover\s*\{([^}]*)\}/)
+    expect(hover).not.toBeNull()
+    expect((hover as RegExpMatchArray)[1]).toContain('translateY(-50%)')
+  })
+
+  test('미션 배경은 상단바 아래에서 시작하고 상단바가 배경보다 위에 있다', () => {
+    const bg = DESKTOP_CSS.match(/\.dt-mission-bg\s*\{([^}]*)\}/)
+    expect(bg).not.toBeNull()
+    const body = (bg as RegExpMatchArray)[1]
+    // inset: 0이면 상단바 뒤까지 어둡게 덮어 상단바가 어두워진다.
+    expect(body).not.toContain('inset: 0')
+    expect(body).toContain('top: calc(var(--topnav-h')
+    expect(body).toContain('left: 0')
+    expect(body).toContain('right: 0')
+    expect(body).toContain('bottom: 0')
+    // 상단바(.g-nav) z 60 > 미션 배경 z 58 — 상단바가 가려지지 않는다.
+    // ^ 앵커 필수 — 앞에 html.myhub-embedded .g-nav 규칙이 있어
+    // 앵커 없으면 그쪽이 먼저 잡힌다.
+    const nav = SHELL_CSS.match(/^\.g-nav\s*\{([^}]*)\}/m)
+    expect(nav).not.toBeNull()
+    expect((nav as RegExpMatchArray)[1]).toContain('z-index: 60')
+    expect(body).toContain('z-index: 58')
+  })
+
+  test('미션 중에는 바탕화면 아이콘·위젯이 숨겨지고 닫히면 돌아온다', async () => {
+    const m = makeManager()
+    const doc = getDoc()
+    m.toggleMission()
+    expect(doc.body.classList.contains('dt-mission-open')).toBe(true)
+    m.toggleMission()
+    await wait(350)
+    expect(doc.body.classList.contains('dt-mission-open')).toBe(false)
+    // CSS가 그 클래스로 아이콘·위젯을 숨긴다 (클래스만 붙고 규칙이
+    // 없으면 소용없다 — 양쪽을 함께 고정한다).
+    expect(DESKTOP_CSS).toMatch(/body\.dt-mission-open #dt-icons[^{]*\{[^}]*visibility:\s*hidden/)
+    expect(DESKTOP_CSS).toMatch(/body\.dt-mission-open #dt-widgets[^{]*\{[^}]*visibility:\s*hidden/)
+  })
+
+  test('winrect에 창틀 밴드가 있다 (흰 네모가 아니라 미니 창처럼 보인다)', () => {
+    const rect = DESKTOP_CSS.match(/\.dt-mission-winrect\s*\{([^}]*)\}/)
+    expect(rect).not.toBeNull()
+    expect((rect as RegExpMatchArray)[1]).toContain('inset 0 3px 0')
   })
 })
 
