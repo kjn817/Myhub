@@ -46,8 +46,8 @@ function makeFactDb(opts: FactDbOpts = {}) {
   const entityIds = new Map<string, number>()
   let entitySeq = 100
   let rowSeq = 1000
-  const shouldThrow = (kind: 'first' | 'all' | 'run', sql: string) =>
-    (opts.throwOn?.[kind] ?? []).some((frag) => sql.includes(frag))
+  const shouldThrow = (kind: 'first' | 'all' | 'run', sql: string, params: any[] = []) =>
+    (opts.throwOn?.[kind] ?? []).some((frag) => sql.includes(frag) || params.some((p) => String(p).includes(frag)))
   const db: any = {
     calls,
     entityIds,
@@ -58,12 +58,16 @@ function makeFactDb(opts: FactDbOpts = {}) {
         bind(...p: any[]) { this._params = p; return this },
         async first() {
           calls.push({ sql, params: this._params })
-          if (shouldThrow('first', sql)) throw new Error('db down')
-          if (sql.includes("key = 'memory.v2_enabled'")) {
-            return opts.v2Flag === undefined || opts.v2Flag === null ? null : { value: opts.v2Flag }
-          }
-          if (sql.includes("key = 'memory.llm_extract_enabled'")) {
-            return opts.llmFlag === undefined || opts.llmFlag === null ? null : { value: opts.llmFlag }
+          if (shouldThrow('first', sql, this._params)) throw new Error('db down')
+          // S2-5 수렴: 설정 조회는 바인드 파라미터(getSetting) — 키는 _params[0]에서 읽는다.
+          if (sql.includes('FROM ai_settings') && sql.includes('key = ?')) {
+            if (this._params[0] === 'memory.v2_enabled') {
+              return opts.v2Flag === undefined || opts.v2Flag === null ? null : { value: opts.v2Flag }
+            }
+            if (this._params[0] === 'memory.llm_extract_enabled') {
+              return opts.llmFlag === undefined || opts.llmFlag === null ? null : { value: opts.llmFlag }
+            }
+            return null
           }
           if (sql.includes('FROM memos WHERE id = ?') && sql.includes('is_locked')) {
             return opts.memoLockRow ?? null
@@ -79,7 +83,7 @@ function makeFactDb(opts: FactDbOpts = {}) {
         },
         async all() {
           calls.push({ sql, params: this._params })
-          if (shouldThrow('all', sql)) throw new Error('db down')
+          if (shouldThrow('all', sql, this._params)) throw new Error('db down')
           if (sql.includes('ai_memory_fts MATCH')) {
             return { results: opts.ftsRows ?? [] }
           }
@@ -102,7 +106,7 @@ function makeFactDb(opts: FactDbOpts = {}) {
         },
         async run() {
           calls.push({ sql, params: this._params })
-          if (shouldThrow('run', sql)) throw new Error('db down')
+          if (shouldThrow('run', sql, this._params)) throw new Error('db down')
           if (sql.includes('INSERT OR IGNORE INTO memory_entities')) {
             const norm = this._params[1]
             if (!entityIds.has(norm)) entityIds.set(norm, entitySeq++)
@@ -123,7 +127,7 @@ function makeFactDb(opts: FactDbOpts = {}) {
 
 describe('isLlmExtractEnabled — 조회 예외 시 false (75)', () => {
   test('first() 예외 → false', async () => {
-    const db = makeFactDb({ throwOn: { first: ["key = 'memory.llm_extract_enabled'"] } })
+    const db = makeFactDb({ throwOn: { first: ['memory.llm_extract_enabled'] } })
     expect(await isLlmExtractEnabled({ DB: db } as any)).toBe(false)
   })
 })

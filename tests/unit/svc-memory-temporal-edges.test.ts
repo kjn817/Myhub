@@ -211,7 +211,8 @@ class ConsolidationDb {
       bind(...p: any[]) { stmt._params = p; return stmt },
       async first() {
         if (q.startsWith('SELECT value FROM ai_settings')) {
-          const key = q.match(/key = '([^']+)'/)?.[1] || ''
+          // S2-5 수렴: 설정 조회는 바인드 파라미터(getSetting) — 키는 _params[0]에서 읽는다.
+          const key = q.includes('key = ?') ? String(stmt._params[0] ?? '') : q.match(/key = '([^']+)'/)?.[1] || ''
           return self.settings.has(key) ? { value: self.settings.get(key) } : null
         }
         return null

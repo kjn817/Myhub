@@ -472,7 +472,7 @@ export function classifyLevel(input: ClassifyLevelInput): ClassifyLevelResult {
   return { level, findings };
 }
 
-export function redactForLog(text: unknown, maxLen = 500): string {
+export function redactStringForLog(text: unknown, maxLen = 500): string {
   try {
     const vault = new TokenVault();
     const { text: tokenized } = vault.sanitize(String(text ?? ''));

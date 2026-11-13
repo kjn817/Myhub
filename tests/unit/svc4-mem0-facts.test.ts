@@ -168,11 +168,15 @@ function makeFactDb(opts: FactDbOpts = {}) {
         bind(...p: any[]) { this._params = p; return this },
         async first() {
           calls.push({ sql, params: this._params })
-          if (sql.includes("key = 'memory.v2_enabled'")) {
-            return opts.v2Flag === undefined || opts.v2Flag === null ? null : { value: opts.v2Flag }
-          }
-          if (sql.includes("key = 'memory.llm_extract_enabled'")) {
-            return opts.llmFlag === undefined || opts.llmFlag === null ? null : { value: opts.llmFlag }
+          // S2-5 수렴: 설정 조회는 바인드 파라미터(getSetting) — 키는 _params[0]에서 읽는다.
+          if (sql.includes('FROM ai_settings') && sql.includes('key = ?')) {
+            if (this._params[0] === 'memory.v2_enabled') {
+              return opts.v2Flag === undefined || opts.v2Flag === null ? null : { value: opts.v2Flag }
+            }
+            if (this._params[0] === 'memory.llm_extract_enabled') {
+              return opts.llmFlag === undefined || opts.llmFlag === null ? null : { value: opts.llmFlag }
+            }
+            return null
           }
           if (sql.includes('FROM memos WHERE id = ?') && sql.includes('is_locked')) {
             return opts.memoLockRow ?? null

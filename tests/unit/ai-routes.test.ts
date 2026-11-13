@@ -2933,7 +2933,9 @@ describe('도구·히스토리·모델', () => {
   test('GET /tools', async () => {
     const { json } = makeApp()
     const j = await body(await json('/tools', 'GET'))
-    expect(j).toEqual({ ok: true, tools: ['memo_search', 'todo_add'] })
+    // S2-3: tools는 실제 FC 레지스트리(search_memo)이고, 간이 레지스트리
+    // (이 파일에서 memo_search·todo_add로 목)는 별도 필드로 분리된다.
+    expect(j).toEqual({ ok: true, tools: ['search_memo'], legacySimpleRegistryTools: ['memo_search', 'todo_add'] })
   })
 
   test('GET /room-history 기본', async () => {

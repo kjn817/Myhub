@@ -116,7 +116,8 @@ class MockD1 {
   private all(q: string, args: any[]): any[] {
     this.failIf(q, args)
     if (q.startsWith('SELECT value FROM ai_settings')) {
-      const key = q.match(/key = '([^']+)'/)?.[1] || ''
+      // S2-5 수렴: 설정 조회는 바인드 파라미터(getSetting) — 키는 args[0]에서 읽는다.
+      const key = q.includes('key = ?') ? String(args[0] ?? '') : q.match(/key = '([^']+)'/)?.[1] || ''
       return this.settings.has(key) ? [{ value: this.settings.get(key) }] : []
     }
     if (q.startsWith('SELECT id, content, summary')) {
@@ -218,7 +219,7 @@ describe('isLlmConsolidationEnabled', () => {
   })
   test('조회 실패 → false', async () => {
     const { db, env } = makeEnv()
-    db.failOn.push({ match: "key = 'memory.llm_consolidation_enabled'" })
+    db.failOn.push({ match: 'SELECT value FROM ai_settings', when: (args) => args[0] === 'memory.llm_consolidation_enabled' })
     expect(await isLlmConsolidationEnabled(env)).toBe(false)
   })
 })
@@ -235,7 +236,7 @@ describe('getLastConsolidationDate / markConsolidationRun', () => {
   })
   test('조회 실패 → null', async () => {
     const { db, env } = makeEnv()
-    db.failOn.push({ match: "key = 'memory.last_consolidation_date'" })
+    db.failOn.push({ match: 'SELECT value FROM ai_settings', when: (args) => args[0] === 'memory.last_consolidation_date' })
     expect(await getLastConsolidationDate(env)).toBeNull()
   })
   test('markConsolidationRun — 마커 기록', async () => {

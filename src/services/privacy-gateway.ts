@@ -91,16 +91,30 @@ function isStandaloneSecret(text: string, findings: PrivacyFinding[]): boolean {
   return covered / Math.max(1, trimmed.length) > 0.35;
 }
 
-export function inspectEgress(input: InspectEgressInput): InspectEgressResult {
+/**
+ * egress 검사 코어 — inspectEgress와 inspectEgressKorean이 공유하는 단일 구현.
+ * (B-L2 통합, 2026-11-14: 두 함수의 이중 구현을 하나로 합쳤다. 동등성은
+ * tests/unit/privacy-gateway-equivalence.test.ts가 고정한다.)
+ *
+ * - koreanFindings: enforce 모드에서만 들어오는 한국어 판정 구간. 엔진·결합
+ *   구간과 겹치는 것은 제외하고(occupied 필터) 나머지를 extra에 합친다.
+ * - degradedReason: 한국어 분류기 장애 코드. 잠금 차단 반환에서는 버리고
+ *   (reasons를 ['locked-source']로 고정), 그 외 경로에서는 접두사로 남긴다.
+ * - msgLevel >= 2면 토큰화하고, 단독 비밀(l3-standalone-secret)이면 차단한다.
+ */
+function inspectEgressCore(
+  input: InspectEgressInput,
+  opts: { koreanFindings?: Map<number, PrivacyFinding[]>; degradedReason?: string | null } = {},
+): InspectEgressResult {
   try {
     const vault = new TokenVault();
     const reasons: string[] = [];
+    if (opts.degradedReason) reasons.push(`korean-degraded:${opts.degradedReason}`);
     let level = 0;
     const allFindings: PrivacyFinding[] = [];
     for (const m of input.messages) {
       if (typeof m.content === 'string' && hasLockedMarker(m.content)) {
-        reasons.push('locked-source');
-        return { action: 'block', messages: input.messages, level: 3, reasons, findings: [], vault };
+        return { action: 'block', messages: input.messages, level: 3, reasons: ['locked-source'], findings: [], vault };
       }
     }
     const crossSpans = detectCrossMessageSpans(
@@ -120,8 +134,18 @@ export function inspectEgress(input: InspectEgressInput): InspectEgressResult {
         policySensitivity: input.policy?.sensitivity,
         memoDerived: input.memoDerived,
       });
-      const extra = crossByMsg.get(mi) ?? [];
-      const findings: PrivacyFinding[] = [...cls.findings, ...extra.map(({ type, level: lv, start, end }) => ({ type, level: lv, start, end }))];
+      const cross = crossByMsg.get(mi) ?? [];
+      const korean = opts.koreanFindings?.get(mi) ?? [];
+      const occupied = [...cls.findings, ...cross];
+      const koreanExtra = korean.filter((k) => !occupied.some((f) => k.start < f.end && k.end > f.start));
+      const extra = [
+        ...cross.map(({ type, level: lv, start, end }) => ({ type, level: lv, start, end })),
+        ...koreanExtra.map(({ type, level: lv, start, end }) => ({ type, level: lv, start, end })),
+      ];
+      const findings: PrivacyFinding[] = [
+        ...cls.findings,
+        ...extra.map(({ type, level: lv, start, end }) => ({ type, level: lv, start, end })),
+      ];
       const msgLevel = Math.max(cls.level, ...extra.map((x) => x.level), 0);
       if (msgLevel > level) level = msgLevel;
       for (const f of findings) reasons.push(`pii:${f.type}:L${f.level}`);
@@ -145,6 +169,10 @@ export function inspectEgress(input: InspectEgressInput): InspectEgressResult {
     if (e instanceof PrivacyEngineError) throw new PrivacyGatewayBlockedError(['engine-error']);
     throw new PrivacyGatewayBlockedError(['engine-error']);
   }
+}
+
+export function inspectEgress(input: InspectEgressInput): InspectEgressResult {
+  return inspectEgressCore(input);
 }
 
 export function guardSearchQuery(query: string): string | null {
@@ -234,99 +262,18 @@ export async function inspectEgressKorean(input: InspectEgressKoreanInput): Prom
       throw new PrivacyGatewayBlockedError(['engine-error']);
     }
   }
-  try {
-    const vault = new TokenVault();
-    const reasons: string[] = [];
-    if (degradedCode) reasons.push(`korean-degraded:${degradedCode}`);
-    let level = 0;
-    const allFindings: PrivacyFinding[] = [];
-    for (const m of input.messages) {
-      if (typeof m.content === 'string' && hasLockedMarker(m.content)) {
-        return {
-          action: 'block',
-          messages: input.messages,
-          level: 3,
-          reasons: ['locked-source'],
-          findings: [],
-          vault,
-          koreanDecisions: decisions,
-          koreanMode: input.mode,
-          relationSignal,
-        };
-      }
-    }
-    const crossSpans = detectCrossMessageSpans(
-      input.messages.map((m) => (typeof m.content === 'string' ? m.content : '')),
-    );
-    const crossByMsg = new Map<number, typeof crossSpans>();
-    for (const sp of crossSpans) {
-      const arr = crossByMsg.get(sp.messageIndex) ?? [];
-      arr.push(sp);
-      crossByMsg.set(sp.messageIndex, arr);
-    }
-    const out = input.messages.map((m, mi) => {
-      if (typeof m.content !== 'string') throw new PrivacyEngineError('non-string message content');
-      if (!m.content) return m;
-      const cls = classifyLevel({
-        text: m.content,
-        policySensitivity: input.policy?.sensitivity,
-        memoDerived: input.memoDerived,
-      });
-      const cross = crossByMsg.get(mi) ?? [];
-      const korean = input.mode === 'enforce' ? koreanByMsg.get(mi) ?? [] : [];
-      const occupied = [...cls.findings, ...cross];
-      const koreanExtra = korean.filter((k) => !occupied.some((f) => k.start < f.end && k.end > f.start));
-      const extra = [
-        ...cross.map(({ type, level: lv, start, end }) => ({ type, level: lv, start, end })),
-        ...koreanExtra.map(({ type, level: lv, start, end }) => ({ type, level: lv, start, end })),
-      ];
-      const findings: PrivacyFinding[] = [
-        ...cls.findings,
-        ...extra.map(({ type, level: lv, start, end }) => ({ type, level: lv, start, end })),
-      ];
-      const msgLevel = Math.max(cls.level, ...extra.map((x) => x.level), 0);
-      if (msgLevel > level) level = msgLevel;
-      for (const f of findings) reasons.push(`pii:${f.type}:L${f.level}`);
-      allFindings.push(...findings);
-      if (msgLevel >= 2) {
-        if (isStandaloneSecret(m.content, findings)) {
-          reasons.push('l3-standalone-secret');
-          return m;
-        }
-        const { text } = vault.sanitizeWith(m.content, extra);
-        return { ...m, content: text };
-      }
-      return m;
-    });
-    if (reasons.includes('l3-standalone-secret')) {
-      return {
-        action: 'block',
-        messages: input.messages,
-        level,
-        reasons,
-        findings: allFindings,
-        vault,
-        koreanDecisions: decisions,
-        koreanMode: input.mode,
-        relationSignal,
-      };
-    }
-    const action = level >= 2 ? 'tokenized' : 'allow';
-    return {
-      action,
-      messages: out,
-      level,
-      reasons: [...new Set(reasons)],
-      findings: allFindings,
-      vault,
-      koreanDecisions: decisions,
-      koreanMode: input.mode,
-      relationSignal,
-    };
-  } catch (e) {
-    if (e instanceof PrivacyGatewayBlockedError) throw e;
-    throw new PrivacyGatewayBlockedError(['engine-error']);
-  }
+  // 2차 검사는 공유 코어로 위임한다 (B-L2 통합). 코어가 던지는
+  // PrivacyGatewayBlockedError는 그대로 전파된다.
+  const base = inspectEgressCore(input, {
+    koreanFindings: input.mode === 'enforce' ? koreanByMsg : undefined,
+    degradedReason: degradedCode,
+  });
+  return {
+    ...base,
+    koreanDecisions: decisions,
+    koreanMode: input.mode,
+    relationSignal,
+  };
 }
 
 export function inspectToolResult(text: string): {

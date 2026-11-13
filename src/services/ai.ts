@@ -60,7 +60,7 @@ import { selectModel } from './ai-model-selection'
 export { getSetting, setSetting } from './ai-model-selection'
 import { PrivacyGatewayBlockedError, inspectToolResult } from './privacy-gateway'
 import { inspectAiChatEgress } from './privacy-korean-mode'
-import { redactForLog } from './privacy-engine'
+import { redactStringForLog } from './privacy-engine'
 // OTEL 스팬 식별자 (0057, 트랙 C2) — SDK 없이 규약만 차용
 import { newSpanId, newTraceId, type TraceContext } from '../lib/trace'
 import { remainingMs } from '../lib/deadline'
@@ -676,7 +676,7 @@ export async function aiChat(
             personaId: policy.personaId,
             provider: model.provider,
             modelId: model.id,
-            error: redactForLog(String((followErr as any)?.message || followErr), 200),
+            error: redactStringForLog(String((followErr as any)?.message || followErr), 200),
           }))
           if (!out.text || !out.text.trim()) out.text = '요청한 작업을 처리했습니다.'
           break
@@ -813,17 +813,17 @@ export async function aiChat(
       // Provider 실제 호출 시도 기록 (오류 분류용)
       providerCallAttempted = true
       lastProviderError = e
-      fallbackChain.push(`${model.id}: ${redactForLog(String(e?.message || e), 100)}`)
+      fallbackChain.push(`${model.id}: ${redactStringForLog(String(e?.message || e), 100)}`)
       // 디버그 로그: 실제 에러 기록 (키 값은 절대 포함하지 않음)
       // Groq 400의 구조화된 오류 정보도 저장 (errorType, errorCode)
       try {
         const rawErrMsg = String(e?.message || e)
-        const errMsg = redactForLog(rawErrMsg, 500)
+        const errMsg = redactStringForLog(rawErrMsg, 500)
         const httpStatus = e?.code || parseInt(rawErrMsg.match(/(\d{3})/)?.[1] || '0')
         const errDetail = e?.errorType ? ` [${e.errorType}${e.errorCode ? ':' + e.errorCode : ''}]` : ''
         await db.prepare(
           'INSERT INTO ai_error_log (provider, model, capability, error, http_status, created_at) VALUES (?, ?, ?, ?, ?, ?)'
-        ).bind(model.provider, model.id, policy.capability, redactForLog(errMsg + errDetail, 500), httpStatus, new Date().toISOString()).run()
+        ).bind(model.provider, model.id, policy.capability, redactStringForLog(errMsg + errDetail, 500), httpStatus, new Date().toISOString()).run()
       } catch { /* 로그 실패 무시 */ }
       const rec: UsageRecord = {
         provider: model.provider,

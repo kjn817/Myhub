@@ -52,10 +52,14 @@ function makeEnv(opts: { llmFlag: 'true' | 'false' | 'throw' }) {
           return this
         },
         async first() {
-          if (q.includes("key = 'memory.v2_enabled'")) return { value: 'true' }
-          if (q.includes("key = 'memory.llm_consolidation_enabled'")) {
-            if (opts.llmFlag === 'throw') throw new Error('flag lookup down')
-            return { value: opts.llmFlag }
+          // S2-5 수렴: 설정 조회는 바인드 파라미터(getSetting) — 키는 _params[0]에서 읽는다.
+          if (q.startsWith('SELECT value FROM ai_settings')) {
+            if (this._params[0] === 'memory.v2_enabled') return { value: 'true' }
+            if (this._params[0] === 'memory.llm_consolidation_enabled') {
+              if (opts.llmFlag === 'throw') throw new Error('flag lookup down')
+              return { value: opts.llmFlag }
+            }
+            return null
           }
           return null
         },

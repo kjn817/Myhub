@@ -12,7 +12,7 @@
 //   (기존 원칙 유지 — allow_ai_use/allow_provider_send 동의 게이트).
 
 import { MEMORY_CITATION_INSTRUCTION } from '../lib/citation-lock'
-import { readBooleanSetting } from '../lib/d1-setting'
+import { getSetting } from './ai-model-selection'
 import {
   buildFtsQuery,
   decayTier,
@@ -132,7 +132,9 @@ export async function touchMemories(env: any, ids: number[]): Promise<void> {
 
 /** v2 장기 기억 플래그 (memory.v2_enabled, 기본 OFF). */
 export async function isMemoryV2Enabled(env: any): Promise<boolean> {
-  return readBooleanSetting(env.DB, 'memory.v2_enabled')
+  // getSetting은 조회 실패 시 null을 반환하므로 === 'true' 비교가
+  // 기존 readBooleanSetting(실패 시 false)과 fail 의미가 동일하다.
+  return (await getSetting(env.DB, 'memory.v2_enabled')) === 'true'
 }
 
 /**

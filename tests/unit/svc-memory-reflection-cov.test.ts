@@ -108,7 +108,8 @@ class MockD1 {
   private all(q: string, args: any[]): any[] {
     this.failIf(q, args)
     if (q.startsWith('SELECT value FROM ai_settings')) {
-      const key = q.match(/key = '([^']+)'/)?.[1] || ''
+      // S2-5 수렴: 설정 조회는 바인드 파라미터(getSetting) — 키는 args[0]에서 읽는다.
+      const key = q.includes('key = ?') ? String(args[0] ?? '') : q.match(/key = '([^']+)'/)?.[1] || ''
       return this.settings.has(key) ? [{ value: this.settings.get(key) }] : []
     }
     if (q.startsWith('SELECT content FROM ai_memory_v2')) {

@@ -179,9 +179,17 @@ aiAdminApp.delete('/memory/:key', async (c) => {
 })
 
 // 등록된 도구 목록 (디버깅용)
+// tools는 실제 FC 경로의 레지스트리(공유 팩토리)에서 읽는다. 간이 레지스트리
+// (services/tools.ts)는 D2 미결로 비어 있어 tools: []라는 거짓 정보를 주던
+// 것을 별도 필드로 분리했다 — 죽은 도구 시스템을 되살리는 것이 아니다.
 aiAdminApp.get('/tools', async (c) => {
+  const { createFCToolRegistry } = await import('../../ai/tools/fc-registry')
   const { getToolDefinitions } = await import('../../services/tools')
-  return c.json({ ok: true, tools: getToolDefinitions().map((t) => t.name) })
+  return c.json({
+    ok: true,
+    tools: createFCToolRegistry(c.env.DB).list().map((t) => t.name),
+    legacySimpleRegistryTools: getToolDefinitions().map((t) => t.name),
+  })
 })
 
 // 통합 방 히스토리 (모든 비서, 시간순, 페이지네이션)

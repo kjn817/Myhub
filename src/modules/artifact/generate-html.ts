@@ -5,7 +5,7 @@
 import type { Env } from '../../types'
 import { MODELS } from '../../services/ai'
 import { inspectEgress, canUseRelay } from '../../services/privacy-gateway'
-import { redactForLog } from '../../services/privacy-engine'
+import { redactStringForLog } from '../../services/privacy-engine'
 import { getLegacyMarkerTools, resolveRequestSensitivity } from '../../ai/legacy-privacy-guard'
 
 export async function generateArtifactHtml(
@@ -302,8 +302,8 @@ export async function generateArtifactHtml(
         SET state='failed', finished_at=CURRENT_TIMESTAMP,
             http_status=?, elapsed_ms=?, error_detail=?
         WHERE provider_attempt_id=?
-      `).bind(res.status, elapsed, redactForLog(errBody), attemptId).run()
-      throw new Error(`${provider} ${res.status}: ${redactForLog(errBody, 200)}`)
+      `).bind(res.status, elapsed, redactStringForLog(errBody), attemptId).run()
+      throw new Error(`${provider} ${res.status}: ${redactStringForLog(errBody, 200)}`)
     }
 
     let data: any
@@ -368,7 +368,7 @@ export async function generateArtifactHtml(
       SET state='failed', finished_at=CURRENT_TIMESTAMP,
           elapsed_ms=?, error_detail=?
       WHERE provider_attempt_id=? AND state='dispatching'
-    `).bind(elapsed, redactForLog(String((e as Error).message)), attemptId).run().catch(() => {
+    `).bind(elapsed, redactStringForLog(String((e as Error).message)), attemptId).run().catch(() => {
     })
     throw e
   }

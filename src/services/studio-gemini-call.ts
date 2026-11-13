@@ -1,6 +1,6 @@
 import { STUDIO_TOOLS, type StudioToolCall } from './studio-tools'
 import { inspectEgress, canUseRelay, PRIVACY_GATEWAY_BLOCK_MESSAGE } from './privacy-gateway'
-import { redactForLog } from './privacy-engine'
+import { redactStringForLog } from './privacy-engine'
 
 type GeminiStage = 'request' | 'transport' | 'http' | 'parse' | 'response'
 
@@ -17,7 +17,7 @@ export class GeminiCallError extends Error {
 }
 
 function safeErrorMessage(message: string): string {
-  return redactForLog(message, 1000)
+  return redactStringForLog(message, 1000)
     .replace(/key=[^&\s]+/gi, 'key=[REDACTED]')
     .replace(/AIza[0-9A-Za-z_-]+/g, '[REDACTED]')
     .slice(0, 1000)

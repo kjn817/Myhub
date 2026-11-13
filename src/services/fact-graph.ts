@@ -26,7 +26,7 @@ import {
   normalizeEntityName,
 } from './fact-extract'
 import { sanitizeForAI } from './ai-access'
-import { readBooleanSetting } from '../lib/d1-setting'
+import { getSetting } from './ai-model-selection'
 
 export { expandGraphFacts, getFactNeighbors, getRelatedFacts } from './fact-graph-expand'
 export { closeFactTemporalEdges, reopenFactTemporalEdges } from './fact-temporal-edges'
@@ -35,7 +35,9 @@ const DEDUP_PAGE_SIZE = 200
 
 /** LLM 추출 플래그 (기본 OFF). */
 export async function isLlmExtractEnabled(env: any): Promise<boolean> {
-  return readBooleanSetting(env.DB, 'memory.llm_extract_enabled')
+  // getSetting은 조회 실패 시 null을 반환하므로 === 'true' 비교가
+  // 기존 readBooleanSetting(실패 시 false)과 fail 의미가 동일하다.
+  return (await getSetting(env.DB, 'memory.llm_extract_enabled')) === 'true'
 }
 
 async function loadAllActiveNorms(env: any): Promise<Set<string>> {

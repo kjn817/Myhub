@@ -18,7 +18,7 @@
 import { sanitizeMemoryContent, isMemoryV2Enabled } from './memory-service'
 import { captureFacts, type CaptureFactsResult } from './fact-graph'
 import { extractFacts } from './fact-extract'
-import { readBooleanSetting } from '../lib/d1-setting'
+import { getSetting } from './ai-model-selection'
 
 export type ReflectionTaskType =
   | 'memo_create'
@@ -53,7 +53,9 @@ export interface ReflectOnTaskResult extends CaptureFactsResult {
 
 /** LLM 성찰 플래그 (기본 OFF). */
 export async function isLlmReflectionEnabled(env: any): Promise<boolean> {
-  return readBooleanSetting(env.DB, 'memory.llm_reflection_enabled')
+  // getSetting은 조회 실패 시 null을 반환하므로 === 'true' 비교가
+  // 기존 readBooleanSetting(실패 시 false)과 fail 의미가 동일하다.
+  return (await getSetting(env.DB, 'memory.llm_reflection_enabled')) === 'true'
 }
 
 /**

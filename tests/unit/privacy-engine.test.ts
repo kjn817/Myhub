@@ -15,7 +15,7 @@ import {
   classifyLevel,
   detectCrossMessageSpans,
   detectPii,
-  redactForLog,
+  redactStringForLog,
   scan,
 } from '../../src/services/privacy-engine'
 
@@ -254,22 +254,22 @@ describe('TokenVault — 토큰화와 복원', () => {
   })
 })
 
-describe('redactForLog', () => {
+describe('redactStringForLog', () => {
   test('API 키 원문이 남지 않는다', () => {
-    const out = redactForLog('호출 실패 key=sk-abcdefghijklmnopqrstuvwx')
+    const out = redactStringForLog('호출 실패 key=sk-abcdefghijklmnopqrstuvwx')
     expect(out).not.toContain('sk-abcdefghijklmnopqrstuvwx')
   })
 
   test('key= 쿼리 파라미터는 [REDACTED]로 바뀐다', () => {
-    const out = redactForLog('GET https://x.test/?key=plainvalue123&y=1')
+    const out = redactStringForLog('GET https://x.test/?key=plainvalue123&y=1')
     expect(out).toContain('key=[REDACTED]')
     expect(out).not.toContain('plainvalue123')
   })
 
   test('maxLen으로 절단되고, 비문자열 입력도 throw하지 않는다', () => {
-    expect(redactForLog('가'.repeat(100), 10)).toHaveLength(10)
-    expect(redactForLog(null)).toBe('')
-    expect(redactForLog(undefined)).toBe('')
-    expect(redactForLog(12345)).toBe('12345')
+    expect(redactStringForLog('가'.repeat(100), 10)).toHaveLength(10)
+    expect(redactStringForLog(null)).toBe('')
+    expect(redactStringForLog(undefined)).toBe('')
+    expect(redactStringForLog(12345)).toBe('12345')
   })
 })

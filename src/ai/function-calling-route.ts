@@ -11,7 +11,7 @@ import type { Context } from 'hono'
 import type { Env } from '../types'
 import { getSetting } from '../services/ai'
 import { ToolRegistry } from './tools/registry'
-import { SearchMemoDefinition, SearchMemoInputSchema, executeSearchMemo } from './tools/search-memo'
+import { createFCToolRegistry } from './tools/fc-registry'
 import { GroqAdapter } from './providers/groq'
 import { GeminiAdapter } from './providers/gemini'
 import { WorkersAIAdapter } from './providers/workers-ai'
@@ -179,23 +179,8 @@ export async function chatWithFunctionCalling(
     }
   }
 
-  // 도구 레지스트리 팩토리
-  const createRegistry = (): ToolRegistry => {
-    const registry = new ToolRegistry()
-    registry.register(
-      SearchMemoDefinition,
-      SearchMemoInputSchema,
-      async (args: unknown, ctx: any) => {
-        const parsed = SearchMemoInputSchema.safeParse(args)
-        if (!parsed.success) {
-          return { ok: false as const, errorCode: 'INVALID_ARGUMENTS', message: 'Invalid arguments' }
-        }
-        const result = await executeSearchMemo(parsed.data, ctx, { DB: db })
-        return { ok: true as const, data: result }
-      }
-    )
-    return registry
-  }
+  // 도구 레지스트리 팩토리 (공유 모듈 — 디버그 엔드포인트도 같은 팩토리를 읽는다)
+  const createRegistry = (): ToolRegistry => createFCToolRegistry(db)
 
   // Phase 2B-V: FallbackController 사용
   // - ModelRouter로 첫 Provider 선택

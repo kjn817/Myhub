@@ -25,7 +25,7 @@ import {
   type MemoryTier,
 } from './memory-service'
 import { closeFactTemporalEdges } from './fact-graph'
-import { readBooleanSetting, readSettingValue } from '../lib/d1-setting'
+import { getSetting } from './ai-model-selection'
 import {
   contradictionFeatures,
   detectContradictionFromFeatures,
@@ -128,16 +128,16 @@ export function tierOf(row: ConsolidationRow): MemoryTier {
 
 /** LLM 통합 요약 플래그 (기본 OFF). */
 export async function isLlmConsolidationEnabled(env: any): Promise<boolean> {
-  return readBooleanSetting(env.DB, 'memory.llm_consolidation_enabled')
+  // getSetting은 조회 실패 시 null을 반환하므로 === 'true' 비교가
+  // 기존 readBooleanSetting(실패 시 false)과 fail 의미가 동일하다.
+  return (await getSetting(env.DB, 'memory.llm_consolidation_enabled')) === 'true'
 }
 
 /** 마지막 통합 실행일 (KST YYYY-MM-DD) — 하루 1회 중복 실행 방지 마커. */
 export async function getLastConsolidationDate(env: any): Promise<string | null> {
-  try {
-    return await readSettingValue(env.DB, 'memory.last_consolidation_date')
-  } catch {
-    return null
-  }
+  // getSetting이 이미 조회 실패 시 null을 반환하므로 try/catch가 불필요하다.
+  // (기존 readSettingValue의 throw를 try/catch로 null로 바꾸던 것과 동일.)
+  return getSetting(env.DB, 'memory.last_consolidation_date')
 }
 
 /** 통합 실행일 마커 기록 (성공한 실행 뒤에만 호출). */
