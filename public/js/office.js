@@ -133,6 +133,7 @@
 
     var viewer = null;
     var current = null; // { fileId, name, mime, version, folderId, folderName, isNew }
+    var autoNewTimer = null; // 자동 새 문서 진입 지연 타이머 (파일 열기가 오면 취소)
     var opening = false;
     var openingFile = null; // 지금 열고 있는 파일 (같은 파일 중복 열기 판정)
     var queuedOpen = null; // 열기 진행 중에 도착한 파일 열기 요청 (유실 방지)
@@ -219,7 +220,10 @@
             if (p.total) showProgress('받는 중 ' + Math.round((p.got / p.total) * 100) + '%', (p.got / p.total) * 100);
             else showProgress('받는 중…', null);
           } else if (p.phase === 'parse') {
-            showProgress('여는 중…', null);
+            // 다운로드가 끝나면 막대는 치운다 — 이후는 뷰어의 로딩 화면이
+            // 이어받는다. 막대를 계속 두면 막대형+원형 로딩이 겹쳐 보인다
+            // (2026-11-13 사용자 지적: 로딩 페이지 전에 뭐가 있다).
+            hideProgress();
           }
         },
       });
@@ -319,6 +323,12 @@
 
     function openFile(file) {
       if (!file || !file.fileId) return Promise.resolve(false);
+      // 파일 열기가 오면 보류 중인 자동 새 문서 진입을 취소한다 —
+      // 빈 문서가 먼저 뜨면 파일이 그 뒤에 줄을 서게 된다 (2026-11-13).
+      if (autoNewTimer) {
+        clearTimeout(autoNewTimer);
+        autoNewTimer = null;
+      }
       if (opening) {
         // 진행 중이거나 대기 중인 것과 같은 파일이면 중복 실행만
         // 막는다 (열기 패널 연속 확정 뒤).
@@ -801,11 +811,19 @@
       getMemory().render();
       refreshIcons();
       if (autoNew && app.canCreate) {
-        // 한글·한글 앱: 시작 화면을 거치지 않고 빈 문서로 바로 진입한다.
+        // 한글·엑셀 앱: 시작 화면을 거치지 않고 빈 문서로 바로 진입한다.
         // 시작 화면은 마크업에서 hidden로 시작하므로 그 앱이 없고,
         // 자동 진입이 실패하면 updateChrome가 내보낸다.
-        if (startEl) startEl.hidden = true;
-        newDocument();
+        // 진입을 200ms 미룬다 (2026-11-13): 데스크톱에서 파일을 갖고 여는
+        // 경우 부팅 직후 myhub:open-file이 도착하는데, 빈 문서를 먼저
+        // 만들면 파일 열기가 그 뒤에 줄을 서서 빈 문서 로딩이 파일 로딩
+        // 전에 보이는 '뭐가 있다' 상태가 된다. 200ms 안에 파일 열기가
+        // 오면 openFile이 타이머를 취소하고 파일만 연다.
+        autoNewTimer = setTimeout(function () {
+          autoNewTimer = null;
+          if (startEl) startEl.hidden = true;
+          newDocument();
+        }, 200);
       }
     }
     init();

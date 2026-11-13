@@ -435,3 +435,93 @@ describe('불변성 — 전이 함수는 입력을 변형하지 않는다', () =
     expect(after.z).toBeGreaterThan(before.z)
   })
 })
+
+describe('restoreWindows — 늦은 창 복원 (성능 5라운드, 부팅 init 비차단화)', () => {
+  // 모듈 목록을 건드리지 않으려고 별도 인스턴스를 쓴다 (파일 공용 S의
+  // MODULES는 '상수와 모듈 정의' 테스트가 정확한 목록으로 단언한다).
+  const R = loadState()
+  R.registerModules([
+    { id: 'app-9001', title: '테스트 앱', url: '/api/artifact/9001/run', defW: 880, defH: 620, dynamic: true },
+  ])
+  const savedWin = (over: any = {}) => ({
+    id: 'app-9001',
+    module: 'app-9001',
+    x: 100,
+    y: 80,
+    w: 880,
+    h: 620,
+    z: 5,
+    minimized: false,
+    space: 1,
+    mode: null,
+    prev: null,
+    ...over,
+  })
+
+  test('알려진 모듈의 저장된 창을 저장된 rect 그대로 복원한다 (기본 위치가 아님)', () => {
+    const s = R.openModule(R.emptyState(), 'memo', VP)
+    const next = R.restoreWindows(s, [savedWin()], VP)
+    expect(next).not.toBe(s)
+    expect(next.windows).toHaveLength(2)
+    const w = next.windows.find((x: any) => x.id === 'app-9001')
+    // 저장된 rect 그대로 — 기본 중앙 배치((1440-880)/2=280, (900-620)/2=140)가 아니다.
+    expect(w.x).toBe(100)
+    expect(w.y).toBe(80)
+    expect(w.w).toBe(880)
+    expect(w.h).toBe(620)
+    expect(w.z).toBe(5)
+    // 원본 state는 변하지 않는다 (불변성).
+    expect(s.windows).toHaveLength(1)
+  })
+
+  test('모르는 모듈·이미 열린 모듈·깨진 rect는 건너뛴다', () => {
+    const s = R.openModule(R.emptyState(), 'memo', VP)
+    const next = R.restoreWindows(
+      s,
+      [
+        savedWin({ module: 'app-unknown', id: 'app-unknown' }),
+        { ...savedWin(), module: 'memo', id: 'memo' },
+        savedWin({ x: NaN }),
+      ],
+      VP,
+    )
+    expect(next).toBe(s)
+  })
+
+  test('복원할 창이 없으면 같은 state 객체를 반환한다 (commit no-op)', () => {
+    const s = R.openModule(R.emptyState(), 'memo', VP)
+    expect(R.restoreWindows(s, [], VP)).toBe(s)
+    expect(R.restoreWindows(s, null as any, VP)).toBe(s)
+  })
+
+  test('저장된 활성 창을 복원하면 activeId가 따라간다', () => {
+    const s = R.openModule(R.emptyState(), 'memo', VP)
+    expect(s.activeId).toBe('memo')
+    const next = R.restoreWindows(s, [savedWin()], VP, 'app-9001')
+    expect(next.activeId).toBe('app-9001')
+  })
+
+  test('저장된 활성 창이 최소화됐으면 activeId를 바꾸지 않는다', () => {
+    const s = R.openModule(R.emptyState(), 'memo', VP)
+    const next = R.restoreWindows(s, [savedWin({ minimized: true })], VP, 'app-9001')
+    expect(next.windows.find((x: any) => x.id === 'app-9001').minimized).toBe(true)
+    expect(next.activeId).toBe('memo')
+  })
+
+  test('zCounter가 복원된 창의 z보다 작으면 올려준다', () => {
+    const s = R.openModule(R.emptyState(), 'memo', VP)
+    expect(s.zCounter).toBe(1)
+    const next = R.restoreWindows(s, [savedWin({ z: 9 })], VP)
+    expect(next.zCounter).toBe(9)
+  })
+
+  test('깊은 동결된 입력을 넘겨도 throw하지 않는다', () => {
+    const s = deepFreeze(R.openModule(R.emptyState(), 'memo', VP))
+    const wins = deepFreeze([savedWin()])
+    let next: any
+    expect(() => {
+      next = R.restoreWindows(s, wins, VP)
+    }).not.toThrow()
+    expect(next.windows).toHaveLength(2)
+  })
+})

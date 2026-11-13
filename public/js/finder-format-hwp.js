@@ -861,20 +861,27 @@
       if (loading && loading.parentNode) loading.parentNode.removeChild(loading);
       loading = null;
     };
+    // 로딩 화면을 SDK 로드 전에 먼저 띄운다 (2026-11-13): loadLib이 끝날
+    // 때까지 빈 화면이 보이는 틈이 있었고, 오피스 진행 막대와 원형 로딩이
+    // 겹쳐 보였다. 다운로드가 끝나는 'parse' 시점에 막대가 사라지고 로딩
+    // 화면이 이어받는다. 실패 시 제거는 아래 .catch가 맡는다.
+    destroyEditor(state);
+    ctx.clearBody();
+    ctx.body.classList.add('fv-fill');
+    if (!ctx.chromeFold) ctx.body.appendChild(toolsEl(ctx, state));
+    var container = ctx.doc.createElement('div');
+    container.className = 'fv-hwp-editor';
+    ctx.body.appendChild(container);
+    loading = buildLoadingEl(ctx.doc, '한글 2020', '한글 편집기를 불러오는 중');
+    container.appendChild(loading);
     return ctx.loadLib('rhwpEditor').then(function (sdk) {
-      if (!ctx.isCurrent()) return;
+      if (!ctx.isCurrent()) {
+        removeLoading();
+        return;
+      }
       if (!sdk || typeof sdk.createEditor !== 'function') {
         throw new Error('편집기 SDK 형태가 올바르지 않습니다');
       }
-      destroyEditor(state);
-      ctx.clearBody();
-      ctx.body.classList.add('fv-fill');
-      if (!ctx.chromeFold) ctx.body.appendChild(toolsEl(ctx, state));
-      var container = ctx.doc.createElement('div');
-      container.className = 'fv-hwp-editor';
-      ctx.body.appendChild(container);
-      loading = buildLoadingEl(ctx.doc, '한글 2020', '한글 편집기를 불러오는 중');
-      container.appendChild(loading);
       return Promise.resolve(
         sdk.createEditor(container, {
           studioUrl: studioEmbedOn(ctx)

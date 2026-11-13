@@ -157,8 +157,30 @@ describe('한글 로딩 화면', () => {
       onFoldChange: () => {},
       saveBtn: null,
     };
-    return { doc, body, api, ctx, resolveLoad, rejectLoad };
+    return { doc, body, api, ctx, sdk, resolveLoad, rejectLoad };
   }
+
+  test('SDK 로드가 끝나기 전에도 로딩 화면이 보인다 (막대→원형 이어받기)', async () => {
+    // 2026-11-13: 로딩 화면이 loadLib 뒤에 만들어져서, 다운로드가 끝난 뒤
+    // SDK 로드 동안 빈 화면이 보이고 오피스 진행 막대와 원형 로딩이 겹쳤다.
+    // 이제 로딩 화면은 openEditor 시작 시점에 먼저 뜬다.
+    const { body, api, ctx, sdk, resolveLoad } = setupHwp();
+    let resolveLib!: (v: any) => void;
+    const libPromise = new Promise((res) => {
+      resolveLib = res;
+    });
+    ctx.loadLib = () => libPromise;
+    const p = api.handleHwp(ctx);
+    await flush(20);
+    // loadLib이 아직 안 끝났는데도 로딩 화면이 있어야 한다.
+    expect(body.querySelector('.fv-hwp-loading')).not.toBeNull();
+    resolveLib(sdk);
+    await flush(20);
+    expect(body.querySelector('.fv-hwp-loading')).not.toBeNull();
+    resolveLoad();
+    await p;
+    expect(body.querySelector('.fv-hwp-loading')).toBeNull();
+  });
 
   test('loadFile이 끝나기 전에는 로딩 화면이 보인다', async () => {
     const { body, api, ctx, resolveLoad } = setupHwp();

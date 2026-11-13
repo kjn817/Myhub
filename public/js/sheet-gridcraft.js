@@ -384,12 +384,17 @@
     // 2026-11-06; 반쯤 sheet.html 프레임에 같은 선택이 있다).
     frame.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-modals');
     frame.src = GC_URL;
-    // 풀 폰트 조기 fetch (2026-11-13 성능 4라운드): 엔진 WASM 부팅과
-    // 병렬로 내장 폰트 풀(11MB)을 받아 둔다. loadPoolBytes는 fetchFn별
+    // 풀 폰트 조기 fetch (2026-11-13 성능 4라운드, 5라운드에서 load 이후로
+    // 지연): 엔진 WASM 부팅과 병렬로 내장 폰트 풀(11MB)을 받아 둔다.
+    // load 전에 받으면 느린 네트워크에서 문서 자체의 로딩을 가로막는다
+    // (실측: Fast 3G에서 Excel 로딩 21.7s — 폰트 11MB + WASM 18MB가
+    // 1.6Mbps 회선을 포화). load 이후에 시작해도 WASM 부팅보다 먼저
+    // 끝나므로 한글 tofu 구간은 그대로 짧다. loadPoolBytes는 fetchFn별
     // Promise를 캐시하므로 pushFonts()가 gcReady 뒤에 다시 불러도 같은
-    // 진행 중 Promise를 재사용한다 — 직렬 대기가 사라져 한글 tofu
-    // 구간이 줄어든다. deckcraft는 이미 같은 패턴을 쓴다.
-    if (fonts && typeof fonts.loadPoolBytes === 'function') {
+    // 진행 중 Promise를 재사용한다 — 직렬 대기가 사라진다.
+    // load가 이미 끝난 상태(파인더에서 파일 열기 등)면 즉시 받는다.
+    function prefetchPoolFonts() {
+      if (!fonts || typeof fonts.loadPoolBytes !== 'function') return;
       try {
         var poolPrefetch = fonts.loadPoolBytes(fetchFn);
         if (poolPrefetch && typeof poolPrefetch.catch === 'function') {
@@ -401,6 +406,13 @@
       } catch (e) {
         console.warn('GridCraft 풀 폰트 조기 fetch 실패:', e);
       }
+    }
+    if (doc.readyState === 'complete') {
+      prefetchPoolFonts();
+    } else if (win && typeof win.addEventListener === 'function') {
+      win.addEventListener('load', prefetchPoolFonts, { once: true });
+    } else {
+      prefetchPoolFonts();
     }
     var veil = doc.createElement('div');
     veil.className = 'sheet-readonly-veil';

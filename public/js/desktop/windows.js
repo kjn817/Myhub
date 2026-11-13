@@ -3165,6 +3165,18 @@
       }
     }
 
+    /**
+     * 저장된 창 목록에서 아직 열리지 않은 창을 저장된 rect 그대로 복원한다.
+     * 성능 5라운드(2026-11-13): 부팅 init 비차단화의 늦은 복원 경로 —
+     * main.js가 /api/artifact 응답 뒤에 스튜디오 모듈을 등록하고, init 시
+     * 버려진 스튜디오 창을 이 메서드로 되살린다. 복원할 창이 없으면
+     * restoreWindows가 같은 state를 반환해 commit이 no-op이 된다.
+     */
+    function restoreWindows(windows, savedActiveId) {
+      if (typeof stateApi.restoreWindows !== 'function') return;
+      commit(stateApi.restoreWindows(state, windows, getViewport(), savedActiveId));
+    }
+
     function postToModule(id, message) {
       var rec = entries.get(id);
       var frame = rec && rec.frame;
@@ -3230,6 +3242,7 @@
 
     return {
       openModule: openModule,
+      restoreWindows: restoreWindows,
       postToModule: postToModule,
       getActiveAssistant: getActiveAssistant,
       onAssistantChange: function (fn) {

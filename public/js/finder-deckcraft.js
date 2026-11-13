@@ -303,10 +303,22 @@
       deps.fetchFn ||
       (typeof win.fetch === 'function' ? win.fetch.bind(win) : null);
     var fonts = deps.fonts !== undefined ? deps.fonts : typeof window !== 'undefined' ? window.MyHubFonts || null : null;
-    // 번호붙 폴백 폰트를 세션을 만드는 즉시 받기 시작한다 — 엔진 붙은
-    // (수십 MB 전송·컴파일)은 생긴 무례하면 바이트가 도착해 있어,
-    // ready 직후 pushFonts가 기다리지 않고 바로 받에 넣을 수 있다.
-    loadFallbackFonts(fetchFn, poolSpecs(fonts));
+    // 폴백 폰트 풀(11MB)은 문서 load 이후에 받기 시작한다 (성능 5라운드,
+    // 2026-11-13). 브릿지 생성 즉시 받으면 느린 네트워크에서 문서 자체의
+    // 로딩을 가로막는다 (실측: Fast 3G에서 PowerPoint 로딩 23.2s — 폰트
+    // 11MB + WASM 22MB가 1.6Mbps 회선을 포화). load 이후에 시작해도 엔진
+    // 부팅(수십 MB 전송·컴파일)보다 먼저 도착하므로, ready 직후 pushFonts가
+    // 기다리지 않고 바로 넣을 수 있다. load가 이미 끝난 상태면 즉시 받는다.
+    function prefetchPoolFonts() {
+      loadFallbackFonts(fetchFn, poolSpecs(fonts));
+    }
+    if (doc.readyState === 'complete') {
+      prefetchPoolFonts();
+    } else if (win && typeof win.addEventListener === 'function') {
+      win.addEventListener('load', prefetchPoolFonts, { once: true });
+    } else {
+      prefetchPoolFonts();
+    }
 
     var frame = doc.createElement('iframe');
     frame.className = 'fv-frame fv-deckcraft-frame';

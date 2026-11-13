@@ -247,6 +247,73 @@
     return withWindows(state, cloneWindows(state.windows).concat([win]), win.id, zCounter);
   }
 
+  /**
+   * 저장된 창 목록에서 아직 열리지 않은 창을 저장된 rect 그대로 복원한다.
+   * 성능 5라운드(2026-11-13): 부팅 init 비차단화 — /api/artifact를 기다리지
+   * 않고 init한 뒤, 스튜디오 모듈이 늦게 등록되면 init 시 parse에서 버려진
+   * 스튜디오 창을 이 전이로 되살린다.
+   * - 모르는 module·이미 열린 module·숫자 필드가 유한하지 않은 항목은 건너뛴다.
+   * - rect는 clampRect로 검증하고 z·mode·space·minimized·prev를 보존한다.
+   * - 복원한 창이 없으면 같은 state 객체를 그대로 반환한다 (commit의
+   *   no-op 가드와 짝을 이룬다).
+   * - savedActiveId가 복원된 창 중 하나이고 활성 스페이스에서 최소화되지
+   *   않았으면 activeId로 삼는다 (parse의 규칙과 동일).
+   */
+  function restoreWindows(state, windows, viewport, savedActiveId) {
+    if (!Array.isArray(windows) || !windows.length) return state;
+    var seen = {};
+    state.windows.forEach(function (w) {
+      seen[w.module] = true;
+    });
+    var next = null;
+    var maxZ = state.zCounter;
+    var restoredActive = null;
+    for (var i = 0; i < windows.length; i++) {
+      var item = windows[i];
+      if (!item || typeof item !== 'object') continue;
+      if (!findModule(item.module)) continue;
+      if (seen[item.module]) continue;
+      if (
+        !isFiniteNumber(item.x) ||
+        !isFiniteNumber(item.y) ||
+        !isFiniteNumber(item.w) ||
+        !isFiniteNumber(item.h) ||
+        !isFiniteNumber(item.z)
+      ) {
+        continue;
+      }
+      if (!next) next = cloneWindows(state.windows);
+      var rect = clampRect({ x: item.x, y: item.y, w: item.w, h: item.h }, viewport);
+      var win = {
+        id: item.module,
+        module: item.module,
+        x: rect.x,
+        y: rect.y,
+        w: rect.w,
+        h: rect.h,
+        z: item.z,
+        minimized: item.minimized === true,
+        space: state.spaces.indexOf(item.space) >= 0 ? item.space : state.spaces[0],
+        mode: item.mode === 'full' || item.mode === 'zoom' ? item.mode : null,
+        prev: clonePrev(item.prev),
+      };
+      seen[item.module] = true;
+      next.push(win);
+      if (item.z > maxZ) maxZ = item.z;
+      if (
+        savedActiveId &&
+        item.module === savedActiveId &&
+        !win.minimized &&
+        win.space === state.activeSpace
+      ) {
+        restoredActive = win.id;
+      }
+    }
+    if (!next) return state;
+    var activeId = restoredActive !== null ? restoredActive : state.activeId;
+    return withWindows(state, next, activeId, maxZ);
+  }
+
   function focusWindow(state, id) {
     var idx = findWindowIndex(state, id);
     if (idx < 0) return state;
@@ -511,6 +578,7 @@
     registerModules: registerModules,
     emptyState: emptyState,
     openModule: openModule,
+    restoreWindows: restoreWindows,
     focusWindow: focusWindow,
     minimizeWindow: minimizeWindow,
     closeWindow: closeWindow,

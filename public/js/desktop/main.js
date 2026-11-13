@@ -9,6 +9,12 @@
   // 캐시를 함께 열기 위함).
   var driveDesktop = null;
   var bootDesktopFolderId = null;
+  // 바탕화면 파일 항목 조회표 (id → 항목). init()의 지역 변수였는데,
+  // 지연 로드(loadDesktopFileItemsDeferred)로 들어오는 항목은 init 뒤에
+  // 도착해 조회표에 없어 openFileIcon이 조용히 포기했다 (2026-11-13
+  // 사용자 지적: 파일 더블클릭이 아무것도 안 함). 모듈 스코프로 올려
+  // init과 지연 로드 양쪽에서 채운다.
+  var fileItemsByKey = {};
 
   function getViewport() {
     return { w: window.innerWidth || 1024, h: window.innerHeight || 768 };
@@ -164,7 +170,6 @@
     var windowsApi = window.MyHubDesktopWindows;
     if (!stateApi || !windowsApi) return null;
     fileItems = fileItems || [];
-    var fileItemsByKey = {};
     fileItems.forEach(function (it) {
       fileItemsByKey[it.id] = it;
     });
@@ -492,12 +497,16 @@
   }
 
   /**
-   * 붙임: 스튜디오 게시 앱을 동적 모듈로 먼저 등록한 앱 init한다.
-   * 등록은 state load보다 앱이어야 저장한 앱 스튜디오 앱 창이
-   * parse에서 버려지지 않고 복원한다. 목록 조회가 실패하거나
-   * 1500ms를 내어면 기본 모듈만으로 진행한다 앱 어떤 경우에도
-   * 데스크톱 붙임이 멈추지 않는다.
-   * 바탕화면 Drive 파일 목록은 init을 막지 않는다 (2026-11-12 성능
+   * 붙임 (성능 5라운드, 2026-11-13): init 비차단화 — /api/artifact(최대
+   * 1.5s)를 기다리지 않고 데스크톱을 먼저 붙인다. 실측: artifact 지연이
+   * 부팅 완료의 대부분이었다 (DCL ~0.4s인데 부팅 완료 ~2.3s).
+   * 스튜디오 창 복원은 늦은 복원으로 이어진다: init 전에 저장된 상태
+   * 원문을 스냅샷해 두고, 모듈 등록 뒤에 parse에서 버려진 스튜디오 창을
+   * restoreWindows로 되살린다. 스냅샷을 init 전에 뜨는 이유는 init 뒤의
+   * 첫 commit(persist)이 버려진 창을 저장소에서 지워 버릴 수 있기 때문이다.
+   * 목록 조회가 실패하거나 1500ms를 넘기면 기본 모듈만으로 진행한다 — 어떤
+   * 경우에도 데스크톱 붙임이 멈추지 않는다.
+   * 바탕화면 Drive 파일 목록도 init을 막지 않는다 (2026-11-12 성능
    * 점검: 최대 2.5s 대기가 시작을 늦췄다). init 뒤 백그라운드로
    * 읽어 파일 아이콘을 추가한다 — 앱 아이콘은 바로 보인다.
    */
@@ -509,9 +518,17 @@
       loadDesktopFileItemsDeferred();
       return;
     }
+    var savedSnapshot = null;
+    try {
+      savedSnapshot = window.localStorage.getItem(stateApi.STORAGE_KEY);
+    } catch (e) {
+      savedSnapshot = null;
+    }
+    init([]);
+    loadDesktopFileItemsDeferred();
     var controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
     var timer = controller ? setTimeout(function () { controller.abort(); }, 1500) : null;
-    var artifactReady = fetch('/api/artifact', controller ? { signal: controller.signal } : undefined)
+    fetch('/api/artifact', controller ? { signal: controller.signal } : undefined)
       .then(function (res) { return res && res.ok ? res.json() : null; })
       .then(function (body) {
         var list = body && Array.isArray(body.data) ? body.data : [];
@@ -521,6 +538,7 @@
           if (m) mods.push(m);
         });
         if (mods.length) stateApi.registerModules(mods);
+        restoreDroppedStudioWindows();
       })
       .catch(function () {
         console.warn('스튜디오 앱 목록 로드 실패 앱 기본 모듈만으로 붙인합이다');
@@ -528,10 +546,15 @@
       .then(function () {
         if (timer) clearTimeout(timer);
       });
-    artifactReady.then(function () {
-      init([]);
-      loadDesktopFileItemsDeferred();
-    });
+
+    function restoreDroppedStudioWindows() {
+      var manager = window.MyHubDesktop;
+      if (!savedSnapshot || !manager || typeof manager.restoreWindows !== 'function') return;
+      if (typeof stateApi.parse !== 'function') return;
+      var parsed = stateApi.parse(savedSnapshot, getViewport());
+      if (!parsed || !parsed.windows || !parsed.windows.length) return;
+      manager.restoreWindows(parsed.windows, parsed.activeId);
+    }
   }
 
   // Drive 바탕화면 파일 목록을 백그라운드로 읽어 파일 아이콘을 추가한다.
@@ -539,6 +562,11 @@
   function loadDesktopFileItemsDeferred() {
     loadDesktopFileItems().then(function (items) {
       if (!items || !items.length) return;
+      // 조회표에도 등록해야 더블클릭(openFileIcon)이 항목을 찾는다 —
+      // 아이콘만 등록하면 클릭이 조용히 무시된다 (2026-11-13 결함).
+      items.forEach(function (it) {
+        fileItemsByKey[it.id] = it;
+      });
       var iconsMgr = window.MyHubDesktopIconsManager;
       if (!iconsMgr) return;
       var added = iconsMgr.registerItems(items);
