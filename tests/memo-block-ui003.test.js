@@ -41,6 +41,7 @@ const TOOLBAR = read('public/js/memo/toolbar.js');
 const MD = read('public/js/memo/md.js');
 const PANE = read('public/js/memo/pane.js');
 const LIST = read('public/js/memo/list.js');
+const UTILS = read('public/js/memo/utils.js');
 const CORE = read('public/js/memo/editor-core.js');
 const BUNDLE = read('public/js/memo-bundle.js');
 
@@ -181,9 +182,13 @@ describe('잠긴 첨부파일 표시·다운로드 경로 (트랙 D)', () => {
     expect(md.fileFullUrl(plain, 42)).toBe('https://cdn/orig');
   });
 
+  // 5-2 F-L6 통합으로 다운로드 핸들러가 utils.js의 downloadMemoFile로
+  // 이동했다 — /content 분기는 헬퍼가 갖고, pane/list는 헬퍼를 호출한다.
+  // 동작 자체는 tests/f-l6-file-chip-download.test.ts가 실행으로 검증한다.
   test('pane/list의 비이미지 다운로드가 잠금 시 /content를 쓴다', () => {
-    expect(PANE).toContain("f.is_locked ? '/api/memo/files/' + f.id + '/content' : f.url");
-    expect(LIST).toContain("f.is_locked ? '/api/memo/files/' + f.id + '/content' : f.url");
+    expect(UTILS).toContain("f.is_locked ? '/api/memo/files/' + f.id + '/content' : f.url");
+    expect(PANE).toContain('downloadMemoFile(f)');
+    expect(LIST).toContain('downloadMemoFile(f)');
     expect(LIST).toContain("f.is_locked ? '/api/memo/files/' + f.id + '/content' : (f.thumb || f.url)");
   });
 });

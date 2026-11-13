@@ -90,6 +90,30 @@ function parseMarkerAlt(alt) {
   const m = /^(.*)\|(\d+)$/.exec(alt);
   return m ? { alt: m[1], width: +m[2] } : { alt, width: 0 };
 }
+// 메모 파일 칩 다운로드 (F-L6: list.js·pane.js 30줄 verbatim 통합).
+// 잠긴 파일은 f.url(암호문 Cloudinary URL)을 직접 받으면 암호문 파일이
+// 내려간다 — 복호화 서빙 경로(/content)로 받아야 원본이 내려간다 (트랙 D).
+async function downloadMemoFile(f) {
+  const srcUrl = f.is_locked ? '/api/memo/files/' + f.id + '/content' : f.url;
+  try {
+    // 잠긴 파일은 보호 게이트 대상 — 403이면 PIN 모달 후 재시도한다.
+    const resp = f.is_locked ? await window._fetchStepUp(srcUrl) : await fetch(srcUrl);
+    if (!resp.ok) throw new Error('download_failed');
+    const blob = await resp.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = f.filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  } catch {
+    // 잠긴 파일은 게이트 403 페이지를 새 탭으로 여는 폴백이 무의미하다.
+    if (f.is_locked) { toast('파일이 열 수 없어요. PIN 확인이 필요합니다.'); return; }
+    window.open(srcUrl, '_blank');
+  }
+}
 
 /* ================= 잠금 메모 공용 컴포넌트 (I-03) =================
    잠금 3단계(메모 잠금·민감도)를 아이콘이 아닌 긴 레벨로 바꿔줄 수 있는
@@ -1590,26 +1614,7 @@ function updateMemoFiles(memoId, files) {
           open.innerHTML = `<span><i data-lucide="${fileIcon(f.filename)}"></i></span><span class="name">${esc(f.filename)}</span><span class="size">${fmtSize(f.size)}</span>`;
           open.onclick = async (e) => {
             e.preventDefault();
-            // 잠긴 파일은 복호화 서빙 경로로 받아야 원본이 내려간다 (트랙 D)
-            const srcUrl = f.is_locked ? '/api/memo/files/' + f.id + '/content' : f.url;
-            try {
-              // 잠긴 파일은 보호 게이트 대상 — 403이면 PIN 모달 후 재시도한다.
-              const resp = f.is_locked ? await window._fetchStepUp(srcUrl) : await fetch(srcUrl);
-              if (!resp.ok) throw new Error('download_failed');
-              const blob = await resp.blob();
-              const url = URL.createObjectURL(blob);
-              const a = document.createElement('a');
-              a.href = url;
-              a.download = f.filename;
-              document.body.appendChild(a);
-              a.click();
-              document.body.removeChild(a);
-              setTimeout(() => URL.revokeObjectURL(url), 1000);
-            } catch {
-              // 잠긴 파일은 게이트 403 페이지를 새 탭으로 여는 폴백이 무의미하다.
-              if (f.is_locked) { toast('파일이 열 수 없어요. PIN 확인이 필요합니다.'); return; }
-              window.open(srcUrl, '_blank');
-            }
+            await downloadMemoFile(f);
           };
           wrap.appendChild(open);
           filesEl.appendChild(wrap);
@@ -3252,27 +3257,7 @@ function renderPaneFiles(pane, memoId, fileMap, isEditMode) {
     open.innerHTML = `<span><i data-lucide="${fileIcon(f.filename)}"></i></span><span class="name">${esc(f.filename)}</span><span class="size">${fmtSize(f.size)}</span>`;
     open.onclick = async (e) => {
       e.preventDefault();
-      // 잠긴 파일은 f.url(암호문 Cloudinary URL)을 직접 받으면 암호문 파일이
-      // 내려간다 — 복호화 서빙 경로(/content)로 받아야 원본이 내려간다 (트랙 D).
-      const srcUrl = f.is_locked ? '/api/memo/files/' + f.id + '/content' : f.url;
-      try {
-        // 잠긴 파일은 보호 게이트 대상 — 403이면 PIN 모달 후 재시도한다.
-        const resp = f.is_locked ? await window._fetchStepUp(srcUrl) : await fetch(srcUrl);
-        if (!resp.ok) throw new Error('download_failed');
-        const blob = await resp.blob();
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = f.filename;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        setTimeout(() => URL.revokeObjectURL(url), 1000);
-      } catch {
-        // 잠긴 파일은 게이트 403 페이지를 새 탭으로 여는 폴백이 무의미하다.
-        if (f.is_locked) { toast('파일이 열 수 없어요. PIN 확인이 필요합니다.'); return; }
-        window.open(srcUrl, '_blank');
-      }
+      await downloadMemoFile(f);
     };
     const del = document.createElement('button');
     del.className = 'fdel';
