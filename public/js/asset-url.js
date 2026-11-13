@@ -50,6 +50,7 @@
     '/fonts/JetBrainsMono-Regular.ttf',
     '/fonts/NanumGothic-Bold.ttf',
     '/fonts/NanumGothic-Regular.ttf',
+    '/js/craft-clipboard.js',
     '/js/craft-prefetch-core.js',
     '/js/deckcraft-prefetch.js',
     '/js/finder-deckcraft.js',

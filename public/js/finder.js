@@ -2835,11 +2835,11 @@
       csv: ['/js/finder-format-text.js'],
       hwp: ['/js/finder-format-hwp.js'],
       hwpx: ['/js/finder-format-hwp.js'],
-      xlsx: ['/js/finder-format-sheet.js'],
-      xls: ['/js/finder-format-sheet.js'],
-      pptx: ['/js/craft-prefetch-core.js', '/js/finder-deckcraft.js', '/js/finder-format-slide.js'],
+      xlsx: ['/js/craft-clipboard.js', '/js/finder-format-sheet.js'],
+      xls: ['/js/craft-clipboard.js', '/js/finder-format-sheet.js'],
+      pptx: ['/js/craft-prefetch-core.js', '/js/craft-clipboard.js', '/js/finder-deckcraft.js', '/js/finder-format-slide.js'],
       docx: ['/js/finder-format-doc.js'],
-      pdf: ['/js/finder-pdf-ops.js', '/js/craft-prefetch-core.js', '/js/finder-pdfcraft.js', '/js/finder-format-pdf.js'],
+      pdf: ['/js/finder-pdf-ops.js', '/js/craft-prefetch-core.js', '/js/craft-clipboard.js', '/js/finder-pdfcraft.js', '/js/finder-format-pdf.js'],
     };
     // 동적 로딩 URL은 공용 핼퍼(asset-url.js)가 배포 버전을 붙인다
     // (N-06 — 버전 없는 URL은 immutable 캐시가 고정할 수 있다).

@@ -53,14 +53,19 @@
 
   // save/open 메시지는 bytes가 ArrayBuffer가 내도, 뷰(Uint8Array 등)가
   // 내도 있다 — 뷰면 자기 구간만 정확히 복사해 ArrayBuffer로 정규화한다.
-  function normalizeBytes(bytes) {
-    if (!bytes) return null;
-    if (bytes instanceof ArrayBuffer) return bytes;
-    if (typeof ArrayBuffer !== 'undefined' && ArrayBuffer.isView(bytes)) {
-      return new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength).slice().buffer;
-    }
-    return null;
+  // 정규화 본문은 공용 코어(craft-clipboard.js)가 맡는다 — 코어는
+  // 이 파일보다 먼저 받아야 한다 (office.html 정적 순서·finder.js
+  // 동적 import 체인). 코어가 없으면 바이트는 null로 정규화된다.
+  var clipboardCore =
+    typeof window !== 'undefined' ? window.MyHubCraftClipboard : null;
+  if (!clipboardCore && typeof console !== 'undefined' && console.warn) {
+    console.warn('[finder-pdfcraft] 코어(craft-clipboard.js)가 없어 바이트 정규화가 동작하지 않습니다');
   }
+  var normalizeBytes = clipboardCore
+    ? clipboardCore.normalizeBytes
+    : function () {
+        return null;
+      };
 
   /**
    * PdfCraft iframe 세션을 만든다.

@@ -264,65 +264,32 @@
   // insert.picture(base64)로 읽어넣는다. 등, 스프레드 시트처럼
   // 표(table) HTML를 함께 등 붙여넣기 등 붙여넣기가 본래 동작이라
   // 엔 진이 (답는다 그림+파일 HTML를 그림 숨긴다).
-
-  var PASTE_MAX_BYTES = 32 * 1024 * 1024; // host.rs MAX_PICTURE_BYTES와 같은 상한
-
-  function isFormFieldTarget(t) {
-    if (!t || typeof t !== 'object') return false;
-    if (t.isContentEditable) return true;
-    var tag = t.tagName;
-    return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
+  // 헬퍼 본문은 공용 코어(craft-clipboard.js)가 맡는다 — 코어는
+  // 이 파일보다 먼저 받아야 한다 (sheet.html 정적 순서). 코어가
+  // 없으면 붙여넣기는 조용히 건너뛴다.
+  var clipboardCore =
+    typeof window !== 'undefined' ? window.MyHubCraftClipboard : null;
+  if (!clipboardCore && typeof console !== 'undefined' && console.warn) {
+    console.warn('[sheet-gridcraft] 코어(craft-clipboard.js)가 없어 붙여넣기가 동작하지 않습니다');
   }
-
-  function pasteImageFile(cd, skipTableHtml) {
-    if (!cd) return null;
-    if (skipTableHtml && typeof cd.getData === 'function') {
-      var html = '';
-      try {
-        html = cd.getData('text/html') || '';
-      } catch (err) {
-        html = '';
-      }
-      if (/<table[\s>]/i.test(html)) return null;
-    }
-    var files = cd.files;
-    if (files && files.length) {
-      for (var i = 0; i < files.length; i++) {
-        if (files[i] && String(files[i].type || '').indexOf('image/') === 0) return files[i];
-      }
-    }
-    var items = cd.items;
-    if (items) {
-      for (var j = 0; j < items.length; j++) {
-        var it = items[j];
-        if (
-          it &&
-          it.kind === 'file' &&
-          String(it.type || '').indexOf('image/') === 0 &&
-          typeof it.getAsFile === 'function'
-        ) {
-          var f = it.getAsFile();
-          if (f) return f;
-        }
-      }
-    }
-    return null;
-  }
-
-  function fileToBase64(file, ReaderCtor) {
-    return new Promise(function (resolve, reject) {
-      var reader = new ReaderCtor();
-      reader.onload = function () {
-        var url = String(reader.result || '');
-        var comma = url.indexOf(',');
-        resolve(comma >= 0 ? url.slice(comma + 1) : '');
+  // host.rs MAX_PICTURE_BYTES와 같은 상한
+  var PASTE_MAX_BYTES =
+    (clipboardCore && clipboardCore.PASTE_MAX_BYTES) || 32 * 1024 * 1024;
+  var isFormFieldTarget = clipboardCore
+    ? clipboardCore.isFormFieldTarget
+    : function () {
+        return false;
       };
-      reader.onerror = function () {
-        reject(reader.error || new Error('파일을 읽지 못했습니다'));
+  var pasteImageFile = clipboardCore
+    ? clipboardCore.pasteImageFile
+    : function () {
+        return null;
       };
-      reader.readAsDataURL(file);
-    });
-  }
+  var fileToBase64 = clipboardCore
+    ? clipboardCore.fileToBase64
+    : function () {
+        return Promise.reject(new Error('파일을 읽지 못했습니다'));
+      };
 
   // ---------- 페이지 컨트롤러 ----------
 

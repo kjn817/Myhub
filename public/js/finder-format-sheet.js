@@ -51,62 +51,31 @@
   // base64로 브리지에 가져보낸다 (myhub-sheet:paste-image-data).
   // 확정 규칙은 브리지와 같다: 표(table) HTML를 함께 등 붙여넣기를
   // 표 붙여넣기가 본래 동작이라 가로채지 않는다.
-  function isFormFieldTarget(t) {
-    if (!t || typeof t !== 'object') return false;
-    if (t.isContentEditable) return true;
-    var tag = t.tagName;
-    return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
+  // 헬퍼 본문은 공용 코어(craft-clipboard.js)가 맡는다 — 코어는
+  // 이 파일보다 먼저 받아야 한다 (office.html 정적 순서·finder.js
+  // 동적 import 체인). 코어가 없으면 붙여넣기는 조용히 건너뛴다.
+  var clipboardCore =
+    typeof window !== 'undefined' ? window.MyHubCraftClipboard : null;
+  if (!clipboardCore && typeof console !== 'undefined' && console.warn) {
+    console.warn('[finder-format-sheet] 코어(craft-clipboard.js)가 없어 붙여넣기가 동작하지 않습니다');
   }
-
-  function pasteImageFile(cd, skipTableHtml) {
-    if (!cd) return null;
-    if (skipTableHtml && typeof cd.getData === 'function') {
-      var html = '';
-      try {
-        html = cd.getData('text/html') || '';
-      } catch (err) {
-        html = '';
-      }
-      if (/<table[\s>]/i.test(html)) return null;
-    }
-    var files = cd.files;
-    if (files && files.length) {
-      for (var i = 0; i < files.length; i++) {
-        if (files[i] && String(files[i].type || '').indexOf('image/') === 0) return files[i];
-      }
-    }
-    var items = cd.items;
-    if (items) {
-      for (var j = 0; j < items.length; j++) {
-        var it = items[j];
-        if (
-          it &&
-          it.kind === 'file' &&
-          String(it.type || '').indexOf('image/') === 0 &&
-          typeof it.getAsFile === 'function'
-        ) {
-          var f = it.getAsFile();
-          if (f) return f;
-        }
-      }
-    }
-    return null;
-  }
-
-  function fileToBase64(file) {
-    return new Promise(function (resolve, reject) {
-      var reader = new window.FileReader();
-      reader.onload = function () {
-        var url = String(reader.result || '');
-        var comma = url.indexOf(',');
-        resolve(comma >= 0 ? url.slice(comma + 1) : '');
+  var PASTE_MAX_BYTES =
+    (clipboardCore && clipboardCore.PASTE_MAX_BYTES) || 32 * 1024 * 1024;
+  var isFormFieldTarget = clipboardCore
+    ? clipboardCore.isFormFieldTarget
+    : function () {
+        return false;
       };
-      reader.onerror = function () {
-        reject(reader.error || new Error('파일을 읽지 못했습니다'));
+  var pasteImageFile = clipboardCore
+    ? clipboardCore.pasteImageFile
+    : function () {
+        return null;
       };
-      reader.readAsDataURL(file);
-    });
-  }
+  var fileToBase64 = clipboardCore
+    ? clipboardCore.fileToBase64
+    : function () {
+        return Promise.reject(new Error('파일을 읽지 못했습니다'));
+      };
 
   function handleXlsx(ctx) {
     // 빈 문서(office "새로 만들기"): 받은 바이트가 없는 등 빈 워크북으로
@@ -510,7 +479,7 @@
       var f = pasteImageFile(e && e.clipboardData, true);
       if (!f) return;
       e.preventDefault();
-      if (f.size > 32 * 1024 * 1024) {
+      if (f.size > PASTE_MAX_BYTES) {
         ctx.setStatus('붙여넣기 이미지를 넣지 못했습니다');
         return;
       }

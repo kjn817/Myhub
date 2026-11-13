@@ -83,6 +83,7 @@
     "/js/finder-format-slide.js",
     "/js/finder-format-text.js",
     "/js/finder-viewer.js",
+    "/js/craft-clipboard.js",
     "/js/craft-prefetch-core.js",
     "/js/deckcraft-prefetch.js",
     "/js/finder-codec.js",

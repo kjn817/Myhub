@@ -29,6 +29,7 @@ node tests/e2e/<이름>.e2e.cjs  # 단독 실행
 | `hangul-loading` | 한글 로딩 화면이 엔진 로드 전에 보임 (제목·상태·스피너) | 38d30c6 (로딩 화면 조기화) |
 | `browser-viewport` | 보이는 `.bw-stage` 크기가 live-session 뷰포트로 전송됨 | 04cd131 (뷰포트 소스 교정) |
 | `prefetch-engines` | Finder .pptx 노출 시 deck 프리패치 1회(shell·글루·WASM, 재렌더에도 1회) + office.html 자동 프리패치 0건 | F-L1 (5-1, 프리패치 5중복 코어 통합) |
+| `paste-image` | 스텁 엔진 ready 뒤 PNG 붙여넣기 → insert.picture exec 수신 + base64 일치 (deck: 오류 없음, sheet: ok:true 보고) + 공개 API가 코어와 동일 참조 | F-L2 (5-3, 붙여넣기 헬퍼 5중복 코어 통합) |
 
 ## 하네스 (`harness.cjs`)
 
