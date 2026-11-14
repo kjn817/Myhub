@@ -40,6 +40,10 @@ const ANIM_JS = read('public/js/common/anim.js')
 const MENU_ITEMS_JS = read('public/js/common/menu-items.js')
 const DESKTOP_HTML = read('public/desktop.html')
 const DESKTOP_CSS = read('public/css/desktop.css')
+// C-L7 (5-8): 컨텍스트 메뉴 hover·활성·danger·체크·라벨·보조·화살표 규칙은
+// desktop.css에서 공용 코어로 이동했다 — 페이지는 두 파일을 함께 로드한다.
+const CTX_MENU_CSS = read('public/css/common/ctx-menu.css')
+const DESKTOP_CTX_CSS = DESKTOP_CSS + '\n' + CTX_MENU_CSS
 const SHELL_CSS = read('public/shell.css')
 
 const VIEWPORT = { w: 1280, h: 800 }
@@ -281,24 +285,26 @@ describe('desktop.html / CSS 구조 계약', () => {
   // hover/is-active = #0a84ff 솔리드 + 흰 글자, danger = #dc2626.
   // 재구성본의 var(--dt-accent-soft)(#eff6ff 틴트)로 되돌리면 실패한다.
   test('컨텍스트 메뉴 hover·활성 선택 색이 원본 #0a84ff/#dc2626이다', () => {
-    const hover = DESKTOP_CSS.match(/\.dt-ctx-item:hover\s*\{([^}]*)\}/)
+    // C-L7 (5-8): 이 규칙들은 공용 코어(ctx-menu.css)에 있다 — desktop.css
+    // 단독이 아니라 페이지가 함께 로드하는 합집합에서 검사한다.
+    const hover = DESKTOP_CTX_CSS.match(/\.dt-ctx-item:hover\s*\{([^}]*)\}/)
     expect(hover).not.toBeNull()
     expect((hover as RegExpMatchArray)[1]).toContain('background: #0a84ff')
     expect((hover as RegExpMatchArray)[1]).toContain('color: #fff')
-    const active = DESKTOP_CSS.match(/\.dt-ctx-item\.is-active\s*\{([^}]*)\}/)
+    const active = DESKTOP_CTX_CSS.match(/\.dt-ctx-item\.is-active\s*\{([^}]*)\}/)
     expect(active).not.toBeNull()
     expect((active as RegExpMatchArray)[1]).toContain('background: #0a84ff')
-    const danger = DESKTOP_CSS.match(/\.dt-ctx-item\.is-danger:hover\s*\{([^}]*)\}/)
+    const danger = DESKTOP_CTX_CSS.match(/\.dt-ctx-item\.is-danger:hover\s*\{([^}]*)\}/)
     expect(danger).not.toBeNull()
     expect((danger as RegExpMatchArray)[1]).toContain('background: #dc2626')
-    const dangerActive = DESKTOP_CSS.match(/\.dt-ctx-item\.is-danger\.is-active\s*\{([^}]*)\}/)
+    const dangerActive = DESKTOP_CTX_CSS.match(/\.dt-ctx-item\.is-danger\.is-active\s*\{([^}]*)\}/)
     expect(dangerActive).not.toBeNull()
     expect((dangerActive as RegExpMatchArray)[1]).toContain('background: #dc2626')
-    expect(DESKTOP_CSS).not.toMatch(/\.dt-ctx-item:hover[^{]*\{[^}]*--dt-accent-soft/)
+    expect(DESKTOP_CTX_CSS).not.toMatch(/\.dt-ctx-item:hover[^{]*\{[^}]*--dt-accent-soft/)
     // menu.js가 방출하는 클래스는 is-danger다 — 죽은 규칙(.dt-ctx-item-danger)이
     // 아니라 실제 클래스에 danger 색이 걸려 있어야 한다.
-    expect(DESKTOP_CSS).toMatch(/\.dt-ctx-item\.is-danger\s*\{[^}]*color: #dc2626/)
-    expect(DESKTOP_CSS).not.toContain('.dt-ctx-item-danger')
+    expect(DESKTOP_CTX_CSS).toMatch(/\.dt-ctx-item\.is-danger\s*\{[^}]*color: #dc2626/)
+    expect(DESKTOP_CTX_CSS).not.toContain('.dt-ctx-item-danger')
   })
 })
 
@@ -348,9 +354,11 @@ describe('설정 메뉴 — 원본 캡처(2026-11-10) 계약', () => {
 describe('컨텍스트 메뉴 기하 — 운영 서빙본 복원 (2026-11-10 회수본 기준)', () => {
   // 기준은 prod-pull 전사본(다른 세대 파일)이 아니라 2026-11-10에
   // 운영에서 회수한 서빙본 desktop.css다. 재구성 값이 돌아오면 실패해야 한다.
+  // C-L7 (5-8): svg·체크·보조 규칙은 공용 코어에 있으므로 페이지 로드
+  // 합집합(desktop.css + ctx-menu.css)에서 찾는다.
   const rule = (sel: string) => {
     // 규칙은 행 첫머리에서 시작한다 — 후손 선택자(.a:hover .b)를 먼저 잡지 않게 앵커.
-    const m = DESKTOP_CSS.match(new RegExp('(?:^|\\n)' + sel.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s*\\{([^}]*)\\}'))
+    const m = DESKTOP_CTX_CSS.match(new RegExp('(?:^|\\n)' + sel.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s*\\{([^}]*)\\}'))
     return (m as RegExpMatchArray | null)?.[1] ?? ''
   }
 

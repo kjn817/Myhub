@@ -1,0 +1,55 @@
+/* 우클릭/드롭다운 메뉴 공용 스타일 (C-L7, 5-8)
+ *
+ * desktop.css와 office.css에 이중 정의돼 있던 .dt-ctx-* 규칙 중
+ * 바이트 동일한 것을 모은 공용 코어다. desktop.html·office.html이
+ * 각자 페이지 CSS보다 먼저 로드한다.
+ *
+ * 공용에 넣지 않은 것 (맥락별 의도된 차이 — 각 CSS에 남는다):
+ * - .dt-ctx-menu: desktop min-width 200·padding 6·반경 12 + 스크롤바 숨김,
+ *   office min-width 180·padding 5·반경 10 (오피스 메뉴가 조금 더 조밀하다)
+ * - .dt-ctx-item 본 규칙: desktop padding 7px 10px·13.5px, office 6px 9px·13px
+ * - .dt-ctx-shortcut: desktop 12.5px + letter-spacing .02em, office 12px
+ * - .dt-ctx-heading: desktop padding 7px 10px 3px, office 7px 9px 3px
+ * - .dt-ctx-sep: desktop margin 6px 10px, office 5px 8px
+ * 값들이 전 방향으로 일괄 작아지는 체계적 차이라 드리프트가 아니라
+ * 맥락별 의도로 보고 합치지 않았다.
+ */
+.dt-ctx-item:hover { background: #0a84ff; color: #fff; }
+
+.dt-ctx-item.is-danger { color: #dc2626; }
+
+.dt-ctx-item.is-danger:hover { background: #dc2626; color: #fff; }
+
+.dt-ctx-item svg { width: 14px; height: 14px; flex: none; }
+
+/* 메뉴바 드롭다운 확장 (menu.js): 체크 슬롯·보조 텍스트·단축키·비활성·
+   키보드 활성·소제목 — 우클릭 메뉴는 이 필드를 쓰지 않아 무영향 */
+.dt-ctx-item.is-active { background: #0a84ff; color: #fff; }
+
+.dt-ctx-item.is-danger.is-active { background: #dc2626; color: #fff; }
+
+.dt-ctx-item.is-disabled { color: #9ca3af; cursor: default; }
+
+.dt-ctx-item.is-disabled:hover, .dt-ctx-item.is-disabled.is-active { background: none; color: #9ca3af; }
+
+.dt-ctx-check { width: 16px; flex: none; display: inline-flex; align-items: center; }
+
+.dt-ctx-check svg { width: 13px; height: 13px; }
+
+.dt-ctx-label { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.dt-ctx-sub {
+  flex: 0 1 auto; min-width: 0; max-width: 190px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-size: 11.5px; color: #6b7280;
+}
+
+.dt-ctx-item:hover .dt-ctx-sub, .dt-ctx-item.is-active .dt-ctx-sub { color: rgba(255, 255, 255, .8); }
+
+.dt-ctx-item.is-disabled .dt-ctx-sub { color: #9ca3af; }
+
+.dt-ctx-item:hover .dt-ctx-shortcut, .dt-ctx-item.is-active .dt-ctx-shortcut { color: rgba(255, 255, 255, .8); }
+
+.dt-ctx-item .dt-ctx-arrow { flex: none; width: 6px; height: 6px; margin-left: auto; border-right: 1.5px solid #9ca3af; border-bottom: 1.5px solid #9ca3af; transform: rotate(-45deg); }
+
+.dt-ctx-item.is-active .dt-ctx-arrow { border-right-color: #fff; border-bottom-color: #fff; }

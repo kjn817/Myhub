@@ -189,39 +189,14 @@
   .empty { text-align: center; padding: 48px 0; color: var(--faint); font-size: 14px; }
   .empty .lucide { width: 26px; height: 26px; margin-bottom: 10px; opacity: 0.5; }
 
-  /* 모달 */
-  .modal-back { position: fixed; inset: 0; background: rgba(0,0,0,0.25); backdrop-filter: blur(2px); display: none; align-items: center; justify-content: center; z-index: 100; padding: 20px; }
-  .modal-back.open { display: flex; }
-  .modal {
-    background: #fff; border-radius: 12px; width: 100%; max-width: 440px;
-    max-height: 90dvh; overflow-y: auto; overflow-x: hidden; padding: 24px;
-    box-shadow: 0 8px 40px rgba(0,0,0,0.12);
-    animation: pop 0.18s ease;
-  }
-  @keyframes pop { from { transform: scale(0.97) translateY(4px); opacity: 0; } }
-  .modal h3 { font-size: 16px; font-weight: 650; margin-bottom: 20px; letter-spacing: -0.2px; }
-  .fld { margin-bottom: 16px; }
-  .fld label { display: block; font-size: 12px; font-weight: 600; color: var(--gray); margin-bottom: 6px; }
-  .fld input, .fld textarea, .fld select {
-    width: 100%; border: 1px solid var(--line); border-radius: 8px;
-    padding: 10px 12px; font-size: 14px; font-family: inherit; background: #fff; color: var(--ink);
-    transition: border-color 0.15s;
-  }
-  .fld input:focus, .fld textarea:focus, .fld select:focus { outline: none; border-color: var(--ink); }
-  .fld textarea { min-height: 72px; resize: vertical; }
-  .fld-row { display: flex; gap: 12px; }
-  .fld-row .fld { flex: 1; min-width: 0; }
-  .fld input, .fld select, .fld textarea { box-sizing: border-box; }
-  .modal-acts { display: flex; gap: 8px; justify-content: flex-end; margin-top: 24px; align-items: center; }
+  /* 모달 — 본 규칙은 /css/common/modal.css 공용 코어에 있다 (C-L6, 5-8).
+     여기에는 일정 전용 델타만 남는다. */
+  .modal { overflow-x: hidden; }
+  .fld-row .fld { min-width: 0; }
+  /* .fld input/select/textarea box-sizing 재선언은 삭제했다 — 파일 위쪽
+     * { box-sizing: border-box; } 리셋이 이미 같은 값을 준다 (무의미 중복) */
+  .modal-acts { align-items: center; }
   .modal-acts .grow { flex: 1; }
-  .m-btn {
-    border: none; border-radius: 8px; padding: 9px 16px; font-size: 13px; font-weight: 600;
-    cursor: pointer; font-family: inherit; transition: all 0.15s;
-  }
-  .m-btn.ghost { background: none; color: var(--gray); }
-  .m-btn.ghost:hover { background: var(--bg-hover); color: var(--ink); }
-  .m-btn.solid { background: var(--ink); color: #fff; }
-  .m-btn.solid:hover { background: #333; }
   .m-btn.text-danger { background: none; color: var(--danger); font-weight: 500; }
   .m-btn.text-danger:hover { background: #fef2f2; }
 
@@ -231,8 +206,7 @@
     .dnum { font-size: 12px; width: 24px; height: 24px; }
     .ev-label { display: none; }
     .s-time { min-width: 64px; font-size: 12px; }
-    .modal { border-radius: 16px 16px 0 0; max-width: none; max-height: 85dvh; }
-    .modal-back { align-items: flex-end; padding: 0; }
+    .modal { max-height: 85dvh; }
     .wk-col { min-height: 128px; padding: 6px 3px; }
     .wk-ev { font-size: 10.5px; padding: 4px; }
     .wk-time { display: none; }

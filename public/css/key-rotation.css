@@ -1,24 +1,13 @@
 /* 키 로테이션 페이지 전용 스타일 (2026-11-01 CSP 파일럿으로 key-rotation.html의
-   인라인 <style> 블록에서 추출 — style-src-elem 'self' enforce의 전제) */
-.wrap { max-width: 600px; margin: 0 auto; padding: 20px; }
-.card { background: white; border: 1px solid #eee; border-radius: 12px; padding: 24px; margin-bottom: 16px; }
-.card h2 { margin: 0 0 16px 0; font-size: 18px; }
-.desc { color: #666; font-size: 14px; line-height: 1.6; margin-bottom: 20px; }
-.field { margin-bottom: 16px; }
-.field label { display: block; font-size: 14px; font-weight: 600; margin-bottom: 8px; }
-.field input { width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 8px; font-size: 16px; box-sizing: border-box; }
-.field input:focus { outline: none; border-color: #007aff; }
-.btn { width: 100%; padding: 14px; background: #007aff; color: white; border: none; border-radius: 8px; font-size: 16px; font-weight: 600; cursor: pointer; }
-.btn:disabled { background: #ccc; cursor: not-allowed; }
-.btn.secondary { background: #f0f0f0; color: #333; margin-top: 8px; }
+   인라인 <style> 블록에서 추출 — style-src-elem 'self' enforce의 전제)
+   공용 규칙은 /css/common/form-panel.css에 있다 (C-L5, 5-8). 여기에는
+   key-rotation 전용(.warn·table.census·.info ol)과 공용과 다른 본 규칙
+   (.error/.success에 line-height: 1.6)만 남는다. */
 .error { display: none; background: #fee; border: 1px solid #fcc; color: #c00; padding: 12px; border-radius: 8px; margin-bottom: 16px; font-size: 14px; line-height: 1.6; }
-.error.show { display: block; }
 .success { display: none; background: #efe; border: 1px solid #cfc; color: #0a0; padding: 12px; border-radius: 8px; margin-bottom: 16px; font-size: 14px; line-height: 1.6; }
-.success.show { display: block; }
 .warn { display: none; background: #fff7e0; border: 1px solid #e6c860; color: #7a5b00; padding: 12px; border-radius: 8px; margin-bottom: 16px; font-size: 14px; line-height: 1.6; }
 .warn.show { display: block; }
-.info { background: #f8f8f8; border-radius: 8px; padding: 16px; font-size: 13px; color: #666; line-height: 1.6; }
-.info ul, .info ol { margin: 8px 0; padding-left: 20px; }
+.info ol { margin: 8px 0; padding-left: 20px; }
 table.census { display: none; width: 100%; border-collapse: collapse; margin-bottom: 16px; font-size: 14px; }
 table.census th, table.census td { border: 1px solid #eee; padding: 8px; text-align: left; }
 table.census tr.mismatch td { background: #fee; color: #c00; }

@@ -34,12 +34,8 @@ body {
 }
 #msgs::-webkit-scrollbar { display: none; /* Chrome/Safari */ }
 #msgs > * { width: 100%; max-width: 800px; }
-.input-bar {
-  position: sticky; bottom: 0; z-index: 10;
-  padding: 12px 20px calc(16px + env(safe-area-inset-bottom));
-  background: linear-gradient(to top, var(--bg) 60%, transparent);
-  max-width: 800px; margin: 0 auto; width: 100%; box-sizing: border-box;
-}
+/* .input-bar 규칙은 아래 "입력 바 (플로팅)" 섹션에 한 번만 둔다 (C-L1, 5-8:
+   바이트 동일 블록이 두 곳에 있었다) */
 /* 상단바 불투명 (채팅방 전용) */
 .g-nav { background: #fff !important; backdrop-filter: none !important; }
 @media (max-width: 768px) {
@@ -83,7 +79,8 @@ body {
   margin-top: calc(var(--topnav-h) + env(safe-area-inset-top));
   overflow: hidden !important;
 }
-.chat-layout { flex: 1; min-height: 0; overflow: hidden; }
+/* .chat-layout은 아래 "3열 레이아웃" 섹션의 규칙 하나로 합쳤다 (C-L2, 5-8:
+   flex: 1·min-height: 0이 두 곳에서 재선언됐다 — overflow: hidden도 함께 이동) */
 .chat-main { overflow: hidden; }
 .chat-wrap { overflow: hidden; }
 /* 채팅 영역 전체에서 휠 스크롤이 #msgs로 전달되도록 */
@@ -345,7 +342,7 @@ body {
 }
 /* 3열 레이아웃 */
 .chat-layout {
-  flex: 1; display: flex; min-height: 0;
+  flex: 1; display: flex; min-height: 0; overflow: hidden;
   max-width: 1400px; width: 100%; margin: 0 auto;
   position: relative;
 }
