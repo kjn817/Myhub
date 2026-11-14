@@ -32,6 +32,8 @@ import * as path from 'path'
 
 const ROOT = path.resolve(__dirname, '..')
 const OFFICE_JS = fs.readFileSync(path.join(ROOT, 'public', 'js', 'office.js'), 'utf-8')
+const DRIVE_IO_JS = fs.readFileSync(path.join(ROOT, 'public', 'js', 'common', 'drive-io.js'), 'utf-8')
+const JSON_STORE_JS = fs.readFileSync(path.join(ROOT, 'public', 'js', 'common', 'json-store.js'), 'utf-8')
 const OFFICE_BOOT_JS = fs.readFileSync(path.join(ROOT, 'public', 'js', 'office-boot.js'), 'utf-8')
 const OFFICE_HTML = fs.readFileSync(path.join(ROOT, 'public', 'office.html'), 'utf-8')
 const OFFICE_CSS = fs.readFileSync(path.join(ROOT, 'public', 'css', 'office.css'), 'utf-8')
@@ -52,6 +54,9 @@ function setupOffice(opts: { autoNew?: boolean; templateOk?: boolean; openOk?: b
   // office.js IIFE는 #officeStart가 있으면 자동 부팅한다 — 픽스처를 넣기
   // 전에 먼저 로드해 자동 부팅을 피하고 createApp만 직접 부른다.
   doc.body.innerHTML = ''
+  // F-L5/F-L7: 공용 코어를 office.js보다 먼저 뜬다 (운영 정적 태그 순서).
+  new Function('window', 'document', DRIVE_IO_JS)(win, doc)
+  new Function('window', 'document', JSON_STORE_JS)(win, doc)
   new Function('window', 'document', OFFICE_JS)(win, doc)
   doc.body.innerHTML = `
 <section class="office-boot-loading" id="officeBootLoading" aria-label="불러오는 중">

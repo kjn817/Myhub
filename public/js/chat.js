@@ -174,6 +174,38 @@ function todayDivider() {
   $('msgs').appendChild(div);
 }
 
+// 메시지 그룹 + 첫 행 생성 (addMsg·prependMsg 공유, F-L9).
+// 반환: {group, content} — content는 버블·피드백을 붙이는 자리.
+function createMsgGroup(isMine, personaId, persona) {
+  const group = document.createElement('div');
+  group.className = 'msg-group' + (isMine ? ' mine' : '');
+  group.dataset.sender = isMine ? 'mine' : personaId;
+  const row = document.createElement('div');
+  row.className = 'msg-row';
+  if (!isMine && persona) {
+    row.innerHTML = `<img class="avatar" src="${escapeHtml(persona.avatar)}" alt="">` +
+      `<div class="content"><div class="sender">${escapeHtml(persona.name)}</div></div>`;
+  } else {
+    row.innerHTML = `<div class="content"></div>`;
+  }
+  group.appendChild(row);
+  return { group, content: group.querySelector('.content') };
+}
+
+// /api/ai/chat 전송 + 본문 파싱 (본 전송·다시 생성 공유, F-L9).
+async function postAiChat(personaId, reqState) {
+  const r = await fetch('/api/ai/chat', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ personaId, conversationId: currentConvId, messages: history.slice(-20) }),
+    signal: reqState.controller.signal,
+  });
+  // 응답을 받았지만 본문이 JSON이 아니면(서버 500의 HTML 응답 등)
+  // 연결 실패와 구분해 서버 오류로 고정한다
+  const d = await r.json().catch(() => null);
+  return { r, d };
+}
+
 function addMsg(role, text, personaId, meta, sources, images, messageId, approvalRequests) {
   const wrap = $('msgs');
   const persona = personas.find((p) => p.id === personaId);
@@ -184,18 +216,7 @@ function addMsg(role, text, personaId, meta, sources, images, messageId, approva
   const groupKey = isMine ? 'mine' : personaId;
   if (!group || !group.classList.contains('msg-group') ||
       group.dataset.sender !== groupKey || group.classList.contains('typing-group')) {
-    group = document.createElement('div');
-    group.className = 'msg-group' + (isMine ? ' mine' : '');
-    group.dataset.sender = groupKey;
-    const row = document.createElement('div');
-    row.className = 'msg-row';
-    if (!isMine && persona) {
-      row.innerHTML = `<img class="avatar" src="${escapeHtml(persona.avatar)}" alt="">` +
-        `<div class="content"><div class="sender">${escapeHtml(persona.name)}</div></div>`;
-    } else {
-      row.innerHTML = `<div class="content"></div>`;
-    }
-    group.appendChild(row);
+    group = createMsgGroup(isMine, personaId, persona).group;
     wrap.appendChild(group);
   }
 
@@ -362,15 +383,7 @@ async function send() {
   armCancelButton();
 
   try {
-    const r = await fetch('/api/ai/chat', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ personaId, conversationId: currentConvId, messages: history.slice(-20) }),
-      signal: reqState.controller.signal,
-    });
-    // 응답을 받았지만 본문이 JSON이 아니면(서버 500의 HTML 응답 등)
-    // 연결 실패와 구분해 서버 오류로 고정한다
-    const d = await r.json().catch(() => null);
+    const { r, d } = await postAiChat(personaId, reqState);
     if (typing) typing.remove();
     if (!d) {
       addMsg('assistant', '서버 응답을 읽지 못했어요. 서버에서 문제가 생겼을 수 있어요 잠시 후 다시 시도해 주세요.', personaId);
@@ -912,19 +925,7 @@ function prependMsg(role, text, personaId, meta, messageId) {
   const wrap = $('msgs');
   const persona = personas.find((p) => p.id === personaId);
   const isMine = role === 'user';
-  const group = document.createElement('div');
-  group.className = 'msg-group' + (isMine ? ' mine' : '');
-  group.dataset.sender = isMine ? 'mine' : personaId;
-  const row = document.createElement('div');
-  row.className = 'msg-row';
-  if (!isMine && persona) {
-    row.innerHTML = `<img class="avatar" src="${escapeHtml(persona.avatar)}" alt="">` +
-      `<div class="content"><div class="sender">${escapeHtml(persona.name)}</div></div>`;
-  } else {
-    row.innerHTML = `<div class="content"></div>`;
-  }
-  group.appendChild(row);
-  const content = group.querySelector('.content');
+  const { group, content } = createMsgGroup(isMine, personaId, persona);
   const bubble = document.createElement('div');
   bubble.className = 'bubble';
   bubble.innerHTML = renderMarkdown(text);
@@ -1153,15 +1154,7 @@ async function sendRegenerate(userText, bubble, container) {
   // I-02: 다시 생성도 같은 타임아웃을 건다 (취소 버튼은 본 전송 전용)
   const reqState = startChatRequest();
   try {
-    const r = await fetch('/api/ai/chat', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ personaId, conversationId: currentConvId, messages: history.slice(-20) }),
-      signal: reqState.controller.signal,
-    });
-    // 응답을 받았지만 본문이 JSON이 아니면(서버 500의 HTML 응답 등)
-    // 연결 실패와 구분해 서버 오류로 고정한다
-    const d = await r.json().catch(() => null);
+    const { r, d } = await postAiChat(personaId, reqState);
     if (bubble) { bubble.style.opacity = ''; }
     if (!d) {
       fail('서버 응답을 읽지 못해 다시 생성하지 못했어요. 잠시 후 다시 시도해 주세요.');

@@ -38,6 +38,7 @@ import * as path from 'path';
 
 const ROOT = path.resolve(__dirname, '..');
 const FONTS_JS = fs.readFileSync(path.join(ROOT, 'public/js/fonts.js'), 'utf-8');
+const HTTP_JSON_JS = fs.readFileSync(path.join(ROOT, 'public/js/common/http-json.js'), 'utf-8');
 const SHEET_JS = fs.readFileSync(path.join(ROOT, 'public/js/sheet-gridcraft.js'), 'utf-8');
 const HWP_JS = fs.readFileSync(path.join(ROOT, 'public/js/finder-format-hwp.js'), 'utf-8');
 const SHEET_CSS = fs.readFileSync(path.join(ROOT, 'public/css/sheet.css'), 'utf-8');
@@ -54,6 +55,8 @@ function setupSheetBridge() {
   const win = getWin();
   const doc = getDoc();
   doc.body.innerHTML = '<div id="sheet-host"></div>';
+  // F-L8: http-json 공용 코어를 fonts.js보다 먼저 뜬다 (운영 정적 태그 순서).
+  new Function('window', 'document', HTTP_JSON_JS)(win, doc);
   new Function('window', 'document', FONTS_JS)(win, doc);
   new Function('window', 'document', SHEET_JS)(win, doc);
   const api = win.MyHubSheetGridcraft;

@@ -17,6 +17,8 @@
  */
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
+require('../public/js/common/anim.js')
+// eslint-disable-next-line @typescript-eslint/no-require-imports
 const icons = require('../public/js/desktop/desktop-icons.js')
 
 const IDS = ['finder', 'browser', 'memo', 'schedule', 'todo', 'chat', 'studio', 'excel', 'hangul', 'powerpoint', 'pdf']

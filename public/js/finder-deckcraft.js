@@ -152,6 +152,7 @@
   // 잡고 있는가 보낸 때만 복사한다 — postMessage transfer가 원본을
   // detach하므로 캐시를 그대로 남기면 두 번째 전송이 빈 껍데기가 낸다).
   var fallbackCache = new WeakMap();
+  var fontBytesWarned = false;
   function loadFallbackFonts(fetchFn, specs) {
     if (!fetchFn) return Promise.resolve([]);
     var list = Array.isArray(specs) && specs.length ? specs : FALLBACK_FONTS;
@@ -167,31 +168,28 @@
     }
     var hit = byKey.get(key);
     if (hit) return hit;
-    var p = Promise.all(
-      list.map(function (spec) {
-        return Promise.resolve()
-          .then(function () {
-            return fetchFn(versionedAssetUrl(spec.url));
-          })
-          .then(function (res) {
-            if (!res || !res.ok) throw new Error('fallback font http ' + (res && res.status));
-            return res.arrayBuffer();
-          })
-          .then(function (buf) {
-            return {
-              family: spec.family,
-              weight: spec.weight,
-              style: spec.style,
-              u8: new Uint8Array(buf),
-            };
-          })
-          .catch(function () {
-            return null; // 폴백 실패는 넣기를 막지 않는다
-          });
-      }),
-    ).then(function (loaded) {
-      return loaded.filter(Boolean);
-    });
+    // fetch 본문은 fonts.js의 loadFontBytes 공용본문(F-L10)을 쓴다 —
+    // fonts.js는 정적 태그라 이 모듈보다 항상 먼저 뜬다.
+    var loader =
+      (typeof window !== 'undefined' &&
+        window.MyHubFonts &&
+        window.MyHubFonts.loadFontBytes) ||
+      (typeof globalThis !== 'undefined' &&
+        globalThis.MyHubFonts &&
+        globalThis.MyHubFonts.loadFontBytes) ||
+      null;
+    var p;
+    if (typeof loader === 'function') {
+      p = loader(fetchFn, list, 'fallback').then(function (loaded) {
+        return loaded.filter(Boolean);
+      });
+    } else {
+      if (!fontBytesWarned) {
+        fontBytesWarned = true;
+        console.warn('[finder-deckcraft] fonts.js(loadFontBytes)가 없어 폴백 폰트를 받지 않습니다');
+      }
+      p = Promise.resolve([]);
+    }
     byKey.set(key, p);
     return p;
   }

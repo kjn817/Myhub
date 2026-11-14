@@ -33,6 +33,8 @@ const STATE_JS = fs.readFileSync(path.join(ROOT, 'public', 'js', 'desktop', 'sta
 const TILES_JS = fs.readFileSync(path.join(ROOT, 'public', 'js', 'desktop', 'tiles.js'), 'utf-8')
 const MENU_JS = fs.readFileSync(path.join(ROOT, 'public', 'js', 'desktop', 'menu.js'), 'utf-8')
 const DOCK_JS = fs.readFileSync(path.join(ROOT, 'public', 'js', 'desktop', 'dock.js'), 'utf-8')
+const ANIM_JS = fs.readFileSync(path.join(ROOT, 'public', 'js', 'common', 'anim.js'), 'utf-8')
+const MENU_ITEMS_JS = fs.readFileSync(path.join(ROOT, 'public', 'js', 'common', 'menu-items.js'), 'utf-8')
 const WINDOWS_JS = fs.readFileSync(path.join(ROOT, 'public', 'js', 'desktop', 'windows.js'), 'utf-8')
 const DESKTOP_HTML = fs.readFileSync(path.join(ROOT, 'public', 'desktop.html'), 'utf-8')
 
@@ -60,6 +62,9 @@ function loadStateApi(): any {
 function loadDesktopGlobals(): void {
   // 운영 로드 순서와 동일하게 전역을 먼저 세운다 (windows.js가 dock·tiles·
   // menu 전역을 lazy 조회하므로 매니저 생성 전에 있어야 한다).
+  // F-L11/F-L13: menu-items·anim 공용 코어도 windows.js보다 먼저 뜬다.
+  new Function('window', 'document', ANIM_JS)(getWin(), getDoc())
+  new Function('window', 'document', MENU_ITEMS_JS)(getWin(), getDoc())
   new Function('window', 'document', TILES_JS)(getWin(), getDoc())
   new Function('window', 'document', MENU_JS)(getWin(), getDoc())
   new Function('window', 'document', DOCK_JS)(getWin(), getDoc())

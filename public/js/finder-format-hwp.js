@@ -203,46 +203,75 @@
     return !!(ctx.minimalChrome || ctx.studioEmbed);
   }
 
-  function wireStudioFileMenu(ctx, state, container) {
-    if (!studioEmbedOn(ctx)) return;
-    if (state.menuWireFor === container) return;
-    state.menuWireFor = container;
-    state.menuWiredOk = false;
-    state.menuWire = { timers: [] };
+  // iframe 확장 배선 재시도 골격 (F-L14) — wireStudioFileMenu·
+  // wireMenuHost 공유. 가드·wire-for 중복 방지·tryWire 골격·load
+  // 리스너·[300, 900, 2000, 4500] 재시도 스케줄이 같다. 본문만
+  // opts.tryBody(win, api)로 받는다 (api.clearTimers는 현재 wire의
+  // 타이머를 비운다 — 원본이 state.menuWire를 live로 읽던 그대로).
+  // opts: {enabled, wireForKey, wireKey, errorKey, setup?, tryBody}.
+  function wireIframeRetry(ctx, state, container, opts) {
+    if (!opts.enabled(ctx)) return;
+    if (state[opts.wireForKey] === container) return;
+    state[opts.wireForKey] = container;
+    state[opts.wireKey] = { timers: [] };
+    if (typeof opts.setup === 'function') opts.setup(state);
+    var clearTimers = function () {
+      var w = state[opts.wireKey];
+      if (!w) return;
+      w.timers.forEach(function (t) {
+        clearTimeout(t);
+      });
+      w.timers = [];
+    };
     var tryWire = function () {
       if (!ctx.isCurrent()) return;
       var frame = container.querySelector('iframe');
       var win = frame && frame.contentWindow;
       if (!win) return;
       try {
+        opts.tryBody(win, { clearTimers: clearTimers });
+      } catch (e) {
+        state[opts.errorKey] = String((e && e.message) || e);
+      }
+    };
+    container.addEventListener('load', tryWire, true);
+    tryWire();
+    [300, 900, 2000, 4500].forEach(function (ms) {
+      state[opts.wireKey].timers.push(setTimeout(tryWire, ms));
+    });
+  }
+
+  function wireStudioFileMenu(ctx, state, container) {
+    wireIframeRetry(ctx, state, container, {
+      enabled: studioEmbedOn,
+      wireForKey: 'menuWireFor',
+      wireKey: 'menuWire',
+      errorKey: 'menuWireError',
+      setup: function (s) {
+        s.menuWiredOk = false;
+      },
+      tryBody: function (win, api) {
         installPrintOpenShim(win);
         if (win.__myhubFileMenuOk) {
           if (!state.menuWiredOk) {
             state.menuWiredOk = true;
-            state.menuWire.timers.forEach(function (t) {
-              clearTimeout(t);
-            });
-            state.menuWire.timers = [];
+            api.clearTimers();
           }
           return;
         }
         state.menuWiredOk = false;
         var ext = win.__myhubFileMenu;
         if (ext && typeof ext.enable === 'function') ext.enable();
-      } catch (e) {
-        state.menuWireError = String((e && e.message) || e);
-      }
-    };
-    container.addEventListener('load', tryWire, true);
-    tryWire();
-    [300, 900, 2000, 4500].forEach(function (ms) {
-      state.menuWire.timers.push(setTimeout(tryWire, ms));
+      },
     });
   }
 
-  function listenFileActions(ctx, state) {
-    if (!studioEmbedOn(ctx) || state.fileActionListening) return;
-    state.fileActionListening = true;
+  // 에디터 iframe 메시지 리스너 골격 (F-L14) — listenFileActions·
+  // listenMenuHost 공유. isCurrent 자가 해제·origin·frame/source
+  // 검증을 합치고, 디스패치만 dispatch(d, frame)로 받는다. 가드와
+  // listening 플래그 검사는 호출처가 한다.
+  function listenEditorMessage(ctx, state, flagKey, dispatch) {
+    state[flagKey] = true;
     var onMessage = function (e) {
       if (!ctx.isCurrent()) {
         window.removeEventListener('message', onMessage);
@@ -254,6 +283,14 @@
         : null;
       if (!frame || !frame.contentWindow || e.source !== frame.contentWindow) return;
       var d = e.data || {};
+      dispatch(d, frame);
+    };
+    window.addEventListener('message', onMessage);
+  }
+
+  function listenFileActions(ctx, state) {
+    if (!studioEmbedOn(ctx) || state.fileActionListening) return;
+    listenEditorMessage(ctx, state, 'fileActionListening', function (d, frame) {
       if (d.type === 'myhub-hwp:request-picture') {
         ctx.requestPicture(function (name, bytes) {
           if (!ctx.isCurrent() || !frame.contentWindow || !bytes) return;
@@ -282,8 +319,7 @@
       ) {
         state.saveAsViaEditor();
       }
-    };
-    window.addEventListener('message', onMessage);
+    });
   }
 
   function menuHostOn(ctx) {
@@ -295,51 +331,26 @@
   }
 
   function wireMenuHost(ctx, state, container) {
-    if (!menuHostOn(ctx)) return;
-    if (state.menuHostWireFor === container) return;
-    state.menuHostWireFor = container;
-    state.menuHostWire = { timers: [] };
-    var tryWire = function () {
-      if (!ctx.isCurrent()) return;
-      var frame = container.querySelector('iframe');
-      var win = frame && frame.contentWindow;
-      if (!win) return;
-      try {
+    wireIframeRetry(ctx, state, container, {
+      enabled: menuHostOn,
+      wireForKey: 'menuHostWireFor',
+      wireKey: 'menuHostWire',
+      errorKey: 'menuHostWireError',
+      tryBody: function (win, api) {
         if (win.__myhubMenuHostOk) {
-          state.menuHostWire.timers.forEach(function (t) {
-            clearTimeout(t);
-          });
-          state.menuHostWire.timers = [];
+          api.clearTimers();
           if (state.shellAdopted) forwardShellAdopted(state, container);
           return;
         }
         var ext = win.__myhubMenuHost;
         if (ext && typeof ext.enable === 'function') ext.enable();
-      } catch (e) {
-        state.menuHostWireError = String((e && e.message) || e);
-      }
-    };
-    container.addEventListener('load', tryWire, true);
-    tryWire();
-    [300, 900, 2000, 4500].forEach(function (ms) {
-      state.menuHostWire.timers.push(setTimeout(tryWire, ms));
+      },
     });
   }
 
   function listenMenuHost(ctx, state) {
     if (!menuHostOn(ctx) || state.menuHostListening) return;
-    state.menuHostListening = true;
-    var onMessage = function (e) {
-      if (!ctx.isCurrent()) {
-        window.removeEventListener('message', onMessage);
-        return;
-      }
-      if (e.origin !== ORIGIN) return;
-      var frame = state.editorContainer
-        ? state.editorContainer.querySelector('iframe')
-        : null;
-      if (!frame || !frame.contentWindow || e.source !== frame.contentWindow) return;
-      var d = e.data || {};
+    listenEditorMessage(ctx, state, 'menuHostListening', function (d) {
       if (d.type === 'myhub-hwp:menu-items') {
         if (state.qaPending && d.seq === state.qaPending.seq) {
           state.qaPending.finish(d.items);
@@ -366,8 +377,7 @@
         shellMenu: !!d.shellMenu,
       };
       pushMenuHostState(state);
-    };
-    window.addEventListener('message', onMessage);
+    });
   }
 
   function pushMenuHostState(state) {

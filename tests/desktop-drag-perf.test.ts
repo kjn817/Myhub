@@ -46,6 +46,8 @@ const MENU_JS = read('public/js/desktop/menu.js')
 const MENUBAR_JS = read('public/js/desktop/menubar.js')
 const DOCK_JS = read('public/js/desktop/dock.js')
 const WINDOWS_JS = read('public/js/desktop/windows.js')
+const ANIM_JS = read('public/js/common/anim.js')
+const MENU_ITEMS_JS = read('public/js/common/menu-items.js')
 const DESKTOP_CSS = read('public/css/desktop.css')
 
 const VIEWPORT = { w: 1280, h: 800 }
@@ -71,6 +73,10 @@ function loadAll() {
   new Function('window', 'document', MENU_JS)(win, doc)
   new Function('window', 'document', MENUBAR_JS)(win, doc)
   new Function('window', 'document', DOCK_JS)(win, doc)
+  // F-L11/F-L13: menu-items·anim 공용 코어를 windows.js보다 먼저 뜬다
+  // (운영 desktop.html의 정적 태그 순서와 동일).
+  new Function('window', 'document', ANIM_JS)(win, doc)
+  new Function('window', 'document', MENU_ITEMS_JS)(win, doc)
   new Function('window', 'document', WINDOWS_JS)(win, doc)
   return win
 }

@@ -527,31 +527,22 @@
     dispatch({ type: 'menu-request', id: tab.id, seq: seq });
   }
 
+  // 메뉴 항목 매핑 (menu-items.js 공용 코어, F-L11) — 호출 시점에 해석한다.
   function mapLocalMenuItems(nodes, menuId) {
-    var out = [];
-    (Array.isArray(nodes) ? nodes : []).forEach(function (n) {
-      if (!n || typeof n !== 'object') return;
-      if (n.separator) {
-        out.push({ separator: true });
-        return;
-      }
-      if (typeof n.label !== 'string' || !n.label) return;
-      var item = { label: n.label, disabled: !!n.disabled };
-      if (typeof n.shortcut === 'string' && n.shortcut) {
-        item.shortcut = n.shortcut;
-      }
-      if (typeof n.checked === 'boolean') item.checked = n.checked;
-      if (Array.isArray(n.children) && n.children.length) {
-        item.children = mapLocalMenuItems(n.children, menuId);
-      } else if (Array.isArray(n.path)) {
-        var p = n.path.slice();
-        item.onSelect = function () {
-          dispatch({ type: 'menu-exec', id: menuId, path: p });
-        };
-      }
-      out.push(item);
+    var core =
+      (typeof window !== 'undefined' &&
+        window.MyHubMenuItems &&
+        window.MyHubMenuItems.mapMenuItems) ||
+      (typeof globalThis !== 'undefined' &&
+        globalThis.MyHubMenuItems &&
+        globalThis.MyHubMenuItems.mapMenuItems) ||
+      null;
+    if (typeof core !== 'function') {
+      throw new Error('[office-tabs.js] menu-items.js가 먼저 로드되어야 합니다');
+    }
+    return core(nodes, function (p) {
+      dispatch({ type: 'menu-exec', id: menuId, path: p });
     });
-    return out;
   }
 
   function stepLocalMenu(dir) {

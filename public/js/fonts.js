@@ -21,7 +21,7 @@
  *
  * 노출: window.MyHubFonts = { FOLDER_NAME, FONT_EXTENSIONS,
  *   parseFontFileName, load, reload, whenReady, families, faces,
- *   POOL_FACES, loadPoolBytes }
+ *   POOL_FACES, loadPoolBytes, loadFontBytes }
  * POOL_FACES/loadPoolBytes는 실행 프로그램 내장 폰트를 모은 공용 풀
  * (public/fonts/)에이다 풀 엔진 바이너리 push 실행 Drive 페이지 위에
  * 병합한다 (아래 POOL_FACES 주석의 정보).
@@ -193,19 +193,20 @@
     return null;
   }
 
-  /** fetch 응답을 {ok:true} 본문으로 확정하고, 아니면 서버 사유로 수집한다. */
-  function jsonOrThrow(res) {
-    return res
-      .json()
-      .catch(function () {
-        return null;
-      })
-      .then(function (body) {
-        if (res.ok && body && body.ok) return body;
-        var msg =
-          body && body.error ? String(body.error) : '요청이 실패했습니다 (' + res.status + ')';
-        throw new Error(msg);
-      });
+  /** fetch 응답을 {ok:true} 본문으로 확정하고, 아니면 서버 사유로 수집한다 (http-json.js 공용 코어, F-L8). */
+  function jsonOrThrow(res, fallbackMsg) {
+    var core =
+      (typeof window !== 'undefined' &&
+        window.MyHubHttpJson &&
+        window.MyHubHttpJson.jsonOrThrow) ||
+      (typeof globalThis !== 'undefined' &&
+        globalThis.MyHubHttpJson &&
+        globalThis.MyHubHttpJson.jsonOrThrow) ||
+      null;
+    if (typeof core !== 'function') {
+      throw new Error('[fonts.js] http-json.js가 먼저 로드되어야 합니다');
+    }
+    return core(res, fallbackMsg);
   }
 
   var state = {
@@ -445,21 +446,18 @@
     var h = typeof window !== 'undefined' ? window.MyHubAssetUrl : null;
     return typeof h === 'function' ? h(url) : url;
   }
-  var poolCache = typeof WeakMap !== 'undefined' ? new WeakMap() : null;
-  function loadPoolBytes(fetchFn) {
-    if (typeof fetchFn !== 'function') return Promise.resolve([]);
-    if (poolCache) {
-      var hit = poolCache.get(fetchFn);
-      if (hit) return hit;
-    }
-    var p = Promise.all(
-      POOL_FACES.map(function (spec) {
+  // 폰트 목록을 병렬로 받아 {family, weight, style, u8} 배열로 낸다
+  // (F-L10 공용 본문 — loadPoolBytes와 deckcraft의 loadFallbackFonts가
+  // 공유한다. 실패한 항목은 null로 남겨 나머지를 막지 않는다).
+  function loadFontBytes(fetchFn, specs, label) {
+    return Promise.all(
+      specs.map(function (spec) {
         return Promise.resolve()
           .then(function () {
             return fetchFn(versionedAssetUrl(spec.url));
           })
           .then(function (res) {
-            if (!res || !res.ok) throw new Error('pool font http ' + (res && res.status));
+            if (!res || !res.ok) throw new Error(label + ' font http ' + (res && res.status));
             return res.arrayBuffer();
           })
           .then(function (buf) {
@@ -474,7 +472,16 @@
             return null; // 개발 등 폰트 실패한 나머지를 막지 않는다
           });
       }),
-    ).then(function (list) {
+    );
+  }
+  var poolCache = typeof WeakMap !== 'undefined' ? new WeakMap() : null;
+  function loadPoolBytes(fetchFn) {
+    if (typeof fetchFn !== 'function') return Promise.resolve([]);
+    if (poolCache) {
+      var hit = poolCache.get(fetchFn);
+      if (hit) return hit;
+    }
+    var p = loadFontBytes(fetchFn, POOL_FACES, 'pool').then(function (list) {
       return list.filter(Boolean);
     });
     if (poolCache) poolCache.set(fetchFn, p);
@@ -492,6 +499,7 @@
     faces: faces,
     POOL_FACES: POOL_FACES,
     loadPoolBytes: loadPoolBytes,
+    loadFontBytes: loadFontBytes,
   };
   if (typeof window !== 'undefined') window.MyHubFonts = api;
   if (typeof globalThis !== 'undefined') globalThis.MyHubFonts = api;

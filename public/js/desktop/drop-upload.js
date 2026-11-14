@@ -24,31 +24,24 @@
     fd.append('files', file);
     if (folderId !== null && folderId !== undefined) fd.append('folder_id', String(folderId));
     return fetch(UPLOAD_URL, { method: 'POST', body: fd }).then(function (res) {
-      return res
-        .json()
-        .catch(function () {
-          return null;
-        })
-        .then(function (body) {
-          if (res.ok && body && body.ok) return body;
-          var msg = body && body.error ? String(body.error) : '업로드에 실패했습니다 (' + res.status + ')';
-          throw new Error(msg);
-        });
+      return jsonOrThrow(res, '업로드에 실패했습니다 (' + res.status + ')');
     });
   }
 
-  /** fetch 응답을 {ok:true} 본문으로 확정하고, 아니면 서버 사유로 던진다. */
-  function jsonOrThrow(res) {
-    return res
-      .json()
-      .catch(function () {
-        return null;
-      })
-      .then(function (body) {
-        if (res.ok && body && body.ok) return body;
-        var msg = body && body.error ? String(body.error) : '요청이 실패했습니다 (' + res.status + ')';
-        throw new Error(msg);
-      });
+  /** fetch 응답을 {ok:true} 본문으로 확정하고, 아니면 서버 사유로 던진다 (http-json.js 공용 코어, F-L8). */
+  function jsonOrThrow(res, fallbackMsg) {
+    var core =
+      (typeof window !== 'undefined' &&
+        window.MyHubHttpJson &&
+        window.MyHubHttpJson.jsonOrThrow) ||
+      (typeof globalThis !== 'undefined' &&
+        globalThis.MyHubHttpJson &&
+        globalThis.MyHubHttpJson.jsonOrThrow) ||
+      null;
+    if (typeof core !== 'function') {
+      throw new Error('[drop-upload.js] http-json.js가 먼저 로드되어야 합니다');
+    }
+    return core(res, fallbackMsg);
   }
 
   /**

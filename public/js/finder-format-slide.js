@@ -883,37 +883,28 @@
     }
 
     // 인쇄 PDF를 통해 iframe로 이어 시스템 인쇄 대화상자에
-    // 전달 한다 (인쇄 정한 등 시트의 printPdfBase64와 같은 방식).
+    // 전달 한다 (인쇄 정한 등 시트의 printPdfBase64와 같은 방식 —
+    // 본문은 뷰어 공용 코어 MyHubFinderViewer.printPdfBytes, F-L15).
     // 인쇄 바이트는 다운로드 파일어느 쪽으로도 있지 않는다. blob
     // URL가 인쇄가 실은 시간을 갖고 파손하고, 어떤 단계가 실패해도
     // 조용히 죽인 않고 상태로 알린다.
     function printPdfBytes(bytes) {
-      try {
-        if (!bytes) throw new Error('empty');
-        var url = URL.createObjectURL(
-          new Blob([bytes], { type: 'application/pdf' }),
-        );
-        var pf = doc.createElement('iframe');
-        pf.setAttribute('aria-hidden', 'true');
-        pf.style.cssText =
-          'position:fixed;right:0;bottom:0;width:1px;height:1px;border:0;opacity:0;';
-        pf.addEventListener('load', function () {
-          setTimeout(function () {
-            try {
-              if (pf.contentWindow) pf.contentWindow.print();
-            } catch (e) {
-              ctx.setStatus('인쇄를 시작하지 못했습니다');
-            }
-            setTimeout(function () {
-              if (pf.parentNode) pf.parentNode.removeChild(pf);
-              URL.revokeObjectURL(url);
-            }, 60000);
-          }, 250);
-        });
-        pf.src = url;
-        doc.body.appendChild(pf);
-      } catch (e) {
+      var fail = function () {
         ctx.setStatus('인쇄를 시작하지 못했습니다');
+      };
+      try {
+        var core =
+          (typeof window !== 'undefined' &&
+            window.MyHubFinderViewer &&
+            window.MyHubFinderViewer.printPdfBytes) ||
+          (typeof globalThis !== 'undefined' &&
+            globalThis.MyHubFinderViewer &&
+            globalThis.MyHubFinderViewer.printPdfBytes) ||
+          null;
+        if (typeof core !== 'function') throw new Error('viewer print core missing');
+        core(doc, bytes, fail);
+      } catch (e) {
+        fail();
       }
     }
 

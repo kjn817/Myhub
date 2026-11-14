@@ -248,6 +248,41 @@
   }
 
   /**
+   * 저장된 창 항목 1개를 검증해 복원용 창 객체로 만든다 (F-L12 —
+   * restoreWindows·parse 공유). 검증에 실패하면 null. seen은 읽고
+   * 설정하지 않는다 (호출처가 설정 시점을 정한다 — 생성 과정은 seen을
+   * 읽지 않아 두 호출처의 설정 시점 차이가 동작에 영향을 주지 않는다).
+   */
+  function restoredWinFromItem(item, seen, spaces, viewport) {
+    if (!item || typeof item !== 'object') return null;
+    if (!findModule(item.module)) return null;
+    if (seen[item.module]) return null;
+    if (
+      !isFiniteNumber(item.x) ||
+      !isFiniteNumber(item.y) ||
+      !isFiniteNumber(item.w) ||
+      !isFiniteNumber(item.h) ||
+      !isFiniteNumber(item.z)
+    ) {
+      return null;
+    }
+    var rect = clampRect({ x: item.x, y: item.y, w: item.w, h: item.h }, viewport);
+    return {
+      id: item.module,
+      module: item.module,
+      x: rect.x,
+      y: rect.y,
+      w: rect.w,
+      h: rect.h,
+      z: item.z,
+      minimized: item.minimized === true,
+      space: spaces.indexOf(item.space) >= 0 ? item.space : spaces[0],
+      mode: item.mode === 'full' || item.mode === 'zoom' ? item.mode : null,
+      prev: clonePrev(item.prev),
+    };
+  }
+
+  /**
    * 저장된 창 목록에서 아직 열리지 않은 창을 저장된 rect 그대로 복원한다.
    * 성능 5라운드(2026-11-13): 부팅 init 비차단화 — /api/artifact를 기다리지
    * 않고 init한 뒤, 스튜디오 모듈이 늦게 등록되면 init 시 parse에서 버려진
@@ -270,33 +305,9 @@
     var restoredActive = null;
     for (var i = 0; i < windows.length; i++) {
       var item = windows[i];
-      if (!item || typeof item !== 'object') continue;
-      if (!findModule(item.module)) continue;
-      if (seen[item.module]) continue;
-      if (
-        !isFiniteNumber(item.x) ||
-        !isFiniteNumber(item.y) ||
-        !isFiniteNumber(item.w) ||
-        !isFiniteNumber(item.h) ||
-        !isFiniteNumber(item.z)
-      ) {
-        continue;
-      }
+      var win = restoredWinFromItem(item, seen, state.spaces, viewport);
+      if (!win) continue;
       if (!next) next = cloneWindows(state.windows);
-      var rect = clampRect({ x: item.x, y: item.y, w: item.w, h: item.h }, viewport);
-      var win = {
-        id: item.module,
-        module: item.module,
-        x: rect.x,
-        y: rect.y,
-        w: rect.w,
-        h: rect.h,
-        z: item.z,
-        minimized: item.minimized === true,
-        space: state.spaces.indexOf(item.space) >= 0 ? item.space : state.spaces[0],
-        mode: item.mode === 'full' || item.mode === 'zoom' ? item.mode : null,
-        prev: clonePrev(item.prev),
-      };
       seen[item.module] = true;
       next.push(win);
       if (item.z > maxZ) maxZ = item.z;
@@ -498,33 +509,10 @@
     var maxZ = 0;
     for (var i = 0; i < rawWindows.length; i++) {
       var item = rawWindows[i];
-      if (!item || typeof item !== 'object') continue;
-      if (!findModule(item.module)) continue;
-      if (seen[item.module]) continue;
-      if (
-        !isFiniteNumber(item.x) ||
-        !isFiniteNumber(item.y) ||
-        !isFiniteNumber(item.w) ||
-        !isFiniteNumber(item.h) ||
-        !isFiniteNumber(item.z)
-      ) {
-        continue;
-      }
+      var win = restoredWinFromItem(item, seen, spaces, viewport);
+      if (!win) continue;
       seen[item.module] = true;
-      var rect = clampRect({ x: item.x, y: item.y, w: item.w, h: item.h }, viewport);
-      windows.push({
-        id: item.module,
-        module: item.module,
-        x: rect.x,
-        y: rect.y,
-        w: rect.w,
-        h: rect.h,
-        z: item.z,
-        minimized: item.minimized === true,
-        space: spaces.indexOf(item.space) >= 0 ? item.space : spaces[0],
-        mode: item.mode === 'full' || item.mode === 'zoom' ? item.mode : null,
-        prev: clonePrev(item.prev),
-      });
+      windows.push(win);
       if (item.z > maxZ) maxZ = item.z;
     }
 

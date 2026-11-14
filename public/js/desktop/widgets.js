@@ -513,13 +513,28 @@
     var wdrag = null;
     var wrz = null;
 
+    // rAF·위치 공용 코어 (anim.js, F-L13) — 호출 시점에 해석한다.
+    function animCore() {
+      return (
+        (typeof window !== 'undefined' && window.MyHubAnim) ||
+        (typeof globalThis !== 'undefined' && globalThis.MyHubAnim) ||
+        null
+      );
+    }
     function raf(fn) {
-      if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') return window.requestAnimationFrame(fn);
-      return setTimeout(fn, 0);
+      var core = animCore();
+      if (!core) throw new Error('[widgets.js] anim.js가 먼저 로드되어야 합니다');
+      return core.raf(fn);
     }
     function cancelRaf(id) {
-      if (typeof window !== 'undefined' && typeof window.cancelAnimationFrame === 'function') window.cancelAnimationFrame(id);
-      else clearTimeout(id);
+      var core = animCore();
+      if (!core) throw new Error('[widgets.js] anim.js가 먼저 로드되어야 합니다');
+      return core.cancelRaf(id);
+    }
+    function copyPositions(map) {
+      var core = animCore();
+      if (!core) throw new Error('[widgets.js] anim.js가 먼저 로드되어야 합니다');
+      return core.copyPositions(map);
     }
 
     // 드래그 중 블러 정확히 2026-11-06 지시로 자의이다 (머티리얼
@@ -730,9 +745,7 @@
       refreshSystem: refreshSystem,
       ready: ready,
       getPositions: function () {
-        var out = {};
-        Object.keys(positions).forEach(function (k) { out[k] = { x: positions[k].x, y: positions[k].y }; });
-        return out;
+        return copyPositions(positions);
       },
       getSizes: function () {
         var out = {};

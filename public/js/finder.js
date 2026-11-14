@@ -1617,13 +1617,22 @@
         });
     }
 
-    function renameFile(row) {
-      // promptFn은 동기 문자열을 내도, 커스텀 모달이 Promise를 내도
-      // 있다 — 검증(취소·빈 값 같은 이름)무시 값이 빈 뒤에 둔다.
-      Promise.resolve(promptFn('파일 이름', row.name)).then(function (answer) {
-        if (answer === null || answer === undefined) return;
+    // promptFn은 동기 문자열을 내도, 커스텀 모달이 Promise를 내도
+    // 있다 — 검증(취소·빈 값·같은 이름 무시)은 값이 빈 뒤에 둔다 (F-L15).
+    // 유효한 이름이면 그 이름을, 아니면 null을 낸다.
+    function promptName(title, def, sameAs) {
+      return Promise.resolve(promptFn(title, def)).then(function (answer) {
+        if (answer === null || answer === undefined) return null;
         var name = String(answer).trim();
-        if (!name || name === row.name) return;
+        if (!name) return null;
+        if (sameAs !== undefined && name === sameAs) return null;
+        return name;
+      });
+    }
+
+    function renameFile(row) {
+      promptName('파일 이름', row.name, row.name).then(function (name) {
+        if (!name) return;
         callJson('/api/drive/files/' + row.fileId + '/rename', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -1697,10 +1706,8 @@
     }
 
     function renameFolder(row) {
-      Promise.resolve(promptFn('폴더 이름', row.name)).then(function (answer) {
-        if (answer === null || answer === undefined) return;
-        var name = String(answer).trim();
-        if (!name || name === row.name) return;
+      promptName('폴더 이름', row.name, row.name).then(function (name) {
+        if (!name) return;
         callJson('/api/drive/folders/' + row.folderId + '/rename', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -1717,9 +1724,7 @@
     }
 
     function createFolder() {
-      Promise.resolve(promptFn('새 폴더 이름', '새 폴더')).then(function (answer) {
-        if (answer === null || answer === undefined) return;
-        var name = String(answer).trim();
+      promptName('새 폴더 이름', '새 폴더').then(function (name) {
         if (!name) return;
         callJson('/api/drive/folders', {
           method: 'POST',
@@ -2611,18 +2616,11 @@
         },
         // 다이얼은 "새 기기에서 가져오기": 기기 파일을 보관함 폴더에
         // 올린다 (오피스와 같은 POST 계약 — 가져오기는 분리된 경로).
+        // 본문은 drive-io.js 공용 코어(F-L5)가 맡는다.
         importFile: function (file, folderId) {
-          var fd = new FormData();
-          fd.append('files', file, file.name);
-          if (folderId) fd.append('folder_id', String(folderId));
-          return fetch('/api/drive/files', { method: 'POST', body: fd })
-            .then(function (res) {
-              if (!res || !res.ok) throw new Error('import http ' + (res && res.status));
-              return res.json();
-            })
-            .then(function (body) {
-              var saved = body && body.files && body.files[0];
-              if (!body || !body.ok || !saved) throw new Error('import shape');
+          return requireDriveIo()
+            .uploadDriveFile(fetch, file, file.name, folderId, 'import')
+            .then(function (saved) {
               return { id: saved.id, filename: saved.filename || file.name };
             });
         },
@@ -2638,6 +2636,24 @@
     // 형식은 동기한 파일을 생기지 않게). version 넣기는 최선
     // 노력이다: 실패해도 저장은 성공하고 다음 저장 base_version
     // 없는 PUT를 쓴다 (office createSaveFlow와 같은 계약).
+    // Drive 생성/조회 공용 코어 (drive-io.js, F-L5) — 없으면 호출 시점에
+    // 명확한 오류를 던진다 (저장 catch가 '저장에 실패했습니다'로 받는다).
+    function requireDriveIo() {
+      var core =
+        (typeof window !== 'undefined' && window.MyHubDriveIo) ||
+        (typeof globalThis !== 'undefined' && globalThis.MyHubDriveIo) ||
+        null;
+      if (!core) throw new Error('[finder.js] drive-io.js가 먼저 로드되어야 합니다');
+      return core;
+    }
+    function listDriveFolder(folderId) {
+      return fetch('/api/drive/list' + (folderId ? '?folder=' + folderId : '')).then(
+        function (res) {
+          return res && res.ok ? res.json() : null;
+        },
+      );
+    }
+
     function finderCreateSave(blob, file, ctx) {
       var picker = getHostPicker();
       if (!picker) {
@@ -2657,31 +2673,19 @@
             name = name.slice(0, name.length - m[1].length) + 'hwpx';
           }
         }
-        var fd = new FormData();
-        fd.append('files', blob, name);
-        if (sel.folderId) fd.append('folder_id', String(sel.folderId));
-        return fetch('/api/drive/files', { method: 'POST', body: fd })
-          .then(function (res) {
-            if (!res || !res.ok) throw new Error('create http ' + (res && res.status));
-            return res.json();
-          })
-          .then(function (body) {
-            var saved = body && body.files && body.files[0];
-            if (!body || !body.ok || !saved) throw new Error('create shape');
+        var driveIo = requireDriveIo();
+        return driveIo
+          .uploadDriveFile(fetch, blob, name, sel.folderId, 'create')
+          .then(function (saved) {
             file.fileId = saved.id;
             file.name = name;
             file.version = null;
             var nameEl = document.getElementById('fvName');
             if (nameEl) nameEl.textContent = name;
-            return fetch('/api/drive/list' + (sel.folderId ? '?folder=' + sel.folderId : ''))
-              .then(function (res) {
-                return res && res.ok ? res.json() : null;
-              })
-              .then(function (listing) {
-                var row = ((listing && listing.files) || []).filter(function (f) {
-                  return f.id === saved.id;
-                })[0];
-                if (row) file.version = row.version || null;
+            return driveIo
+              .resolveDriveFileVersion(listDriveFolder, sel.folderId, saved.id)
+              .then(function (version) {
+                if (version !== null) file.version = version;
               })
               .catch(function (e) {
                 // 넣기 실패는 저장 성공과 섞이지 않는다

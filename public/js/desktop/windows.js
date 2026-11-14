@@ -72,13 +72,37 @@
       if (changed) persist();
     })();
 
+    // rAF 공용 코어 (anim.js, F-L13) — 호출 시점에 해석한다.
+    function animCore() {
+      return (
+        (typeof window !== 'undefined' && window.MyHubAnim) ||
+        (typeof globalThis !== 'undefined' && globalThis.MyHubAnim) ||
+        null
+      );
+    }
     function raf(fn) {
-      if (typeof window.requestAnimationFrame === 'function') return window.requestAnimationFrame(fn);
-      return setTimeout(fn, 0);
+      var core = animCore();
+      if (!core) throw new Error('[windows.js] anim.js가 먼저 로드되어야 합니다');
+      return core.raf(fn);
     }
     function cancelRaf(id) {
-      if (typeof window.cancelAnimationFrame === 'function') window.cancelAnimationFrame(id);
-      else clearTimeout(id);
+      var core = animCore();
+      if (!core) throw new Error('[windows.js] anim.js가 먼저 로드되어야 합니다');
+      return core.cancelRaf(id);
+    }
+
+    // 동일 출처 메시지의 data를 낸다 (아니면 null) (F-L11).
+    function sameOriginData(e) {
+      if (!e || e.origin !== window.location.origin) return null;
+      return e.data || null;
+    }
+    // 메시지 발신 iframe이 속한 창 id를 찾는다 (없으면 null) (F-L11).
+    function findWinIdBySource(source) {
+      var found = null;
+      entries.forEach(function (rec, id) {
+        if (rec.frame && rec.frame.contentWindow && rec.frame.contentWindow === source) found = id;
+      });
+      return found;
     }
 
     function findModule(moduleId) {
@@ -143,13 +167,9 @@
       applyDocTitle(id);
     }
     function onDocTitleMessage(e) {
-      if (!e || e.origin !== window.location.origin) return;
-      var d = e.data;
+      var d = sameOriginData(e);
       if (!d || d.type !== 'myhub:doc-title') return;
-      var found = null;
-      entries.forEach(function (rec, id) {
-        if (rec.frame && rec.frame.contentWindow && rec.frame.contentWindow === e.source) found = id;
-      });
+      var found = findWinIdBySource(e.source);
       if (!found) return;
       setDocTitle(found, {
         name: typeof d.name === 'string' && d.name ? d.name : null,
@@ -159,15 +179,10 @@
     window.addEventListener('message', onDocTitleMessage);
 
     function onNavKeyMessage(e) {
-      if (!e || e.origin !== window.location.origin) return;
-      var d = e.data;
+      var d = sameOriginData(e);
       if (!d || d.type !== 'myhub:desktop-nav-key') return;
       if (d.key !== 'ArrowLeft' && d.key !== 'ArrowRight' && d.key !== 'ArrowUp') return;
-      var found = false;
-      entries.forEach(function (rec) {
-        if (rec.frame && rec.frame.contentWindow && rec.frame.contentWindow === e.source) found = true;
-      });
-      if (!found) return;
+      if (!findWinIdBySource(e.source)) return;
       onKeydown({ key: d.key, ctrlKey: true, preventDefault: function () {} });
     }
     window.addEventListener('message', onNavKeyMessage);
@@ -448,15 +463,22 @@
       }
       return { x: 0, y: 0, w: vp.w, h: Math.max(160, Math.round(h)) };
     }
-    function toggleMaximize(id) {
+    // 최대화/줌 토글 공통 서두 (F-L11) — 창이 없으면 null.
+    function beginModeToggle(id) {
       var cur = findWin(id);
-      if (!cur) return;
+      if (!cur) return null;
       focusById(id);
       cur = findWin(id);
-      if (!cur) return;
-      var vp = getViewport();
-      var kind = modeKind(id);
-      var prev = modePrev(id);
+      if (!cur) return null;
+      return { cur: cur, vp: getViewport(), kind: modeKind(id), prev: modePrev(id) };
+    }
+    function toggleMaximize(id) {
+      var t = beginModeToggle(id);
+      if (!t) return;
+      var cur = t.cur;
+      var vp = t.vp;
+      var kind = t.kind;
+      var prev = t.prev;
       if (kind === 'full') {
         commit(stateApi.resizeWindow(
           stateApi.setWindowMode(state, id, null, null),
@@ -473,14 +495,12 @@
       sync();
     }
     function toggleZoom(id) {
-      var cur = findWin(id);
-      if (!cur) return;
-      focusById(id);
-      cur = findWin(id);
-      if (!cur) return;
-      var vp = getViewport();
-      var kind = modeKind(id);
-      var prev = modePrev(id);
+      var t = beginModeToggle(id);
+      if (!t) return;
+      var cur = t.cur;
+      var vp = t.vp;
+      var kind = t.kind;
+      var prev = t.prev;
       if (kind === 'zoom') {
         commit(stateApi.resizeWindow(
           stateApi.setWindowMode(state, id, null, null),
@@ -1240,33 +1260,20 @@
         seq: seq,
       });
     }
+    // 메뉴 항목 매핑 (menu-items.js 공용 코어, F-L11) — 호출 시점에 해석한다.
     function mapOfficeMenuItems(nodes, exec) {
-      var out = [];
-      (Array.isArray(nodes) ? nodes : []).forEach(function (n) {
-        if (!n || typeof n !== 'object') return;
-        if (n.separator) {
-          out.push({ separator: true });
-          return;
-        }
-        if (typeof n.label !== 'string' || !n.label) return;
-        var item = { label: n.label, disabled: !!n.disabled };
-        if (typeof n.shortcut === 'string' && n.shortcut) {
-          item.shortcut = n.shortcut;
-        }
-        if (typeof n.checked === 'boolean') {
-          item.checked = n.checked;
-        }
-        if (Array.isArray(n.children) && n.children.length) {
-          item.children = mapOfficeMenuItems(n.children, exec);
-        } else if (Array.isArray(n.path)) {
-          var p = n.path.slice();
-          item.onSelect = function () {
-            exec(p);
-          };
-        }
-        out.push(item);
-      });
-      return out;
+      var core =
+        (typeof window !== 'undefined' &&
+          window.MyHubMenuItems &&
+          window.MyHubMenuItems.mapMenuItems) ||
+        (typeof globalThis !== 'undefined' &&
+          globalThis.MyHubMenuItems &&
+          globalThis.MyHubMenuItems.mapMenuItems) ||
+        null;
+      if (typeof core !== 'function') {
+        throw new Error('[windows.js] menu-items.js가 먼저 로드되어야 합니다');
+      }
+      return core(nodes, exec);
     }
     function openOfficeMenuDropdown(ctl, rawItems) {
       var menu = getOfficeMenu();
@@ -1308,18 +1315,9 @@
       });
     }
     function onOfficeMenuItemsMessage(e) {
-      if (!e || e.origin !== window.location.origin) return;
-      var d = e.data;
+      var d = sameOriginData(e);
       if (!d || d.type !== 'myhub:office-tabs-menu-items') return;
-      var found = null;
-      entries.forEach(function (rec, id) {
-        if (
-          rec.frame &&
-          rec.frame.contentWindow &&
-          rec.frame.contentWindow === e.source
-        )
-          found = id;
-      });
+      var found = findWinIdBySource(e.source);
       if (!found) return;
       var ctl = officeMenuCtl;
       if (!ctl || !ctl.pending) return;
@@ -1336,18 +1334,9 @@
     window.addEventListener('message', onOfficeMenuItemsMessage);
 
     function onOfficeTabsMessage(e) {
-      if (!e || e.origin !== window.location.origin) return;
-      var d = e.data;
+      var d = sameOriginData(e);
       if (!d || d.type !== 'myhub:office-tabs') return;
-      var found = null;
-      entries.forEach(function (rec, id) {
-        if (
-          rec.frame &&
-          rec.frame.contentWindow &&
-          rec.frame.contentWindow === e.source
-        )
-          found = id;
-      });
+      var found = findWinIdBySource(e.source);
       if (!found) return;
       var st = normalizeOfficeTabState(d);
       if (st) officeTabsByWin.set(found, st);
@@ -1607,13 +1596,9 @@
       finderMenu.open(r.left, r.bottom + 4, items);
     }
     function onFinderToolbarMessage(e) {
-      if (!e || e.origin !== window.location.origin) return;
-      var d = e.data;
+      var d = sameOriginData(e);
       if (!d) return;
-      var found = null;
-      entries.forEach(function (rec, id) {
-        if (rec.frame && rec.frame.contentWindow && rec.frame.contentWindow === e.source) found = id;
-      });
+      var found = findWinIdBySource(e.source);
       if (!found) return;
       if (d.type === 'myhub:finder-toolbar') {
         var rec = entries.get(found);
@@ -1811,13 +1796,9 @@
       searchBox.appendChild(label);
     }
     function onOfficeQuickMessage(e) {
-      if (!e || e.origin !== window.location.origin) return;
-      var d = e.data;
+      var d = sameOriginData(e);
       if (!d || d.type !== 'myhub:office-quick') return;
-      var found = null;
-      entries.forEach(function (rec, id) {
-        if (rec.frame && rec.frame.contentWindow && rec.frame.contentWindow === e.source) found = id;
-      });
+      var found = findWinIdBySource(e.source);
       if (!found) return;
       var rec = entries.get(found);
       if (!rec || !rec.el.querySelector('.myhub-win-quick')) return;
@@ -1829,13 +1810,9 @@
     window.addEventListener('message', onOfficeQuickMessage);
 
     function onOfficeFoldMessage(e) {
-      if (!e || e.origin !== window.location.origin) return;
-      var d = e.data;
+      var d = sameOriginData(e);
       if (!d || d.type !== 'myhub:office-fold') return;
-      var found = null;
-      entries.forEach(function (rec, id) {
-        if (rec.frame && rec.frame.contentWindow && rec.frame.contentWindow === e.source) found = id;
-      });
+      var found = findWinIdBySource(e.source);
       if (!found) return;
       var rec = entries.get(found);
       if (!rec || !rec.el.querySelector('.myhub-win-quick')) return;
@@ -1911,13 +1888,9 @@
       refreshIcons();
     }
     function onWinActionsMessage(e) {
-      if (!e || e.origin !== window.location.origin) return;
-      var d = e.data;
+      var d = sameOriginData(e);
       if (!d || d.type !== 'myhub:win-actions') return;
-      var found = null;
-      entries.forEach(function (rec, id) {
-        if (rec.frame && rec.frame.contentWindow && rec.frame.contentWindow === e.source) found = id;
-      });
+      var found = findWinIdBySource(e.source);
       if (!found) return;
       var rec = entries.get(found);
       if (!rec || !rec.el.querySelector('.myhub-win-actions')) return;
@@ -2035,18 +2008,9 @@
       refreshIcons();
     }
     function onBrowserTabsMessage(e) {
-      if (!e || e.origin !== window.location.origin) return;
-      var d = e.data;
+      var d = sameOriginData(e);
       if (!d || d.type !== 'myhub:browser-tabs') return;
-      var found = null;
-      entries.forEach(function (rec, id) {
-        if (
-          rec.frame &&
-          rec.frame.contentWindow &&
-          rec.frame.contentWindow === e.source
-        )
-          found = id;
-      });
+      var found = findWinIdBySource(e.source);
       if (!found) return;
       var rec = entries.get(found);
       if (!rec || !rec.el.querySelector('.myhub-win-btabs')) return;
@@ -2090,14 +2054,10 @@
       });
     }
     function onAssistantDeclareMessage(e) {
-      if (!e || e.origin !== window.location.origin) return;
-      var d = e.data;
+      var d = sameOriginData(e);
       if (!d || d.type !== 'myhub:assistant-declare') return;
       if (typeof d.personaId !== 'string' || !d.personaId) return;
-      var found = null;
-      entries.forEach(function (rec, id) {
-        if (rec.frame && rec.frame.contentWindow && rec.frame.contentWindow === e.source) found = id;
-      });
+      var found = findWinIdBySource(e.source);
       if (!found) return;
       assistantByWin.set(found, {
         personaId: d.personaId,
@@ -2505,8 +2465,7 @@
     }
 
     function onFinderMessage(e) {
-      if (!e || e.origin !== window.location.origin) return;
-      var d = e.data;
+      var d = sameOriginData(e);
       if (!d) return;
       if (d.type === 'myhub:open-in-app') {
         openInApp(d);

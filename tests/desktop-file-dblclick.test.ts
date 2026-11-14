@@ -28,6 +28,9 @@ const TILES_JS = fs.readFileSync(path.join(ROOT, 'public', 'js', 'desktop', 'til
 const MENU_JS = fs.readFileSync(path.join(ROOT, 'public', 'js', 'desktop', 'menu.js'), 'utf-8')
 const DOCK_JS = fs.readFileSync(path.join(ROOT, 'public', 'js', 'desktop', 'dock.js'), 'utf-8')
 const WINDOWS_JS = fs.readFileSync(path.join(ROOT, 'public', 'js', 'desktop', 'windows.js'), 'utf-8')
+const ANIM_JS = fs.readFileSync(path.join(ROOT, 'public', 'js', 'common', 'anim.js'), 'utf-8')
+const MENU_ITEMS_JS = fs.readFileSync(path.join(ROOT, 'public', 'js', 'common', 'menu-items.js'), 'utf-8')
+const HTTP_JSON_JS = fs.readFileSync(path.join(ROOT, 'public', 'js', 'common', 'http-json.js'), 'utf-8')
 const ICONS_JS = fs.readFileSync(path.join(ROOT, 'public', 'js', 'desktop', 'desktop-icons.js'), 'utf-8')
 const DROP_JS = fs.readFileSync(path.join(ROOT, 'public', 'js', 'desktop', 'drop-upload.js'), 'utf-8')
 const MAIN_JS = fs.readFileSync(path.join(ROOT, 'public', 'js', 'desktop', 'main.js'), 'utf-8')
@@ -91,6 +94,11 @@ function setupDesktop() {
   new Function('window', 'document', TILES_JS)(win, doc)
   new Function('window', 'document', MENU_JS)(win, doc)
   new Function('window', 'document', DOCK_JS)(win, doc)
+  // F-L8/F-L11/F-L13: 공용 코어를 소비자보다 먼저 뜬다 (운영
+  // desktop.html의 정적 태그 순서와 동일).
+  new Function('window', 'document', ANIM_JS)(win, doc)
+  new Function('window', 'document', MENU_ITEMS_JS)(win, doc)
+  new Function('window', 'document', HTTP_JSON_JS)(win, doc)
   new Function('window', 'document', WINDOWS_JS)(win, doc)
   new Function('window', 'document', ICONS_JS)(win, doc)
   new Function('window', 'document', DROP_JS)(win, doc)

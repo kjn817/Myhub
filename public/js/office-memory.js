@@ -32,26 +32,33 @@
     var K_LAST = 'myhub.office.' + appKey + '.lastFile.v1';
     var el = function (id) { return doc.getElementById(id); };
 
-    function storeGet(key, fallback) {
-      if (!storage) return fallback;
-      try {
-        var raw = storage.getItem(key);
-        if (!raw) return fallback;
-        var parsed = JSON.parse(raw);
-        return parsed === null || parsed === undefined ? fallback : parsed;
-      } catch (e) {
-        console.warn('세션 등 메모리 읽기 실패:', e);
-        return fallback;
+    // 저장소 (json-store.js 공용 코어, F-L7)
+    var jsonStoreCore =
+      (typeof window !== 'undefined' && window.MyHubJsonStore) ||
+      (typeof globalThis !== 'undefined' && globalThis.MyHubJsonStore) ||
+      null;
+    var jsonStoreWarned = false;
+    var jsonStoreWarnOnce = function () {
+      if (!jsonStoreWarned) {
+        jsonStoreWarned = true;
+        console.warn('[office-memory.js] json-store.js가 먼저 로드되어야 합니다');
       }
-    }
-    function storeSet(key, value) {
-      if (!storage) return;
-      try {
-        storage.setItem(key, JSON.stringify(value));
-      } catch (e) {
-        console.warn('세션 등 메모리 쓰기 실패:', e);
-      }
-    }
+    };
+    var store = jsonStoreCore
+      ? jsonStoreCore.create(storage, '세션 등 메모리')
+      : {
+          // 코어 부재 시 null-storage와 동등하게 열화한다 (최근 문서는
+          // 비치명 기능이라 페이지를 죽이지 않는다).
+          get: function (key, fallback) {
+            jsonStoreWarnOnce();
+            return fallback;
+          },
+          set: function () {
+            jsonStoreWarnOnce();
+          },
+        };
+    var storeGet = store.get;
+    var storeSet = store.set;
 
     function loadRecents() {
       var list = storeGet(K_RECENT, []);

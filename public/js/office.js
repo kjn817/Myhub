@@ -180,27 +180,33 @@
       }
     }
 
-    // ---------- 저장소 (앱 메모리) ----------
-    function storeGet(key, fallback) {
-      if (!storage) return fallback;
-      try {
-        var raw = storage.getItem(key);
-        if (!raw) return fallback;
-        var parsed = JSON.parse(raw);
-        return parsed === null || parsed === undefined ? fallback : parsed;
-      } catch (e) {
-        console.warn('오피스 앱 메모리 읽기 실패:', e);
-        return fallback;
+    // ---------- 저장소 (앱 메모리: json-store.js 공용 코어, F-L7) ----------
+    var jsonStoreCore =
+      (typeof window !== 'undefined' && window.MyHubJsonStore) ||
+      (typeof globalThis !== 'undefined' && globalThis.MyHubJsonStore) ||
+      null;
+    var jsonStoreWarned = false;
+    var jsonStoreWarnOnce = function () {
+      if (!jsonStoreWarned) {
+        jsonStoreWarned = true;
+        console.warn('[office.js] json-store.js가 먼저 로드되어야 합니다');
       }
-    }
-    function storeSet(key, value) {
-      if (!storage) return;
-      try {
-        storage.setItem(key, JSON.stringify(value));
-      } catch (e) {
-        console.warn('오피스 앱 메모리 쓰기 실패:', e);
-      }
-    }
+    };
+    var store = jsonStoreCore
+      ? jsonStoreCore.create(storage, '오피스 앱 메모리')
+      : {
+          // 코어 부재 시 null-storage와 동등하게 열화한다 (최근 폴더는
+          // 비치명 기능이라 페이지를 죽이지 않는다).
+          get: function (key, fallback) {
+            jsonStoreWarnOnce();
+            return fallback;
+          },
+          set: function () {
+            jsonStoreWarnOnce();
+          },
+        };
+    var storeGet = store.get;
+    var storeSet = store.set;
     // ---------- 내용 캐시 + 진행 표시 fetch (office-fetch.js가 전임) ----------
     var fetchApi = null;
     function getFetchApi() {
@@ -463,6 +469,17 @@
       onViewerClosed();
     }
 
+    // Drive 생성/조회 공용 코어 (drive-io.js, F-L5) — 없으면 호출 시점에
+    // 명확한 오류를 던진다 (저장 catch가 '저장에 실패했습니다'로 받는다).
+    function requireDriveIo() {
+      var core =
+        (typeof window !== 'undefined' && window.MyHubDriveIo) ||
+        (typeof globalThis !== 'undefined' && globalThis.MyHubDriveIo) ||
+        null;
+      if (!core) throw new Error('[office.js] drive-io.js가 먼저 로드되어야 합니다');
+      return core;
+    }
+
     // ---------- 다른 이름으로 저장 (새 문서의 첫 저장) ----------
     function createSaveFlow(blob, file, ctx) {
       return openPicker('save', { initialName: file.name }).then(function (sel) {
@@ -470,20 +487,12 @@
           ctx.setStatus('문서를 취소했습니다');
           return false;
         }
-        var fd = new FormData();
-        fd.append('files', blob, sel.name);
-        if (sel.folderId) fd.append('folder_id', String(sel.folderId));
+        var driveIo = requireDriveIo();
         return Promise.resolve()
           .then(function () {
-            return baseFetch('/api/drive/files', { method: 'POST', body: fd });
+            return driveIo.uploadDriveFile(baseFetch, blob, sel.name, sel.folderId, 'create');
           })
-          .then(function (res) {
-            if (!res || !res.ok) throw new Error('create http ' + (res && res.status));
-            return res.json();
-          })
-          .then(function (body) {
-            var saved = body && body.files && body.files[0];
-            if (!body || !body.ok || !saved) throw new Error('create shape');
+          .then(function (saved) {
             // 파일을 열어 서버가 생성한다 앱 id·이름이 즉시 확정한다.
             // 여기서 실패로 보고하면 사용자가 재시도해 중복 파일이
             // 생긴다. 생성 응답에는 version이 없어 폴더 참조로
@@ -493,10 +502,10 @@
             file.fileId = saved.id;
             file.name = sel.name;
             file.version = null;
-            return listFolder(sel.folderId)
-              .then(function (listing) {
-                var row = (listing.files || []).filter(function (f) { return f.id === saved.id; })[0];
-                if (row) file.version = row.version || null;
+            return driveIo
+              .resolveDriveFileVersion(listFolder, sel.folderId, saved.id)
+              .then(function (version) {
+                if (version !== null) file.version = version;
               })
               .catch(function (err) {
                 // 올리기 실패는 저장 성공을 삼키지 않는다 앱 오직 조용히
@@ -562,20 +571,12 @@
     // 일명 "이 기계에서 가져오기": 기계 파일을 보관함 폴더로 올린다.
     // 파일 생성 POST는 createSaveFlow와 같은 계약(files 파트 + folder_id).
     function importDriveFile(file, folderId) {
-      var fd = new FormData();
-      fd.append('files', file, file.name);
-      if (folderId) fd.append('folder_id', String(folderId));
+      var driveIo = requireDriveIo();
       return Promise.resolve()
         .then(function () {
-          return baseFetch('/api/drive/files', { method: 'POST', body: fd });
+          return driveIo.uploadDriveFile(baseFetch, file, file.name, folderId, 'import');
         })
-        .then(function (res) {
-          if (!res || !res.ok) throw new Error('import http ' + (res && res.status));
-          return res.json();
-        })
-        .then(function (body) {
-          var saved = body && body.files && body.files[0];
-          if (!body || !body.ok || !saved) throw new Error('import shape');
+        .then(function (saved) {
           return { id: saved.id, filename: saved.filename || file.name };
         });
     }

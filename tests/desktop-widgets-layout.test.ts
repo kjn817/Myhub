@@ -21,6 +21,8 @@
  */
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
+require('../public/js/common/anim.js')
+// eslint-disable-next-line @typescript-eslint/no-require-imports
 const widgets = require('../public/js/desktop/widgets.js')
 
 const ORDER = ['today', 'storage', 'system']

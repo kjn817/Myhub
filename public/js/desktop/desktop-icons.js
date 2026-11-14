@@ -321,13 +321,28 @@
     var drag = null;
     var band = null;
 
+    // rAF·위치 공용 코어 (anim.js, F-L13) — 호출 시점에 해석한다.
+    function animCore() {
+      return (
+        (typeof window !== 'undefined' && window.MyHubAnim) ||
+        (typeof globalThis !== 'undefined' && globalThis.MyHubAnim) ||
+        null
+      );
+    }
     function raf(fn) {
-      if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') return window.requestAnimationFrame(fn);
-      return setTimeout(fn, 0);
+      var core = animCore();
+      if (!core) throw new Error('[desktop-icons.js] anim.js가 먼저 로드되어야 합니다');
+      return core.raf(fn);
     }
     function cancelRaf(id) {
-      if (typeof window !== 'undefined' && typeof window.cancelAnimationFrame === 'function') window.cancelAnimationFrame(id);
-      else clearTimeout(id);
+      var core = animCore();
+      if (!core) throw new Error('[desktop-icons.js] anim.js가 먼저 로드되어야 합니다');
+      return core.cancelRaf(id);
+    }
+    function copyPositions(map) {
+      var core = animCore();
+      if (!core) throw new Error('[desktop-icons.js] anim.js가 먼저 로드되어야 합니다');
+      return core.copyPositions(map);
     }
     var destroyed = false;
     var lastTap = null; // 더블탭 열기 추적 { id, time }
@@ -880,9 +895,7 @@
 
     return {
       getPositions: function () {
-        var out = {};
-        Object.keys(positions).forEach(function (k) { out[k] = { x: positions[k].x, y: positions[k].y }; });
-        return out;
+        return copyPositions(positions);
       },
       getPresentIds: function () { return present.slice(); },
       addItem: addItem,

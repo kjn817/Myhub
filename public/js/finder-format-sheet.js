@@ -104,32 +104,28 @@
   // 실패한 시간을 갖고 파손한다. 어떤 단계가 실패해도 조용히 죽인
   // 않고 상태로 알린다.
   function printPdfBase64(ctx, base64) {
+    // base64 → 바이트 변환만 여기서 하고, iframe 인쇄 본문은 뷰어
+    // 공용 코어(MyHubFinderViewer.printPdfBytes, F-L15)가 맡는다.
+    var fail = function () {
+      ctx.setStatus('서식을 시작하지 못했습니다');
+    };
     try {
       if (!base64 || typeof base64 !== 'string') throw new Error('empty');
       var bin = atob(base64);
       var bytes = new Uint8Array(bin.length);
       for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-      var url = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }));
-      var pf = ctx.doc.createElement('iframe');
-      pf.setAttribute('aria-hidden', 'true');
-      pf.style.cssText = 'position:fixed;right:0;bottom:0;width:1px;height:1px;border:0;opacity:0;';
-      pf.addEventListener('load', function () {
-        setTimeout(function () {
-          try {
-            if (pf.contentWindow) pf.contentWindow.print();
-          } catch (e) {
-            ctx.setStatus('서식을 시작하지 못했습니다');
-          }
-          setTimeout(function () {
-            if (pf.parentNode) pf.parentNode.removeChild(pf);
-            URL.revokeObjectURL(url);
-          }, 60000);
-        }, 250);
-      });
-      pf.src = url;
-      ctx.doc.body.appendChild(pf);
+      var core =
+        (typeof window !== 'undefined' &&
+          window.MyHubFinderViewer &&
+          window.MyHubFinderViewer.printPdfBytes) ||
+        (typeof globalThis !== 'undefined' &&
+          globalThis.MyHubFinderViewer &&
+          globalThis.MyHubFinderViewer.printPdfBytes) ||
+        null;
+      if (typeof core !== 'function') throw new Error('viewer print core missing');
+      core(ctx.doc, bytes, fail);
     } catch (e) {
-      ctx.setStatus('서식을 시작하지 못했습니다');
+      fail();
     }
   }
 

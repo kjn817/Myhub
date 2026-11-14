@@ -12,7 +12,7 @@
  * 성공하면 응답의 등 버전으로 교체해 다음 저장도 이어지게 한다.
  * 노출: window.MyHubFinderViewer = { classifyFile, parseCsv,
  *        serializeCsv, extractHwpxText, decodeTextBytes, encodeText,
- *        registerFormat, formats, createViewer }
+ *        printPdfBytes, registerFormat, formats, createViewer }
  */
 (function () {
   'use strict';
@@ -321,6 +321,44 @@
     // 다른 파일이 이름 이전 숨긴 요청인 등 파일 내용을 받아 실패
     // 못하게 하기 위해서 (감사 D5).
     function makeCtx(file, gen) {
+      // createSave(다른 이름으로 저장) 실행 + 완료 처리 (F-L15 —
+      // putContent 첫 저장 분기·saveAsContent 공유). restoreName이
+      // null이 아니면 실패·취소 시 file.name을 그 값으로 되돌린다.
+      // createSave가 file.fileId를 실제 id로 넣으면 현재 숨긴 상태(cur)와
+      // 맞추고, 버려진 세대(gen)의 완료는 현재 상태를 건드리지 않는다.
+      function runCreateSave(blob, restoreName) {
+        if (gen === openGen) {
+          pendingDirty = false;
+          setSaveState('saving');
+        }
+        ctx.setStatus('저장하는 중');
+        return Promise.resolve()
+          .then(function () {
+            return deps.createSave(blob, file, ctx);
+          })
+          .then(function (ok) {
+            if (ok) {
+              if (gen === openGen && cur) {
+                cur.fileId = file.fileId;
+                cur.name = file.name;
+              }
+              ctx.setStatus('저장했습니다');
+              onSaved();
+              if (gen === openGen) setSaveState(pendingDirty ? 'dirty' : 'saved');
+            } else {
+              if (restoreName !== null) file.name = restoreName;
+              if (gen === openGen) setSaveState('dirty');
+            }
+            return !!ok;
+          })
+          .catch(function () {
+            if (restoreName !== null) file.name = restoreName;
+            ctx.setStatus('처음에 실패했습니다');
+            if (gen === openGen) setSaveState('dirty');
+            return false;
+          });
+      }
+
       var ctx = {
         doc: doc,
         body: bodyEl,
@@ -501,40 +539,7 @@
               ctx.setStatus('처음에 실패했습니다');
               return Promise.resolve(false);
             }
-            if (gen === openGen) {
-              pendingDirty = false;
-              setSaveState('saving');
-            }
-            ctx.setStatus('저장하는 중');
-            return Promise.resolve()
-              .then(function () {
-                return deps.createSave(blob, file, ctx);
-              })
-              .then(function (ok) {
-                if (ok) {
-                  // createSave가를 file.fileId실제 로 id넣은 안에 실패
-                  // 현재 숨긴 상태(cur)와 맞떨어 한다 등 등 맞으면
-                  // isCurrent()가 앞으로 false가 등 파일 완료 표시부분
-                  // 이후 비동기 완료 까지 전부. 버려진다 작은(gen)핸들러
-                  // 완료한 현재 상태를 건드리 않게.
-                  if (gen === openGen && cur) {
-                    cur.fileId = file.fileId;
-                    cur.name = file.name;
-                  }
-                  ctx.setStatus('저장했습니다');
-                  onSaved();
-                  paint(pendingDirty ? 'dirty' : 'saved');
-                } else {
-                  // 취소 실패 "모두 아직 담리지"않은 사실이다
-                  paint('dirty');
-                }
-                return !!ok;
-              })
-              .catch(function () {
-                ctx.setStatus('처음에 실패했습니다');
-                paint('dirty');
-                return false;
-              });
+            return runCreateSave(blob, null);
           }
           var fd = new FormData();
           fd.append('file', blob, file.name);
@@ -593,36 +598,7 @@
           }
           var origName = file.name;
           if (name) file.name = name;
-          if (gen === openGen) {
-            pendingDirty = false;
-            setSaveState('saving');
-          }
-          ctx.setStatus('저장하는 중');
-          return Promise.resolve()
-            .then(function () {
-              return deps.createSave(blob, file, ctx);
-            })
-            .then(function (ok) {
-              if (ok) {
-                if (gen === openGen && cur) {
-                  cur.fileId = file.fileId;
-                  cur.name = file.name;
-                }
-                ctx.setStatus('저장했습니다');
-                onSaved();
-                if (gen === openGen) setSaveState(pendingDirty ? 'dirty' : 'saved');
-              } else {
-                file.name = origName;
-                if (gen === openGen) setSaveState('dirty');
-              }
-              return !!ok;
-            })
-            .catch(function () {
-              file.name = origName;
-              ctx.setStatus('처음에 실패했습니다');
-              if (gen === openGen) setSaveState('dirty');
-              return false;
-            });
+          return runCreateSave(blob, origName);
         },
       };
       return ctx;
@@ -792,6 +768,38 @@
     };
   }
 
+  // 인쇄 PDF 바이트를 숨긴 iframe으로 시스템 인쇄 대화상자에 전달한다
+  // (F-L15 공용 본문 — finder-format-sheet의 printPdfBase64와
+  // finder-format-slide의 printPdfBytes가 공유한다). 어떤 단계가
+  // 실패해도 조용히 죽지 않고 onFail로 알린다. blob URL은 인쇄가
+  // 끝날 시간을 갖고 60초 뒤에 파기한다.
+  function printPdfBytes(doc, bytes, onFail) {
+    try {
+      if (!bytes) throw new Error('empty');
+      var url = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }));
+      var pf = doc.createElement('iframe');
+      pf.setAttribute('aria-hidden', 'true');
+      pf.style.cssText = 'position:fixed;right:0;bottom:0;width:1px;height:1px;border:0;opacity:0;';
+      pf.addEventListener('load', function () {
+        setTimeout(function () {
+          try {
+            if (pf.contentWindow) pf.contentWindow.print();
+          } catch (e) {
+            onFail();
+          }
+          setTimeout(function () {
+            if (pf.parentNode) pf.parentNode.removeChild(pf);
+            URL.revokeObjectURL(url);
+          }, 60000);
+        }, 250);
+      });
+      pf.src = url;
+      doc.body.appendChild(pf);
+    } catch (e) {
+      onFail();
+    }
+  }
+
   var api = {
     classifyFile: classifyFile,
     parseCsv: parseCsv,
@@ -799,6 +807,7 @@
     extractHwpxText: extractHwpxText,
     decodeTextBytes: decodeTextBytes,
     encodeText: encodeText,
+    printPdfBytes: printPdfBytes,
     registerFormat: registerFormat,
     formats: formats,
     createViewer: createViewer,
