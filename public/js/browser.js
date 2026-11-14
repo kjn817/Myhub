@@ -314,6 +314,9 @@
     // (2026-11-14 실제 맥 캡처 image-46 대조).
     function applyTabsHosting() {
       if (tabstripEl) tabstripEl.hidden = tabsHosted || tabs.length <= 1;
+      // 창 모드(호스팅)에서는 새 탭 +가 창 바에 있으므로 툴바의 +는
+      // 숨긴다 (두 개가 겹쳐 보이지 않게).
+      if (newTabBtn) newTabBtn.hidden = tabsHosted;
     }
 
     function refreshIcons() {

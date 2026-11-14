@@ -41,6 +41,15 @@ async function standalonePart(t, browser, base) {
   assertEq(s.tabs, 2, `단독: 새 탭 후 탭은 2개여야 한다 (실제: ${s.tabs}개)`);
   assert(!s.hidden, '단독: 탭 2개면 탭 줄이 보여야 한다');
   assert(s.h > 0, `단독: 탭 2개면 탭 줄 높이가 있어야 한다 (실제: ${s.h}px)`);
+  // 탭이 다 들어가면 오버플로(⌄) 버튼은 안 보여야 한다
+  // (.bw-icon-btn의 display:flex가 UA [hidden]을 이겨 계속 보이던 결함).
+  const overflow = await page.evaluate(() => {
+    const btn = document.getElementById('bwTabsOverflow');
+    const r = btn.getBoundingClientRect();
+    return { hidden: btn.hidden, w: Math.round(r.width), h: Math.round(r.height) };
+  });
+  assert(overflow.hidden, '단독: 탭이 다 들어가면 오버플로 버튼은 hidden이어야 한다');
+  assertEq(overflow.w, 0, `단독: 오버플로 버튼은 안 보여야 한다 (실제 너비: ${overflow.w}px)`);
 
   // (3) 두 번째 탭 닫기 → 다시 1개, 탭 줄 사라짐.
   await page.click('.bw-tab:nth-child(2) .bw-tab-close');
@@ -63,6 +72,24 @@ async function windowPart(t, browser, base) {
   await page.waitForSelector('.dt-frame[src*="browser.html"]', { timeout: 15000 });
   // iframe이 탭을 게시할 때까지 대기 (+ 버튼이 렌더링되면 게시 완료).
   await page.waitForSelector('.myhub-win-btabs .myhub-btab-new', { timeout: 15000 });
+  // 창 모드(호스팅)에서는 iframe 툴바의 +가 숨겨져야 한다
+  // (창 바 +와 두 개가 겹쳐 보이지 않게).
+  const frame = page.frame({ url: /browser\.html/ });
+  assert(frame, '창 모드: 브라우저 iframe을 찾을 수 없다');
+  await frame.waitForFunction(
+    () => {
+      const btn = document.getElementById('bwNewTabBtn');
+      return btn && btn.hidden;
+    },
+    { timeout: 10000 },
+  );
+  const hostedPlus = await frame.evaluate(() => {
+    const btn = document.getElementById('bwNewTabBtn');
+    const r = btn.getBoundingClientRect();
+    return { hidden: btn.hidden, w: Math.round(r.width), h: Math.round(r.height) };
+  });
+  assert(hostedPlus.hidden, '창 모드: iframe 툴바의 + 버튼은 hidden이어야 한다');
+  assertEq(hostedPlus.w, 0, `창 모드: iframe 툴바의 + 버튼은 안 보여야 한다 (실제 너비: ${hostedPlus.w}px)`);
 
   const barState = () => page.evaluate(() => {
     const winEl = document.querySelector('.dt-window[data-id="browser"]');

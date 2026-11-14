@@ -129,6 +129,9 @@
 .bw-tabs-menu-item:hover { background: rgba(15, 23, 42, 0.06); }
 .bw-tabs-menu-item.is-active { font-weight: 700; }
 .bw-newtab, .bw-tabs-overflow { align-self: center; }
+/* .bw-icon-btn이 display:flex라 UA의 [hidden] 규칙이 안 먹히므로
+   명시한다. 없으면 오버플로 버튼이 접히지 않고 계속 보인다. */
+.bw-newtab[hidden], .bw-tabs-overflow[hidden] { display: none; }
 .bw-toolbar {
   position: relative;
   display: flex;
