@@ -309,8 +309,11 @@
         console.warn('[browser] 창 바 탭 게시 실패 (무시):', err);
       }
     }
+    // 탭 줄은 창 바에 호스팅되거나(창 모드) 탭이 1개 이하일 때 숨긴다.
+    // 사파리는 탭이 하나면 탭 줄 자체가 없고 주소 캡슐만 있다
+    // (2026-11-14 실제 맥 캡처 image-46 대조).
     function applyTabsHosting() {
-      if (tabstripEl) tabstripEl.hidden = tabsHosted;
+      if (tabstripEl) tabstripEl.hidden = tabsHosted || tabs.length <= 1;
     }
 
     function refreshIcons() {
@@ -374,6 +377,8 @@
       // 창 바에서도 같은 상태를 게시한다 (클릭 접힘이 무관하게 앱
       // 앱이 없으면 앱 않고, 있으면 창 바가 정보 표면을 연다)
       postBrowserTabs(false);
+      // 탭 개수가 바뀌면 탭 줄 표시도 다시 정한다 (1개면 숨김).
+      applyTabsHosting();
     }
 
     function syncNavButtons() {

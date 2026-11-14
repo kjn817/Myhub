@@ -1955,63 +1955,69 @@
       var box = rec.el.querySelector('.myhub-win-btabs');
       if (!box) return;
       var st = browserTabsByWin.get(winId) || null;
-      rec.el.classList.toggle('dt-win-btabs-on', !!st);
+      // 탭이 1개면 카드를 렌더링하지 않고 창 제목을 다시 보인다.
+      // 사파리는 탭이 하나면 탭 줄 자체가 없다 (2026-11-14 실제 맥
+      // 캡처 image-46 대조). 새 탭 + 버튼은 1개일 때도 남긴다.
+      var showTabs = !!(st && st.tabs.length > 1);
+      rec.el.classList.toggle('dt-win-btabs-on', showTabs);
       var sig = browserTabsSignature(winId, st);
       if (sig === browserTabsSig.get(winId)) return;
       browserTabsSig.set(winId, sig);
       box.innerHTML = '';
       if (st) {
-        st.tabs.forEach(function (t) {
-          var wrap = document.createElement('div');
-          wrap.className =
-            'myhub-btab' + (t.id === st.activeId ? ' is-active' : '');
-          var main = document.createElement('button');
-          main.type = 'button';
-          main.className = 'myhub-btab-main';
-          main.setAttribute('role', 'tab');
-          main.setAttribute(
-            'aria-selected',
-            t.id === st.activeId ? 'true' : 'false',
-          );
-          main.setAttribute('data-btab-id', t.id);
-          var fav = document.createElement('span');
-          fav.className = 'myhub-btab-fav';
-          if (t.fav) fav.textContent = t.fav;
-          else fav.innerHTML = '<i data-lucide="globe"></i>';
-          main.appendChild(fav);
-          var name = document.createElement('span');
-          name.className = 'myhub-btab-name';
-          name.textContent = t.label;
-          main.appendChild(name);
-          if (t.live) {
-            var dot = document.createElement('span');
-            dot.className = 'myhub-btab-live';
-            dot.title = '';
-            main.appendChild(dot);
-          }
-          main.addEventListener('click', function () {
-            postToModule(winId, {
-              type: 'myhub:browser-tabs-action',
-              action: 'select',
-              id: t.id,
+        if (showTabs) {
+          st.tabs.forEach(function (t) {
+            var wrap = document.createElement('div');
+            wrap.className =
+              'myhub-btab' + (t.id === st.activeId ? ' is-active' : '');
+            var main = document.createElement('button');
+            main.type = 'button';
+            main.className = 'myhub-btab-main';
+            main.setAttribute('role', 'tab');
+            main.setAttribute(
+              'aria-selected',
+              t.id === st.activeId ? 'true' : 'false',
+            );
+            main.setAttribute('data-btab-id', t.id);
+            var fav = document.createElement('span');
+            fav.className = 'myhub-btab-fav';
+            if (t.fav) fav.textContent = t.fav;
+            else fav.innerHTML = '<i data-lucide="globe"></i>';
+            main.appendChild(fav);
+            var name = document.createElement('span');
+            name.className = 'myhub-btab-name';
+            name.textContent = t.label;
+            main.appendChild(name);
+            if (t.live) {
+              var dot = document.createElement('span');
+              dot.className = 'myhub-btab-live';
+              dot.title = '';
+              main.appendChild(dot);
+            }
+            main.addEventListener('click', function () {
+              postToModule(winId, {
+                type: 'myhub:browser-tabs-action',
+                action: 'select',
+                id: t.id,
+              });
             });
-          });
-          wrap.appendChild(main);
-          var close = document.createElement('button');
-          close.type = 'button';
-          close.className = 'myhub-btab-close';
-          close.setAttribute('aria-label', '');
-          close.innerHTML = '<i data-lucide="x"></i>';
-          close.addEventListener('click', function () {
-            postToModule(winId, {
-              type: 'myhub:browser-tabs-action',
-              action: 'close',
-              id: t.id,
+            wrap.appendChild(main);
+            var close = document.createElement('button');
+            close.type = 'button';
+            close.className = 'myhub-btab-close';
+            close.setAttribute('aria-label', '');
+            close.innerHTML = '<i data-lucide="x"></i>';
+            close.addEventListener('click', function () {
+              postToModule(winId, {
+                type: 'myhub:browser-tabs-action',
+                action: 'close',
+                id: t.id,
+              });
             });
+            wrap.appendChild(close);
+            box.appendChild(wrap);
           });
-          wrap.appendChild(close);
-          box.appendChild(wrap);
-        });
+        }
         var add = document.createElement('button');
         add.type = 'button';
         add.className = 'myhub-btab-new';

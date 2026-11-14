@@ -844,7 +844,9 @@ body.dt-fullscreen .settings-btn { color: #fff; }
    절대 배치 flex다 — 컨테이너 자체는 드래그를 막지 않고 버튼만
    nodrag(기존 button 제외 규칙)이며 사이 빈 공간은 창 드래그다.
    탭은 사파리 26 카드(네 모서리 둥글고 파비콘+제목 가운데)로
-   바 높이(40px) 안에 세로 가운데로 뜬다 (2026-11-14 실제 맥 캡처 대조). */
+   바 높이(40px) 안에 세로 가운데로 뜬다 (2026-11-14 실제 맥 캡처 대조).
+   탭이 1개면 카드는 없고 제목이 다시 보인다 — + 버튼만 바 오른쪽
+   끝에 남는다 (2026-11-14 실제 맥 캡처 image-46 대조). */
 .myhub-win-btabs {
   position: absolute;
   top: 0;
@@ -955,6 +957,9 @@ body.dt-fullscreen .settings-btn { color: #fff; }
 .myhub-btab-new {
   flex: none;
   align-self: center;
+  /* 탭이 1개면 카드 없이 +만 남는데, 이때도 바 오른쪽 끝에 붙는다
+     (카드가 있으면 카드가 행을 채우므로 이 여백은 0이다). */
+  margin-left: auto;
   width: 26px;
   height: 26px;
   display: flex;

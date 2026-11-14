@@ -15,7 +15,8 @@
    몸이 짧아지면 탭 행이 접힌다 (browser.js의 탭 게시 참조). 사파리
    26(Tahoe)처럼 툴바 아래에 놓이며, 탭은 네 모서리 둥근 카드로
    떠 있다 (2026-11-14 실제 맥 캡처 대조). 탭이 넘칠 때는 목록
-   버튼(bwTabsOverflow)으로 접는다. */
+   버튼(bwTabsOverflow)으로 접는다. 탭이 1개면 줄 자체가 없고
+   새 탭 + 버튼은 툴바에 남는다 (2026-11-14 실제 맥 캡처 image-46 대조). */
 .bw-tabstrip[hidden] { display: none; }
 .bw-tabstrip {
   position: relative;
