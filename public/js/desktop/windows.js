@@ -1918,6 +1918,7 @@
         tabs.push({
           id: t.id,
           label: typeof t.label === 'string' && t.label ? t.label : t.id,
+          fav: typeof t.fav === 'string' ? t.fav : '',
           live: !!t.live,
         });
       });
@@ -1935,7 +1936,15 @@
         st.activeId || '',
         st.tabs
           .map(function (t) {
-            return t.id + ':' + t.label + ':' + (t.live ? 1 : 0);
+            return (
+              t.id +
+              ':' +
+              t.label +
+              ':' +
+              (t.fav || '') +
+              ':' +
+              (t.live ? 1 : 0)
+            );
           })
           .join(','),
       ].join('|');
@@ -1965,6 +1974,11 @@
             t.id === st.activeId ? 'true' : 'false',
           );
           main.setAttribute('data-btab-id', t.id);
+          var fav = document.createElement('span');
+          fav.className = 'myhub-btab-fav';
+          if (t.fav) fav.textContent = t.fav;
+          else fav.innerHTML = '<i data-lucide="globe"></i>';
+          main.appendChild(fav);
           var name = document.createElement('span');
           name.className = 'myhub-btab-name';
           name.textContent = t.label;

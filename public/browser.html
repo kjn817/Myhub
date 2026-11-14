@@ -23,25 +23,25 @@
 </header>
 <div class="g-main">
   <div class="bw-layout">
-    <div class="bw-tabstrip" id="bwTabstrip">
-      <div class="bw-tabs" id="bwTabs" role="tablist"></div>
-      <button type="button" class="bw-icon-btn bw-tabs-overflow" id="bwTabsOverflow" aria-label="모든 탭 보기" hidden><i data-lucide="chevron-down"></i></button>
-      <button type="button" class="bw-icon-btn bw-newtab" id="bwNewTabBtn" aria-label="새 탭"><i data-lucide="plus"></i></button>
-      <div class="bw-tabs-menu" id="bwTabsMenu" hidden></div>
-    </div>
     <div class="bw-toolbar">
       <div class="bw-navgroup">
         <button type="button" class="bw-icon-btn" id="bwBackBtn" aria-label="뒤로"><i data-lucide="chevron-left"></i></button>
         <button type="button" class="bw-icon-btn" id="bwFwdBtn" aria-label="앞으로"><i data-lucide="chevron-right"></i></button>
-        <button type="button" class="bw-icon-btn" id="bwReloadBtn" aria-label="새로고침"><i data-lucide="rotate-cw"></i></button>
       </div>
       <div class="bw-url-wrap">
         <input id="bwUrl" type="text" placeholder="검색 또는 웹사이트 이름 입력" autocomplete="off" spellcheck="false" aria-label="주소 또는 검색어">
+        <button type="button" class="bw-icon-btn" id="bwReloadBtn" aria-label="새로고침"><i data-lucide="rotate-cw"></i></button>
       </div>
       <div class="bw-trailgroup">
         <button type="button" class="bw-icon-btn" id="bwShareBtn" aria-label="링크 복사"><i data-lucide="share"></i></button>
         <button type="button" class="bw-icon-btn" id="bwHomeBtn" aria-label="시작 페이지"><i data-lucide="house"></i></button>
       </div>
+    </div>
+    <div class="bw-tabstrip" id="bwTabstrip">
+      <div class="bw-tabs" id="bwTabs" role="tablist"></div>
+      <button type="button" class="bw-icon-btn bw-tabs-overflow" id="bwTabsOverflow" aria-label="모든 탭 보기" hidden><i data-lucide="chevron-down"></i></button>
+      <button type="button" class="bw-icon-btn bw-newtab" id="bwNewTabBtn" aria-label="새 탭"><i data-lucide="plus"></i></button>
+      <div class="bw-tabs-menu" id="bwTabsMenu" hidden></div>
     </div>
     <div class="bw-stage">
       <div class="bw-home" id="bwHome">

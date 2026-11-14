@@ -287,6 +287,8 @@
         return {
           id: t.id,
           label: tabTitle(t),
+          // 창 바 탭 카드의 파비콘 타일 — 단독 탭(renderTabs)과 같은 글자.
+          fav: t.url ? hostOf(t.url).charAt(0).toUpperCase() : '',
           live: t.id === liveTabId && live.isActive(),
         };
       });

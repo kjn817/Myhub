@@ -843,7 +843,8 @@ body.dt-fullscreen .settings-btn { color: #fff; }
    (오피스 빠른 실행과 같은 leading 기준선)부터 바 끝까지를 덮는
    절대 배치 flex다 — 컨테이너 자체는 드래그를 막지 않고 버튼만
    nodrag(기존 button 제외 규칙)이며 사이 빈 공간은 창 드래그다.
-   바 높이(40px) 안에서 탭은 아래쪽에 붙어 본문과 이어지는 결이다. */
+   탭은 사파리 26 카드(네 모서리 둥글고 파비콘+제목 가운데)로
+   바 높이(40px) 안에 세로 가운데로 뜬다 (2026-11-14 실제 맥 캡처 대조). */
 .myhub-win-btabs {
   position: absolute;
   top: 0;
@@ -852,7 +853,7 @@ body.dt-fullscreen .settings-btn { color: #fff; }
   right: 10px;
   z-index: 1;
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   gap: 4px;
   box-sizing: border-box;
 }
@@ -866,41 +867,56 @@ body.dt-fullscreen .settings-btn { color: #fff; }
 .myhub-btab {
   flex: 1 1 0;
   min-width: 84px;
-  max-width: 200px;
-  height: 30px;
+  height: 32px;
   display: flex;
   align-items: stretch;
-  border-radius: 8px 8px 0 0;
-  background: rgba(15, 23, 42, 0.05);
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.06);
   overflow: hidden;
 }
 
 .myhub-btab:hover { background: rgba(15, 23, 42, 0.09); }
 
-.myhub-btab.is-active { background: rgba(255, 255, 255, 0.88); }
+.myhub-btab.is-active { background: #fff; }
 
-.myhub-btab.is-active:hover { background: rgba(255, 255, 255, 0.88); }
+.myhub-btab.is-active:hover { background: #fff; }
 
 .myhub-btab-main {
   flex: 1 1 auto;
   min-width: 0;
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 6px;
   border: none;
   background: none;
-  padding: 0 2px 0 10px;
+  padding: 0 10px;
   font: inherit;
   font-size: 12.5px;
   color: #4b5563;
   cursor: pointer;
-  text-align: left;
 }
 
 .myhub-btab.is-active .myhub-btab-main { color: #111827; font-weight: 600; }
 
+.myhub-btab-fav {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+  background: rgba(15, 23, 42, 0.09);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10.5px;
+  font-weight: 700;
+  color: #374151;
+}
+
+.myhub-btab-fav svg { width: 11px; height: 11px; }
+
 .myhub-btab-name {
-  flex: 1 1 auto;
+  flex: 0 1 auto;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;

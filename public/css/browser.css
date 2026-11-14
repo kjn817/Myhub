@@ -12,16 +12,17 @@
 }
 /* 탭 스트립 (트랙 H 후속, Safari형) — 단독 실행 때만 전용이다.
    창 모드에서는 탭이 창 제목 바(myhub:browser-tabs 채널)로 수렴하고
-   몸이 짧아지면 탭 행이 접힌다 (browser.js의 탭 게시 참조). 활성
-   탭 아래 주소창 줄과 같은 면(반투명 흰색)으로 이어진다. 탭이
-   넘칠 때는 목록 버튼(bwTabsOverflow)으로 접는다. */
+   몸이 짧아지면 탭 행이 접힌다 (browser.js의 탭 게시 참조). 사파리
+   26(Tahoe)처럼 툴바 아래에 놓이며, 탭은 네 모서리 둥근 카드로
+   떠 있다 (2026-11-14 실제 맥 캡처 대조). 탭이 넘칠 때는 목록
+   버튼(bwTabsOverflow)으로 접는다. */
 .bw-tabstrip[hidden] { display: none; }
 .bw-tabstrip {
   position: relative;
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   gap: 4px;
-  padding: 6px 10px 0;
+  padding: 6px 10px;
   box-sizing: border-box;
 }
 .bw-tabs {
@@ -31,18 +32,20 @@
   min-width: 0;
   overflow: hidden;
 }
+/* 사파리 26 탭 카드: 네 모서리 둥글고, 파비콘+제목이 가운데.
+   폭 상한 없이 늘어나서 채운다 (2026-11-14 실제 맥 캡처 대조). */
 .bw-tab {
   flex: 1 1 0;
   min-width: 104px;
-  max-width: 200px;
-  height: 32px;
+  height: 34px;
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 7px;
-  padding: 0 6px 0 10px;
+  padding: 0 10px;
   border: none;
-  border-radius: 8px 8px 0 0;
-  background: rgba(15, 23, 42, 0.05);
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.06);
   color: #4b5563;
   font-size: 12.5px;
   font-family: inherit;
@@ -50,8 +53,8 @@
   box-sizing: border-box;
 }
 .bw-tab:hover { background: rgba(15, 23, 42, 0.09); }
-.bw-tab.is-active { background: rgba(255, 255, 255, 0.88); color: #111827; font-weight: 600; }
-.bw-tab.is-active:hover { background: rgba(255, 255, 255, 0.88); }
+.bw-tab.is-active { background: #fff; color: #111827; font-weight: 600; }
+.bw-tab.is-active:hover { background: #fff; }
 .bw-tab-fav {
   flex: none;
   width: 18px;
@@ -67,12 +70,11 @@
 }
 .bw-tab-fav svg { width: 11px; height: 11px; }
 .bw-tab-name {
-  flex: 1 1 auto;
+  flex: 0 1 auto;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  text-align: left;
 }
 .bw-tab-live {
   flex: none;
@@ -143,6 +145,15 @@
   gap: 2px;
   flex: none;
 }
+/* 사파리 26처럼 뒤로/앞으로를 하나의 알약 안에 묶는다
+   (2026-11-14 실제 맥 캡처 대조). 새로고침은 주소 캡슐 안으로 이동. */
+.bw-navgroup {
+  background: rgba(15, 23, 42, 0.05);
+  border-radius: 999px;
+  padding: 2px;
+  gap: 0;
+}
+.bw-navgroup .bw-icon-btn { border-radius: 999px; }
 .bw-trailgroup { margin-left: auto; }
 .bw-icon-btn {
   flex: none;
@@ -175,11 +186,13 @@
   margin: 0;
   display: flex;
   align-items: center;
-  padding: 0 16px;
+  padding: 0 8px 0 16px;
   height: 36px;
   border-radius: 999px;
-  background: rgba(231, 231, 231, 0.9);
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(15, 23, 42, 0.08);
   box-shadow: 0 1px 4px rgba(15, 23, 42, 0.06);
+  box-sizing: border-box;
 }
 .bw-url-wrap input {
   flex: 1 1 auto;
@@ -193,6 +206,13 @@
 }
 .bw-url-wrap input::placeholder { color: #9aa0a6; }
 .bw-url-wrap input:disabled { color: #9aa0a6; }
+/* 사파리 26처럼 새로고침은 주소 캡슐 안 오른쪽에 둔다. */
+.bw-url-wrap .bw-icon-btn {
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+}
+.bw-url-wrap .bw-icon-btn svg { width: 14px; height: 14px; }
 .bw-start-btn {
   flex: none;
   border: none;
@@ -419,7 +439,7 @@
   .bw-start-card { flex-wrap: wrap; }
   .bw-start-big { width: 100%; }
   .bw-home { padding: 18px 16px 32px; }
-  .bw-tab { min-width: 72px; padding: 0 4px 0 8px; }
+  .bw-tab { min-width: 72px; padding: 0 6px; }
   .bw-toolbar { padding: 0 8px; gap: 6px; }
   .bw-icon-btn { width: 28px; height: 28px; }
 }
