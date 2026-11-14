@@ -1,6 +1,7 @@
 // 브라우저 크롬 사파리 정렬 검증 (2026-11-14 실제 맥 사파리 26 캡처 대조):
-// 툴바가 탭 줄 위에 있고, 탭은 네 모서리 둥근 카드(파비콘+제목 가운데),
-// 새로고침은 주소 캡슐 안에, 뒤로/앞으로는 하나의 알약 안에 있다.
+// 단독 툴바 순서가 사이드바 → 뒤로/앞으로 알약 → 주소 캡슐 → 공유·새 탭·
+// 탭 개요이고, 홈 버튼은 없다. 탭은 네 모서리 둥근 카드(파비콘+제목
+// 가운데), 새로고침은 주소 캡슐 안에, 뒤로/앞으로는 하나의 알약 안에 있다.
 'use strict';
 
 const { runScenario, attachErrorCollector, assert, assertEq } = require('./harness.cjs');
@@ -40,6 +41,7 @@ runScenario('browser-safari-chrome', async (t) => {
     const cs = getComputedStyle(first);
     const navgroup = document.querySelector('.bw-navgroup');
     const reload = document.getElementById('bwReloadBtn');
+    const trail = document.querySelector('.bw-trailgroup');
     return {
       // (a) 툴바가 탭 줄보다 DOM 순서상 앞
       toolbarBeforeTabstrip:
@@ -63,6 +65,20 @@ runScenario('browser-safari-chrome', async (t) => {
       navRadius: navgroup ? getComputedStyle(navgroup).borderRadius : null,
       backInNav: !!document.getElementById('bwBackBtn').closest('.bw-navgroup'),
       fwdInNav: !!document.getElementById('bwFwdBtn').closest('.bw-navgroup'),
+      // (f) 툴바 순서: 사이드바 → 알약 → 캡슐 → 트레일(공유·새 탭·개요), 홈 없음
+      toolbarOrder: Array.from(toolbar.children).map((el) => el.id || el.className),
+      trailOrder: Array.from(trail.children).map((el) => el.id),
+      homeBtn: !!document.getElementById('bwHomeBtn'),
+      sidebarVisible: (() => {
+        const b = document.getElementById('bwSidebarBtn');
+        const r = b.getBoundingClientRect();
+        return r.width > 0 && r.height > 0;
+      })(),
+      overviewVisible: (() => {
+        const b = document.getElementById('bwOverviewBtn');
+        const r = b.getBoundingClientRect();
+        return r.width > 0 && r.height > 0;
+      })(),
     };
   });
 
@@ -81,5 +97,18 @@ runScenario('browser-safari-chrome', async (t) => {
   chrome.tabWidths.forEach((w, i) => {
     assert(w > 400, `탭 ${i}번이 늘어나서 채워야 한다 (실제 너비: ${w}px, 200px 상한이면 실패)`);
   });
+  assertEq(
+    chrome.toolbarOrder.join('|'),
+    'bwSidebarBtn|bw-navgroup|bw-url-wrap|bw-trailgroup',
+    `툴바 순서는 사이드바 → 알약 → 캡슐 → 트레일이어야 한다 (실제: ${chrome.toolbarOrder.join('|')})`,
+  );
+  assertEq(
+    chrome.trailOrder.join('|'),
+    'bwShareBtn|bwNewTabBtn|bwOverviewBtn',
+    `트레일 순서는 공유 → 새 탭 → 탭 개요여야 한다 (실제: ${chrome.trailOrder.join('|')})`,
+  );
+  assert(!chrome.homeBtn, '홈 버튼은 툴바에 없어야 한다 (새 탭이 시작 페이지 역할)');
+  assert(chrome.sidebarVisible, '사이드바 버튼이 보여야 한다');
+  assert(chrome.overviewVisible, '탭 개요 버튼이 보여야 한다');
   assertEq(errors.pageErrors.length, 0, `페이지 오류가 없어야 한다: ${errors.pageErrors.slice(0, 3).join(' | ')}`);
 });

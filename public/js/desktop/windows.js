@@ -265,10 +265,10 @@
         bar.appendChild(searchBox);
       }
       if (win.module === 'browser') {
-        var btabs = document.createElement('div');
-        btabs.className = 'myhub-win-btabs';
-        btabs.hidden = true;
-        bar.appendChild(btabs);
+        var bnav = document.createElement('div');
+        bnav.className = 'myhub-win-bnav';
+        bnav.hidden = true;
+        bar.appendChild(bnav);
       }
       var winActions = document.createElement('div');
       winActions.className = 'myhub-win-actions';
@@ -303,7 +303,7 @@
               window.location.origin,
             );
             frame.contentWindow.postMessage(
-              { type: 'myhub:request-browser-tabs' },
+              { type: 'myhub:request-browser-nav' },
               window.location.origin,
             );
             frame.contentWindow.postMessage(
@@ -320,9 +320,9 @@
         renderOfficeQuick(win.id);
         winActionsByWin.delete(win.id);
         renderWinActions(win.id);
-        browserTabsByWin.delete(win.id);
-        browserTabsSig.delete(win.id);
-        renderBrowserTabs(win.id);
+        browserNavByWin.delete(win.id);
+        browserNavSig.delete(win.id);
+        renderBrowserNav(win.id);
         assistantByWin.delete(win.id);
         if (state.activeId === mod.id) {
           barDoc = null;
@@ -767,8 +767,8 @@
           officeFoldByWin.delete(id);
           winActionsByWin.delete(id);
           winActionsSig.delete(id);
-          browserTabsByWin.delete(id);
-          browserTabsSig.delete(id);
+          browserNavByWin.delete(id);
+          browserNavSig.delete(id);
           assistantByWin.delete(id);
         }
       });
@@ -1908,146 +1908,208 @@
     }
     window.addEventListener('message', onWinActionsMessage);
 
-    var browserTabsByWin = new Map();
-    var browserTabsSig = new Map();
-    function normalizeBrowserTabs(d) {
-      if (!d || !Array.isArray(d.tabs)) return null;
-      var tabs = [];
-      d.tabs.forEach(function (t) {
-        if (!t || typeof t.id !== 'string' || !t.id) return;
-        tabs.push({
-          id: t.id,
-          label: typeof t.label === 'string' && t.label ? t.label : t.id,
-          fav: typeof t.fav === 'string' ? t.fav : '',
-          live: !!t.live,
-        });
-      });
-      if (!tabs.length) return null;
+    var browserNavByWin = new Map();
+    var browserNavSig = new Map();
+    function normalizeBrowserNav(d) {
+      if (!d || typeof d !== 'object') return null;
       return {
-        tabs: tabs,
-        activeId:
-          typeof d.activeId === 'string' ? d.activeId : tabs[0].id,
+        url: typeof d.url === 'string' ? d.url : '',
+        title: typeof d.title === 'string' && d.title ? d.title : '새 탭',
+        fav: typeof d.fav === 'string' ? d.fav : '',
+        canBack: !!d.canBack,
+        canFwd: !!d.canFwd,
+        loading: !!d.loading,
       };
     }
-    function browserTabsSignature(winId, st) {
+    function browserNavSignature(winId, st) {
       if (!st) return winId + '|none';
       return [
         winId,
-        st.activeId || '',
-        st.tabs
-          .map(function (t) {
-            return (
-              t.id +
-              ':' +
-              t.label +
-              ':' +
-              (t.fav || '') +
-              ':' +
-              (t.live ? 1 : 0)
-            );
-          })
-          .join(','),
+        st.url,
+        st.title,
+        st.fav,
+        st.canBack ? 1 : 0,
+        st.canFwd ? 1 : 0,
+        st.loading ? 1 : 0,
       ].join('|');
     }
-    function renderBrowserTabs(winId) {
+    // 캡슐 표시값: 포커스 중에는 전체 URL(편집용), 아니면 호스트만
+    // (사파리처럼 주소 캡슐에는 도메인이 보인다). URL이 없으면 빈 값이라
+    // placeholder가 보인다.
+    function bnavDisplayValue(st, focused) {
+      if (!st || !st.url) return '';
+      return focused ? st.url : st.title;
+    }
+    function postBrowserNavAction(winId, action, extra) {
+      var msg = { type: 'myhub:browser-nav-action', action: action };
+      if (extra) {
+        Object.keys(extra).forEach(function (k) { msg[k] = extra[k]; });
+      }
+      postToModule(winId, msg);
+    }
+    // 셸 제목 바 내비 DOM을 한 번만 만든다. 상태 게시마다 innerHTML을
+    // 다시 그리면 주소 입력 중 포커스가 날아가 타이핑이 끊긴다.
+    // 값 동기화는 syncBrowserNav가 맡는다. 순서(2026-11-14 사용자 지정):
+    // 사이드바 → 뒤로/앞으로 알약 → 주소 캡슐 → 공유 → 새 탭 → 탭 개요.
+    function buildBrowserNav(winId, box) {
+      function iconBtn(cls, icon, label) {
+        var b = document.createElement('button');
+        b.type = 'button';
+        b.className = cls;
+        b.setAttribute('aria-label', label);
+        b.innerHTML = '<i data-lucide="' + icon + '"></i>';
+        return b;
+      }
+      var sidebarBtn = iconBtn('myhub-bnav-btn myhub-bnav-sidebar', 'panel-left', '사이드바');
+      sidebarBtn.addEventListener('click', function () {
+        postBrowserNavAction(winId, 'sidebar');
+      });
+      box.appendChild(sidebarBtn);
+      var navgroup = document.createElement('div');
+      navgroup.className = 'myhub-bnav-navgroup';
+      var backBtn = iconBtn('myhub-bnav-btn myhub-bnav-back', 'chevron-left', '뒤로');
+      backBtn.addEventListener('click', function () {
+        postBrowserNavAction(winId, 'back');
+      });
+      var fwdBtn = iconBtn('myhub-bnav-btn myhub-bnav-fwd', 'chevron-right', '앞으로');
+      fwdBtn.addEventListener('click', function () {
+        postBrowserNavAction(winId, 'forward');
+      });
+      navgroup.appendChild(backBtn);
+      navgroup.appendChild(fwdBtn);
+      box.appendChild(navgroup);
+      var urlWrap = document.createElement('div');
+      urlWrap.className = 'myhub-bnav-url';
+      urlWrap.setAttribute('data-nodrag', '');
+      var fav = document.createElement('span');
+      fav.className = 'myhub-bnav-fav';
+      urlWrap.appendChild(fav);
+      var input = document.createElement('input');
+      input.type = 'text';
+      input.className = 'myhub-bnav-input';
+      input.placeholder = '검색 또는 웹사이트 이름 입력';
+      input.setAttribute('aria-label', '주소 또는 검색어');
+      input.setAttribute('autocomplete', 'off');
+      input.setAttribute('spellcheck', 'false');
+      // 오피스 문서 내 검색과 같은 패턴: mousedown 전파를 막아 창
+      // 드래그가 시작되지 않게 하고, 키 입력은 셸 단축키에 안 뺏긴다.
+      input.addEventListener('mousedown', function (e) { e.stopPropagation(); });
+      input.addEventListener('focus', function () {
+        var st = browserNavByWin.get(winId);
+        input.value = bnavDisplayValue(st, true);
+        input.select();
+      });
+      input.addEventListener('blur', function () {
+        var st = browserNavByWin.get(winId);
+        input.value = bnavDisplayValue(st, false);
+      });
+      input.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') {
+          postBrowserNavAction(winId, 'navigate', { url: input.value });
+          input.blur();
+        } else if (e.key === 'Escape') {
+          var st = browserNavByWin.get(winId);
+          input.value = bnavDisplayValue(st, false);
+          input.blur();
+        }
+        e.stopPropagation();
+      });
+      urlWrap.appendChild(input);
+      var reloadBtn = iconBtn('myhub-bnav-btn myhub-bnav-reload', 'rotate-cw', '새로고침');
+      reloadBtn.addEventListener('click', function () {
+        postBrowserNavAction(winId, 'reload');
+      });
+      urlWrap.appendChild(reloadBtn);
+      box.appendChild(urlWrap);
+      var trail = document.createElement('div');
+      trail.className = 'myhub-bnav-trail';
+      var shareBtn = iconBtn('myhub-bnav-btn myhub-bnav-share', 'share', '링크 복사');
+      shareBtn.addEventListener('click', function () {
+        var st = browserNavByWin.get(winId);
+        if (!st || !st.url) return;
+        var nav = typeof navigator !== 'undefined' ? navigator : null;
+        if (nav && nav.clipboard && typeof nav.clipboard.writeText === 'function') {
+          nav.clipboard.writeText(st.url).catch(function () {
+            input.focus();
+            input.select();
+          });
+        } else {
+          input.focus();
+          input.select();
+        }
+      });
+      var newBtn = iconBtn('myhub-bnav-btn myhub-bnav-new', 'plus', '새 탭');
+      newBtn.addEventListener('click', function () {
+        postBrowserNavAction(winId, 'newtab');
+        // 새 탭은 주소 입력부터 시작한다 (사파리와 같은 동작).
+        input.focus();
+      });
+      var overviewBtn = iconBtn('myhub-bnav-btn myhub-bnav-overview', 'copy', '탭 개요');
+      overviewBtn.addEventListener('click', function () {
+        postBrowserNavAction(winId, 'overview');
+      });
+      trail.appendChild(shareBtn);
+      trail.appendChild(newBtn);
+      trail.appendChild(overviewBtn);
+      box.appendChild(trail);
+    }
+    function syncBrowserNav(winId, box, st) {
+      var backBtn = box.querySelector('.myhub-bnav-back');
+      var fwdBtn = box.querySelector('.myhub-bnav-fwd');
+      var reloadBtn = box.querySelector('.myhub-bnav-reload');
+      var shareBtn = box.querySelector('.myhub-bnav-share');
+      var input = box.querySelector('.myhub-bnav-input');
+      var fav = box.querySelector('.myhub-bnav-fav');
+      if (backBtn) backBtn.disabled = !st.canBack;
+      if (fwdBtn) fwdBtn.disabled = !st.canFwd;
+      if (reloadBtn) {
+        reloadBtn.disabled = !st.url;
+        reloadBtn.classList.toggle('is-loading', !!st.loading);
+      }
+      if (shareBtn) shareBtn.disabled = !st.url;
+      // 파비콘은 값이 바뀔 때만 건드린다 (매번 innerHTML을 갈면
+      // lucide svg가 날아가 깜빡인다).
+      if (fav && fav.dataset.fav !== st.fav) {
+        fav.dataset.fav = st.fav;
+        if (st.fav) fav.textContent = st.fav;
+        else fav.innerHTML = '<i data-lucide="globe"></i>';
+      }
+      // 입력 중이면 값을 건드리지 않는다 (타이핑 방해 금지).
+      if (input && document.activeElement !== input) {
+        var v = bnavDisplayValue(st, false);
+        if (input.value !== v) input.value = v;
+      }
+    }
+    function renderBrowserNav(winId) {
       var rec = entries.get(winId);
       if (!rec) return;
-      var box = rec.el.querySelector('.myhub-win-btabs');
+      var box = rec.el.querySelector('.myhub-win-bnav');
       if (!box) return;
-      var st = browserTabsByWin.get(winId) || null;
-      // 탭이 1개면 카드를 렌더링하지 않고 창 제목을 다시 보인다.
-      // 사파리는 탭이 하나면 탭 줄 자체가 없다 (2026-11-14 실제 맥
-      // 캡처 image-46 대조). 새 탭 + 버튼은 1개일 때도 남긴다.
-      var showTabs = !!(st && st.tabs.length > 1);
-      rec.el.classList.toggle('dt-win-btabs-on', showTabs);
-      var sig = browserTabsSignature(winId, st);
-      if (sig === browserTabsSig.get(winId)) return;
-      browserTabsSig.set(winId, sig);
-      box.innerHTML = '';
-      if (st) {
-        if (showTabs) {
-          st.tabs.forEach(function (t) {
-            var wrap = document.createElement('div');
-            wrap.className =
-              'myhub-btab' + (t.id === st.activeId ? ' is-active' : '');
-            var main = document.createElement('button');
-            main.type = 'button';
-            main.className = 'myhub-btab-main';
-            main.setAttribute('role', 'tab');
-            main.setAttribute(
-              'aria-selected',
-              t.id === st.activeId ? 'true' : 'false',
-            );
-            main.setAttribute('data-btab-id', t.id);
-            var fav = document.createElement('span');
-            fav.className = 'myhub-btab-fav';
-            if (t.fav) fav.textContent = t.fav;
-            else fav.innerHTML = '<i data-lucide="globe"></i>';
-            main.appendChild(fav);
-            var name = document.createElement('span');
-            name.className = 'myhub-btab-name';
-            name.textContent = t.label;
-            main.appendChild(name);
-            if (t.live) {
-              var dot = document.createElement('span');
-              dot.className = 'myhub-btab-live';
-              dot.title = '';
-              main.appendChild(dot);
-            }
-            main.addEventListener('click', function () {
-              postToModule(winId, {
-                type: 'myhub:browser-tabs-action',
-                action: 'select',
-                id: t.id,
-              });
-            });
-            wrap.appendChild(main);
-            var close = document.createElement('button');
-            close.type = 'button';
-            close.className = 'myhub-btab-close';
-            close.setAttribute('aria-label', '');
-            close.innerHTML = '<i data-lucide="x"></i>';
-            close.addEventListener('click', function () {
-              postToModule(winId, {
-                type: 'myhub:browser-tabs-action',
-                action: 'close',
-                id: t.id,
-              });
-            });
-            wrap.appendChild(close);
-            box.appendChild(wrap);
-          });
-        }
-        var add = document.createElement('button');
-        add.type = 'button';
-        add.className = 'myhub-btab-new';
-        add.setAttribute('aria-label', '');
-        add.innerHTML = '<i data-lucide="plus"></i>';
-        add.addEventListener('click', function () {
-          postToModule(winId, {
-            type: 'myhub:browser-tabs-action',
-            action: 'new',
-          });
-        });
-        box.appendChild(add);
-      }
-      box.hidden = box.childNodes.length === 0;
+      var st = browserNavByWin.get(winId) || null;
+      rec.el.classList.toggle('dt-win-bnav-on', !!st);
+      box.hidden = !st;
+      if (!st) return;
+      var sig = browserNavSignature(winId, st);
+      if (sig === browserNavSig.get(winId)) return;
+      browserNavSig.set(winId, sig);
+      if (!box.hasChildNodes()) buildBrowserNav(winId, box);
+      syncBrowserNav(winId, box, st);
       refreshIcons();
     }
-    function onBrowserTabsMessage(e) {
+    function onBrowserNavMessage(e) {
       var d = sameOriginData(e);
-      if (!d || d.type !== 'myhub:browser-tabs') return;
+      if (!d || d.type !== 'myhub:browser-nav') return;
       var found = findWinIdBySource(e.source);
       if (!found) return;
       var rec = entries.get(found);
-      if (!rec || !rec.el.querySelector('.myhub-win-btabs')) return;
-      var st = normalizeBrowserTabs(d);
-      if (st) browserTabsByWin.set(found, st);
-      else browserTabsByWin.delete(found);
-      renderBrowserTabs(found);
-      if (st) postToModule(found, { type: 'myhub:browser-tabs-adopt' });
+      if (!rec || !rec.el.querySelector('.myhub-win-bnav')) return;
+      var st = normalizeBrowserNav(d);
+      if (st) browserNavByWin.set(found, st);
+      else browserNavByWin.delete(found);
+      renderBrowserNav(found);
+      if (st) postToModule(found, { type: 'myhub:browser-nav-adopt' });
     }
-    window.addEventListener('message', onBrowserTabsMessage);
+    window.addEventListener('message', onBrowserNavMessage);
 
     var assistantByWin = new Map();
     var assistantListeners = new Set();

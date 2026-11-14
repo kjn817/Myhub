@@ -3,13 +3,14 @@
  */
 /// <reference types="jest" />
 /**
- * 창 바 브라우저 탭 — 탭 1개면 카드 숨김 (2026-11-14 실제 맥 사파리 캡처 image-46 대조).
+ * 창 바에는 탭 카드가 없다 (2026-11-14 타이틀바 한 줄 통일).
  *
  * 검증 성질:
- * - 게시된 탭이 1개면 창 바에 탭 카드(.myhub-btab)가 없고 창 제목이 다시 보인다
- *   (dt-win-btabs-on 클래스 없음). 새 탭 + 버튼(.myhub-btab-new)은 남는다.
- * - 탭이 2개가 되면 카드가 다시 나타나고 제목이 숨긴다.
- * - 2개에서 1개로 돌아가면 카드가 사라지고 제목이 돌아온다.
+ * - 내비 상태가 오기 전에는 내비가 숨겨지고 창 제목이 보인다.
+ * - 내비 상태가 오면 내비가 나타나고 제목이 숨긴다 — 탭 개수와 무관하게
+ *   셸은 탭 카드를 그리지 않는다 (탭 줄은 iframe 안의 .bw-tabstrip이
+ *   담당하고, 탭 1개 숨김 규칙도 iframe 쪽에서 돈다).
+ * - 내비 상태가 바뀌어도(다른 URL·로딩 전환) 탭 카드는 생기지 않는다.
  *
  * 로딩 패턴은 tests/desktop-browser-tabs-safari.test.ts와 동일하다 (실제
  * windows.js + state.js + 공용 전역, 스텁 아님). CSS는 실제
@@ -120,24 +121,17 @@ function injectDesktopCss(): void {
   getDoc().head.appendChild(style)
 }
 
-/** CSS 원문에서 `selector { ... }` 규칙 본문을 뽑는다 (없으면 null). */
-function extractRule(css: string, selector: string): string | null {
-  const re = new RegExp(selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s*\\{([^}]*)\\}')
-  const m = css.match(re)
-  return m ? m[1] : null
-}
-
-function postTabs(win: any, frame: any, tabs: any[], activeId: string): void {
+function postNav(win: any, frame: any, nav: any): void {
   const ev = new win.MessageEvent('message', {
-    data: { type: 'myhub:browser-tabs', tabs, activeId },
+    data: { type: 'myhub:browser-nav', ...nav },
     origin: win.location.origin,
     source: frame.contentWindow,
   })
   win.dispatchEvent(ev)
 }
 
-describe('창 바 브라우저 탭 — 탭 1개면 카드 숨김', () => {
-  test('1개 탭 → 카드 없음·제목 보임·+ 남음, 2개 탭 → 카드 나타남·제목 숨김, 다시 1개 → 카드 사라짐', () => {
+describe('창 바에는 탭 카드가 없다 — 내비만 있다', () => {
+  test('게시 전에는 내비 숨김·제목 보임, 게시 후에는 내비 표시·제목 숨김, 어떤 상태에서도 카드 없음', () => {
     const storage = new MemoryStorage()
     const m = makeManager(storage)
     const doc = getDoc()
@@ -149,56 +143,69 @@ describe('창 바 브라우저 탭 — 탭 1개면 카드 숨김', () => {
     expect(el).not.toBeNull()
     const frame = el.querySelector('iframe.dt-frame')
     expect(frame).not.toBeNull()
-    const box = el.querySelector('.myhub-win-btabs')
+    const box = el.querySelector('.myhub-win-bnav')
     expect(box).not.toBeNull()
     const titleFlow = el.querySelector('.dt-title-flow')
     expect(titleFlow).not.toBeNull()
 
     const state = () => ({
-      cards: box.querySelectorAll('.myhub-btab').length,
-      newBtn: box.querySelectorAll('.myhub-btab-new').length,
-      tabsOn: el.classList.contains('dt-win-btabs-on'),
+      cards: el.querySelectorAll('.myhub-btab').length,
+      btabsBox: el.querySelectorAll('.myhub-win-btabs').length,
+      navHidden: box.hidden,
+      navOn: el.classList.contains('dt-win-bnav-on'),
       titleDisplay: win.getComputedStyle(titleFlow).display,
     })
 
-    // (1) 탭 1개: 카드 없음, 제목 보임, + 버튼은 남는다.
-    postTabs(win, frame, [{ id: 't1', label: 'naver.com', fav: 'N', live: false }], 't1')
+    // (1) 게시 전: 내비 숨김, 제목 보임, 카드 없음.
     let s = state()
     expect(s.cards).toBe(0)
-    expect(s.newBtn).toBe(1)
-    expect(s.tabsOn).toBe(false)
+    expect(s.btabsBox).toBe(0)
+    expect(s.navHidden).toBe(true)
+    expect(s.navOn).toBe(false)
     expect(s.titleDisplay).not.toBe('none')
 
-    // (2) 탭 2개: 카드 2개, 제목 숨김, + 버튼 유지.
-    postTabs(
-      win,
-      frame,
-      [
-        { id: 't1', label: 'naver.com', fav: 'N', live: false },
-        { id: 't2', label: '새 탭', fav: '', live: false },
-      ],
-      't2',
-    )
-    s = state()
-    expect(s.cards).toBe(2)
-    expect(s.newBtn).toBe(1)
-    expect(s.tabsOn).toBe(true)
-    expect(s.titleDisplay).toBe('none')
-
-    // (3) 다시 탭 1개: 카드 사라지고 제목 돌아온다.
-    postTabs(win, frame, [{ id: 't1', label: 'naver.com', fav: 'N', live: false }], 't1')
+    // (2) 내비 게시(빈 탭): 내비 나타남, 제목 숨김, 카드 없음.
+    postNav(win, frame, {
+      url: '',
+      title: '새 탭',
+      fav: '',
+      canBack: false,
+      canFwd: false,
+      loading: false,
+    })
     s = state()
     expect(s.cards).toBe(0)
-    expect(s.newBtn).toBe(1)
-    expect(s.tabsOn).toBe(false)
-    expect(s.titleDisplay).not.toBe('none')
+    expect(s.btabsBox).toBe(0)
+    expect(s.navHidden).toBe(false)
+    expect(s.navOn).toBe(true)
+    expect(s.titleDisplay).toBe('none')
 
-    // + 버튼은 카드 없이도 바 오른쪽 끝에 붙는다 (margin-left: auto).
-    // jsdom은 레이아웃을 안 하므로 규칙 원문으로 단언하고, 선택자가
-    // 실제 렌더된 + 버튼에 매칭되는지 확인한다.
-    const newRule = extractRule(DESKTOP_CSS, '.myhub-btab-new')
-    expect(newRule).not.toBeNull()
-    expect(newRule).toMatch(/margin-left:\s*auto\s*;/)
-    expect(box.querySelector('.myhub-btab-new').matches('.myhub-btab-new')).toBe(true)
+    // (3) 다른 URL로 이동 + 로딩 전환: 여전히 카드 없음, 내비 유지.
+    postNav(win, frame, {
+      url: 'https://www.naver.com',
+      title: 'naver.com',
+      fav: 'N',
+      canBack: false,
+      canFwd: false,
+      loading: true,
+    })
+    s = state()
+    expect(s.cards).toBe(0)
+    expect(s.navHidden).toBe(false)
+    expect(s.navOn).toBe(true)
+    postNav(win, frame, {
+      url: 'https://www.google.com',
+      title: 'google.com',
+      fav: 'G',
+      canBack: true,
+      canFwd: false,
+      loading: false,
+    })
+    s = state()
+    expect(s.cards).toBe(0)
+    expect(s.navHidden).toBe(false)
+    expect(s.titleDisplay).toBe('none')
+    // 캡슐에는 새 호스트가 보인다.
+    expect((box.querySelector('.myhub-bnav-input') as any).value).toBe('google.com')
   })
 })

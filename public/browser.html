@@ -23,7 +23,8 @@
 </header>
 <div class="g-main">
   <div class="bw-layout">
-    <div class="bw-toolbar">
+    <div class="bw-toolbar" id="bwToolbar">
+      <button type="button" class="bw-icon-btn" id="bwSidebarBtn" aria-label="사이드바"><i data-lucide="panel-left"></i></button>
       <div class="bw-navgroup">
         <button type="button" class="bw-icon-btn" id="bwBackBtn" aria-label="뒤로"><i data-lucide="chevron-left"></i></button>
         <button type="button" class="bw-icon-btn" id="bwFwdBtn" aria-label="앞으로"><i data-lucide="chevron-right"></i></button>
@@ -34,8 +35,8 @@
       </div>
       <div class="bw-trailgroup">
         <button type="button" class="bw-icon-btn" id="bwShareBtn" aria-label="링크 복사"><i data-lucide="share"></i></button>
-        <button type="button" class="bw-icon-btn" id="bwHomeBtn" aria-label="시작 페이지"><i data-lucide="house"></i></button>
         <button type="button" class="bw-icon-btn bw-newtab" id="bwNewTabBtn" aria-label="새 탭"><i data-lucide="plus"></i></button>
+        <button type="button" class="bw-icon-btn" id="bwOverviewBtn" aria-label="탭 개요"><i data-lucide="copy"></i></button>
       </div>
     </div>
     <div class="bw-tabstrip" id="bwTabstrip">
@@ -78,15 +79,37 @@
         </div>
       </div>
       <iframe class="bw-frame" id="bwLiveFrame" title="원격 브라우저" hidden sandbox="allow-scripts allow-same-origin allow-presentation" allowfullscreen></iframe>
-      <div class="bw-pill" id="bwPill" hidden>
-        <span class="bw-pill-dot"></span>
-        <span id="bwLiveMsg">원격 브라우저</span>
-        <span class="bw-pill-time" id="bwLiveTime"></span>
-        <button type="button" id="bwLiveEnd">종료</button>
-      </div>
       <div class="bw-notice-card" id="bwNoticeCard" hidden>
         <p id="bwNoticeMsg"></p>
         <button type="button" id="bwNoticeClose">닫기</button>
+      </div>
+      <div class="bw-sidebar-backdrop" id="bwSidebarBackdrop" hidden></div>
+      <aside class="bw-sidebar" id="bwSidebar" hidden aria-label="사이드바">
+        <div class="bw-sidebar-head">
+          <h2 class="bw-sidebar-title">브라우저</h2>
+          <button type="button" class="bw-icon-btn" id="bwSidebarClose" aria-label="사이드바 닫기"><i data-lucide="x"></i></button>
+        </div>
+        <div class="bw-sidebar-body">
+          <section class="bw-sidebar-section">
+            <h3 class="bw-sidebar-section-title">즐겨찾기</h3>
+            <div class="bw-sidebar-list" id="bwSidebarFavs"></div>
+          </section>
+          <section class="bw-sidebar-section" id="bwSidebarRecentsSection">
+            <h3 class="bw-sidebar-section-title">최근 방문</h3>
+            <div class="bw-sidebar-list" id="bwSidebarRecents"></div>
+          </section>
+          <section class="bw-sidebar-section">
+            <h3 class="bw-sidebar-section-title">열린 탭</h3>
+            <div class="bw-sidebar-list" id="bwSidebarTabs"></div>
+          </section>
+        </div>
+      </aside>
+      <div class="bw-overview" id="bwOverview" hidden>
+        <div class="bw-overview-head">
+          <h2 class="bw-overview-title">열린 탭</h2>
+          <button type="button" class="bw-icon-btn" id="bwOverviewClose" aria-label="탭 개요 닫기"><i data-lucide="x"></i></button>
+        </div>
+        <div class="bw-overview-grid" id="bwOverviewGrid"></div>
       </div>
     </div>
   </div>

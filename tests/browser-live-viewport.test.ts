@@ -23,12 +23,22 @@
  * - enterLive는 iframe src를 /api/browse/view/로 걸고, 이미 켜진
  *   상태의 enterLive는 이동만 지시한다 (src 재설정 없음).
  * 카나리아: 이 테스트는 수정 전 코드에서 실패한다 (iframe만 재서 null).
+ *
+ * (2026-11-14: 하단 "원격 브라우저" 필 제거 — 시간 제한 세션 시절의
+ * 잔재. 오라클 서버는 상시 가동이라 종료 버튼이 서버의 뭘 끄는 게
+ * 아니고 화면만 닫는 동작이라 새 탭으로 대체 가능하고, 사파리에도
+ * 없는 UI다. 필·경과 시간·종료 버튼은 browser.html·browser-live.js·
+ * browser.js·browser.css 어디에도 없어야 한다 — 아래 '필 부재' 테스트가
+ * 실제 소스를 읽어 단언한다. 카나리아: 필을 다시 넣으면 실패한다.)
  */
 import * as fs from 'fs'
 import * as path from 'path'
 
 const ROOT = path.resolve(__dirname, '..')
 const LIVE_JS = fs.readFileSync(path.join(ROOT, 'public/js/browser-live.js'), 'utf-8')
+const BROWSER_HTML = fs.readFileSync(path.join(ROOT, 'public/browser.html'), 'utf-8')
+const BROWSER_JS = fs.readFileSync(path.join(ROOT, 'public/js/browser.js'), 'utf-8')
+const BROWSER_CSS = fs.readFileSync(path.join(ROOT, 'public/css/browser.css'), 'utf-8')
 
 const getWin = (): any => (globalThis as any).window
 const getDoc = (): any => (globalThis as any).document
@@ -53,10 +63,6 @@ function setupFixture(stageSize: { w: number; h: number }, frameSize: { w: numbe
     <div class="bw-stage" id="bwStage">
       <div class="bw-home" id="bwHome"></div>
       <iframe class="bw-frame" id="bwLiveFrame" title="원격 브라우저" hidden></iframe>
-      <div class="bw-pill" id="bwPill" hidden>
-        <span id="bwLiveMsg"></span><span id="bwLiveTime"></span>
-        <button type="button" id="bwLiveEnd">종료</button>
-      </div>
       <div class="bw-notice-card" id="bwNoticeCard" hidden>
         <p id="bwNoticeMsg"></p><button type="button" id="bwNoticeClose">닫기</button>
       </div>
@@ -175,5 +181,46 @@ describe('browser-live enterLive 상태', () => {
     live.endLive()
     expect(live.state()).toBe('off')
     expect(getDoc().getElementById('bwLiveFrame').getAttribute('src')).toBeNull()
+  })
+})
+
+describe('browser-live 필 부재 (2026-11-14 제거)', () => {
+  // 필을 다시 넣으면 실패한다: 실제 소스 파일에 식별자가 없어야 한다.
+  const PILL_IDS = ['bwPill', 'bwLiveMsg', 'bwLiveTime', 'bwLiveEnd']
+  test('browser.html에 필 요소가 없다', () => {
+    for (const id of PILL_IDS) {
+      expect(BROWSER_HTML).not.toContain(id)
+    }
+    expect(BROWSER_HTML).not.toContain('bw-pill')
+  })
+
+  test('browser-live.js에 필 참조가 없다', () => {
+    for (const id of [...PILL_IDS, 'liveMsg', 'liveTime', 'liveEndBtn', 'setLiveTime']) {
+      expect(LIVE_JS).not.toContain(id)
+    }
+    // endLive API는 남아 있다 (탭 닫기·전환 시 browser.js가 호출한다).
+    expect(LIVE_JS).toContain('function endLive()')
+    expect(LIVE_JS).toContain('endLive: endLive')
+  })
+
+  test('browser.js·browser.css에 필 참조가 없다', () => {
+    expect(BROWSER_JS).not.toContain('bwPill')
+    expect(BROWSER_JS).not.toContain('pillEl')
+    expect(BROWSER_CSS).not.toContain('.bw-pill')
+  })
+
+  test('라이브가 켜진 상태에도 필·종료 버튼이 DOM에 없다', async () => {
+    setupFixture({ w: 1920, h: 1000 }, { w: 0, h: 0 })
+    const { live } = makeLive()
+    await live.enterLive('https://www.naver.com')
+    expect(live.state()).toBe('on')
+    const doc = getDoc()
+    for (const id of PILL_IDS) {
+      expect(doc.getElementById(id)).toBeNull()
+    }
+    expect(doc.querySelector('.bw-pill')).toBeNull()
+    // 종료 버튼 없이도 endLive API로는 끌 수 있다.
+    live.endLive()
+    expect(live.state()).toBe('off')
   })
 })

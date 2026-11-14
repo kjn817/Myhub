@@ -11,9 +11,13 @@
  * iframe을 다시 띄우지 않고 이동만 지시한다.
  * 상태: 'off' | 'on' | 'notice'
  * (notice = 503 등 시작 실패 안내 카드를 띄운 상태).
- * 자기 소유 요소(#bwLiveFrame/#bwPill/#bwNoticeCard)를 표시와
+ * 자기 소유 요소(#bwLiveFrame/#bwNoticeCard)를 표시와
  * syncChrome()로 맞추고, 상태 변경 직후에는 deps.onChange()로 주인에게
  * 알려 전체 너비를 다시 그리게 한다.
+ * (2026-11-14: 하단 "원격 브라우저" 필(라벨·경과 시간·종료 버튼)
+ * 제거 — 시간 제한 세션 시절의 잔재. 오라클 서버는 상시 가동이라
+ * 종료 버튼이 서버의 뭘 끄는 게 아니고 화면만 닫는 동작이라 새 탭으로
+ * 대체 가능하고, 사파리에도 없는 UI다. 종료는 endLive() API로만.)
  * 노출: window.MyHubBrowserLive = { createLive }
  */
 (function () {
@@ -50,11 +54,10 @@
 
   /**
    * deps = { doc, navigate, onChange }
-   * doc에서 #bwLiveFrame/#bwPill/#bwLiveMsg/#bwLiveTime/#bwLiveEnd/
-   * #bwNoticeCard/#bwNoticeMsg/#bwNoticeClose를 찾는다 (없으면 해당
-   * 요소만 비활성). navigate(url, viewport)는 Promise<{status, body}>
-   * 테스트 주입 지난. onChange()는 상태 변경 등 주인의 너비를 다시
-   * 그리며 알림 콜백.
+   * doc에서 #bwLiveFrame/#bwNoticeCard/#bwNoticeMsg/#bwNoticeClose를
+   * 찾는다 (없으면 해당 요소만 비활성). navigate(url, viewport)는
+   * Promise<{status, body}> 테스트 주입 지난. onChange()는 상태 변경 등
+   * 주인의 너비를 다시 그리며 알림 콜백.
    */
   function createLive(deps) {
     deps = deps || {};
@@ -68,20 +71,12 @@
             return undefined;
           };
     var liveFrame = doc.getElementById('bwLiveFrame');
-    var pill = doc.getElementById('bwPill');
-    var liveMsg = doc.getElementById('bwLiveMsg');
-    var liveTime = doc.getElementById('bwLiveTime');
-    var liveEndBtn = doc.getElementById('bwLiveEnd');
     var noticeCard = doc.getElementById('bwNoticeCard');
     var noticeMsg = doc.getElementById('bwNoticeMsg');
     var noticeClose = doc.getElementById('bwNoticeClose');
     /* 원격 상태: 'off' | 'on' | 'notice' */
     var liveState = 'off';
     var liveGen = 0; // 이동 응답이 늦게 도착해 종료 후에 상태를 건드리지 않기 위한 지난 번호
-
-    function setLiveTime(text) {
-      if (liveTime) liveTime.textContent = text;
-    }
 
     function setNotice(text) {
       if (noticeMsg) noticeMsg.textContent = text;
@@ -91,7 +86,6 @@
     function syncChrome() {
       var liveOn = liveState === 'on';
       if (liveFrame) liveFrame.hidden = !liveOn;
-      if (pill) pill.hidden = !liveOn;
       if (noticeCard) noticeCard.hidden = liveState !== 'notice';
     }
 
@@ -127,7 +121,6 @@
       if (!alreadyOn) {
         liveState = 'on';
         if (liveFrame) liveFrame.src = VIEW_URL;
-        if (liveMsg) liveMsg.textContent = '원격 브라우저';
         onChange();
       }
       if (!url) return Promise.resolve(true);
@@ -166,7 +159,6 @@
       liveGen += 1;
       liveState = 'off';
       if (liveFrame) liveFrame.removeAttribute('src');
-      setLiveTime('');
       onChange();
       return Promise.resolve();
     }
@@ -178,11 +170,6 @@
       onChange();
     }
 
-    if (liveEndBtn) {
-      liveEndBtn.addEventListener('click', function () {
-        endLive();
-      });
-    }
     if (noticeClose) {
       noticeClose.addEventListener('click', function () {
         dismissNotice();

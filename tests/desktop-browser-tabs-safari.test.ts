@@ -3,13 +3,19 @@
  */
 /// <reference types="jest" />
 /**
- * 창 바 브라우저 탭의 사파리 정렬 테스트 (2026-11-14 실제 맥 사파리 26 캡처 대조).
+ * 창 바 브라우저 내비 — 사파리 한 줄 정렬 (2026-11-14 실제 맥 사파리 26 캡처 대조).
  *
- * 검증 성질:
- * - 브라우저 앱이 게시한 탭(myhub:browser-tabs 메시지)이 창 바에 렌더링될 때
- *   이름 앞에 파비콘 타일(.myhub-btab-fav)이 붙는다 (글자, 없으면 globe 아이콘).
- * - 탭은 사파리 카드다: 네 모서리 반경 10px, 높이 32px, 파비콘+제목 가운데.
- * - 탭 띠(.myhub-win-btabs)는 바 안에서 세로 가운데 정렬이다.
+ * 검증 성질 (2026-11-14 타이틀바 한 줄 통일):
+ * - 브라우저 앱이 게시한 내비 상태(myhub:browser-nav 메시지)가 창 바에
+ *   사파리 순서로 렌더링된다: 사이드바 → 뒤로/앞으로 알약 → 주소 캡슐 →
+ *   공유 → 새 탭 → 탭 개요.
+ * - 주소 캡슐 왼쪽에 현재 탭 파비콘 타일(.myhub-bnav-fav)이 붙는다
+ *   (글자, 없으면 globe 아이콘). 캡슐에는 호스트만 보인다 (포커스
+ *   전에는 전체 URL이 아니다 — 사파리와 같은 방식).
+ * - 뒤로/앞으로 disabled는 canBack/canFwd를 따른다.
+ * - 탭 카드는 셸에 없다 (.myhub-win-btabs·.myhub-btab 없음 — 탭 줄은
+ *   iframe 안의 .bw-tabstrip이 담당한다).
+ * - 내비가 앉으면 창 제목이 숨긴다 (dt-win-bnav-on).
  *
  * 로딩 패턴은 tests/desktop-ui.test.ts와 동일하다 (실제 windows.js +
  * state.js + 공용 전역, 스텁 아님). CSS는 실제 public/css/desktop.css를
@@ -127,8 +133,17 @@ function extractRule(css: string, selector: string): string | null {
   return m ? m[1] : null
 }
 
-describe('창 바 브라우저 탭 — 사파리 카드 정렬', () => {
-  test('게시된 탭에 파비콘 타일이 붙고 카드는 네 모서리 10px·높이 32px·가운데 정렬이다', () => {
+function postNav(win: any, frame: any, nav: any): void {
+  const ev = new win.MessageEvent('message', {
+    data: { type: 'myhub:browser-nav', ...nav },
+    origin: win.location.origin,
+    source: frame.contentWindow,
+  })
+  win.dispatchEvent(ev)
+}
+
+describe('창 바 브라우저 내비 — 사파리 한 줄 정렬', () => {
+  test('내비 상태가 사파리 순서로 렌더링되고 캡슐에 호스트+파비콘이 보인다', () => {
     const storage = new MemoryStorage()
     const m = makeManager(storage)
     const doc = getDoc()
@@ -140,10 +155,122 @@ describe('창 바 브라우저 탭 — 사파리 카드 정렬', () => {
     expect(el).not.toBeNull()
     const frame = el.querySelector('iframe.dt-frame')
     expect(frame).not.toBeNull()
-    const box = el.querySelector('.myhub-win-btabs')
+    const box = el.querySelector('.myhub-win-bnav')
     expect(box).not.toBeNull()
+    // 탭 카드 호스팅은 폐지됐다 — 셸에 탭 카드 흔적이 없다.
+    expect(el.querySelector('.myhub-win-btabs')).toBeNull()
+    expect(el.querySelector('.myhub-btab')).toBeNull()
 
-    // 브라우저 앱이 보내는 것과 같은 게시 메시지 (fav 포함).
+    // 게시 전에는 내비가 숨겨지고 제목이 보인다.
+    expect(box.hidden).toBe(true)
+    expect(el.classList.contains('dt-win-bnav-on')).toBe(false)
+
+    // 브라우저 앱이 보내는 것과 같은 내비 상태 게시.
+    postNav(win, frame, {
+      url: 'https://www.naver.com',
+      title: 'naver.com',
+      fav: 'N',
+      canBack: false,
+      canFwd: true,
+      loading: false,
+    })
+
+    expect(box.hidden).toBe(false)
+    expect(el.classList.contains('dt-win-bnav-on')).toBe(true)
+    const titleFlow = el.querySelector('.dt-title-flow')
+    expect(win.getComputedStyle(titleFlow).display).toBe('none')
+
+    // 순서: 사이드바 → 알약 → 캡슐 → 트레일(공유·새 탭·개요).
+    const kids = Array.from(box.children)
+    expect(kids.length).toBe(4)
+    expect(kids[0].classList.contains('myhub-bnav-sidebar')).toBe(true)
+    expect(kids[1].classList.contains('myhub-bnav-navgroup')).toBe(true)
+    expect(kids[2].classList.contains('myhub-bnav-url')).toBe(true)
+    expect(kids[3].classList.contains('myhub-bnav-trail')).toBe(true)
+    const trailKids = Array.from(kids[3].children)
+    expect(trailKids.length).toBe(3)
+    expect(trailKids[0].classList.contains('myhub-bnav-share')).toBe(true)
+    expect(trailKids[1].classList.contains('myhub-bnav-new')).toBe(true)
+    expect(trailKids[2].classList.contains('myhub-bnav-overview')).toBe(true)
+
+    // 캡슐: 파비콘 'N' + 호스트 표시 + 새로고침이 캡슐 안.
+    const fav = box.querySelector('.myhub-bnav-fav')
+    expect(fav).not.toBeNull()
+    expect(fav.textContent).toBe('N')
+    const input = box.querySelector('.myhub-bnav-input') as any
+    expect(input).not.toBeNull()
+    expect(input.value).toBe('naver.com')
+    const reload = box.querySelector('.myhub-bnav-reload')
+    expect(reload).not.toBeNull()
+    expect(reload.closest('.myhub-bnav-url')).not.toBeNull()
+
+    // 뒤로 disabled(canBack false), 앞으로 enabled(canFwd true).
+    expect((box.querySelector('.myhub-bnav-back') as any).disabled).toBe(true)
+    expect((box.querySelector('.myhub-bnav-fwd') as any).disabled).toBe(false)
+
+    // 캡슐 계산 스타일 (실제 desktop.css): 높이 30px, 가운데 정렬 입력.
+    const urlCs = win.getComputedStyle(box.querySelector('.myhub-bnav-url'))
+    expect(urlCs.height).toBe('30px')
+    expect(win.getComputedStyle(input).textAlign).toBe('center')
+    // border-radius는 jsdom getComputedStyle이 못 읽으므로(빈 값/0 반환)
+    // CSS 원문에서 규칙을 뽑아 단언하고, 선택자가 실제 렌더된 요소에
+    // 매칭되는지 확인한다 (tests/desktop-drag-perf.test.ts와 같은 방식).
+    const urlRule = extractRule(DESKTOP_CSS, '.myhub-bnav-url')
+    expect(urlRule).not.toBeNull()
+    expect(urlRule).toMatch(/border-radius:\s*999px\s*;/)
+    expect(box.querySelector('.myhub-bnav-url').matches('.myhub-bnav-url')).toBe(true)
+    const navgroupRule = extractRule(DESKTOP_CSS, '.myhub-bnav-navgroup')
+    expect(navgroupRule).not.toBeNull()
+    expect(navgroupRule).toMatch(/border-radius:\s*999px\s*;/)
+    const boxCs = win.getComputedStyle(box)
+    expect(boxCs.alignItems).toBe('center')
+    const favCs = win.getComputedStyle(fav)
+    expect(favCs.width).toBe('18px')
+    expect(favCs.height).toBe('18px')
+  })
+
+  test('빈 탭이면 파비콘은 globe, 입력은 비어 있고 새로고침·공유는 disabled다', () => {
+    const storage = new MemoryStorage()
+    const m = makeManager(storage)
+    const doc = getDoc()
+    const win = getWin()
+    injectDesktopCss()
+
+    m.openModule('browser')
+    const el = doc.querySelector('.dt-window[data-id="browser"]')
+    const frame = el.querySelector('iframe.dt-frame')
+    const box = el.querySelector('.myhub-win-bnav')
+
+    postNav(win, frame, {
+      url: '',
+      title: '새 탭',
+      fav: '',
+      canBack: false,
+      canFwd: false,
+      loading: false,
+    })
+
+    const fav = box.querySelector('.myhub-bnav-fav')
+    expect(fav.querySelector('i[data-lucide="globe"]')).not.toBeNull()
+    expect((box.querySelector('.myhub-bnav-input') as any).value).toBe('')
+    expect((box.querySelector('.myhub-bnav-reload') as any).disabled).toBe(true)
+    expect((box.querySelector('.myhub-bnav-share') as any).disabled).toBe(true)
+    expect((box.querySelector('.myhub-bnav-back') as any).disabled).toBe(true)
+    expect((box.querySelector('.myhub-bnav-fwd') as any).disabled).toBe(true)
+  })
+
+  test('옛 탭 채널(myhub:browser-tabs) 메시지는 무시된다', () => {
+    const storage = new MemoryStorage()
+    const m = makeManager(storage)
+    const doc = getDoc()
+    const win = getWin()
+    injectDesktopCss()
+
+    m.openModule('browser')
+    const el = doc.querySelector('.dt-window[data-id="browser"]')
+    const frame = el.querySelector('iframe.dt-frame')
+    const box = el.querySelector('.myhub-win-bnav')
+
     const ev = new win.MessageEvent('message', {
       data: {
         type: 'myhub:browser-tabs',
@@ -158,38 +285,9 @@ describe('창 바 브라우저 탭 — 사파리 카드 정렬', () => {
     })
     win.dispatchEvent(ev)
 
-    const btabs = box.querySelectorAll('.myhub-btab')
-    expect(btabs.length).toBe(2)
-    // 파비콘 타일: 글자 탭은 'N', 무URL 탭은 globe 아이콘.
-    const fav1 = btabs[0].querySelector('.myhub-btab-fav')
-    expect(fav1).not.toBeNull()
-    expect(fav1.textContent).toBe('N')
-    const fav2 = btabs[1].querySelector('.myhub-btab-fav')
-    expect(fav2).not.toBeNull()
-    expect(fav2.querySelector('i[data-lucide="globe"]')).not.toBeNull()
-    // 파비콘이 이름보다 앞에 온다.
-    expect(btabs[0].querySelector('.myhub-btab-main').firstChild).toBe(fav1)
-
-    // border-radius는 jsdom getComputedStyle이 못 읽으므로(빈 값/0 반환)
-    // CSS 원문에서 규칙을 뽑아 단언하고, 선택자가 실제 렌더된 탭에
-    // 매칭되는지 확인한다 (tests/desktop-drag-perf.test.ts와 같은 방식).
-    const btabRule = extractRule(DESKTOP_CSS, '.myhub-btab')
-    expect(btabRule).not.toBeNull()
-    expect(btabRule).toMatch(/border-radius:\s*10px\s*;/)
-    expect(btabRule).not.toMatch(/8px 8px 0 0/)
-    expect(btabs[0].matches('.myhub-btab')).toBe(true)
-
-    // 카드 계산 스타일 (실제 desktop.css).
-    const cs = win.getComputedStyle(btabs[0])
-    expect(cs.height).toBe('32px')
-    // 폭 상한 해제는 jsdom이 미설정 max-width를 ''로 돌리므로 규칙 원문으로 단언.
-    expect(btabRule).not.toMatch(/max-width/)
-    const mainCs = win.getComputedStyle(btabs[0].querySelector('.myhub-btab-main'))
-    expect(mainCs.justifyContent).toBe('center')
-    const boxCs = win.getComputedStyle(box)
-    expect(boxCs.alignItems).toBe('center')
-    const favCs = win.getComputedStyle(fav1)
-    expect(favCs.width).toBe('18px')
-    expect(favCs.height).toBe('18px')
+    expect(box.hidden).toBe(true)
+    expect(box.hasChildNodes()).toBe(false)
+    expect(el.querySelector('.myhub-btab')).toBeNull()
+    expect(el.classList.contains('dt-win-bnav-on')).toBe(false)
   })
 })

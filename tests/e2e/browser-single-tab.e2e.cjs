@@ -1,8 +1,10 @@
 // 탭이 1개면 탭 줄이 사라지는지 검증한다 (2026-11-14 실제 맥 사파리 26 캡처
 // image-46 대조: 탭이 하나면 사파리는 탭 줄 자체가 없고 주소 캡슐만 있다).
 // 단독 모드: #bwTabstrip hidden + 높이 0, 새 탭 + 버튼은 툴바에 남아 클릭 가능.
-// 창 모드: 창 바에 탭 카드 없음·제목 보임·+ 버튼만 남음.
-// 탭이 2개가 되면 둘 다 나타나고, 다시 1개가 되면 사라진다.
+// 창 모드: 탭 줄은 iframe 안의 #bwTabstrip이 담당한다 (제목 바는 내비만 맡고
+// 탭 카드는 없다 — 2026-11-14 타이틀바 한 줄 통일). iframe 툴바는 숨겨지고
+// 셸 제목 바에 내비 한 줄이 뜬다. 탭이 2개가 되면 탭 줄이 나타나고,
+// 다시 1개가 되면 사라진다.
 'use strict';
 
 const { runScenario, waitForDesktop, attachErrorCollector, assert, assertEq } = require('./harness.cjs');
@@ -70,74 +72,83 @@ async function windowPart(t, browser, base) {
   await waitForDesktop(page);
   await page.evaluate(() => window.MyHubDesktop.openModule('browser'));
   await page.waitForSelector('.dt-frame[src*="browser.html"]', { timeout: 15000 });
-  // iframe이 탭을 게시할 때까지 대기 (+ 버튼이 렌더링되면 게시 완료).
-  await page.waitForSelector('.myhub-win-btabs .myhub-btab-new', { timeout: 15000 });
-  // 창 모드(호스팅)에서는 iframe 툴바의 +가 숨겨져야 한다
-  // (창 바 +와 두 개가 겹쳐 보이지 않게).
+  // iframe이 내비를 게시할 때까지 대기 (주소 입력이 렌더링되면 게시 완료).
+  await page.waitForSelector('.myhub-win-bnav .myhub-bnav-input', { timeout: 15000 });
   const frame = page.frame({ url: /browser\.html/ });
   assert(frame, '창 모드: 브라우저 iframe을 찾을 수 없다');
+  // 창 모드(호스팅)에서는 iframe 툴바 자체가 숨겨져야 한다
+  // (내비는 셸 제목 바가 대신한다).
   await frame.waitForFunction(
     () => {
-      const btn = document.getElementById('bwNewTabBtn');
-      return btn && btn.hidden;
+      const tb = document.getElementById('bwToolbar');
+      return tb && tb.hidden;
     },
     { timeout: 10000 },
   );
-  const hostedPlus = await frame.evaluate(() => {
-    const btn = document.getElementById('bwNewTabBtn');
-    const r = btn.getBoundingClientRect();
-    return { hidden: btn.hidden, w: Math.round(r.width), h: Math.round(r.height) };
+  const hostedToolbar = await frame.evaluate(() => {
+    const tb = document.getElementById('bwToolbar');
+    const r = tb.getBoundingClientRect();
+    return { hidden: tb.hidden, w: Math.round(r.width), h: Math.round(r.height) };
   });
-  assert(hostedPlus.hidden, '창 모드: iframe 툴바의 + 버튼은 hidden이어야 한다');
-  assertEq(hostedPlus.w, 0, `창 모드: iframe 툴바의 + 버튼은 안 보여야 한다 (실제 너비: ${hostedPlus.w}px)`);
+  assert(hostedToolbar.hidden, '창 모드: iframe 툴바는 hidden이어야 한다');
+  assertEq(hostedToolbar.h, 0, `창 모드: iframe 툴바는 안 보여야 한다 (실제 높이: ${hostedToolbar.h}px)`);
 
+  const frameStripState = () => frame.evaluate(() => {
+    const strip = document.getElementById('bwTabstrip');
+    const r = strip.getBoundingClientRect();
+    return {
+      hidden: strip.hidden,
+      h: Math.round(r.height),
+      tabs: document.querySelectorAll('.bw-tab').length,
+    };
+  });
   const barState = () => page.evaluate(() => {
     const winEl = document.querySelector('.dt-window[data-id="browser"]');
-    const box = winEl.querySelector('.myhub-win-btabs');
+    const box = winEl.querySelector('.myhub-win-bnav');
     const title = winEl.querySelector('.dt-title-flow');
-    const btn = box.querySelector('.myhub-btab-new');
-    const br = btn ? btn.getBoundingClientRect() : null;
     return {
-      cards: box.querySelectorAll('.myhub-btab').length,
-      newBtn: box.querySelectorAll('.myhub-btab-new').length,
-      tabsOn: winEl.classList.contains('dt-win-btabs-on'),
+      cards: winEl.querySelectorAll('.myhub-btab').length,
+      navHidden: box.hidden,
+      navOn: winEl.classList.contains('dt-win-bnav-on'),
       titleVisible: !!(title && getComputedStyle(title).display !== 'none'),
-      btnAtRight: br ? Math.round(br.right) : null,
-      boxRight: Math.round(box.getBoundingClientRect().right),
+      hasInput: !!box.querySelector('.myhub-bnav-input'),
+      hasOverview: !!box.querySelector('.myhub-bnav-overview'),
+      hasSidebar: !!box.querySelector('.myhub-bnav-sidebar'),
+      hasNew: !!box.querySelector('.myhub-bnav-new'),
     };
   });
 
-  // (1) 탭 1개: 카드 없음·제목 보임·+ 남음.
+  // (1) 탭 1개: 제목 바에 내비 한 줄·탭 카드 없음·제목 숨김, iframe 탭 줄 숨김.
   let s = await barState();
-  assertEq(s.cards, 0, `창 모드: 탭 1개면 카드가 없어야 한다 (실제: ${s.cards}개)`);
-  assertEq(s.newBtn, 1, `창 모드: 탭 1개여도 + 버튼이 있어야 한다 (실제: ${s.newBtn}개)`);
-  assert(!s.tabsOn, '창 모드: 탭 1개면 dt-win-btabs-on 클래스가 없어야 한다');
-  assert(s.titleVisible, '창 모드: 탭 1개면 창 제목이 보여야 한다');
-  assert(s.btnAtRight !== null && s.boxRight - s.btnAtRight <= 2,
-    `창 모드: 탭 1개일 때 + 버튼은 바 오른쪽 끝에 있어야 한다 (버튼 우단: ${s.btnAtRight}, 박스 우단: ${s.boxRight})`);
+  assertEq(s.cards, 0, `창 모드: 제목 바에 탭 카드가 없어야 한다 (실제: ${s.cards}개)`);
+  assert(!s.navHidden, '창 모드: 내비가 보여야 한다');
+  assert(s.navOn, '창 모드: dt-win-bnav-on 클래스가 있어야 한다');
+  assert(!s.titleVisible, '창 모드: 내비가 앉으면 창 제목이 숨겨져야 한다');
+  assert(s.hasInput && s.hasOverview && s.hasSidebar && s.hasNew,
+    '창 모드: 내비에 주소 입력·탭 개요·사이드바·새 탭이 있어야 한다');
+  let f = await frameStripState();
+  assertEq(f.tabs, 1, `창 모드: 시작 탭은 1개여야 한다 (실제: ${f.tabs}개)`);
+  assert(f.hidden, '창 모드: 탭 1개면 iframe 탭 줄이 hidden이어야 한다');
+  assertEq(f.h, 0, `창 모드: 탭 1개면 iframe 탭 줄 높이가 0이어야 한다 (실제: ${f.h}px)`);
 
-  // (2) 창 바 + 클릭 → 탭 2개 → 카드 나타남·제목 숨김.
-  await page.click('.myhub-win-btabs .myhub-btab-new');
-  await page.waitForFunction(
-    () => document.querySelectorAll('.myhub-win-btabs .myhub-btab').length === 2,
-    { timeout: 10000 },
-  );
+  // (2) 제목 바 + 클릭 → 탭 2개 → iframe 탭 줄 나타남.
+  await page.click('.myhub-win-bnav .myhub-bnav-new');
+  await frame.waitForFunction(() => document.querySelectorAll('.bw-tab').length === 2, { timeout: 10000 });
+  f = await frameStripState();
+  assertEq(f.tabs, 2, `창 모드: 새 탭 후 탭은 2개여야 한다 (실제: ${f.tabs}개)`);
+  assert(!f.hidden, '창 모드: 탭 2개면 iframe 탭 줄이 보여야 한다');
+  assert(f.h > 0, `창 모드: 탭 2개면 iframe 탭 줄 높이가 있어야 한다 (실제: ${f.h}px)`);
   s = await barState();
-  assertEq(s.cards, 2, `창 모드: 새 탭 후 카드는 2개여야 한다 (실제: ${s.cards}개)`);
-  assert(s.tabsOn, '창 모드: 탭 2개면 dt-win-btabs-on 클래스가 있어야 한다');
-  assert(!s.titleVisible, '창 모드: 탭 2개면 창 제목이 숨겨져야 한다');
+  assertEq(s.cards, 0, '창 모드: 탭 2개여도 제목 바에 탭 카드가 없어야 한다');
+  assert(!s.navHidden, '창 모드: 탭 2개여도 내비가 보여야 한다');
 
-  // (3) 두 번째 카드 닫기 → 다시 1개 → 카드 사라짐·제목 돌아옴.
-  await page.click('.myhub-btab:nth-child(2) .myhub-btab-close');
-  await page.waitForFunction(
-    () => document.querySelectorAll('.myhub-win-btabs .myhub-btab').length === 0,
-    { timeout: 10000 },
-  );
-  s = await barState();
-  assertEq(s.cards, 0, `창 모드: 탭 닫은 후 카드가 없어야 한다 (실제: ${s.cards}개)`);
-  assertEq(s.newBtn, 1, `창 모드: 다시 1개가 되어도 + 버튼이 있어야 한다 (실제: ${s.newBtn}개)`);
-  assert(!s.tabsOn, '창 모드: 다시 1개가 되면 dt-win-btabs-on 클래스가 없어야 한다');
-  assert(s.titleVisible, '창 모드: 다시 1개가 되면 창 제목이 보여야 한다');
+  // (3) iframe 탭 줄에서 두 번째 탭 닫기 → 다시 1개 → 탭 줄 사라짐.
+  await frame.click('.bw-tab:nth-child(2) .bw-tab-close');
+  await frame.waitForFunction(() => document.getElementById('bwTabstrip').hidden, { timeout: 10000 });
+  f = await frameStripState();
+  assertEq(f.tabs, 1, `창 모드: 탭 닫은 후 탭은 1개여야 한다 (실제: ${f.tabs}개)`);
+  assert(f.hidden, '창 모드: 다시 1개가 되면 iframe 탭 줄이 hidden이어야 한다');
+  assertEq(f.h, 0, `창 모드: 다시 1개가 되면 iframe 탭 줄 높이가 0이어야 한다 (실제: ${f.h}px)`);
   assertEq(errors.pageErrors.length, 0, `창 모드: 페이지 오류가 없어야 한다: ${errors.pageErrors.slice(0, 3).join(' | ')}`);
   await page.context().close();
 }

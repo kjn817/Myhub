@@ -17,14 +17,18 @@
  * 안내를 보여준다 — 소유하지 않은 탭이 실행 중인 것처럼 보이지 않게
  * 한다. 뒤로/앞으로는 탭의 방문 기록을 따른다. 원격 화면 안에서의
  * 이동은 라이브 화면 자체가 처리한다.
- * 탭 표면 (2026-11-06, image-147): 탭 행이 아닌 창 바(타이틀바)에
- * 두는 탭 상태는 myhub:browser-tabs 채널로 부모에 게시하고
- * (win-actions·finder-toolbar와 같은 계약: 게시 → 클릭 → 동작 전임),
- * 탭을 클릭하면 탭 행(#bwTabstrip)에 둔다. 단독 실행에서는 게시할
- * 부모가 없으므로 탭 행을 페이지 안에 둔다. 주소 캡슐과
- * (뒤로/앞으로/새로고침·공유·시작 페이지) 버튼은 본문 툴바에 둔다 —
- * Safari에서는 주소창과 툴바 행의 높이가 같고, 캡슐이 높으면 주소
- * 입력·이동 버튼이 자리를 잃는다.
+ * 탭 표면 (2026-11-06, image-147; 2026-11-14 타이틀바 한 줄 통일로
+ * 변경): 탭 줄은 iframe 안의 #bwTabstrip이 창 모드·단독 모드 모두
+ * 담당한다. 창 모드에서는 내비게이션을 셸 제목 바가 호스팅한다 —
+ * iframe이 내비 상태(myhub:browser-nav)를 게시하면 셸이 제목 바에
+ * 사이드바·뒤로/앞으로·주소 캡슐·공유·새 탭·탭 개요를 그리고,
+ * 명령은 myhub:browser-nav-action으로 iframe에 돌려보낸다
+ * (win-actions·finder-toolbar와 같은 계약: 게시 → 클릭 → 동작 전임).
+ * 창 모드에서는 iframe 툴바(.bw-toolbar) 자체를 숨긴다. 단독 실행에서는
+ * 게시할 부모가 없으므로 툴바를 페이지 안에 둔다.
+ * 사이드바(즐겨찾기·최근 방문·열린 탭)와 탭 개요(파비콘+제목 카드
+ * 그리드)는 iframe 안의 스테이지 오버레이로, 셸·단독 버튼 둘 다
+ * 같은 토글을 연다. 원격 탭 썸네일은 없으므로 개요에 썸네일은 없다.
  * '브라우저 시작' 버튼은 시작 페이지 카드의 것 하나로 둔다
  * (2026-11-06, image-147): 툴바 우측 버튼은 시작 카드 버튼과
  * 동시에 보여 중복이었고, 원격 뷰가 켜진 동안에는 시작 페이지 자체가 숨어
@@ -111,9 +115,9 @@
 
     var urlInput = doc.getElementById('bwUrl');
     var home = doc.getElementById('bwHome');
-    var homeBtn = doc.getElementById('bwHomeBtn');
     // 시작 버튼은 카드의 것 하나로 둔다 (헤더 참조 — 툴바 중복 제거)
     var startBtns = doc.querySelectorAll('.bw-start-btn');
+    var toolbarEl = doc.getElementById('bwToolbar');
     var tabstripEl = doc.getElementById('bwTabstrip');
     // 창 바 채널을 받는 창 (테스트 주입 인자 — office-tabs mount와 같은 방식)
     var appWin =
@@ -132,8 +136,19 @@
     var fwdBtn = doc.getElementById('bwFwdBtn');
     var reloadBtn = doc.getElementById('bwReloadBtn');
     var shareBtn = doc.getElementById('bwShareBtn');
+    var sidebarBtn = doc.getElementById('bwSidebarBtn');
+    var overviewBtn = doc.getElementById('bwOverviewBtn');
+    var sidebarEl = doc.getElementById('bwSidebar');
+    var sidebarBackdrop = doc.getElementById('bwSidebarBackdrop');
+    var sidebarCloseBtn = doc.getElementById('bwSidebarClose');
+    var sidebarFavsEl = doc.getElementById('bwSidebarFavs');
+    var sidebarRecentsEl = doc.getElementById('bwSidebarRecents');
+    var sidebarRecentsSection = doc.getElementById('bwSidebarRecentsSection');
+    var sidebarTabsEl = doc.getElementById('bwSidebarTabs');
+    var overviewEl = doc.getElementById('bwOverview');
+    var overviewGridEl = doc.getElementById('bwOverviewGrid');
+    var overviewCloseBtn = doc.getElementById('bwOverviewClose');
     var liveFrame = doc.getElementById('bwLiveFrame');
-    var pillEl = doc.getElementById('bwPill');
     var noticeEl = doc.getElementById('bwNoticeCard');
     var elsewhereEl = doc.getElementById('bwElsewhere');
     var elsewhereMsg = doc.getElementById('bwElsewhereMsg');
@@ -276,47 +291,55 @@
       }
     }
 
-    // ---------- 창 바 탭 게시 (myhub:browser-tabs 채널) ----------
+    // ---------- 창 바 내비 게시 (myhub:browser-nav 채널) ----------
     // 상태 서명이 바뀔 때만 게시한다 (notifyDocTitle와 같은 방식).
-    // 탭을 클릭하면 탭 행을 남기고, 탭 클릭·닫기·새 탭은
-    // myhub:browser-tabs-action으로 알려준 아래 실제 함수들을 연다.
-    var tabsHosted = false;
-    var lastTabsSig; // undefined = 아직 게시 전 값
-    function browserTabsPayload() {
-      return tabs.map(function (t) {
-        return {
-          id: t.id,
-          label: tabTitle(t),
-          // 창 바 탭 카드의 파비콘 타일 — 단독 탭(renderTabs)과 같은 글자.
-          fav: t.url ? hostOf(t.url).charAt(0).toUpperCase() : '',
-          live: t.id === liveTabId && live.isActive(),
-        };
-      });
+    // 셸은 이 상태로 제목 바에 사이드바·뒤로/앞으로·주소 캡슐·공유·
+    // 새 탭·탭 개요를 그리고, 명령은 myhub:browser-nav-action으로
+    // 돌려보낸다. 탭 줄은 iframe 안에 남으므로 탭 목록은 게시하지 않는다.
+    var toolbarHosted = false;
+    var navLoading = false;
+    var lastNavSig; // undefined = 아직 게시 전 값
+    function browserNavPayload() {
+      var tab = activeTab();
+      return {
+        url: tab && tab.url ? tab.url : '',
+        title: tabTitle(tab),
+        fav: tab && tab.url ? hostOf(tab.url).charAt(0).toUpperCase() : '',
+        canBack: !!(tab && tab.hIndex > 0),
+        canFwd: !!(tab && tab.hIndex < tab.history.length - 1),
+        loading: navLoading,
+      };
     }
-    function postBrowserTabs(force) {
+    function postBrowserNav(force) {
       if (!appWin || !appWin.parent || appWin.parent === appWin) return;
-      var payload = browserTabsPayload();
-      var sig = JSON.stringify({ tabs: payload, activeId: activeTabId });
-      if (!force && sig === lastTabsSig) return;
-      lastTabsSig = sig;
+      var payload = browserNavPayload();
+      var sig = JSON.stringify(payload);
+      if (!force && sig === lastNavSig) return;
+      lastNavSig = sig;
       try {
         appWin.parent.postMessage(
-          { type: 'myhub:browser-tabs', tabs: payload, activeId: activeTabId },
+          Object.assign({ type: 'myhub:browser-nav' }, payload),
           appWin.location.origin,
         );
       } catch (err) {
-        // 부모 통신 실패는 무시한다 (탭 표시는 다음 게시 때 갱신된다)
-        console.warn('[browser] 창 바 탭 게시 실패 (무시):', err);
+        // 부모 통신 실패는 무시한다 (내비 표시는 다음 게시 때 갱신된다)
+        console.warn('[browser] 창 바 내비 게시 실패 (무시):', err);
       }
     }
-    // 탭 줄은 창 바에 호스팅되거나(창 모드) 탭이 1개 이하일 때 숨긴다.
-    // 사파리는 탭이 하나면 탭 줄 자체가 없고 주소 캡슐만 있다
-    // (2026-11-14 실제 맥 캡처 image-46 대조).
-    function applyTabsHosting() {
-      if (tabstripEl) tabstripEl.hidden = tabsHosted || tabs.length <= 1;
-      // 창 모드(호스팅)에서는 새 탭 +가 창 바에 있으므로 툴바의 +는
-      // 숨긴다 (두 개가 겹쳐 보이지 않게).
-      if (newTabBtn) newTabBtn.hidden = tabsHosted;
+    function setNavLoading(value) {
+      if (navLoading === value) return;
+      navLoading = value;
+      postBrowserNav(false);
+    }
+    // 창 모드(호스팅)에서는 셸 제목 바가 내비를 대신하므로 iframe
+    // 툴바를 숨긴다. 탭 줄은 양쪽 모드 모두 iframe이 담당한다.
+    function applyToolbarHosting() {
+      if (toolbarEl) toolbarEl.hidden = toolbarHosted;
+    }
+    // 탭이 1개 이하일 때 탭 줄을 숨긴다. 사파리는 탭이 하나면 탭 줄
+    // 자체가 없고 주소 캡슐만 있다 (2026-11-14 실제 맥 캡처 image-46 대조).
+    function applyTabstripVisibility() {
+      if (tabstripEl) tabstripEl.hidden = tabs.length <= 1;
     }
 
     function refreshIcons() {
@@ -377,11 +400,8 @@
         tabsOverflowBtn.hidden = !(tabsEl.scrollWidth > tabsEl.clientWidth + 1);
       }
       refreshIcons();
-      // 창 바에서도 같은 상태를 게시한다 (클릭 접힘이 무관하게 앱
-      // 앱이 없으면 앱 않고, 있으면 창 바가 정보 표면을 연다)
-      postBrowserTabs(false);
       // 탭 개수가 바뀌면 탭 줄 표시도 다시 정한다 (1개면 숨김).
-      applyTabsHosting();
+      applyTabstripVisibility();
     }
 
     function syncNavButtons() {
@@ -402,7 +422,7 @@
       var busy = on || state === 'notice';
       var mine = liveTabId !== null && liveTabId === activeTabId;
       live.syncChrome();
-      // 라이브 소유 요소(화면·토글…)는 뷰를 소유한 탭에서만
+      // 라이브 소유 요소(화면·안내 카드)는 뷰를 소유한 탭에서만
       // 보인다 — 다른 탭에서는 실행 중인 것처럼 보이지 않게 가린다.
       // 단, iframe은 display:none(hidden)이 아니라 visibility:hidden
       // 으로 숨긴다. display:none은 iframe 문서를 hidden으로 만들어
@@ -411,7 +431,6 @@
       // visibility:hidden은 문서를 살려 둬 복귀가 즉시 된다.
       if (!mine && busy) {
         if (liveFrame) liveFrame.classList.add('bw-frame-parked');
-        if (pillEl) pillEl.hidden = true;
         if (noticeEl) noticeEl.hidden = true;
       } else if (liveFrame) {
         liveFrame.classList.remove('bw-frame-parked');
@@ -444,6 +463,7 @@
       }
       renderTabs();
       syncNavButtons();
+      postBrowserNav(false);
       notifyDocTitle();
     }
 
@@ -516,6 +536,10 @@
         saveTabs();
       }
       startAndRecord(url);
+      // 이동 즉시 탭 줄·내비 버튼·창 바 내비 상태를 맞춘다.
+      // live가 이미 켜져 있으면 enterLive가 onChange를 부르지 않아
+      // 이 호출 없이는 탭 제목이 이전 주소로 남는다.
+      syncChrome();
     }
 
     function goBack() {
@@ -537,11 +561,20 @@
     }
 
     function startAndRecord(url) {
-      Promise.resolve(enterLiveHere(url)).then(function (started) {
-        if (!started) return;
-        if (url && storage) saveRecent(storage, url);
-        renderRecents();
-      });
+      setNavLoading(true);
+      Promise.resolve(enterLiveHere(url)).then(
+        function (started) {
+          if (started) {
+            if (url && storage) saveRecent(storage, url);
+            renderRecents();
+          }
+          setNavLoading(false);
+        },
+        function (err) {
+          setNavLoading(false);
+          throw err;
+        },
+      );
     }
 
     function submitInput() {
@@ -549,6 +582,196 @@
       if (!url) return;
       go(url);
       if (urlInput) urlInput.blur();
+    }
+
+    // ---------- 시작 페이지로 (예전 홈 버튼 동작) ----------
+    // 툴바 홈 버튼은 2026-11-14 타이틀바 한 줄 통일로 빠졌으나
+    // (새 탭이 시작 페이지 역할을 한다), 메뉴 명령으로는 남긴다.
+    function goHome() {
+      // 활성 탭이 뷰를 소유한 때만 종료하고, 다른 탭의 뷰는 건드리지 않는다
+      if (liveTabId !== activeTabId) return;
+      if (live.isActive()) live.endLive();
+      else if (live.state() === 'notice') live.dismissNotice();
+    }
+
+    // ---------- 사이드바 (즐겨찾기·최근 방문·열린 탭) ----------
+    // 열 때 렌더링한다 (즐겨찾기는 시작 페이지와 같은 버튼 데이터,
+    // 최근 방문은 renderRecents와 같은 저장소 데이터).
+    function sidebarOpen() {
+      return !!(sidebarEl && !sidebarEl.hidden);
+    }
+    function makeSideFav(url) {
+      var fav = doc.createElement('span');
+      fav.className = 'bw-side-fav';
+      if (url) fav.textContent = hostOf(url).charAt(0).toUpperCase();
+      else fav.innerHTML = '<i data-lucide="globe"></i>';
+      return fav;
+    }
+    function renderSidebar() {
+      if (sidebarFavsEl) {
+        sidebarFavsEl.textContent = '';
+        Array.prototype.forEach.call(favBtns, function (btn) {
+          var url = btn.getAttribute('data-url');
+          if (!url) return;
+          var item = doc.createElement('button');
+          item.type = 'button';
+          item.className = 'bw-side-item';
+          var tile = btn.querySelector('.bw-fav-tile');
+          var fav = doc.createElement('span');
+          // 시작 페이지 타일의 색 class를 그대로 가져온다
+          // (bw-fav-naver 등 색만 지정하므로 22px 타일에도 맞는다).
+          fav.className =
+            'bw-side-fav' +
+            (tile
+              ? ' ' +
+                tile.className
+                  .split(/\s+/)
+                  .filter(function (c) {
+                    return c.indexOf('bw-fav-') === 0 && c !== 'bw-fav-tile' && c !== 'bw-fav-word';
+                  })
+                  .join(' ')
+              : '');
+          fav.innerHTML = tile ? tile.innerHTML : '';
+          if (!fav.innerHTML) fav.textContent = hostOf(url).charAt(0).toUpperCase();
+          var name = doc.createElement('span');
+          name.className = 'bw-side-name';
+          var nameEl = btn.querySelector('.bw-fav-name');
+          name.textContent = nameEl ? nameEl.textContent : hostOf(url);
+          item.appendChild(fav);
+          item.appendChild(name);
+          item.addEventListener('click', function () {
+            setSidebar(false);
+            go(url);
+          });
+          sidebarFavsEl.appendChild(item);
+        });
+        if (!sidebarFavsEl.hasChildNodes()) {
+          var empty = doc.createElement('div');
+          empty.className = 'bw-sidebar-empty';
+          empty.textContent = '즐겨찾기가 없어요';
+          sidebarFavsEl.appendChild(empty);
+        }
+      }
+      var recents = storage ? loadRecents(storage) : [];
+      if (sidebarRecentsSection) sidebarRecentsSection.hidden = recents.length === 0;
+      if (sidebarRecentsEl) {
+        sidebarRecentsEl.textContent = '';
+        recents.forEach(function (r) {
+          var item = doc.createElement('button');
+          item.type = 'button';
+          item.className = 'bw-side-item';
+          item.appendChild(makeSideFav(r.url));
+          var name = doc.createElement('span');
+          name.className = 'bw-side-name';
+          name.textContent = hostOf(r.url);
+          item.appendChild(name);
+          item.addEventListener('click', function () {
+            setSidebar(false);
+            go(r.url);
+          });
+          sidebarRecentsEl.appendChild(item);
+        });
+      }
+      if (sidebarTabsEl) {
+        sidebarTabsEl.textContent = '';
+        tabs.forEach(function (tab) {
+          var item = doc.createElement('button');
+          item.type = 'button';
+          item.className =
+            'bw-side-item' + (tab.id === activeTabId ? ' is-active' : '');
+          item.appendChild(makeSideFav(tab.url));
+          var name = doc.createElement('span');
+          name.className = 'bw-side-name';
+          name.textContent = tabTitle(tab);
+          item.appendChild(name);
+          if (tab.id === liveTabId && live.isActive()) {
+            var dot = doc.createElement('span');
+            dot.className = 'bw-side-live';
+            item.appendChild(dot);
+          }
+          item.addEventListener('click', function () {
+            setSidebar(false);
+            activateTab(tab.id);
+          });
+          sidebarTabsEl.appendChild(item);
+        });
+      }
+      refreshIcons();
+    }
+    function setSidebar(open) {
+      if (!sidebarEl || !sidebarBackdrop) return;
+      if (open) {
+        renderSidebar();
+        setOverview(false);
+      }
+      sidebarEl.hidden = !open;
+      sidebarBackdrop.hidden = !open;
+    }
+    function toggleSidebar() {
+      setSidebar(!sidebarOpen());
+    }
+
+    // ---------- 탭 개요 (파비콘+제목 카드 그리드) ----------
+    function overviewOpen() {
+      return !!(overviewEl && !overviewEl.hidden);
+    }
+    function renderOverview() {
+      if (!overviewGridEl) return;
+      overviewGridEl.textContent = '';
+      tabs.forEach(function (tab) {
+        var card = doc.createElement('button');
+        card.type = 'button';
+        card.className =
+          'bw-ov-card' + (tab.id === activeTabId ? ' is-active' : '');
+        var fav = doc.createElement('span');
+        fav.className = 'bw-ov-fav';
+        if (tab.url) fav.textContent = hostOf(tab.url).charAt(0).toUpperCase();
+        else fav.innerHTML = '<i data-lucide="globe"></i>';
+        card.appendChild(fav);
+        var name = doc.createElement('span');
+        name.className = 'bw-ov-name';
+        name.textContent = tabTitle(tab);
+        card.appendChild(name);
+        var urlEl = doc.createElement('span');
+        urlEl.className = 'bw-ov-url';
+        urlEl.textContent = tab.url ? hostOf(tab.url) : '새 탭';
+        card.appendChild(urlEl);
+        if (tab.id === liveTabId && live.isActive()) {
+          var liveRow = doc.createElement('span');
+          liveRow.className = 'bw-ov-live';
+          liveRow.textContent = '실행 중';
+          card.appendChild(liveRow);
+        }
+        var close = doc.createElement('span');
+        close.className = 'bw-ov-close';
+        close.setAttribute('role', 'button');
+        close.setAttribute('aria-label', '탭 닫기');
+        close.innerHTML = '<i data-lucide="x"></i>';
+        close.addEventListener('click', function (ev) {
+          ev.stopPropagation();
+          closeTab(tab.id);
+          // 개요는 열어 두고 남은 탭으로 다시 그린다.
+          if (overviewOpen()) renderOverview();
+        });
+        card.appendChild(close);
+        card.addEventListener('click', function () {
+          setOverview(false);
+          activateTab(tab.id);
+        });
+        overviewGridEl.appendChild(card);
+      });
+      refreshIcons();
+    }
+    function setOverview(open) {
+      if (!overviewEl) return;
+      if (open) {
+        renderOverview();
+        setSidebar(false);
+      }
+      overviewEl.hidden = !open;
+    }
+    function toggleOverview() {
+      setOverview(!overviewOpen());
     }
 
     if (urlInput) {
@@ -650,37 +873,66 @@
         });
       })(favBtns[j]);
     }
-    if (homeBtn) {
-      homeBtn.addEventListener('click', function () {
-        // 시작 페이지 버튼은 활성 탭이 뷰를 소유한 때만 종료하고,
-        // 다른 탭의 뷰는 건드리지 않는다
-        if (liveTabId !== activeTabId) return;
-        if (live.isActive()) live.endLive();
-        else if (live.state() === 'notice') live.dismissNotice();
+    if (sidebarBtn) sidebarBtn.addEventListener('click', toggleSidebar);
+    if (overviewBtn) overviewBtn.addEventListener('click', toggleOverview);
+    if (sidebarCloseBtn) {
+      sidebarCloseBtn.addEventListener('click', function () {
+        setSidebar(false);
       });
     }
+    if (sidebarBackdrop) {
+      sidebarBackdrop.addEventListener('click', function () {
+        setSidebar(false);
+      });
+    }
+    if (overviewCloseBtn) {
+      overviewCloseBtn.addEventListener('click', function () {
+        setOverview(false);
+      });
+    }
+    if (overviewEl) {
+      overviewEl.addEventListener('click', function (ev) {
+        // 카드 사이 빈 곳을 누르면 닫는다 (카드 클릭은 전환이다).
+        if (ev.target === overviewEl) setOverview(false);
+      });
+    }
+    doc.addEventListener('keydown', function (ev) {
+      if (ev.key !== 'Escape') return;
+      if (overviewOpen()) setOverview(false);
+      else if (sidebarOpen()) setSidebar(false);
+    });
 
-    // 창 바 탭 채널의 수신부: 채택(adopt)·탭 목록 요청·동작(선택·
-    // 닫기·새 탭). 출처는 부모 창으로 판정한다
-    // (e.source === appWin.parent).
+    // 창 바 내비 채널의 수신부: 채택(adopt)·내비 상태 요청·동작(뒤로·
+    // 앞으로·새로고침·이동·새 탭·탭 개요·사이드바). 출처는 부모 창으로
+    // 판정한다 (e.source === appWin.parent).
     if (appWin && typeof appWin.addEventListener === 'function') {
       appWin.addEventListener('message', function (e) {
         if (!e || !e.data || e.source !== appWin.parent) return;
         var d = e.data;
-        if (d.type === 'myhub:browser-tabs-adopt') {
-          if (!tabsHosted) {
-            tabsHosted = true;
-            applyTabsHosting();
+        if (d.type === 'myhub:browser-nav-adopt') {
+          if (!toolbarHosted) {
+            toolbarHosted = true;
+            applyToolbarHosting();
           }
-        } else if (d.type === 'myhub:request-browser-tabs') {
-          postBrowserTabs(true);
-        } else if (d.type === 'myhub:browser-tabs-action') {
-          if (d.action === 'select' && typeof d.id === 'string') {
-            activateTab(d.id);
-          } else if (d.action === 'close' && typeof d.id === 'string') {
-            closeTab(d.id);
-          } else if (d.action === 'new') {
+        } else if (d.type === 'myhub:request-browser-nav') {
+          postBrowserNav(true);
+        } else if (d.type === 'myhub:browser-nav-action') {
+          if (d.action === 'back') {
+            goBack();
+          } else if (d.action === 'forward') {
+            goFwd();
+          } else if (d.action === 'reload') {
+            var tab = activeTab();
+            if (tab && tab.url) go(tab.url, true);
+          } else if (d.action === 'navigate' && typeof d.url === 'string') {
+            var url = normalizeInput(d.url);
+            if (url) go(url);
+          } else if (d.action === 'newtab') {
             newTab();
+          } else if (d.action === 'overview') {
+            toggleOverview();
+          } else if (d.action === 'sidebar') {
+            toggleSidebar();
           }
         }
       });
@@ -729,9 +981,7 @@
               },
               {
                 label: '시작 페이지로',
-                run: function () {
-                  if (homeBtn) homeBtn.click();
-                },
+                run: goHome,
               },
               {
                 label: '브라우저 시작',
@@ -771,6 +1021,23 @@
               });
             }
             return items;
+          },
+        },
+        {
+          label: '보기',
+          items: function () {
+            return [
+              {
+                label: '사이드바',
+                checked: sidebarOpen(),
+                run: toggleSidebar,
+              },
+              {
+                label: '탭 개요',
+                checked: overviewOpen(),
+                run: toggleOverview,
+              },
+            ];
           },
         },
         {
@@ -816,8 +1083,8 @@
       go: go,
       live: live,
       syncChrome: syncChrome,
-      isTabsHosted: function () {
-        return tabsHosted;
+      isToolbarHosted: function () {
+        return toolbarHosted;
       },
       newTab: newTab,
       closeTab: closeTab,

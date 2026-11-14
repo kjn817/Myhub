@@ -838,16 +838,17 @@ body.dt-fullscreen .settings-btn { color: #fff; }
 
 .myhub-wa-btn:disabled:hover { background: none; }
 
-/* ---- 브라우저 탭의 창 바 호스팅 (myhub:browser-tabs 채널) ----
-   탭 띠는 신호등(첫 신호등 17px + 신호등 묶음 폭) 다음인 left 84px
-   (오피스 빠른 실행과 같은 leading 기준선)부터 바 끝까지를 덮는
-   절대 배치 flex다 — 컨테이너 자체는 드래그를 막지 않고 버튼만
+/* ---- 브라우저 내비의 창 바 호스팅 (myhub:browser-nav 채널) ----
+   사파리 26 한 줄 레이아웃 (2026-11-14 실제 맥 캡처 image-48 대조):
+   신호등 → 사이드바 → 뒤로/앞으로 알약 → 주소 캡슐 → 공유 → 새 탭 →
+   탭 개요. 띠는 신호등(첫 신호등 17px + 신호등 묶음 폭) 다음인
+   left 84px (오피스 빠른 실행과 같은 leading 기준선)부터 바 끝까지를
+   덮는 절대 배치 flex다 — 컨테이너 자체는 드래그를 막지 않고 버튼만
    nodrag(기존 button 제외 규칙)이며 사이 빈 공간은 창 드래그다.
-   탭은 사파리 26 카드(네 모서리 둥글고 파비콘+제목 가운데)로
-   바 높이(40px) 안에 세로 가운데로 뜬다 (2026-11-14 실제 맥 캡처 대조).
-   탭이 1개면 카드는 없고 제목이 다시 보인다 — + 버튼만 바 오른쪽
-   끝에 남는다 (2026-11-14 실제 맥 캡처 image-46 대조). */
-.myhub-win-btabs {
+   주소 캡슐은 flex 여유 공간에서 가운데로(margin auto) 둔다.
+   탭 줄은 iframe 안의 .bw-tabstrip이 담당한다 (2026-11-14 타이틀바
+   한 줄 통일로 탭 카드 호스팅 폐지). */
+.myhub-win-bnav {
   position: absolute;
   top: 0;
   bottom: 0;
@@ -856,110 +857,17 @@ body.dt-fullscreen .settings-btn { color: #fff; }
   z-index: 1;
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 8px;
   box-sizing: border-box;
 }
 
-.myhub-win-btabs[hidden] { display: none; }
+.myhub-win-bnav[hidden] { display: none; }
 
-/* 탭이 앉으면 창 제목 텍스트는 숨긴다 — 활성 탭 이름이 곧 제목이라
-   함께 두면 같은 이름이 두 번 표기된다 */
-.dt-win-btabs-on .dt-title-flow { display: none; }
+/* 내비가 앉으면 창 제목 텍스트는 숨긴다 — 주소 캡슐이 곧 제목이다 */
+.dt-win-bnav-on .dt-title-flow { display: none; }
 
-.myhub-btab {
-  flex: 1 1 0;
-  min-width: 84px;
-  height: 32px;
-  display: flex;
-  align-items: stretch;
-  border-radius: 10px;
-  background: rgba(15, 23, 42, 0.06);
-  overflow: hidden;
-}
-
-.myhub-btab:hover { background: rgba(15, 23, 42, 0.09); }
-
-.myhub-btab.is-active { background: #fff; }
-
-.myhub-btab.is-active:hover { background: #fff; }
-
-.myhub-btab-main {
-  flex: 1 1 auto;
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  border: none;
-  background: none;
-  padding: 0 10px;
-  font: inherit;
-  font-size: 12.5px;
-  color: #4b5563;
-  cursor: pointer;
-}
-
-.myhub-btab.is-active .myhub-btab-main { color: #111827; font-weight: 600; }
-
-.myhub-btab-fav {
+.myhub-bnav-btn {
   flex: none;
-  width: 18px;
-  height: 18px;
-  border-radius: 5px;
-  background: rgba(15, 23, 42, 0.09);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 10.5px;
-  font-weight: 700;
-  color: #374151;
-}
-
-.myhub-btab-fav svg { width: 11px; height: 11px; }
-
-.myhub-btab-name {
-  flex: 0 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.myhub-btab-live {
-  flex: none;
-  width: 7px;
-  height: 7px;
-  border-radius: 999px;
-  background: #51cf66;
-}
-
-.myhub-btab-close {
-  flex: none;
-  align-self: center;
-  width: 18px;
-  height: 18px;
-  margin-right: 4px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: none;
-  background: none;
-  border-radius: 4px;
-  color: #9aa0a6;
-  cursor: pointer;
-  padding: 0;
-}
-
-.myhub-btab-close svg { width: 11px; height: 11px; }
-
-.myhub-btab-close:hover { background: rgba(15, 23, 42, 0.12); color: #374151; }
-
-.myhub-btab-new {
-  flex: none;
-  align-self: center;
-  /* 탭이 1개면 카드 없이 +만 남는데, 이때도 바 오른쪽 끝에 붙는다
-     (카드가 있으면 카드가 행을 채우므로 이 여백은 0이다). */
-  margin-left: auto;
   width: 26px;
   height: 26px;
   display: flex;
@@ -973,9 +881,101 @@ body.dt-fullscreen .settings-btn { color: #fff; }
   padding: 0;
 }
 
-.myhub-btab-new svg { width: 15px; height: 15px; }
+.myhub-bnav-btn svg { width: 15px; height: 15px; }
 
-.myhub-btab-new:hover { background: rgba(15, 23, 42, 0.06); }
+.myhub-bnav-btn:hover:not(:disabled) { background: rgba(15, 23, 42, 0.06); }
+
+.myhub-bnav-btn:disabled { color: #c3c9d1; cursor: default; }
+
+/* 사파리처럼 뒤로/앞으로를 하나의 알약 안에 묶는다 */
+.myhub-bnav-navgroup {
+  flex: none;
+  display: flex;
+  align-items: center;
+  background: rgba(15, 23, 42, 0.05);
+  border-radius: 999px;
+  padding: 2px;
+  gap: 0;
+}
+
+.myhub-bnav-navgroup .myhub-bnav-btn {
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+}
+
+/* 주소 캡슐: 단독 툴바(.bw-url-wrap)와 같은 생김새, 바 높이(40px)에
+   맞춰 30px로. flex 여유 공간을 양쪽 margin auto로 나눠 가운데에 둔다. */
+.myhub-bnav-url {
+  flex: 1 1 auto;
+  min-width: 120px;
+  max-width: 640px;
+  margin: 0 auto;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 4px 0 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.06);
+  box-sizing: border-box;
+  cursor: text;
+}
+
+.myhub-bnav-fav {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+  background: rgba(15, 23, 42, 0.09);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10.5px;
+  font-weight: 700;
+  color: #374151;
+}
+
+.myhub-bnav-fav svg { width: 11px; height: 11px; }
+
+.myhub-bnav-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: none;
+  background: none;
+  outline: none;
+  font: inherit;
+  font-size: 13px;
+  color: #1f2937;
+  text-align: center;
+  padding: 0;
+  /* 제목 바는 user-select:none·cursor:move라 입력 필드만 되돌린다 */
+  user-select: text;
+  -webkit-user-select: text;
+  cursor: text;
+}
+
+.myhub-bnav-input::placeholder { color: #9aa0a6; }
+
+.myhub-bnav-reload {
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+}
+
+.myhub-bnav-reload svg { width: 13px; height: 13px; }
+
+/* 이동 중에는 새로고침 아이콘이 빙글빙글 돈다 (로딩 표시) */
+.myhub-bnav-reload.is-loading svg { animation: dt-boot-spin 0.9s linear infinite; }
+
+.myhub-bnav-trail {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
 
 .myhub-ft-nav {
   display: flex;
@@ -2082,8 +2082,6 @@ body.dt-material-opaque .dt-window { background: #fff; }
 .myhub-win-tools .myhub-ft-seg button.is-active:hover { background: #fff; }
 
 .myhub-win-tools:not(.is-compact) .myhub-ft-more { display: none; }
-
-.dt-win-btabs-on .myhub-btab { background: rgba(255,255,255,.75); }
 
 .dt-dock-item:active { filter: brightness(1.12); }
 
