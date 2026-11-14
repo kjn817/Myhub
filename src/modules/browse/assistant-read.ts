@@ -4,11 +4,11 @@
  */
 
 import type { Env } from '../../types'
-import { defaultCdpConnect, type CdpSocket, type CdpConnectFn } from './cdp'
-import { CF_BROWSER_URL, findWebSocketDebuggerUrl } from './live'
+import { defaultCdpConnect, toDirectCdpWsUrl, type CdpSocket, type CdpConnectFn } from './cdp'
+import { ORACLE_CDP_PORT, oracleConfigOf } from './oracle-proxy'
 
 export type PageReadError =
-  | 'invalid_url' | 'blocked_host' | 'not_configured' | 'quota' | 'upstream'
+  | 'invalid_url' | 'blocked_host' | 'not_configured' | 'upstream'
   | 'connect' | 'navigate' | 'extract' | 'empty' | 'timeout'
 
 export type PageReadResult =
@@ -16,7 +16,6 @@ export type PageReadResult =
   | { ok: false; error: PageReadError }
 
 const MAX_PAGE_TEXT_CHARS = 12000
-const READ_KEEP_ALIVE_MS = 60000
 const DEFAULT_RENDER_DEADLINE_MS = 12000
 const CALL_TIMEOUT_MS = 8000
 const POLL_INTERVAL_MS = 250
@@ -159,22 +158,32 @@ async function readTextWithCdp(
       }
     })
 
-  let sessionId: string | null = null
-  for (let attempt = 0; attempt < 3 && !sessionId; attempt++) {
-    const targets = await call('Target.getTargets')
-    if (targets.error || targets.timedOut) break
-    const infos = targets.result?.targetInfos ?? []
-    const page = infos.find((t: any) => t.type === 'page') ?? infos[0]
-    if (!page) {
-      await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS))
-      continue
-    }
-    const attach = await call('Target.attachToTarget', { targetId: page.targetId, flatten: true })
-    if (!attach.error && typeof attach.result?.sessionId === 'string') {
-      sessionId = attach.result.sessionId
-    }
-    break
+  // 별도 백그라운드 탭을 만들어 읽는다 — 영구 브라우저는 사용자와
+  // 공유되므로 사용자 탭을 납치하면 안 된다. 탭은 finally에서 닫는다.
+  const created = await call('Target.createTarget', { url: 'about:blank' })
+  const targetId = created.result?.targetId
+  if (created.error || created.timedOut || typeof targetId !== 'string' || !targetId) {
+    return { ok: false, error: 'connect' }
   }
+  try {
+    const attach = await call('Target.attachToTarget', { targetId, flatten: true })
+    const sessionId =
+      !attach.error && !attach.timedOut && typeof attach.result?.sessionId === 'string'
+        ? attach.result.sessionId
+        : null
+    if (!sessionId) return { ok: false, error: 'connect' }
+    return await readFromSession(call, targetUrl, sessionId, renderDeadlineMs)
+  } finally {
+    await call('Target.closeTarget', { targetId }).catch(() => ({}))
+  }
+}
+
+async function readFromSession(
+  call: (method: string, params?: Record<string, unknown>, sessionId?: string | null, timeoutMs?: number) => Promise<CdpReply>,
+  targetUrl: string,
+  sessionId: string,
+  renderDeadlineMs: number,
+): Promise<PageReadResult> {
   await call('Page.enable', undefined, sessionId).catch(() => ({}))
   const nav = await call('Page.navigate', { url: targetUrl }, sessionId)
   if (nav.timedOut || nav.error || nav.result?.errorText) {
@@ -239,60 +248,50 @@ export async function readPage(
   const validated = validatePublicUrl(rawUrl)
   if (!validated.ok) return { ok: false, error: validated.error }
   const targetUrl = validated.url
-  const token = env.BROWSER_RUN_TOKEN
-  if (!token) return { ok: false, error: 'not_configured' }
+  const cfg = oracleConfigOf(env)
+  if (!cfg) return { ok: false, error: 'not_configured' }
   const fetchFn = deps.fetchFn ?? fetch
   const connect = deps.connect ?? defaultCdpConnect
-  const headers = { Authorization: `Bearer ${token}` }
-  let data: any = null
+  const secretHeaders = {
+    'x-origin-secret': cfg.originSecret,
+    'x-cdp-secret': cfg.cdpSecret,
+  }
+  let version: unknown = null
   try {
-    const res = await fetchFn(`${CF_BROWSER_URL}?keep_alive=${READ_KEEP_ALIVE_MS}&targets=true`, {
-      method: 'POST',
-      headers,
+    const res = await fetchFn(`http://${cfg.host}:${ORACLE_CDP_PORT}/json/version`, {
+      headers: secretHeaders,
     })
-    if (res.status === 429) return { ok: false, error: 'quota' }
     if (!res.ok) return { ok: false, error: 'upstream' }
-    data = await res.json().catch(() => null)
+    version = await res.json().catch(() => null)
   } catch {
     return { ok: false, error: 'upstream' }
   }
-  const sid = data?.sessionId
-  if (typeof sid !== 'string' || !sid) return { ok: false, error: 'upstream' }
+  const publicWs = (version as { webSocketDebuggerUrl?: unknown } | null)?.webSocketDebuggerUrl
+  const directWs =
+    typeof publicWs === 'string' ? toDirectCdpWsUrl(publicWs, cfg.host, ORACLE_CDP_PORT) : null
+  if (!directWs) return { ok: false, error: 'upstream' }
+  let socket: CdpSocket | null = null
   try {
-    const endpoint = findWebSocketDebuggerUrl(data)
-    if (!endpoint) return { ok: false, error: 'upstream' }
-    let socket: CdpSocket | null = null
-    try {
-      socket = await connect(endpoint.url, headers)
-    } catch {
-      socket = null
+    socket = await connect(directWs, secretHeaders)
+  } catch {
+    socket = null
+  }
+  if (!socket) return { ok: false, error: 'connect' }
+  try {
+    const result = await readTextWithCdp(socket, targetUrl, {
+      renderDeadlineMs: opts.renderDeadlineMs,
+    })
+    if (!result.ok) return result
+    const maxTextChars = opts.maxTextChars ?? MAX_PAGE_TEXT_CHARS
+    if (result.text.length > maxTextChars) {
+      return { ...result, text: result.text.slice(0, maxTextChars), truncated: true }
     }
-    if (!socket) return { ok: false, error: 'connect' }
-    try {
-      const result = await readTextWithCdp(socket, targetUrl, {
-        renderDeadlineMs: opts.renderDeadlineMs,
-      })
-      if (!result.ok) return result
-      const maxTextChars = opts.maxTextChars ?? MAX_PAGE_TEXT_CHARS
-      if (result.text.length > maxTextChars) {
-        return { ...result, text: result.text.slice(0, maxTextChars), truncated: true }
-      }
-      return result
-    } finally {
-      try {
-        socket.close()
-      } catch {
-        // 무시
-      }
-    }
+    return result
   } finally {
     try {
-      await fetchFn(`${CF_BROWSER_URL}/${encodeURIComponent(sid)}`, {
-        method: 'DELETE',
-        headers,
-      })
+      socket.close()
     } catch {
-      // 세션 정리 실패는 무시
+      // 무시
     }
   }
 }

@@ -624,6 +624,10 @@ def build_worker_metadata(completion_jwt):
             # 같지만, 운영 바인딩과의 이름 단위 일치를 위해 'false'로 명시한다
             # (2026-11-11 배포 메타 감사에서 발견).
             {'type': 'plain_text', 'name': 'WORKFLOW_REMINDER_ENABLED', 'text': 'false'},
+            # Oracle 원격 브라우저 서버 공인 IP (2026-11-14 설계 변경 — Worker가
+            # 사이드카로 직접 프록시. 평문 바인딩이라 keep_bindings가 보존하지
+            # 않으므로 여기 명시가 유일한 기준이다).
+            {'type': 'plain_text', 'name': 'ORACLE_BROWSER_HOST', 'text': '143.47.112.35'},
             {'type': 'queue', 'name': 'ARTIFACT_QUEUE', 'queue_name': 'myhub-artifact-jobs'},
         ],
         'keep_bindings': ['secret_text', 'secret_key'],

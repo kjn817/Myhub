@@ -1,19 +1,20 @@
 /* MyHub 브라우저 (browser.js) — Safari처럼 미니멀한 원격 브라우저 화면
  *
- * 브라우저 앱은 실제 원격 브라우저(Browser Run Live View) 하나로 통일한다
- * (프록시·리더·원격브라우저는 2026-11-04 사용자 지시로 폐지). 이 파일은 호스트만
+ * 브라우저 앱은 실제 원격 브라우저(Oracle 상시 기동 서버, Selkies 화면)
+ * 하나로 통일한다 (프록시·리더는 2026-11-04 사용자 지시로 폐지,
+ * Browser Run 세션 발급은 2026-11-14 설계 변경으로 폐기). 이 파일은 호스트만
  * 맞는다: 탭 스트립 + 가운데 둥근 주소창(주소/검색 겸용), 시작 페이지
- * (안내 카드 + 즐겨찾기 타일 + 최근 방문), 세션 상태에 따른 접기 전환.
- * 세션 상태 기계 본체는 browser-live.js(window.MyHubBrowserLive.
+ * (안내 카드 + 즐겨찾기 타일 + 최근 방문), 원격 뷰 상태에 따른 접기 전환.
+ * 원격 뷰 상태 기계 본체는 browser-live.js(window.MyHubBrowserLive.
  * createLive)가 이 browser.html과 그 파일을 이 파일보다 먼저 불러오며,
  * 합쳐지지 않으면 createApp이 실패한다(조용히 무력화 금지).
- * 주소·검색을 고르면 세션이 있으면 서버가 그 주소로 먼저 이동시킨다.
- * 세션 중 주소창에 새 주소를 넣으면 세션이 그 주소로 이동한다
- * (원격 세션은 동시 1개뿐이라 주소 이동도 새 세션과 같은 비용이다).
+ * 주소·검색을 고르면 원격 뷰를 켜고 영구 탭을 그 주소로 이동시킨다.
+ * 뷰가 켜져 있을 때 주소창에 새 주소를 넣으면 이동만 지시한다
+ * (iframe을 껐다 켜지 않는다).
  * 탭 (트랙 H 귀속, Safari식): 탭의 기록 단위는 주소·방문 기록이다.
- * 원격 세션은 동시 1개뿐이라 세션을 정확히 하나의 탭이 소유하고
+ * 원격 뷰는 한 번에 한 탭에만 보이므로 정확히 하나의 탭이 소유하고
  * (liveTabId), 다른 탭에서는 라이브 화면 대신 "다른 탭에서 실행 중"
- * 안내를 보여준다 — 세션이 없는 탭이 실행 중인 것처럼 보이지 않게
+ * 안내를 보여준다 — 소유하지 않은 탭이 실행 중인 것처럼 보이지 않게
  * 한다. 뒤로/앞으로는 탭의 방문 기록을 따른다. 원격 화면 안에서의
  * 이동은 라이브 화면 자체가 처리한다.
  * 탭 표면 (2026-11-06, image-147): 탭 행이 아닌 창 바(타이틀바)에
@@ -25,8 +26,8 @@
  * Safari에서는 주소창과 툴바 행의 높이가 같고, 캡슐이 높으면 주소
  * 입력·이동 버튼이 자리를 잃는다.
  * '브라우저 시작' 버튼은 시작 페이지 카드의 것 하나로 둔다
- * (2026-11-06, image-147): 툴바 우측 버튼은 세션 시작 카드 버튼과
- * 동시에 보여 중복이었고, 세션 중에서는 시작 페이지 자체가 숨어
+ * (2026-11-06, image-147): 툴바 우측 버튼은 시작 카드 버튼과
+ * 동시에 보여 중복이었고, 원격 뷰가 켜진 동안에는 시작 페이지 자체가 숨어
  * 카드 버튼을 볼 수 없게 되므로 그때는 시작이 아닌 종료 상태 토글이
  * [종료]가 맞는다.
  * 노출: window.MyHubBrowser = { normalizeInput, createApp }
@@ -90,7 +91,7 @@
 
   /**
    * deps = { doc, liveDeps, storage, win }
-   * liveDeps는 browser-live.js createLive의 주입 인자(liveStart 등).
+   * liveDeps는 browser-live.js createLive의 주입 인자(navigate 등).
    * storage는 localStorage 래퍼, win은 창 바 채널을 받는 창
    * (부모·프레임)이며 테스트 주입 인자이다.
    */
@@ -133,7 +134,6 @@
     var shareBtn = doc.getElementById('bwShareBtn');
     var liveFrame = doc.getElementById('bwLiveFrame');
     var pillEl = doc.getElementById('bwPill');
-    var startingEl = doc.getElementById('bwStarting');
     var noticeEl = doc.getElementById('bwNoticeCard');
     var elsewhereEl = doc.getElementById('bwElsewhere');
     var elsewhereMsg = doc.getElementById('bwElsewhereMsg');
@@ -144,7 +144,7 @@
     var TABS_KEY = 'myhub.browser.tabs.v1';
     var tabs = [];
     var activeTabId = null;
-    var liveTabId = null; // 원격 세션이 소유한 탭 (동시 1개 제한의 UI 반영)
+    var liveTabId = null; // 원격 뷰를 소유한 탭 (한 번에 한 탭에만 보임)
     var tabSeq = 0;
     function makeTab(url) {
       tabSeq += 1;
@@ -381,7 +381,7 @@
         fwdBtn.disabled = !(tab && tab.hIndex < tab.history.length - 1);
       }
       if (reloadBtn) {
-        reloadBtn.disabled = !(tab && tab.url) || live.state() === 'starting';
+        reloadBtn.disabled = !(tab && tab.url);
       }
       if (shareBtn) shareBtn.disabled = !(tab && tab.url);
     }
@@ -389,22 +389,19 @@
     function syncChrome() {
       var state = live.state();
       var on = state === 'on';
-      var starting = state === 'starting';
-      var busy = on || starting || state === 'notice';
+      var busy = on || state === 'notice';
       var mine = liveTabId !== null && liveTabId === activeTabId;
       live.syncChrome();
-      // 라이브 소유 요소(화면·토글·연결 중…)은 세션의 소유한
-      // 탭이 생성한 때만 보인다 앱 다른 앱에서는 실행 중인 것처럼
-      // 보이지 않게 가린다 (동시 세션 1개 제한의 정확히 반영).
+      // 라이브 소유 요소(화면·토글…)는 뷰를 소유한 탭에서만
+      // 보인다 — 다른 탭에서는 실행 중인 것처럼 보이지 않게 가린다.
       if (!mine && busy) {
         if (liveFrame) liveFrame.hidden = true;
         if (pillEl) pillEl.hidden = true;
-        if (startingEl) startingEl.hidden = true;
         if (noticeEl) noticeEl.hidden = true;
       }
-      if (home) home.hidden = mine && (on || starting);
+      if (home) home.hidden = mine && on;
       if (elsewhereEl) {
-        var showElse = !mine && liveTabId !== null && (on || starting);
+        var showElse = !mine && liveTabId !== null && on;
         elsewhereEl.hidden = !showElse;
         if (showElse && elsewhereMsg) {
           var owner = null;
@@ -418,7 +415,6 @@
         }
       }
       if (urlInput) {
-        urlInput.disabled = starting;
         // 입력 중이 아니면 활성 앱의 주소를 보여준다
         if (doc.activeElement !== urlInput) {
           var tab = activeTab();
@@ -427,7 +423,6 @@
         }
       }
       for (var i = 0; i < startBtns.length; i++) {
-        startBtns[i].disabled = starting;
         startBtns[i].hidden = mine && on;
       }
       renderTabs();
@@ -465,9 +460,8 @@
         if (t.id === id) idx = i;
       });
       if (idx < 0) return;
-      // 세션을 소유한 탭을 접으면 세션이 끝난다 (페이지가 접힌
-      // 것과 같이 서버 세션을 반납한다)
-      if (id === liveTabId && live.isActive()) live.endLive(true);
+      // 뷰를 소유한 탭을 접으면 뷰도 꺼진다
+      if (id === liveTabId && live.isActive()) live.endLive();
       tabs.splice(idx, 1);
       if (!tabs.length) tabs.push(makeTab(null));
       if (activeTabId === id) {
@@ -477,7 +471,7 @@
       syncChrome();
     }
 
-    /* 이 탭에서 세션 시작: 소유권을 활성 탭으로 먼저 못 박는다.
+    /* 이 탭에서 원격 뷰 시작: 소유권을 활성 탭으로 먼저 못 박는다.
        다른 탭이 실행 중일 때의 시작 시도도 여기에 걸리도록
        소유권을 가로채지 않는다 (안내 버튼들의 시작을 방지). */
     function enterLiveHere(url) {
@@ -487,9 +481,9 @@
       return live.enterLive(url);
     }
 
-    /* 주소로 이동: 세션의 꺾여 있으면 열고, 켜져 있으면 반납한 끝난
-       앱에 새로 연다 (동시 1개 가능에 걸리지 않게 순서를 지킨다).
-       최근 방문은 세션의 실제로 닫힌 앱에만 기록한다 앱 시작의 실패한
+    /* 주소로 이동: 영구 브라우저라 켜져 있으면 이동만 지시하고, 꺼져
+       있으면 켜서 이동한다 (iframe을 껐다 켜지 않는다).
+       최근 방문은 실제로 이동한 앱에만 기록한다 앱 시작의 실패한
        주소를 방문한 것으로 남기지 않기 위해서다. */
     function go(url, viaHist) {
       if (!url) return;
@@ -504,13 +498,7 @@
         tab.url = url;
         saveTabs();
       }
-      if (live.isActive()) {
-        live.endLive(true).then(function () {
-          startAndRecord(url);
-        });
-      } else {
-        startAndRecord(url);
-      }
+      startAndRecord(url);
     }
 
     function goBack() {
@@ -628,9 +616,11 @@
         var tab = activeTab();
         if (tab && tab.url) go(tab.url, true);
         else if (live.isActive()) {
-          live.endLive(true).then(function () {
-            startAndRecord(null);
-          });
+          // 소유권만 이 탭으로 옮긴다 — 영구 브라우저라 iframe을
+          // 껐다 켤 필요가 없다.
+          liveTabId = activeTabId;
+          saveTabs();
+          syncChrome();
         } else {
           startAndRecord(null);
         }
@@ -645,10 +635,10 @@
     }
     if (homeBtn) {
       homeBtn.addEventListener('click', function () {
-        // 시작 페이지 버튼은 활성 탭이 세션을 소유한 때만 종료하고,
-        // 다른 탭의 세션은 건드리지 않는다
+        // 시작 페이지 버튼은 활성 탭이 뷰를 소유한 때만 종료하고,
+        // 다른 탭의 뷰는 건드리지 않는다
         if (liveTabId !== activeTabId) return;
-        if (live.isActive()) live.endLive(true);
+        if (live.isActive()) live.endLive();
         else if (live.state() === 'notice') live.dismissNotice();
       });
     }
@@ -682,7 +672,7 @@
     // 앱 상단 메뉴바 정의 (계약: js/desktop/windows.js 상단 주석).
     // 즐겨찾기·최근 방문은 목록 항목으로 열어 보여준다. 툴바 버튼
     // (뒤로·앞으로·새로고침·공유 등)은 메뉴바에도 같은 명령이 있어야
-    // 한다는 HIG 규칙으로 함께 둔다. 새로고침은 같은 주소를 새 세션으로
+    // 한다는 HIG 규칙으로 함께 둔다. 새로고침은 같은 주소로 다시 이동해
     // 다시 여는 것이 실제 이동 방식이다.
     var menuWin =
       (doc && doc.defaultView) || (typeof window !== 'undefined' ? window : null);
@@ -715,7 +705,7 @@
               },
               {
                 label: '새로고침',
-                disabled: !(tab && tab.url) || st === 'starting',
+                disabled: !(tab && tab.url),
                 run: function () {
                   if (tab && tab.url) go(tab.url, true);
                 },
@@ -728,7 +718,7 @@
               },
               {
                 label: '브라우저 시작',
-                disabled: st === 'on' || st === 'starting',
+                disabled: st === 'on',
                 run: function () {
                   if (startBtns[0]) startBtns[0].click();
                 },

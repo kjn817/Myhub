@@ -68,5 +68,5 @@ export const modules: ModuleDef[] = [
   { id: 'voice', name: '음성', desc: '음성 입력·출력 (Whisper STT·MeloTTS)', path: '', app: voiceApp, hidden: true },
   { id: 'mcp', name: 'MCP 서버', desc: '표준 MCP(Streamable HTTP) 읽기 도구', path: '', app: mcpApp, hidden: true },
   { id: 'desktop', name: '데스크톱', desc: '웹OS 데스크톱 배경화면(오늘의 사진)', path: '/desktop.html', app: desktopApp, hidden: true },
-  { id: 'browse', name: '브라우저', desc: '원격 실제 브라우저(Browser Run) 세션 발급', path: '', app: browseApp, hidden: true },
+  { id: 'browse', name: '브라우저', desc: '원격 실제 브라우저(Oracle) 프록시', path: '', app: browseApp, hidden: true },
 ]

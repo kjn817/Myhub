@@ -13,11 +13,15 @@
  * 채 최대화 iframe에 맞춰 확대돼 보였다. 2026-11-12에 넣은 "iframe 크기
  * 전송" 기능은 처음부터 동작하지 않은 셈이다.
  * 수정: iframe이 꽉 채우는 .bw-stage(부모, 항상 보임) 크기를 잰다.
+ * (2026-11-14: 세션 발급 폐기 — 뷰포트는 POST /api/browse/navigate에
+ * 실리고, iframe src는 /api/browse/view/로 직접 건다.)
  *
  * 검증 성질 (깨지면 실패해야 한다):
- * - iframe이 hidden(0x0)이어도 stage 크기가 liveStart에 뷰포트로 전달된다.
+ * - iframe이 hidden(0x0)이어도 stage 크기가 navigate에 뷰포트로 전달된다.
  * - stage 크기를 못 재면 iframe 자기 rect로 폴백한다.
- * - 둘 다 0x0이면 뷰포트 없이 시작한다 (서버 기본값).
+ * - 둘 다 0x0이면 뷰포트 없이 이동한다 (서버 기본값).
+ * - enterLive는 iframe src를 /api/browse/view/로 걸고, 이미 켜진
+ *   상태의 enterLive는 이동만 지시한다 (src 재설정 없음).
  * 카나리아: 이 테스트는 수정 전 코드에서 실패한다 (iframe만 재서 null).
  */
 import * as fs from 'fs'
@@ -56,7 +60,6 @@ function setupFixture(stageSize: { w: number; h: number }, frameSize: { w: numbe
       <div class="bw-notice-card" id="bwNoticeCard" hidden>
         <p id="bwNoticeMsg"></p><button type="button" id="bwNoticeClose">닫기</button>
       </div>
-      <div class="bw-starting" id="bwStarting" hidden></div>
     </div>
   `
   stubRect(doc.getElementById('bwStage'), stageSize.w, stageSize.h)
@@ -70,71 +73,107 @@ function loadLive(): any {
   return win.MyHubBrowserLive
 }
 
+function makeLive(navigateImpl?: (url: string, viewport: unknown) => Promise<unknown>) {
+  const calls: Array<{ url: string; viewport: unknown }> = []
+  const api = loadLive()
+  const live = api.createLive({
+    doc: getDoc(),
+    navigate: (url: string, viewport: unknown) => {
+      calls.push({ url, viewport })
+      if (navigateImpl) return navigateImpl(url, viewport)
+      return Promise.resolve({ status: 200, body: { ok: true, nav: 'ok', navStage: 'ok' } })
+    },
+    onChange: () => undefined,
+  })
+  return { live, calls }
+}
+
 describe('browser-live viewport 측정', () => {
   test('iframe이 hidden(0x0)이어도 stage 크기를 뷰포트로 보낸다', async () => {
     setupFixture({ w: 1920, h: 1000 }, { w: 0, h: 0 })
-    const api = loadLive()
-    const calls: Array<{ url: string | null; viewport: unknown }> = []
-    const live = api.createLive({
-      doc: getDoc(),
-      liveStart: (url: string | null, viewport: unknown) => {
-        calls.push({ url, viewport })
-        return Promise.resolve({
-          status: 200,
-          body: { ok: true, viewUrl: 'https://live.example/view', expiresAt: Date.now() + 120000 },
-        })
-      },
-      liveStop: () => Promise.resolve(),
-      onChange: () => undefined,
-    })
+    const { live, calls } = makeLive()
     const started = await live.enterLive('https://www.naver.com')
     expect(started).toBe(true)
     expect(calls).toHaveLength(1)
+    expect(calls[0].url).toBe('https://www.naver.com')
     expect(calls[0].viewport).toEqual({ width: 1920, height: 1000 })
-    live.endLive(false)
+    expect(getDoc().getElementById('bwLiveFrame').getAttribute('src')).toBe('/api/browse/view/')
+    live.endLive()
   })
 
   test('stage 크기를 못 재면 iframe rect로 폴백한다', async () => {
     setupFixture({ w: 0, h: 0 }, { w: 1280, h: 720 })
-    const api = loadLive()
-    const calls: Array<{ url: string | null; viewport: unknown }> = []
-    const live = api.createLive({
-      doc: getDoc(),
-      liveStart: (url: string | null, viewport: unknown) => {
-        calls.push({ url, viewport })
-        return Promise.resolve({
-          status: 200,
-          body: { ok: true, viewUrl: 'https://live.example/view', expiresAt: Date.now() + 120000 },
-        })
-      },
-      liveStop: () => Promise.resolve(),
-      onChange: () => undefined,
-    })
+    const { live, calls } = makeLive()
     const started = await live.enterLive('https://www.naver.com')
     expect(started).toBe(true)
     expect(calls[0].viewport).toEqual({ width: 1280, height: 720 })
-    live.endLive(false)
+    live.endLive()
   })
 
-  test('둘 다 0x0이면 뷰포트 없이 시작한다', async () => {
+  test('둘 다 0x0이면 뷰포트 없이 이동한다', async () => {
     setupFixture({ w: 0, h: 0 }, { w: 0, h: 0 })
-    const api = loadLive()
-    const calls: Array<{ url: string | null; viewport: unknown }> = []
-    const live = api.createLive({
-      doc: getDoc(),
-      liveStart: (url: string | null, viewport: unknown) => {
-        calls.push({ url, viewport })
-        return Promise.resolve({
-          status: 200,
-          body: { ok: true, viewUrl: 'https://live.example/view', expiresAt: Date.now() + 120000 },
-        })
-      },
-      liveStop: () => Promise.resolve(),
-      onChange: () => undefined,
-    })
+    const { live, calls } = makeLive()
     const started = await live.enterLive('https://www.naver.com')
     expect(started).toBe(true)
     expect(calls[0].viewport).toBeNull()
-    live.endLive(false)
+    live.endLive()
+  })
+})
+
+describe('browser-live enterLive 상태', () => {
+  test('이미 켜진 상태의 enterLive는 이동만 지시하고 src를 다시 건드리지 않는다', async () => {
+    setupFixture({ w: 1920, h: 1000 }, { w: 0, h: 0 })
+    const { live, calls } = makeLive()
+    const frame = getDoc().getElementById('bwLiveFrame')
+    await live.enterLive('https://www.naver.com')
+    expect(frame.getAttribute('src')).toBe('/api/browse/view/')
+    const moved = await live.enterLive('https://example.com')
+    expect(moved).toBe(true)
+    expect(calls).toHaveLength(2)
+    expect(calls[1].url).toBe('https://example.com')
+    expect(frame.getAttribute('src')).toBe('/api/browse/view/')
+    expect(live.state()).toBe('on')
+    live.endLive()
+  })
+
+  test('url 없이 enterLive하면 뷰만 켜고 navigate를 부르지 않는다', async () => {
+    setupFixture({ w: 1920, h: 1000 }, { w: 0, h: 0 })
+    const { live, calls } = makeLive()
+    const started = await live.enterLive(null)
+    expect(started).toBe(true)
+    expect(calls).toHaveLength(0)
+    expect(live.state()).toBe('on')
+    live.endLive()
+  })
+
+  test('navigate 503이면 뷰를 끄고 안내 상태가 된다', async () => {
+    setupFixture({ w: 1920, h: 1000 }, { w: 0, h: 0 })
+    const { live } = makeLive(() => Promise.resolve({ status: 503, body: { ok: false } }))
+    const started = await live.enterLive('https://www.naver.com')
+    expect(started).toBe(false)
+    expect(live.state()).toBe('notice')
+    expect(getDoc().getElementById('bwLiveFrame').getAttribute('src')).toBeNull()
+    expect(getDoc().getElementById('bwNoticeMsg').textContent).toContain('설정되지 않았어요')
+    live.dismissNotice()
+    expect(live.state()).toBe('off')
+  })
+
+  test('navigate 400이면 뷰는 켜진 채 두고 false만 돌려준다', async () => {
+    setupFixture({ w: 1920, h: 1000 }, { w: 0, h: 0 })
+    const { live } = makeLive(() => Promise.resolve({ status: 400, body: { ok: false } }))
+    const started = await live.enterLive('https://www.naver.com')
+    expect(started).toBe(false)
+    expect(live.state()).toBe('on')
+    expect(getDoc().getElementById('bwLiveFrame').getAttribute('src')).toBe('/api/browse/view/')
+    live.endLive()
+  })
+
+  test('endLive는 src를 지우고 off가 된다', async () => {
+    setupFixture({ w: 1920, h: 1000 }, { w: 0, h: 0 })
+    const { live } = makeLive()
+    await live.enterLive('https://www.naver.com')
+    live.endLive()
+    expect(live.state()).toBe('off')
+    expect(getDoc().getElementById('bwLiveFrame').getAttribute('src')).toBeNull()
   })
 })

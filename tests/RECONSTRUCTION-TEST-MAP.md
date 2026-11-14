@@ -35,7 +35,7 @@
 | tests/xlsx-vendor-security.test.ts | 11-02 로그 | SheetJS 교체 CVE PoC 카나리아 양방향 (3건) | 미착수 |
 | tests/integration/ai-access-search-real.test.ts | 로그 언급 | AI 접근 검색 실연동 | 미착수 |
 | tests/unit/agent-modules.test.ts | 로그 언급 | 에이전트 모듈 표 | 미착수 |
-| tests/unit/browse-cdp.test.ts | 11-04 로그 | Browser Run CDP 접속·초기 이동 (신설) | 미착수 |
+| tests/unit/browse-cdp.test.ts | 11-04 로그 | Oracle CDP 접속·초기 이동 (신설) | 미착수 |
 | tests/unit/desktop-dock.test.ts | 11-02 로그 | 독 구성·순서·우클릭 (desktop-state 등과 함께 언급) | 미착수 |
 | tests/unit/desktop-icons.test.ts | 11-01 로그 | 동적 타일 글리프 갱신(refreshIcons) 회귀 — 가짜 lucide 주입 | 미착수 |
 | tests/unit/desktop-widgets.test.ts | 11-02 로그 | 위젯 드래그 순서·positions v2 저장 모델 | 미착수 |

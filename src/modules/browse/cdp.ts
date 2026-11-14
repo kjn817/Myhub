@@ -1,5 +1,5 @@
 /**
- * CDP(Chrome DevTools Protocol) 최소 클라이언트 — Browser Run 세션의
+ * CDP(Chrome DevTools Protocol) 최소 클라이언트 — Oracle 원격 브라우저의
  * WebSocket 디버거 엔드포인트로 페이지 이동을 지시한다.
  */
 
@@ -16,6 +16,30 @@ export function wsToHttpUrl(wsUrl: string): string {
   if (wsUrl.startsWith('wss://')) return `https://${wsUrl.slice('wss://'.length)}`
   if (wsUrl.startsWith('ws://')) return `http://${wsUrl.slice('ws://'.length)}`
   return wsUrl
+}
+
+/**
+ * 사이드카가 공개 베이스로 재작성한 CDP WS URL을 서버 내부 직접 URL로
+ * 되돌린다. Worker가 자기 자신을 경유하지 않고 사이드카에 직접 닿기
+ * 위함 (자기 경유는 세션 쿠키가 없어 401이 된다). 경로 안의 마지막
+ * /devtools/ 부터가 CDP 엔드포인트이며 (공개 URL은 /api/browse/cdp
+ * 접두사를 포함한다), 없으면 null (임의 URL로의 연결을 막는다).
+ */
+export function toDirectCdpWsUrl(publicWsUrl: string, host: string, port: number): string | null {
+  let parsed: URL
+  try {
+    parsed = new URL(publicWsUrl)
+  } catch {
+    return null
+  }
+  if (parsed.protocol !== 'ws:' && parsed.protocol !== 'wss:') return null
+  // 공개 URL은 프록시 접두사(/api/browse/cdp)를 포함하므로, 경로 안의
+  // 마지막 /devtools/ 부터가 CDP 엔드포인트이다.
+  const idx = parsed.pathname.lastIndexOf('/devtools/')
+  if (idx < 0) return null
+  const endpoint = parsed.pathname.slice(idx)
+  if (endpoint.length <= '/devtools/'.length) return null
+  return `ws://${host}:${port}${endpoint}`
 }
 
 export const defaultCdpConnect: CdpConnectFn = async (wsUrl, headers) => {

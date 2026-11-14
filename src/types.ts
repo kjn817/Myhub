@@ -36,7 +36,13 @@ export type Env = {
   WORKFLOW_REMINDER_ENABLED?: string
   VOICE_DAILY_LIMIT?: string // 음성 일일 요청 상한 (기본 100, ai_settings voice.daily_limit이 우선)
   EXA_API_KEY?: string // Exa 웹검색 API 키
-  BROWSER_RUN_TOKEN?: string // Cloudflare Browser Run API 토큰 (브라우저 모듈)
+  // Oracle 원격 브라우저 (2026-11-14 설계 변경: 터널·Browser Run 폐기,
+  // Worker가 오라클 서버 사이드카로 직접 프록시). 시크릿 3종은 사용자가
+  // 대시보드에 등록, ORACLE_BROWSER_HOST는 deploy_full.py 평문 바인딩.
+  ORACLE_BROWSER_HOST?: string // 오라클 브라우저 서버 공인 IP
+  ORIGIN_SECRET?: string // 사이드카 오리진 시크릿 (view·cdp 공통 게이트)
+  CDP_SECRET?: string // CDP 프록시 추가 시크릿
+  SELKIES_PASSWORD?: string // Selkies 기본 인증 비밀번호 (사용자 myhub)
   MEMO_ENCRYPTION_KEY?: string // 메모 AES-GCM 암호화 키
   CHANNEL_WEBHOOK_SECRET?: string // 채널 게이트웨이 웹훅 공유 시크릿 (미설정 시 웹훅 비활성화)
   // Google 연동 (Gmail·Calendar) — OAuth 클라이언트 (설계 docs/gmail-calendar-design.md §9-①)

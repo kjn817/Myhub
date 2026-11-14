@@ -110,31 +110,32 @@ interface ScriptOpts {
   extractValue?: unknown
   extractException?: boolean
   navigateErrorText?: string
-  noTargets?: boolean
-  targetsError?: boolean
+  createError?: boolean
   attachError?: boolean
 }
 
 class ScriptSocket implements CdpSocket {
   closed = false
   sentMethods: string[] = []
-  sentMessages: Array<{ method: string; sessionId?: string }> = []
+  sentMessages: Array<{ method: string; sessionId?: string; params?: Record<string, unknown> }> = []
   private listeners: Listener[] = []
   constructor(private opts: ScriptOpts = {}) {}
   send(data: string): void {
-    const msg = JSON.parse(data) as { id: number; method: string; sessionId?: string; params?: { expression?: string } }
+    const msg = JSON.parse(data) as { id: number; method: string; sessionId?: string; params?: { expression?: string; targetId?: string } }
     this.sentMethods.push(msg.method)
-    this.sentMessages.push({ method: msg.method, sessionId: msg.sessionId })
+    this.sentMessages.push({ method: msg.method, sessionId: msg.sessionId, params: msg.params as Record<string, unknown> | undefined })
     const reply = (m: unknown) => queueMicrotask(() => {
       const s = JSON.stringify(m)
       for (const l of this.listeners) l({ data: s })
     })
-    if (msg.method === 'Target.getTargets') {
-      if (this.opts.targetsError) reply({ id: msg.id, error: { message: 'targets unavailable' } })
-      else reply({ id: msg.id, result: { targetInfos: this.opts.noTargets ? [] : [{ type: 'page', targetId: 'p1' }] } })
+    if (msg.method === 'Target.createTarget') {
+      if (this.opts.createError) reply({ id: msg.id, error: { message: 'create denied' } })
+      else reply({ id: msg.id, result: { targetId: 't-new' } })
     } else if (msg.method === 'Target.attachToTarget') {
       if (this.opts.attachError) reply({ id: msg.id, error: { message: 'attach denied' } })
       else reply({ id: msg.id, result: { sessionId: 'sess-1' } })
+    } else if (msg.method === 'Target.closeTarget') {
+      reply({ id: msg.id, result: {} })
     } else if (msg.method === 'Page.enable') {
       reply({ id: msg.id, result: {} })
     } else if (msg.method === 'Page.navigate') {
@@ -159,79 +160,112 @@ class ScriptSocket implements CdpSocket {
   }
 }
 
-const ENV = { BROWSER_RUN_TOKEN: 'br-token' } as never
+const ENV = {
+  ORACLE_BROWSER_HOST: '203.0.113.7',
+  ORIGIN_SECRET: 'origin-secret',
+  CDP_SECRET: 'cdp-secret',
+  SELKIES_PASSWORD: 'selkies-pw',
+} as never
 const PAGE_URL = 'https://example.com/page'
+const VERSION_DATA = {
+  Browser: 'Chrome/120.0',
+  webSocketDebuggerUrl: 'wss://myhub.myhub-app.workers.dev/api/browse/cdp/devtools/browser/abc',
+}
 
-function sessionFetch(sessionData: unknown, status = 200) {
-  const calls: Array<{ url: string; method: string }> = []
-  const fetchFn = (async (url: unknown, init?: { method?: string }) => {
-    const u = String(url)
-    const method = init?.method ?? 'GET'
-    calls.push({ url: u, method })
-    if (method === 'DELETE') return { ok: true, status: 204, json: async () => null }
-    return { ok: status >= 200 && status < 300, status, json: async () => sessionData }
+function versionFetch(versionData: unknown, status = 200) {
+  const calls: Array<{ url: string; method: string; headers: Record<string, string> }> = []
+  const fetchFn = (async (url: unknown, init?: { method?: string; headers?: Record<string, string> }) => {
+    calls.push({ url: String(url), method: init?.method ?? 'GET', headers: init?.headers ?? {} })
+    return { ok: status >= 200 && status < 300, status, json: async () => versionData }
   }) as unknown as typeof fetch
   return { fetchFn, calls }
 }
 
-const sessionData = { sessionId: 'sess-9', webSocketDebuggerUrl: 'wss://dbg.example/ws' }
-
-function deps(fetchFn: typeof fetch, socket: CdpSocket | null) {
-  return { fetchFn, connect: async () => socket }
+function deps(fetchFn: typeof fetch, socket: CdpSocket | null, connected: { url?: string } = {}) {
+  return {
+    fetchFn,
+    connect: (async (url: string) => {
+      connected.url = url
+      return socket
+    }) as (url: string, headers?: Record<string, string>) => Promise<CdpSocket | null>,
+  }
 }
 
-describe('readPage — 세션·연결 단계 실패 구분', () => {
+describe('readPage — 버전 조회·연결 단계 실패 구분', () => {
   test('차단 URL은 네트워크 이전에 blocked_host로 돌아온다', async () => {
-    const { fetchFn, calls } = sessionFetch(sessionData)
+    const { fetchFn, calls } = versionFetch(VERSION_DATA)
     const r = await readPage(ENV, 'http://192.168.1.1/', deps(fetchFn, new ScriptSocket()))
     expect(r).toEqual({ ok: false, error: 'blocked_host' })
     expect(calls).toHaveLength(0)
   })
 
-  test('토큰이 없으면 not_configured', async () => {
-    const { fetchFn } = sessionFetch(sessionData)
-    const r = await readPage({} as never, PAGE_URL, deps(fetchFn, new ScriptSocket()))
-    expect(r).toEqual({ ok: false, error: 'not_configured' })
+  test('시크릿이 하나라도 없으면 not_configured', async () => {
+    const { fetchFn } = versionFetch(VERSION_DATA)
+    const r1 = await readPage({} as never, PAGE_URL, deps(fetchFn, new ScriptSocket()))
+    expect(r1).toEqual({ ok: false, error: 'not_configured' })
+    const partial = { ORACLE_BROWSER_HOST: '203.0.113.7', ORIGIN_SECRET: 'o' } as never
+    const r2 = await readPage(partial, PAGE_URL, deps(fetchFn, new ScriptSocket()))
+    expect(r2).toEqual({ ok: false, error: 'not_configured' })
   })
 
-  test('세션 발급 429는 quota, 5xx·예외·sessionId 없음·ws 없음은 upstream', async () => {
+  test('/json/version 5xx·예외·ws 없음·ws 비CDP 경로는 upstream', async () => {
     const sock = new ScriptSocket()
-    let f = sessionFetch({}, 429)
-    await expect(readPage(ENV, PAGE_URL, deps(f.fetchFn, sock))).resolves.toEqual({ ok: false, error: 'quota' })
-    f = sessionFetch({}, 500)
+    let f = versionFetch({}, 500)
     await expect(readPage(ENV, PAGE_URL, deps(f.fetchFn, sock))).resolves.toEqual({ ok: false, error: 'upstream' })
     const throwing = (async () => { throw new Error('down') }) as unknown as typeof fetch
     await expect(readPage(ENV, PAGE_URL, deps(throwing, sock))).resolves.toEqual({ ok: false, error: 'upstream' })
-    f = sessionFetch({ webSocketDebuggerUrl: 'wss://x' })
+    f = versionFetch({ Browser: 'Chrome' })
     await expect(readPage(ENV, PAGE_URL, deps(f.fetchFn, sock))).resolves.toEqual({ ok: false, error: 'upstream' })
-    f = sessionFetch({ sessionId: 's1' })
+    f = versionFetch({ webSocketDebuggerUrl: 'wss://example.com/somewhere/else' })
     await expect(readPage(ENV, PAGE_URL, deps(f.fetchFn, sock))).resolves.toEqual({ ok: false, error: 'upstream' })
   })
 
-  test('connect가 null이거나 던지면 connect이고, 세션 정리는 그래도 시도된다', async () => {
-    const f1 = sessionFetch(sessionData)
+  test('/json/version 조회는 사이드카 직접 URL에 두 시크릿을 싣는다', async () => {
+    const { fetchFn, calls } = versionFetch(VERSION_DATA)
+    await readPage(ENV, PAGE_URL, deps(fetchFn, new ScriptSocket()))
+    expect(calls).toHaveLength(1)
+    expect(calls[0].url).toBe('http://203.0.113.7:8081/json/version')
+    expect(calls[0].headers['x-origin-secret']).toBe('origin-secret')
+    expect(calls[0].headers['x-cdp-secret']).toBe('cdp-secret')
+  })
+
+  test('connect가 null이거나 던지면 connect', async () => {
+    const f1 = versionFetch(VERSION_DATA)
     await expect(readPage(ENV, PAGE_URL, deps(f1.fetchFn, null))).resolves.toEqual({ ok: false, error: 'connect' })
-    expect(f1.calls.some((c) => c.method === 'DELETE' && c.url.includes('/sess-9'))).toBe(true)
-    const f2 = sessionFetch(sessionData)
+    const f2 = versionFetch(VERSION_DATA)
     const throwingConnect = async () => { throw new Error('ws refused') }
     await expect(readPage(ENV, PAGE_URL, { fetchFn: f2.fetchFn, connect: throwingConnect })).resolves.toEqual({ ok: false, error: 'connect' })
-    expect(f2.calls.some((c) => c.method === 'DELETE')).toBe(true)
   })
 })
 
 describe('readPage — 읽기 결과', () => {
-  test('성공: 제목·본문이 돌아오고 소켓이 닫히며 세션 DELETE가 간다', async () => {
-    const { fetchFn, calls } = sessionFetch(sessionData)
+  test('성공: 제목·본문이 돌아오고 별도 탭으로 읽고 닫으며 소켓이 닫힌다', async () => {
+    const { fetchFn } = versionFetch(VERSION_DATA)
     const sock = new ScriptSocket()
-    const r = await readPage(ENV, PAGE_URL, deps(fetchFn, sock))
+    const connected: { url?: string } = {}
+    const r = await readPage(ENV, PAGE_URL, deps(fetchFn, sock, connected))
     expect(r).toEqual({ ok: true, url: PAGE_URL, title: '제목', text: '본문 내용', truncated: false })
+    // 공개 베이스가 아니라 사이드카 직접 URL로 연결해야 한다.
+    expect(connected.url).toBe('ws://203.0.113.7:8081/devtools/browser/abc')
     expect(sock.closed).toBe(true)
-    expect(sock.sentMethods).toEqual(expect.arrayContaining(['Target.getTargets', 'Target.attachToTarget', 'Page.navigate', 'Runtime.evaluate']))
-    expect(calls.some((c) => c.method === 'DELETE' && c.url.includes('/sess-9'))).toBe(true)
+    // 별도 탭 생성 → attach → navigate → 추출 → 탭 닫기 순서가 고정된다.
+    expect(sock.sentMethods).toEqual(
+      expect.arrayContaining(['Target.createTarget', 'Target.attachToTarget', 'Page.navigate', 'Runtime.evaluate', 'Target.closeTarget']),
+    )
+    expect(sock.sentMethods.indexOf('Target.createTarget')).toBeLessThan(
+      sock.sentMethods.indexOf('Page.navigate'),
+    )
+    expect(sock.sentMethods.indexOf('Target.closeTarget')).toBeGreaterThan(
+      sock.sentMethods.lastIndexOf('Runtime.evaluate'),
+    )
+    const close = sock.sentMessages.find((m) => m.method === 'Target.closeTarget')!
+    expect(close.params?.targetId).toBe('t-new')
+    // 기존 탭을 건드리지 않는다: getTargets는 쓰지 않는다.
+    expect(sock.sentMethods).not.toContain('Target.getTargets')
   })
 
   test('본문이 상한을 넘으면 truncated=true와 함께 정확히 상한만큼 잘린다', async () => {
-    const { fetchFn } = sessionFetch(sessionData)
+    const { fetchFn } = versionFetch(VERSION_DATA)
     const longText = '가'.repeat(500)
     const sock = new ScriptSocket({ extractValue: { title: 't', url: PAGE_URL, text: longText } })
     const r = await readPage(ENV, PAGE_URL, deps(fetchFn, sock), { maxTextChars: 120 })
@@ -243,7 +277,7 @@ describe('readPage — 읽기 결과', () => {
   })
 
   test('제목은 300자로 잘리고, 추출 url이 비면 대상 URL로 대체된다', async () => {
-    const { fetchFn } = sessionFetch(sessionData)
+    const { fetchFn } = versionFetch(VERSION_DATA)
     const sock = new ScriptSocket({ extractValue: { title: '제'.repeat(400), url: '', text: '본문' } })
     const r = await readPage(ENV, PAGE_URL, deps(fetchFn, sock))
     expect(r.ok).toBe(true)
@@ -254,7 +288,7 @@ describe('readPage — 읽기 결과', () => {
   })
 
   test('navigate errorText면 navigate, 추출 예외면 extract, 빈 본문이면 empty', async () => {
-    const f = () => sessionFetch(sessionData).fetchFn
+    const f = () => versionFetch(VERSION_DATA).fetchFn
     await expect(readPage(ENV, PAGE_URL, deps(f(), new ScriptSocket({ navigateErrorText: 'ERR_ABORTED' }))))
       .resolves.toEqual({ ok: false, error: 'navigate' })
     await expect(readPage(ENV, PAGE_URL, deps(f(), new ScriptSocket({ extractException: true }))))
@@ -265,36 +299,31 @@ describe('readPage — 읽기 결과', () => {
       .resolves.toEqual({ ok: false, error: 'extract' })
   })
 
-  test('readyState가 끝내 complete가 아니면 timeout', async () => {
-    const { fetchFn } = sessionFetch(sessionData)
+  test('readyState가 끝내 complete가 아니면 timeout이고 탭은 그래도 닫힌다', async () => {
+    const { fetchFn } = versionFetch(VERSION_DATA)
     const sock = new ScriptSocket({ readyState: 'loading' })
     const r = await readPage(ENV, PAGE_URL, deps(fetchFn, sock), { renderDeadlineMs: 60 })
     expect(r).toEqual({ ok: false, error: 'timeout' })
+    expect(sock.sentMethods).toContain('Target.closeTarget')
   })
 
-  test('getTargets 오류면 재시도 없이 세션 없이 진행하고, attach 오류여도 마찬가지다', async () => {
-    const f = () => sessionFetch(sessionData).fetchFn
-    const sockErr = new ScriptSocket({ targetsError: true })
-    const r1 = await readPage(ENV, PAGE_URL, deps(f(), sockErr), { renderDeadlineMs: 2000 })
-    expect(r1.ok).toBe(true)
-    expect(sockErr.sentMethods.filter((m) => m === 'Target.getTargets')).toHaveLength(1)
-    const sockAttach = new ScriptSocket({ attachError: true })
-    const r2 = await readPage(ENV, PAGE_URL, deps(f(), sockAttach), { renderDeadlineMs: 2000 })
-    expect(r2.ok).toBe(true)
-    const nav = sockAttach.sentMessages.find((m) => m.method === 'Page.navigate')!
-    expect(nav.sessionId).toBeUndefined()
+  test('createTarget 실패면 connect이고 닫을 탭이 없으니 closeTarget은 안 간다', async () => {
+    const { fetchFn } = versionFetch(VERSION_DATA)
+    const sock = new ScriptSocket({ createError: true })
+    const r = await readPage(ENV, PAGE_URL, deps(fetchFn, sock))
+    expect(r).toEqual({ ok: false, error: 'connect' })
+    expect(sock.sentMethods).not.toContain('Target.closeTarget')
+    expect(sock.sentMethods).not.toContain('Page.navigate')
   })
 
-  test('타깃이 없으면 3회까지만 재시도하고 세션 없이 진행한다', async () => {
-    const { fetchFn } = sessionFetch(sessionData)
-    const sock = new ScriptSocket({ noTargets: true })
-    const r = await readPage(ENV, PAGE_URL, deps(fetchFn, sock), { renderDeadlineMs: 2000 })
-    // 타깃을 못 잡아도 읽기를 포기하지 않는다: getTargets는 정확히 3회까지만
-    // 시도하고, 이후 navigate는 sessionId 없이 나간다.
-    expect(sock.sentMethods.filter((m) => m === 'Target.getTargets').length).toBe(3)
-    const nav = sock.sentMessages.find((m) => m.method === 'Page.navigate')!
-    expect(nav.sessionId).toBeUndefined()
-    expect(r.ok).toBe(true)
+  test('attach 실패면 connect이지만 만든 탭은 반드시 닫는다', async () => {
+    const { fetchFn } = versionFetch(VERSION_DATA)
+    const sock = new ScriptSocket({ attachError: true })
+    const r = await readPage(ENV, PAGE_URL, deps(fetchFn, sock))
+    expect(r).toEqual({ ok: false, error: 'connect' })
+    expect(sock.sentMethods).toContain('Target.closeTarget')
+    const close = sock.sentMessages.find((m) => m.method === 'Target.closeTarget')!
+    expect(close.params?.targetId).toBe('t-new')
   })
 })
 

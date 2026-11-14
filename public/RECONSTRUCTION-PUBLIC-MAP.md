@@ -86,7 +86,7 @@
 | browser.html | D-20: 탭 스트립은 창 바 안, 주소 캡슐, '브라우저 시작' 단일 버튼, 시작 페이지(안내 카드+즐겨찾기 6+최근 방문), 하단 알약 |
 | css/browser.css | 주소 캡슐 36px·창 폭 50%(220~640px), 시작 콘텐츠 768px·타일 64px |
 | js/browser.js | 탭 모델, 최근 방문 'myhub.browser.recents.v1', resolveLiveFactory 없으면 fail-fast |
-| js/browser-live.js | {createLive}: POST /api/browse/live-session, 반납(DELETE) 완료 후 새 세션, 한도(1회 2분) 카운트다운·종료 상태 |
+| js/browser-live.js | {createLive}: iframe에 /api/browse/view/ 직접 연결, POST /api/browse/navigate로 영구 탭 이동 (2026-11-14 Oracle 전환, live-session 폐기) |
 
 ### 오프라인 (3)
 | 파일 | 근거 |
@@ -133,8 +133,8 @@
   검색(/api/drive/search), 사용량 응답 형태 — 계약(동작)만 기록에 있고
   경로는 관용 형태로 채웠다. finder.js 상단 api 객체에 모아 둠.
 - /api/system 응답 형태 (위젯 summarizeSystem은 관용 필드명으로 방어 구현).
-- /api/browse/live-session 응답 필드명(id/viewUrl/limitSec/expiresAt) —
-  browser-live.js에서 복수 후보를 수용하게 구현.
+- ~~`/api/browse/live-session` 응답 필드명(id/viewUrl/limitSec/expiresAt)~~ —
+  2026-11-14 폐기됨 (Oracle 프록시로 전환, live-session 라우트 없음).
 - 오피스 엔진 메시지 프로토콜(myhub:engine-ready, office-export 등)은
   엔진이 재구성 불가라 호스트 측 계약만 정의했다.
 - 접기 셰브론 위치: 정본 기록(제목줄 첫 자리 vs 메뉴 줄 우측 끝)이 충돌해
