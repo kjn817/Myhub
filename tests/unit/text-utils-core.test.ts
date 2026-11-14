@@ -5,11 +5,11 @@
  * 고정하는 성질 (설계 노트 .scratch/f-l3-utils-design.md):
  * - esc는 5문자 버전(& < > " ') — memo본만 4자였는데 5자로 올린다.
  *   null/undefined는 ''로, 숫자 0은 '0'으로 (4개 사본의 다수 동작).
- * - friendlyError는 풀 패턴 버전: 위임(window.friendlyErrorMessage) +
- *   fail-safe(http_\d{3}·서버 오류 (NNN)·snake_case·SNAKE_CASE·
- *   ALL-CAPS 2자 이상, trim, input.message 폴백). chat본에만 없던
- *   패턴·trim·message 폴백을 채운다. 위임 분기는 5-4에서 유지한다
- *   (제거는 6단계 D5에서 이 파일 한 곳에만 적용).
+ * - friendlyError는 fail-safe 패턴 버전(http_\d{3}·서버 오류 (NNN)·
+ *   snake_case·SNAKE_CASE·ALL-CAPS 2자 이상, trim, input.message 폴백).
+ *   chat본에만 없던 패턴·trim·message 폴백을 채운다. 위임
+ *   (window.friendlyErrorMessage)은 6단계 D5에서 제거했다 —
+ *   error-messages.js 파일 자체가 없어 위임은 영원히 false였다.
  * 카나리아: esc를 4자로 되돌리면 ' 이스케이프 테스트가, chat본 패턴
  * (snake/SNAKE만)으로 되돌리면 http_/서버 오류/ALL-CAPS·trim·message
  * 테스트가 실패한다.
@@ -64,7 +64,7 @@ describe('text-utils 코어 — esc (5문자)', () => {
   })
 })
 
-describe('text-utils 코어 — friendlyError (풀 패턴)', () => {
+describe('text-utils 코어 — friendlyError (fail-safe 패턴)', () => {
   const FALLBACK = '잠시 후 다시 시도해 주세요.'
   let warnSpy: jest.SpyInstance
 
@@ -75,16 +75,17 @@ describe('text-utils 코어 — friendlyError (풀 패턴)', () => {
     warnSpy.mockRestore()
   })
 
-  it('위임 함수가 있으면 그 결과를 그대로 반환한다', () => {
+  it('위임 함수가 있어도 무시하고 fail-safe를 적용한다 (D5: 위임 제거)', () => {
     const win: any = {}
     const core = loadCore(win)
     const delegate = jest.fn((input: any, fb: any) => `맵:${String(input)}:${fb}`)
     win.friendlyErrorMessage = delegate
-    expect(core.friendlyError('decrypt_failed', FALLBACK)).toBe(`맵:decrypt_failed:${FALLBACK}`)
-    expect(delegate).toHaveBeenCalledWith('decrypt_failed', FALLBACK)
+    expect(core.friendlyError('decrypt_failed', FALLBACK)).toBe(FALLBACK)
+    expect(core.friendlyError('일반 문구', FALLBACK)).toBe('일반 문구')
+    expect(delegate).not.toHaveBeenCalled()
   })
 
-  it('위임 함수가 던지면 fail-safe로 폴백한다', () => {
+  it('위임 함수가 던지는 값을 갖고 있어도 무시한다 (D5: 위임 제거)', () => {
     const win: any = {}
     const core = loadCore(win)
     win.friendlyErrorMessage = () => {
@@ -92,7 +93,6 @@ describe('text-utils 코어 — friendlyError (풀 패턴)', () => {
     }
     expect(core.friendlyError('decrypt_failed', FALLBACK)).toBe(FALLBACK)
     expect(core.friendlyError('일반 문구', FALLBACK)).toBe('일반 문구')
-    expect(warnSpy).toHaveBeenCalledWith('오류 문구 변환 실패:', expect.any(Error))
   })
 
   it.each([

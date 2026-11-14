@@ -1,30 +1,31 @@
-/* MyHub 데스크톱 앱 바탕화면 아이콘 (desktop-icons.js)
+/* MyHub 데스크톱 바탕화면 아이콘 (desktop-icons.js)
  *
  * 설계: docs/desktop-macos-redesign-20261101.md C단계 (사용자 검수 기준 2·3)
  * - 아이콘의 격자 스냅 배치다 (2026-11-03 사용자 재지시: "완전 자유
- *   말고, 아이콘처럼 같은 줄에 앱 맞게" 앱 2026-11-02의 완전 자유
- *   배치를 단체한것): 드래그 중에서는 포인터를 그대로 앱이지만, 빼면
- *   가장 가까운 앱 앱 붙는다. 그 앱 창 있으면 가장 가까운 빈
- *   앱으로 간다 (겹침은 스냅 이상으로 해소). 격자 기준은 왼쪽 앱 앱
- *   col 0의 왼쪽 앱 이이고, 기본 배치·정렬은 앱 우선(왼쪽·위을앱,
+ *   말고, 아이콘처럼 같은 줄에 딱 맞게" — 2026-11-02의 완전 자유
+ *   배치를 대체한 것): 드래그 중에서는 포인터를 그대로 따르지만,
+ *   놓으면 가장 가까운 셀에 붙는다. 그 셀에 창이 있으면 가장 가까운
+ *   빈 셀로 간다 (겹침은 스냅으로 해소). 격자 기준은 왼쪽 위,
+ *   col 0의 왼쪽 끝이고, 기본 배치·정렬은 행 우선(왼쪽·위에서,
  *   다음 줄)으로 채운다 ("정렬하면 앱 오른쪽으로 가장, 왼쪽이 정상"
- *   앱 같은 재지시).
- * - 정렬(arrange)은 사용자가 명시적으로 앱 앱만 앱는 자동 정렬이다
+ *   이라는 재지시).
+ * - 정렬(arrange)은 사용자가 명시적으로 부를 때만 하는 자동 정렬이다
  *   (배경 우클릭 메뉴의 설정에서 호출).
  * - 아이콘 구성(어떤 아이콘이 바탕화면에 있는가)은 사용자가 바꾼다:
- *   제거는 독의 내장함으로 드래그해 빼는 방식으로 일원화된다
- *   (2026-11-06 지시 앱 드래그 중 내어하는 별도 제거 영역은 폐지),
- *   아이콘 추가 패널에서 없는 아이콘을 다시 앱는다. 드래그로 앱 앱에
- *   빼면 독에서 추가한다 (onDragToDock 콜백 앱 앱 관리자는 windows.js).
- *   제거는 바탕화면 아이콘만 지운다 앱 앱(모듈) 자체의 설치 개념이 없어
- *   사라지지 않고, 추가 패널에서 언제든 다시 앱을 앱 있다.
- * - 배치·구성은 localStorage 'myhub.desktop.icons.v1'앱 앱한다
- *   (v8 포맷: { version: 8, present: [id...], positions: {id:{x,y}} } 앱
- *   v8의 격자 스냅 전환 마이그레이션을 추가한다: v<8 저장낯의 자유
- *   좌표를 읽을 앱 가장 가까운 앱(창 있으면 가장 가까운 빈 앱)로
- *   앱 번 앱어 넣는다. 좌표는 바탕화면 전체 레이어 기본. v5의
- *   positions는 오른쪽 앱(앱 108) 기본이라 오른쪽 앱 거리 보존으로
- *   x를 미 앱 앱. v스냅한다4는 cells {col,row}의 cellToXY로 연산한다).
+ *   제거는 독 밖으로 드래그해 빼는 방식으로 일원화된다
+ *   (2026-11-06 지시 — 드래그 중 내어놓는 별도 제거 영역은 폐지),
+ *   아이콘 추가 패널에서 없는 아이콘을 다시 넣는다. 드래그로 독에
+ *   빼면 독에서 추가한다 (onDragToDock 콜백 — 독 관리자는 windows.js).
+ *   제거는 바탕화면 아이콘만 지운다 — 앱(모듈) 자체의 설치 개념이 없어
+ *   사라지지 않고, 추가 패널에서 언제든 다시 넣을 수 있다.
+ * - 배치·구성은 localStorage 'myhub.desktop.icons.v1'에 저장한다
+ *   (v8 포맷: { version: 8, present: [id...], positions: {id:{x,y}} }.
+ *   v8의 격자 스냅 전환 마이그레이션을 추가한다: v<8 저장값의 자유
+ *   좌표를 읽을 때 가장 가까운 셀(창 있으면 가장 가까운 빈 셀)로
+ *   옮겨 넣는다. 좌표는 바탕화면 전체 레이어 기준. v5의
+ *   positions는 오른쪽 108px 띠를 제외한 기준이라 오른쪽에서의
+ *   거리 보존으로 x에 shiftX를 더한다. v4 형식(cells)은
+ *   cells {col,row}의 cellToXY로 연산한다).
  * - 클릭은 선택, 더블클릭은 열기(모듈) 또는 이동(링크).
  * 노출: window.MyHubDesktopIcons = { PREF_KEY, CELL_W, CELL_H, TILE,
  *        gridDims, clampCell, nearestFreeCell, cellToXY, xyToCell,
@@ -163,11 +164,11 @@
     if (!parsed || !Array.isArray(parsed.present)) return all.slice();
     var wanted = {};
     parsed.present.forEach(function (id) { wanted[id] = true; });
-    // v3 마이그레이션: 파인더가 없든 시점에 구성하면 파인더를 포함한다
+    // v3 마이그레이션: 파인더가 없던 시점에 구성했으면 파인더를 포함한다
     var savedV = parsed.version || 1;
     if (savedV < 3 && all.indexOf('finder') >= 0) wanted.finder = true;
     if (savedV < 4 && all.indexOf('browser') >= 0) wanted.browser = true;
-    // v7 마이그레이션: 오피스 앱 4종이 없든 시점에 구성하면 앱 번 포함한다
+    // v7 마이그레이션: 오피스 앱 4종이 없던 시점에 구성했으면 모두 포함한다
     if (savedV < 7) {
       ['excel', 'hangul', 'powerpoint', 'pdf'].forEach(function (id) {
         if (all.indexOf(id) >= 0) wanted[id] = true;
@@ -176,7 +177,7 @@
     return all.filter(function (id) { return wanted[id]; });
   }
 
-  var LEGACY_STRIP_W = 108; // v5까지 아이콘 레이어의 오른쪽 앱의 앱
+  var LEGACY_STRIP_W = 108; // v6 미만 저장값의 좌표계: 오른쪽 108px 띠를 제외한 기준
   function loadLayout(storage, items, area) {
     var a = area || { w: 0, h: 0 };
     var positions = defaultPositions(items, a.w, a.h);
@@ -572,7 +573,7 @@
           },
           { separator: true },
           {
-            label: '내장함으로 이동', icon: 'trash-2', danger: true,
+            label: '휴지통으로 이동', icon: 'trash-2', danger: true,
             onSelect: function () {
               if (typeof deps.onFileTrash === 'function') deps.onFileTrash(item);
             },
@@ -599,7 +600,7 @@
       }
       menuItems.push({ separator: true });
       menuItems.push({
-        label: targetIds.length > 1 ? '내장함으로 이동 (' + targetIds.length + '개)' : '내장함으로 이동',
+        label: targetIds.length > 1 ? '휴지통으로 이동 (' + targetIds.length + '개)' : '휴지통으로 이동',
         icon: 'trash-2', danger: true,
         onSelect: function () { trashRemove(targetIds); },
       });

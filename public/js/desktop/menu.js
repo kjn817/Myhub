@@ -1,39 +1,39 @@
-/* MyHub 데스크톱 앱 공용 드롭다운 메뉴 (menu.js)
+/* MyHub 데스크톱 공용 드롭다운 메뉴 (menu.js)
  *
  * macOS의 드롭다운: 바탕화면 아이콘·독 항목의 우클릭과 앱 상단 메뉴바
- * (menubar.js)가 함께 여는 단일 구현이다. 설정 메뉴와 같은 거동 앱
- * 레벨이 앱면 아래로 앱고, 항목을 고르면 실행 앱 접힌다.
+ * (menubar.js)가 함께 여는 단일 구현이다. 설정 메뉴와 같은 거동 —
+ * 레벨이 깊어지면 아래로 펼치고, 항목을 고르면 실행하고 접힌다.
  * - 항목: { label, icon?, danger?, disabled?, checked?, sub?, shortcut?,
  *   heading?, children?, onSelect } 또는 { separator: true }
- *   체크 checked 앱 메뉴의 체크 항목이 하나라도 있으면 모든 항목이 체크
- *     열(16px)을 잡고, true인 항목의 앱 그림자 (보기 메뉴의).
- *   · sub 레벨 앱 보조 텍스트 방송 (목록의 최근 메시지 앱 앱).
- *   · shortcut 앱 우측 단축키 표기 (실행은 각 앱의 앱 핸들러 몫).
- *   · heading 앱 선택 불가한 소제목 (메뉴바 "앱 보기" 그릅 제목의).
- *   · children 앱 서브메뉴 항목 배열. 부모 항목은 실행하지 않고
- *     hover(짧은 지연)클릭 앱 뒤로 없음에 하위 패널이 (닫힌다
- *     Studio 메뉴처럼 서브메뉴가 있는 트리를 앱이 그길 앱 연다).
- *     서브메뉴가 닫힌 깊이에서는 잡고 앱 단계 앱고, 최상의 깊이는
- *     앱/앱만 opts.onSwitch(메뉴바 앱 메뉴 전환)을 앱는다.
- * - 메뉴는 화면 가로자리에 앱으로 앱고 바깥, 클릭 ·ESC로 접힌다.
- * - 키보드: 앱/앱 이동, Enter 실행, 앱/앱는 opts.onSwitch가 있을 때만
- *   앱 메뉴로 전환 (메뉴바 앱용).
- * - opts.keepSelector 앱 앱 선택자가 일치하는 앱의 pointerdown은
+ *   체크 checked — 메뉴의 체크 항목이 하나라도 있으면 모든 항목이 체크
+ *     열(16px)을 잡고, true인 항목에 체크 표시를 그린다 (보기 메뉴 등).
+ *   · sub — 항목 아래 보조 텍스트 (예: 목록의 최근 메시지).
+ *   · shortcut — 우측 단축키 표기 (실행은 각 앱의 키 핸들러 몫).
+ *   · heading — 선택 불가한 소제목 (메뉴바 "보기" 그룹 제목 등).
+ *   · children — 서브메뉴 항목 배열. 부모 항목은 실행하지 않고
+ *     hover(짧은 지연)·클릭으로 하위 패널을 연다 (Studio 메뉴처럼
+ *     서브메뉴가 있는 트리를 한 번에 연다).
+ *     서브메뉴가 열린 깊이에서는 화살표 키로 단계를 오가고, 최상위
+ *     깊이에서만 좌/우 키가 opts.onSwitch(메뉴바 간 메뉴 전환)를 부른다.
+ * - 메뉴는 화면 안에 들어가도록 위치를 잡고, 바깥 클릭·ESC로 접힌다.
+ * - 키보드: ↑/↓ 이동, Enter 실행, ←/→는 opts.onSwitch가 있을 때만
+ *   다른 메뉴로 전환 (메뉴바용).
+ * - opts.keepSelector — 선택자가 일치하는 요소의 pointerdown은
  *   바깥 클릭으로 치지 않는다 (메뉴바 트리거 버튼의 자기 클릭으로
- *   잠그는 앱 있게 하기 위함).
- * - 호스트가 사라진 동시에 하나만 닫힌다 (모듈 전역 현재 메뉴).
+ *   잠그는 일이 없게 하기 위함).
+ * - 한 번에 하나만 열린다 (모듈 전역 현재 메뉴).
  * 노출: window.MyHubDesktopMenu = { createMenu }
  */
 (function () {
   'use strict';
 
-  var active = null; // 현재 닫힌 메뉴의 close 함수
+  var active = null; // 현재 열린 메뉴의 close 함수
   var SUBMENU_HOVER_MS = 200; // 서브메뉴 hover 수의 지연 (macOS와 같은 것)
 
-  // 단축키 표기를 macOS 기호로 바꾼다 (기본 사진 것): 'Ctrl+S' →
-  // '⌘', 'Ctrl+Shift+S' → '⇧⌘S', 'Alt+Ctrl+B' → '⌥⌘B'. PC 표기는
-  // Ctrl은 앱 임의 메뉴 표기에서 앱 자리를 앱한다. 이미 기호로
-  // 표기한 수식이 없는 앱(F7 앱)은 그대로 붇다.
+  // 단축키 표기를 macOS 기호로 바꾼다: 'Ctrl+S' → '⌘S',
+  // 'Ctrl+Shift+S' → '⇧⌘S', 'Alt+Ctrl+B' → '⌥⌘B'. Ctrl은 맥 메뉴
+  // 표기에서 ⌘ 자리를 차지한다. 이미 기호로 표기된 것이나 기호가
+  // 없는 단독 키(F7 등)는 그대로 둔다.
   var GLYPH_KEYS = {
     delete: '⌫',
     del: '⌫',
@@ -71,8 +71,8 @@
         key = p;
       }
     }
-    // 'Ctrl++'처럼 앱 자체가 '+'인 경우: 분리하면 키가 비로
-    // 문자열 앱의 '+'를 뒤로 내보낸다.
+    // 'Ctrl++'처럼 키 자체가 '+'인 경우: 분리하면 키가 비므로
+    // 문자열 끝의 '+'를 뒤에 붙여 내보낸다.
     if (!key && /\+$/.test(t) && (alt || shift || cmd)) key = '+';
     if (!key || (!alt && !shift && !cmd)) return s;
     var k =
@@ -162,7 +162,7 @@
     function openSubmenu(level, idx) {
       var depth = levels.indexOf(level);
       if (depth < 0) return;
-      // 같은 부모의 서브메뉴가 이미 열려 있으면 그대로 붇다
+      // 같은 부모의 서브메뉴가 이미 열려 있으면 그대로 둔다
       if (
         levels.length > depth + 1 &&
         levels[depth + 1].parentIdx === idx
@@ -386,7 +386,7 @@
       levels = [level];
       doc.body.appendChild(level.el);
       if (typeof deps.refreshIcons === 'function') deps.refreshIcons();
-      // 화면 밖으로 나가지 않게 앱고 넣는다
+      // 화면 밖으로 나가지 않게 조정해 넣는다
       var vw = doc.documentElement.clientWidth || 0;
       var vh = doc.documentElement.clientHeight || 0;
       var w = level.el.offsetWidth || 0;

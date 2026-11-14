@@ -409,7 +409,7 @@
 
   /* 내장 공용 폰트 풀 (public/fonts/, 전부 SIL OFL 1.1 원본 무손실)
    *
-   * 실행 프로 그램이 가져다 넣은 폰트를 모은 등 것이다:
+   * 실행 프로그램이 가져다 넣은 폰트를 모은 것이다:
    * - Inter 400/500/600/700 + Italic 400 의본문폰트 DeckCraft(craft-fonts
    *   카탈)로그 PdfCraft(assets/fonts)와 내장하는 실행 본문 폰트.
    *   다만 DeckCraft 빌드도 craft-fonts 없이 만들 Inter었을 비어

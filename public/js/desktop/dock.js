@@ -1,10 +1,9 @@
 /* MyHub 데스크톱 앱 독 (dock.js)
  *
- * 설계: docs/desktop-macos-redesign-20261101.md B단계 + 핫팁데스크 앱용앱
- * - 하단 중앙 플로팅 독. 모듈 타일 1개 = 창 1개(앱의 모델)와 앱한다.
- * - 앱 크기를 고정한다 앱 마우스오버 확대(일시아이)를 넣었기가 사용자
- *   지시로 제거한다 (2026-11-01: "앱에서 마우스오버하면 커서이 앱과
- *   필요 없어"). 호버 일드 백이 해당한다.
+ * 설계: docs/desktop-macos-redesign-20261101.md B단계
+ * - 하단 중앙 플로팅 독. 모듈 타일 1개 = 창 1개(맥의 모델)와 같다.
+ * - 아이콘 크기를 고정한다. 마우스오버 확대(돋보기)는 넣었다가 사용자
+ *   지시로 제거했다 (2026-11-01). 호버 확대는 없다.
  * - 실행 중이면 앱 아래 점, 최소화한 창도 앱으로 표시(열려 있음).
  * - 클릭: 모듈의 onActivate(열기/복원/사용하는 창 관리자가 판단),
  *   링크 항목은 href로 이동, 동작 항목은 onSelect를 부른다. 아직 없는
@@ -13,10 +12,10 @@
  *   드래그해 빼면 제거(onRemoveItem), 바탕화면 아이콘을 앱에
  *   드래그하면 추가(windows.js의 addToDock). 구성은 localStorage
  *   'myhub.desktop.dock.v1'의 순서 있는 id 목록으로 저장된다.
- * - 독 안 순서 변경 (2026-11-03 사용자 지시 "앱내에서 위치변경이
- *   안되며, 앱 고정되여 있어"): reorderable 항목은 독 안에서
- *   좌우로 드래그해 빼면 그 자리에 삽입한다 앱 DOM의 실제로
- *   앱고 onReorder(고정 항목들의 앱 순서)로 소유자에게 알린다.
+ * - 독 안 순서 변경 (2026-11-03 사용자 지시 "독 안에서 위치 변경이
+ *   안 되며, 고정되어 있어"): reorderable 항목은 독 안에서
+ *   좌우로 드래그하면 그 자리에 삽입하고 DOM을 실제로 옮긴 뒤
+ *   onReorder(고정 항목들의 새 순서)로 소유자에게 알린다.
  *   독 밖으로 나간 드래그는 종전대로 제거가 우선한다.
  * 노출: window.MyHubDesktopDock = { BASE, DOCK_KEY,
  *        loadDockIds, saveDockIds, createDock }
@@ -47,8 +46,8 @@
       parsed.ids.forEach(function (id) {
         if (known[id] && out.indexOf(id) < 0) out.push(id);
       });
-      // v1 앱값 마이그레이션: 미션 컨트롤 항목이 없든 시점에 구성하면
-      // 설정 앞에 앱 번 넣어준다. v2 이상으로 저장된 앱에서는 사용자의
+      // v1 기본값 마이그레이션: 미션 컨트롤 항목이 없던 시점에 구성하면
+      // 설정 앞에 한 번 넣어준다. v2 이상으로 저장된 값에서는 사용자의
       // 제거를 존중해 다시 넣지 않는다.
       var savedVersion = parsed.version || 1;
       if (savedVersion < 2 && known['mission'] && out.indexOf('mission') < 0) {
@@ -57,23 +56,23 @@
         else out.push('mission');
       }
 
-      // v3 마이그레이션: 파인더가 없든 시점에 구성하면 맨 앞에 앱 번
-      // 넣어준다 (맨의 앱에서 파인더는 항상 첫 자리로). v3로 저장된
-      // 앱에서는 다시 넣지 않는다.
+      // v3 마이그레이션: 파인더가 없던 시점에 구성하면 맨 앞에 한 번
+      // 넣어준다 (맥의 독에서 파인더는 항상 첫 자리로). v3로 저장된
+      // 값에서는 다시 넣지 않는다.
       if (savedVersion < 3 && known['finder'] && out.indexOf('finder') < 0) {
         out.unshift('finder');
       }
-      // v4 마이그레이션: 브라우저가 없든 시점에 구성하면 파인 앱에
-      // 앱 번 넣어준다 (사파리 자리). v4로 저장된 앱에서는 다시 앱 않음.
+      // v4 마이그레이션: 브라우저가 없던 시점에 구성하면 파인더 다음에
+      // 한 번 넣어준다 (사파리 자리). v4로 저장된 값에서는 다시 넣지 않음.
       if (savedVersion < 4 && known['browser'] && out.indexOf('browser') < 0) {
         var fIdx = out.indexOf('finder');
         if (fIdx >= 0) out.splice(fIdx + 1, 0, 'browser');
         else out.unshift('browser');
       }
-      // v5 마이그레이션: 오피스 앱 4종(Excel·한글 2020·PowerPoint·PDF)의
-      // 없든 시점에 구성하면 Finder(브라우저가 있으면 그 앱) 앱에 앱 번
+      // v5 마이그레이션: 오피스 앱 4종(Excel·한글 2020·PowerPoint·PDF)이
+      // 없던 시점에 구성하면 Finder(브라우저가 있으면 그 다음) 뒤에 한 번
       // 넣어준다 (사용자 지시 2026-11-02: "앱에서 추가해줘 4개 모두").
-      // v5로 저장된 앱에서는 사용자의 제거를 존중해 다시 넣지 않는다.
+      // v5로 저장된 값에서는 사용자의 제거를 존중해 다시 넣지 않는다.
       if (savedVersion < 5) {
         var office = ['excel', 'hangul', 'powerpoint', 'pdf'].filter(function (id) {
           return known[id] && out.indexOf(id) < 0;
@@ -211,7 +210,7 @@
         var from = currentIndex();
         var to = insertionIndex(clientX);
         if (from < 0 || to === from) return;
-        // 구분자가 붙은 항목은 구분자도 함께 앱한다
+        // 구분자가 붙은 항목은 구분자도 함께 옮긴다
         var btns = Array.prototype.slice.call(inner.querySelectorAll('.dt-dock-item'));
         var others = btns.filter(function (b) { return b !== btn; });
         var ref = to < others.length ? others[to] : null;

@@ -32,9 +32,9 @@ async function createBackup() {
   loading.classList.add('show');
   
   try {
-    // step-up 자동 처리 (단계 1): 비밀번호를 403 STEP_UP_REQUIRED만났을 때수동 붙인 수동 송금 자동 실행.
-    // (js/step-up.js)의 PIN 기록 입력을 /api/auth/step-up 에 1번 원래 값의 스타일 것이다 안에서 유효.
-    // 시프트 분기 403에 그 추출하려면 (무한 구조)를 여는 방식이다.
+    // step-up 자동 처리: 403 STEP_UP_REQUIRED가 오면 PIN 재확인을 거쳐
+    // 같은 요청을 1번 다시 보낸다 (window._fetchStepUp이 있으면 그걸 쓰고,
+    // 없으면 일반 fetch로 보낸 뒤 아래에서 STEP_UP_REQUIRED를 확인한다).
     const backupOpts = {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -54,7 +54,7 @@ async function createBackup() {
     
     const backup = await response.json();
     
-    // 동시에 JSON 그 자체에 객체용 일차원으로 펼치는 방법이 정렬 상태로 여기 지 않는다 표시한다.
+    // 백업 JSON을 파일로 내려받는다 (날짜별 파일명).
     const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -64,11 +64,10 @@ async function createBackup() {
     a.click();
     URL.revokeObjectURL(url);
     
-    // 설명 암호 방식도 마찬가지로 비밀번호 관리자 확인 예정이다.
+    // 아래 주석 처리된 줄은 백업 내용물(파일·태그·메모) 확인용 초안이다.
     // const fptails = backup.data && backup.data.files ? backup.data.files : [];
     // const fileTags = backup.data && backup.data.fileTags ? backup.data.fileTags : [];
     // const memos = backup.data && backup.data.memos ? backup.data.memos : [];
-    // TODO: 추출된 비밀 번호 상태로 경로 한도 공개 방식도 배정한 여는 복원본 문구로도 유럽 실행하다.
 
     showSuccess('백업이 완료됐습니다. 백업 파일은 비밀번호로 보호되니 안전한 곳에 보관하세요.');
     document.getElementById('password').value = '';

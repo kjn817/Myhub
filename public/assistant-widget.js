@@ -118,7 +118,7 @@
         .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
       // (id: 123) 같은 내부 식별자 제거
       html = html.replace(/\s*\(id:\s*\d+\)/g, '');
-      // 체크박스: - [ ] 앱 앱, - [x] 앱 앱
+      // 체크박스: - [ ] 미체크(☐), - [x] 체크(☑)
       html = html.replace(/^- \[ \] /gm, '☐ ');
       html = html.replace(/^- \[x\] /gm, '☑ ');
       // 굵게: **text**

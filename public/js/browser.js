@@ -5,31 +5,30 @@
  * 맞는다: 탭 스트립 + 가운데 둥근 주소창(주소/검색 겸용), 시작 페이지
  * (안내 카드 + 즐겨찾기 타일 + 최근 방문), 세션 상태에 따른 접기 전환.
  * 세션 상태 기계 본체는 browser-live.js(window.MyHubBrowserLive.
- * createLive)가 이 browser.html과 그 파일을 앱 파일보다 먼저 불러오며,
+ * createLive)가 이 browser.html과 그 파일을 이 파일보다 먼저 불러오며,
  * 합쳐지지 않으면 createApp이 실패한다(조용히 무력화 금지).
  * 주소·검색을 고르면 세션이 있으면 서버가 그 주소로 먼저 이동시킨다.
- * 세션 중 주소창에 앱 주소를 넣으면 세션이 새로 이어 이동한다
- * (원격 세션은 1앱 2앱이면 이동=앱 세션과 같은 비용이다).
- * 앱 (트랙 H 귀속, Safari식): 앱 앱 앱의 기록 단위는(주소·방문
- * 방문 기록). 원격 세션은 동시 1개뿐이라 세션의 정확히 앱 앱이
- * 소유하고(liveTabId), 다른 앱에서는 라이브 화면 대신 "다른 앱에서
- * 실행 중" 안내를 정확하게 보여준다 앱 세션이 없는 앱이 실행 중인
- * 것처럼 보이지 않게 한다. 뒤로/앞으로는 앱의 방문 기록(주소창으로
- * 앱 주소를)앱 하면, 이동은 전과 같은 이유로 앱 세션으로 닫힌다.
- * 원격 화면 안에서의 이동은 라이브 화면 자체가 맞는다.
- * 앱 표면 (2026-11-06, image-147): 앱 앱 앱 행이 아닌 창 바
- * (타이틀바 앱)에 두는 앱 상태는 myhub:browser-tabs 채널로 앱에
- * 게시하고(win-actions·finder-toolbar와 같은 계약: 게시 앱 클릭 앱
- * 동작 전임), 앱이 클릭하면 앱 앱 앱 앱(#bwTabstrip)에 둔다.
- * 앱이 없는 단독 실행에서는 게시가 앱 않게 앱 앱 행이 이값으로
- * 둔다. 주소 캡슐 앱(뒤로/앞으로/새로고침·공유·시작 페이지)는
- * 본문 이값으로 둔다 앱 Safari에서는 주소창과 이값 행의 높이이고,
- * 캡슐이 높으면 주소 입력·이동 버튼이 자리가 사라진다.
+ * 세션 중 주소창에 새 주소를 넣으면 세션이 그 주소로 이동한다
+ * (원격 세션은 동시 1개뿐이라 주소 이동도 새 세션과 같은 비용이다).
+ * 탭 (트랙 H 귀속, Safari식): 탭의 기록 단위는 주소·방문 기록이다.
+ * 원격 세션은 동시 1개뿐이라 세션을 정확히 하나의 탭이 소유하고
+ * (liveTabId), 다른 탭에서는 라이브 화면 대신 "다른 탭에서 실행 중"
+ * 안내를 보여준다 — 세션이 없는 탭이 실행 중인 것처럼 보이지 않게
+ * 한다. 뒤로/앞으로는 탭의 방문 기록을 따른다. 원격 화면 안에서의
+ * 이동은 라이브 화면 자체가 처리한다.
+ * 탭 표면 (2026-11-06, image-147): 탭 행이 아닌 창 바(타이틀바)에
+ * 두는 탭 상태는 myhub:browser-tabs 채널로 부모에 게시하고
+ * (win-actions·finder-toolbar와 같은 계약: 게시 → 클릭 → 동작 전임),
+ * 탭을 클릭하면 탭 행(#bwTabstrip)에 둔다. 단독 실행에서는 게시할
+ * 부모가 없으므로 탭 행을 페이지 안에 둔다. 주소 캡슐과
+ * (뒤로/앞으로/새로고침·공유·시작 페이지) 버튼은 본문 툴바에 둔다 —
+ * Safari에서는 주소창과 툴바 행의 높이가 같고, 캡슐이 높으면 주소
+ * 입력·이동 버튼이 자리를 잃는다.
  * '브라우저 시작' 버튼은 시작 페이지 카드의 것 하나로 둔다
- * (2026-11-06, image-147): 이값 우측 버튼은 세션 시작 앱 카드
- * 버튼과 동시에 보여 중복이었고, 세션 중에서는 시작 페이지 자체가
- * 합어 카드 버튼을 앱 않게 그때는 시작은 세션의 이 앱
- * 있다 앱 종료한 상태 토글은 [종료]가 맞는다.
+ * (2026-11-06, image-147): 툴바 우측 버튼은 세션 시작 카드 버튼과
+ * 동시에 보여 중복이었고, 세션 중에서는 시작 페이지 자체가 숨어
+ * 카드 버튼을 볼 수 없게 되므로 그때는 시작이 아닌 종료 상태 토글이
+ * [종료]가 맞는다.
  * 노출: window.MyHubBrowser = { normalizeInput, createApp }
  */
 (function () {
@@ -38,10 +37,10 @@
   var RECENTS_KEY = 'myhub.browser.recents.v1';
   var RECENTS_MAX = 6;
 
-  /* 주소창 입력 앱 실제 URL. 전체 URL는 그대로, 도메인만 보면 https를
-     붙이고, 그 밖의 단어들은 Google 검색으로 보낸다. IPv4 주소는
-     localhost(포트 포함)는 도메인 패턴에 앱 걸려 검색으로 앱는 것을
-     주소로 판정한다 앱 이하의 https가 아닌 http로 연다. */
+  /* 주소창 입력 → 실제 URL. 전체 URL은 그대로, 도메인만 보면 https를
+     붙이고, 그 밖의 단어들은 Google 검색으로 보낸다. IPv4 주소와
+     localhost(포트 포함)는 도메인 패턴에 안 걸려 검색으로 빠지는 것을
+     주소로 판정한다. 그 이하는 https가 아닌 http로 연다. */
   function normalizeInput(raw) {
     var text = String(raw == null ? '' : raw).trim();
     if (!text) return null;
@@ -76,7 +75,7 @@
       list.unshift({ url: url, at: Date.now() });
       storage.setItem(RECENTS_KEY, JSON.stringify(list.slice(0, RECENTS_MAX)));
     } catch (err) {
-      // 저장 실패는 무시한다 앱 최근 방문은 임의 기능의 껍질이다
+      // 저장 실패는 무시한다 (최근 방문은 부가 기능이다)
       console.debug('최근 방문 저장 생략:', err);
     }
   }
@@ -91,9 +90,9 @@
 
   /**
    * deps = { doc, liveDeps, storage, win }
-   * liveDeps는 browser-live.js createLive의 주입 지정(liveStart 이다).
-   * storage는 localStorage 앱, win는 창 바 채널을 앱는 창
-   * (부모·프레임) 앱 앱 앱 테스트 주입 지정이다.
+   * liveDeps는 browser-live.js createLive의 주입 인자(liveStart 등).
+   * storage는 localStorage 래퍼, win은 창 바 채널을 받는 창
+   * (부모·프레임)이며 테스트 주입 인자이다.
    */
   function createApp(deps) {
     deps = deps || {};
@@ -106,16 +105,16 @@
       (typeof window !== 'undefined' && window.MyHubBrowserLive) ||
       (typeof globalThis !== 'undefined' && globalThis.MyHubBrowserLive);
     if (!liveFactory || typeof liveFactory.createLive !== 'function') {
-      throw new Error('MyHubBrowserLive 라이브러리가 없습니다 앱 browser-live.js를 먼저 불러오십시오');
+      throw new Error('MyHubBrowserLive 라이브러리가 없습니다. browser-live.js를 먼저 불러오십시오');
     }
 
     var urlInput = doc.getElementById('bwUrl');
     var home = doc.getElementById('bwHome');
     var homeBtn = doc.getElementById('bwHomeBtn');
-    // 시작 버튼과 카드의 것 하나로이다 (머리만 참조 앱 이값 중복 제거)
+    // 시작 버튼은 카드의 것 하나로 둔다 (헤더 참조 — 툴바 중복 제거)
     var startBtns = doc.querySelectorAll('.bw-start-btn');
     var tabstripEl = doc.getElementById('bwTabstrip');
-    // 창 바 채널을 앱는 창 (테스트 주입 지정 앱 office-tabs mount와 같은 것)
+    // 창 바 채널을 받는 창 (테스트 주입 인자 — office-tabs mount와 같은 방식)
     var appWin =
       deps.win ||
       (doc && doc.defaultView) ||
@@ -173,7 +172,7 @@
           JSON.stringify({ tabs: tabs, activeTabId: activeTabId }),
         );
       } catch (err) {
-        // 저장 실패는 무시한다 앱 앱 복원은 임의 기능의 껍질이다
+        // 저장 실패는 무시한다 (탭 복원은 부가 기능이다)
         console.warn('[browser] 탭 상태 저장 실패 (무시):', err);
       }
     }
@@ -272,15 +271,15 @@
           w.location.origin,
         );
       } catch (err) {
-        // 부모 통신 실패는 앱 기능의 껍질이 무시한다
+        // 부모 통신 실패는 무시한다 (탭 표시는 다음 게시 때 갱신된다)
         console.warn('[browser] 부모 통신 실패 (무시):', err);
       }
     }
 
-    // ---------- 창 바 앱 게시 (myhub:browser-tabs 채널) ----------
-    // 상태 서명이 바뀔 때만 게시한다 (notifyDocTitle와 같은 것).
-    // 앱이 클릭하면 앱 앱 앱 행을 남고, 앱 클릭·닫기·앱 앱 앱이
-    // myhub:browser-tabs-action로 알려준 아래 실제 함수들을 연다.
+    // ---------- 창 바 탭 게시 (myhub:browser-tabs 채널) ----------
+    // 상태 서명이 바뀔 때만 게시한다 (notifyDocTitle와 같은 방식).
+    // 탭을 클릭하면 탭 행을 남기고, 탭 클릭·닫기·새 탭은
+    // myhub:browser-tabs-action으로 알려준 아래 실제 함수들을 연다.
     var tabsHosted = false;
     var lastTabsSig; // undefined = 아직 게시 전 값
     function browserTabsPayload() {
@@ -304,8 +303,8 @@
           appWin.location.origin,
         );
       } catch (err) {
-        // 부모 통신 실패는 앱 기능의 껍질이 무시한다
-        console.warn('[browser] 창 바 앱 게시 실패 (무시):', err);
+        // 부모 통신 실패는 무시한다 (탭 표시는 다음 게시 때 갱신된다)
+        console.warn('[browser] 창 바 탭 게시 실패 (무시):', err);
       }
     }
     function applyTabsHosting() {
@@ -365,7 +364,7 @@
         });
         tabsEl.appendChild(el);
       });
-      // 오버플로 규칙: 앱이 스트립 앱을 앱으면 목록 버튼으로 앉는다
+      // 오버플로 규칙: 탭이 스트립 너비를 넘으면 목록 버튼을 보인다
       if (tabsOverflowBtn) {
         tabsOverflowBtn.hidden = !(tabsEl.scrollWidth > tabsEl.clientWidth + 1);
       }
@@ -466,8 +465,8 @@
         if (t.id === id) idx = i;
       });
       if (idx < 0) return;
-      // 세션의 소유한 탭을 접으면 세션이 끝난다 (페이지가 접힌
-      // 것과 같은 앱 앱 서버 세션이 반납한다)
+      // 세션을 소유한 탭을 접으면 세션이 끝난다 (페이지가 접힌
+      // 것과 같이 서버 세션을 반납한다)
       if (id === liveTabId && live.isActive()) live.endLive(true);
       tabs.splice(idx, 1);
       if (!tabs.length) tabs.push(makeTab(null));
@@ -478,8 +477,8 @@
       syncChrome();
     }
 
-    /* 앱 앱에서 세션 시작: 소유권을 활성 앱으로 먼저 못 박는다.
-       앱, 합의 앱이 실행 중일 때의 시작 시도도 이같이 걸리도록
+    /* 이 탭에서 세션 시작: 소유권을 활성 탭으로 먼저 못 박는다.
+       다른 탭이 실행 중일 때의 시작 시도도 여기에 걸리도록
        소유권을 가로채지 않는다 (안내 버튼들의 시작을 방지). */
     function enterLiveHere(url) {
       if (!live.isActive() || liveTabId === activeTabId) {
@@ -646,17 +645,17 @@
     }
     if (homeBtn) {
       homeBtn.addEventListener('click', function () {
-        // 시작 페이지는 활성 앱 기다린다 앱 앱 앱이 세션의 소유한
-        // 때만 종료하고, 합의 세션은 건드리지 않는다
+        // 시작 페이지 버튼은 활성 탭이 세션을 소유한 때만 종료하고,
+        // 다른 탭의 세션은 건드리지 않는다
         if (liveTabId !== activeTabId) return;
         if (live.isActive()) live.endLive(true);
         else if (live.state() === 'notice') live.dismissNotice();
       });
     }
 
-    // 창 바 앱 채널의 수신부: 클릭(앱 앱 앱 남고)닫기 요청(닫기
-    // 치유)· 동작(전임 전환·닫기·앱 앱 실제 앱 함수). 출처는 부모
-    // 창으로 판정한다 (doc-title 닫기치유 리스트와 같은 가능).
+    // 창 바 탭 채널의 수신부: 채택(adopt)·탭 목록 요청·동작(선택·
+    // 닫기·새 탭). 출처는 부모 창으로 판정한다
+    // (e.source === appWin.parent).
     if (appWin && typeof appWin.addEventListener === 'function') {
       appWin.addEventListener('message', function (e) {
         if (!e || !e.data || e.source !== appWin.parent) return;
@@ -681,10 +680,10 @@
     }
 
     // 앱 상단 메뉴바 정의 (계약: js/desktop/windows.js 상단 주석).
-    // 즐겨찾기·최근 방문은 목록성이며 앱 앱 열어 보여 앱에
-    // 렌더한다. 이값 앱(뒤로·앞으로·새로고침·공유 등)은 메뉴바도
-    // 같은 명령을 입혀야 한다는 HIG 합성으로 함께 붇다 앱 새로고침과
-    // 같은 주소를 앱 세션으로 다시 여는 앱 앱의 실제 이동 방식이다.
+    // 즐겨찾기·최근 방문은 목록 항목으로 열어 보여준다. 툴바 버튼
+    // (뒤로·앞으로·새로고침·공유 등)은 메뉴바에도 같은 명령이 있어야
+    // 한다는 HIG 규칙으로 함께 둔다. 새로고침은 같은 주소를 새 세션으로
+    // 다시 여는 것이 실제 이동 방식이다.
     var menuWin =
       (doc && doc.defaultView) || (typeof window !== 'undefined' ? window : null);
     if (menuWin && typeof menuWin.addEventListener === 'function') {

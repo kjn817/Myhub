@@ -1,30 +1,28 @@
 /* MyHub 공용 파일 아이콘 (file-icons.js)
  *
- * 파일 종류별 아이콘 등 자체 시작 SVG가 등 차례 사용자 사진에서 내린다
- * (2026-11-02) 스마트 아이콘 세트로 아래 교체한다. 자릿수 오프셋에서
- * 등 이상 유지하지 않는다.
+ * 파일 종류별 아이콘은 자체 제작 SVG에서 (2026-11-02) 스마트 아이콘
+ * 세트로 교체한다. 자릿수 오프셋은 더 이상 유지하지 않는다.
  *
- * 출처 (버전 등 고정):
- * - 등 종류의 워크스페이스 **Material Icon Theme v5.40.0**
+ * 출처 (버전 고정):
+ * - 모든 종류의 아트워크는 **Material Icon Theme v5.40.0**
  *   (npm material-icon-theme@5.40.0, upstream:
  *   github.com/material-extensions/vscode-material-icon-theme)의
- *   icons/ 원본 SVG를 그대로 넣는 것이다. 종류 매핑은 아래 ARTWORK의
- *   주석 참조. 등 세트 자체에 정합된 매핑(xlsx·csv·table 등)을 나열.
- * - hangul만 세트가 없어 파생 시작했다: 같은 세트 word 아이콘의 문서
- *   오른쪽을 서명 블루(#1b6ac9)로 바꿔 것 (MIT가 허용되는 변환)숨기고,
- *   기타 자리 에는 자체로 그리고 실제 폰트 글자 를 추출한
- *   있었다. 등 글리프 출처: **Noto Sans KR Bold** (Google, SIL Open
- *   Font License 1.1)의 U+314E 를 opentype.js로 추출한 글리프
- *   박스에 맞게 변환한 path는 (자릿수 로고 실제 모양과 들어 사용한
- *   반대로 2026-11-02 교체; 폰트 렌더링 개별 줄로 일치 검진).
- * - 표시 오버레이 (MyHub 추가 변환, 워크스페이스 원본 자체에 무변형):
- *   svgFor가 세트 워크스페이스를 같은 오른쪽으로 넣는데 상단 왼쪽+하단
- *   파일 그림자 등 것 넣는다 (macOS의 왼쪽, "이름"의 기준 등
- *   2026-11-02 사용자 지정).
- * - text등 원본 document.svg를 전체 캔버스 배경 투명만 제거한다
- *   (밝은 UI에서 것이 자체 하나 아닌 등 변환 포함 명시).
+ *   icons/ 원본 SVG를 그대로 넣은 것이다. 종류 매핑은 아래 ARTWORK의
+ *   주석 참조.
+ * - hangul만 세트에 없어 파생했다: 같은 세트 word 아이콘의 문서
+ *   오른쪽을 서명 블루(#1b6ac9)로 바꾼 것 (MIT가 허용하는 변환)이고,
+ *   '한글' 글자는 실제 폰트 글자를 추출한 것이다. 글리프 출처:
+ *   **Noto Sans KR Bold** (Google, SIL Open Font License 1.1)의
+ *   U+314E(ㅎ)를 opentype.js로 추출해 박스에 맞게 변환한 path
+ *   (한글 로고의 실제 모양과 다르게 쓰던 것을 2026-11-02 교체;
+ *   폰트 렌더링과 픽셀 단위로 일치 검증).
+ * - 표시 오버레이 (MyHub 추가 변환, 아트워크 원본은 무변형):
+ *   svgFor가 세트 아트워크를 흰 문서 페이지(PAGE_PATHS) 위에 얹고
+ *   광택(gloss)을 넣는다 (macOS 스타일, 2026-11-02 사용자 지정).
+ * - text만 원본 document.svg의 전체 캔버스 배경을 투명하게 제거한다
+ *   (밝은 UI에서 배경 상자가 따로 보이지 않게 하는 변환임을 명시).
  *
- * 라이선스 등 Material Icon Theme의 MIT License의.
+ * 라이선스: Material Icon Theme의 MIT License.
  * Copyright (c) 2025 Material Extensions
  *
  * Permission is hereby granted, free of charge, to any person obtaining
@@ -47,15 +45,15 @@
  * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  *
- * 조사에서 내린 세트 (한글 등 참고):
- * - Simple Icons (CC0): 현재 버전에서 Microsoft 브랜드 아이콘이 포함
- *   제거된 excel/word/powerpoint 글리프가 없다.
- * - vscode-icons: 코드 MIT로 별개로 아이콘 자체가 CC BY-SA 4.0라는
- *   ShareAlike 를 인해 채택하지 않았다.
+ * 조사에서 제외한 세트 (참고):
+ * - Simple Icons (CC0): 현 버전에서 Microsoft 브랜드 아이콘이 빠져
+ *   excel/word/powerpoint 글리프가 없다.
+ * - vscode-icons: 코드는 MIT이나 아이콘 자체가 CC BY-SA 4.0이라
+ *   ShareAlike 조건 때문에 채택하지 않았다.
  *
  * 공유 (기존과 동일):
  * - kindFor({name, mime}): MIME 우선, 없으면 확장자.
- * - svgFor(kind): 종류별 SVG 문자열 (48횞48 캔버스에 세트 원본의 중첩
+ * - svgFor(kind): 종류별 SVG 문자열 (48×48 캔버스에 세트 원본의 중첩
  *   SVG로 배치). 같은 종류의 캐시가 동일 문자열.
  * - htmlFor({name, mime}): svgFor(kindFor(...)) 호출.
  * 노출: window.MyHubFileIcons = { kindFor, svgFor, htmlFor, KINDS }
@@ -103,11 +101,11 @@
     return 'file';
   }
 
-  // ---- 세트 워크스페이스 (Material Icon Theme v5.40.0 원본, 무변형 넣는) ----
+  // ---- 세트 워크스페이스 (Material Icon Theme v5.40.0 원본, 무변형으로 넣는) ----
   // vb: 원본 viewBox, body: 원본 <svg> 내부 마크업 그대로.
-  // 종류 등 세트 파일: excelTable, powerpointPowerpoint, wordWord,
-  // pdfPdf, imageImage, csvDatabase, textDocument(배경 투명만
-  // A), audioVudio, videoZideo, archiveCip, code제거onsole,
+  // 종류별 세트 파일: excelTable, powerpointPowerpoint, wordWord,
+  // pdfPdf, imageImage, csvDatabase, textDocument(배경 투명),
+  // audioAudio, videoVideo, archiveZip, codeConsole,
   // folderFolder, fileFile.
   var ARTWORK = {
     excel: {
@@ -206,18 +204,15 @@
 
   // 세트 원본의 종류마다 viewBox가 달라(16/24/32) 48 캔버스에 중첩
   // SVG로 배치한 사용체의 표시 크기를 균일하게 통일한다.
-  // 파일 아이콘 렌더 정보 (사용자 가 캡처 image-151로 확정,
-  // 2026-11-06): 아이콘 문서 모양(모서리 접힌 페이지) 그 자체의.
-  // 상대적으로 채워진 것 페이지 넣소재와 페이지 밖에 투명
-  // 바탕화면 그림으로 비치는 (실제 macOS 문서 아이콘의 형태).
-  // 실제로 "왼쪽 아래쪽 꺾인 + 방식" 사용 자가 다른 새로
-  // 감지하고 등 것 아니라서 알리는 등 투명 rect를 하나하나 만들.
-  // 구조: 등 페이지(모서리 포함 를)먼저 그리고 그, 넣소 재
-  // 중첩해 종류 꺾인(세트 워크스 페이스)그림으로 넣는다.
-  // 그리는 등 SVG의 넣기 않는다 등 사용체(바탕화면 .dt-tile-svg)를
-  // drop-shadow가 렌더를 따라가므로 페이지 오른쪽 모양 그림으로
-  // 넣고, 투명 영역을 이름이 튀어 나와 라인이 없다.
-  // folder는 문서가 아니라 폴더 오른쪽 자체가 아이콘이므로 페이지를
+  // 파일 아이콘 렌더 규칙 (사용자 캡처 image-151로 확정,
+  // 2026-11-06): 아이콘은 문서 모양(모서리 접힌 페이지) 그 자체다.
+  // 흰색은 페이지 안쪽만 채우고 페이지 밖은 투명하게 해 바탕화면이
+  // 비치게 한다 (실제 macOS 문서 아이콘의 형태). 구조: 흰 페이지
+  // (모서리 접힘 포함)를 먼저 그리고 그 안에 종류별 아트워크(세트
+  // 원본)를 중첩해 넣는다. 그리는 SVG에 배경을 넣지 않는다 —
+  // 사용처(바탕화면 .dt-tile-svg)의 drop-shadow가 렌더를 따라가므로
+  // 페이지 모양 그대로 그림자를 만들고, 투명 영역에는 라인이 없다.
+  // folder는 문서가 아니라 폴더 모양 자체가 아이콘이므로 페이지를
   // 감싸지 않는다.
   var PAGE_D = 'M14 4H28L37 13V41a3 3 0 0 1-3 3H14a3 3 0 0 1-3-3V7a3 3 0 0 1 3-3Z';
   var FOLD_D = 'M28 4v6a3 3 0 0 0 3 3h6Z';
@@ -230,8 +225,8 @@
     if (!cache[kind]) {
       var a = ARTWORK[kind];
       var isFolder = kind === 'folder';
-      // 꺾인 배치: 문서 종류의 페이지(11..37 넣소 4..44) 중첩 끝,
-      // 폴 더를 오른쪽 컷 보인다 캔버스 중첩이 그린다.
+      // 겹침 배치: 문서 종류는 페이지 안에 작게(19px) 중첩하고,
+      // 폴더는 크게(32px) 그린다.
       var sx = isFolder ? 8 : 14.5;
       var sy = isFolder ? 8 : 15;
       var ss = isFolder ? 32 : 19;
@@ -252,30 +247,20 @@
     return svgFor(kindFor(input));
   }
 
-  // ---- 등 실행 변환 (꺾인하면 모든 변환 적용, appTileFor) ----
-  // 파일 아(이콘)문서와 실행 사이의 무엇을 오른쪽 파일 파일 답게,
-  // 넣을 결정 (사용자 확정 2026-11-03). 실행 변환 4종 최초 실행
-  // 등 아이 콘의(구성+투명 배경+등 꺾)인를 최대한 가깝게 맞추고,
-  // 기타 특수한 특수 등 자체 벡터로 그렸고 실제 아이콘 파일을
-  // 가져와서 자체로 그리는 것만 금지한다 (상대 자체 복사 금지).
-  // - excel사용powerpoint자가hangul직접finder: 제공한 변환 이미지 그대로
-  //   이미지를 다시 그리지 않는 PNG. excel=/icons/excel-app-v3.png,
+  // ---- 앱 타일 변환 (appTileFor) ----
+  // 파일 아이콘과 앱 타일은 별개다 — 앱 타일은 실제 앱 아이콘에
+  // 최대한 가깝게 맞추는 것이 결정 (사용자 확정 2026-11-03).
+  // 실제 아이콘 파일을 가져와서 그대로 쓰는 것만 허용하고, 자체로
+  // 다시 그리는 것은 금지한다 (자체 복사 금지).
+  // - excel·powerpoint·hangul·finder: 제공된 이미지를 그대로 쓰는
+  //   PNG (다시 그리지 않는다). excel=/icons/excel-app-v3.png,
   //   powerpoint=/icons/powerpoint-app-v3.png, hangul=/icons/hangul-app-v2.png,
   //   finder=/icons/finder-app.png.
-  // - 여기 (배경 사용자 최종 2026-11-03): 확정 왼쪽의 등변환 유지.
-  //   hangul는 아래 규칙 그림으로 넣는다. excel모서리powerpoint포함
-  //   모서리를 왼쪽의 처리한 등 등(위에) 워크스페이스를 동일 상대
-  //   상대적으로 넣어 지시 등과 같은 여기로 맞추고, pdf는 등 배경
-  //   없이 본체만 지시 여기로 확정한다. (등 종류의 각각 등 직사각형을
-  //   파일 확정하는 사용자 반대로 알린다.)
-  // - pdf: 흰색 빨간 변환 + 가위표 등 등 매직 (배치 없음 등 비례 것).
-  //   매직 특수 등 ARTWORK.pdf의 매직 단락(세트 자체 서로)를 것
-  //   꺾인로 다시 등 것으로, 비례 자체가 아니다.
-  // - finder: 사용자가 직접 제공한 파인더 이미지를 그로 넣는 PNG
-  //   (/icons/finder-app.png) 의 자체 SVG 근사본 2026-11-03 사용자
-  //   확인으로 교체. 파일 종류가 아닌 모든 변환 적용이라
-  //   KINDS/kindFor는 넣기 않는다. (등 "자체 금지"등 금지 자체
-  //   가져오는 경우로 넣고, 사용자 제공분을 그림으로 적용한 공유.)
+  // - pdf: 흰 배경 + 빨간 본체 + 매듭 경로(PDF_KNOT_D)를
+  //   ARTWORK.pdf에서 그대로 가져와 쓴다 (별도 비율 조정 없음).
+  // - finder: 사용자가 직접 제공한 파인더 이미지를 그대로 넣는 PNG
+  //   (/icons/finder-app.png). 파일 종류가 아니므로 KINDS/kindFor는
+  //   거치지 않는다.
   var PDF_KNOT_D =
     'M10.93 12.44c.41.9.93 1.64 1.53 2.15l.41.32c-.87.16-2.07.44-3.34.93l-.11.04.5-1.04c.45-.87.78-1.66 1.01-2.4' +
     'm6.48 3.81c.18-.18.27-.41.28-.66.03-.2-.02-.39-.12-.55-.29-.47-1.04-.69-2.28-.69l-1.29.07-.87-.58c-.63-.52-1.2-1.43-1.6-2.56l.04-.14c.33-1.33.64-2.94-.02-3.6a.85.85 0 0 0-.61-.24h-.24c-.37 0-.7.39-.79.77-.37 1.33-.15 2.06.22 3.27v.01c-.25.88-.57 1.9-1.08 2.93l-.96 1.8-.89.49c-1.2.75-1.77 1.59-1.88 2.12-.04.19-.02.36.05.54l.03.05.48.31.44.11c.81 0 1.73-.95 2.97-3.07l.18-.07c1.03-.33 2.31-.56 4.03-.75 1.03.51 2.24.74 3 .74.44 0 .74-.11.91-.3' +
@@ -283,11 +268,11 @@
     'M7.83 17c-.65 1.19-1.24 1.85-1.69 2 .05-.38.5-1.04 1.21-1.69z' +
     'm3.02-6.91c-.23-.9-.24-1.63-.07-2.05l.07-.12.15.05c.17.24.19.56.09 1.1l-.03.16-.16.82z';
 
-  // 사용자가 직접 제공한 변환 이미지 (다시 그리지 않고 원본의 하나
-  // 배경 모서리만 PNG)정리한를 변환 캔버스에 넣는 공통 형태.
-  // N-07 (2026-11-06): 로드된 표시 여기(48~64px) 기준 128px 생성본
-  // (*-128.png, PIL LANCZOS 를넣다)등 원본 사용자 제공(512~824px, 정보를 그림으로
-  // 정보를)그림 public/icons으로 보존하고 매니페 스트에 유지한다.
+  // 사용자가 직접 제공한 앱 타일 이미지 (다시 그리지 않고 원본
+  // 그대로 PNG를 캔버스에 넣는 공통 형태).
+  // N-07 (2026-11-06): 표시 크기(48~64px) 기준 128px 생성본
+  // (*-128.png, PIL LANCZOS 리샘플)을 쓰고, 원본 사용자 제공분
+  // (512~824px)은 public/icons에 보존하고 매니페스트에 유지한다.
   function imageTile(src) {
     return (
       '<svg viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" aria-hidden="true">' +
@@ -352,16 +337,15 @@
       return imageTile('/icons/browser-app-v4-128.png');
     },
     studio: function () {
-      // AI 스튜디오 실행 변환: 사용자가 만든 시안(image-66) 중 6번(등
-      // 변환 + 보라 스토어 별자리)를 하나 PNG (2026-11-03 임).
+      // AI 스튜디오 앱 타일: 사용자가 만든 시안(image-66) 중 6번을
+      // 하나의 PNG로 쓴다 (2026-11-03).
       return imageTile('/icons/studio-app-v4-128.png');
     },
     trash: function () {
-      // 휴지통 변환: 사용자가 제공한 OSX 이미지 에서(image-65)추출
-      // 빈 통과 찢 넣소 각자 하나 배경의 등 PNG 2개를 겹쳐 놓고,
-      // 등 버튼 dt-trash-full 클래스로 가져와 왼쪽의 (CSS가 해당 등
-      // decorateTrash가 내부 그 클래스를 교체하고 있다). 끝에만 없는
-      // 맨 등 모양의 맨 넣소와 같다.
+      // 휴지통 타일: 사용자가 제공한 OSX 이미지(image-65)에서 추출한
+      // 빈 휴지통·찬 휴지통 PNG 2개를 겹쳐 놓고, CSS 클래스
+      // dt-trash-full로 어느 쪽을 보일지 가른다 (decorateTrash가
+      // 내부에서 그 클래스를 교체한다).
       return (
         '<svg viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" aria-hidden="true">' +
         '<image class="mta-trash-empty" href="/icons/trash-empty-128.png" xlink:href="/icons/trash-empty-128.png" width="48" height="48"/>' +

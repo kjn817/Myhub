@@ -5,11 +5,11 @@
  * - 상태는 state.js(MyHubDesktopState) 함수를 통해서만 바꾼다. 직접 변경 금지.
  * - keep-alive: iframe은 창 생성 앱 1앱만 만들고 src를 그앱만 설정한다.
  *   사용·활성화·복원에서는 DOM 앱만 내고 앱 설명하지 않는다.
- * - 드래그/리사이즈는 Pointer Events(포인터 캡처로 iframe 앱에서도 추적) +
- *   종료 시점에서만 상태 확정·앱한것이다.
- * - 최대화/줌 모드의 복원 기억은 창 앱(mode/prev)가 정보이다
- *   (state.js). 매니저 메모리에만 두면 새로고침 앱 모드가 내린다 앱
- *   로드 시점의 저장된 모드를 현재 뷰포트 기억으로 다시 앱한다.
+ * - 드래그/리사이즈는 Pointer Events(포인터 캡처로 iframe 위에서도 추적) +
+ *   종료 시점에서만 상태 확정·저장한다.
+ * - 최대화/줌 모드의 복원 기억은 창 상태(mode/prev)에 있다 (state.js).
+ *   매니저 메모리에만 두면 새로고침 시 모드가 날아가므로, 로드 시점의
+ *   저장된 모드를 현재 뷰포트에 맞게 다시 적용한다.
  * 노출: window.MyHubDesktopWindows = { createManager(deps) }
  * deps = { root, taskbar, stateApi, storage, getViewport, state?, activeTitleEl? }
  */

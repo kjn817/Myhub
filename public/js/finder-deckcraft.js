@@ -25,9 +25,8 @@
   if (!constants) throw new Error('[finder-deckcraft.js] constants.js가 먼저 로드되어야 합니다');
 
   var APP_URL = '/vendor/deckcraft/index.html?host=parent&chrome=notitlebar&lang=ko';
-  // 엔진 내장 앱 복원 (2026-11-06 오후 정합): 엔진 리본 앱 행을 앱
-  // URL(chrome=notabs)로 열고 서면은 앱 행을 눌러 그리는 호스트가
-  // 원래있다 — 앱 서면에서 앱 기본 URL(엔진 앱 앱 유지)만 낸다.
+  // 엔진 내장 탭 복원 (2026-11-06 오후 정합): 엔진 리본 탭 행은
+  // 호스트가 그리고, 기본 URL은 엔진 탭을 유지한다.
   var MANIFEST_URL = '/vendor/deckcraft/manifest.json';
 
   // 동적 로딩 URL은 공용 핼퍼(asset-url.js)가 배포 버전을 붙인다

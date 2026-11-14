@@ -1,8 +1,8 @@
 /* MyHub 파인더 (finder.js)
  *
- * iPhone '파일' 앱 같은 저장소 관리자 웹 페이지가 아니다 실제 보관함이다.
+ * iPhone '파일' 앱 같은 저장소 관리자 — 웹 페이지가 아니라 실제 보관함이다.
  * - 보관함(/api/drive): 폴더를 만들고 들어가고, 이름 바꾸고, 파일을
- *   올리고(작업·PDF한글· 이미지 등 무관), 놓고, 내보내기에 보낸다.
+ *   올리고(문서·PDF·한글·이미지 등 종류 무관), 놓고, 내보내기에 보낸다.
  * - 휴지통: 폴더째·파일째 복원하거나 영구 삭제한다 (폴더와 함께
  *   지워진 파일은 폴더부터 복원해야 한다).
  * - 메모·일정 같은 앱 데이터는 각 앱이 담당한다 — 여기는 순수 저장소.
@@ -89,13 +89,22 @@
     return null;
   }
 
+  // file-icons.js의 kindFor와 동기화한다 (S2-6): 이 폴백은
+  // window.MyHubFileIcons가 없을 때만 타며, MIME 판정·확장자 판정이
+  // kindFor와 같은 표를 써야 로드 실패 시에도 종류가 열화되지 않는다.
+  // kindFor의 input.kind/input.folder 분기는 (name, mime) 시그니처에
+  // 없어 제외한다. MIME은 대소문자를 구분하지 않는다.
   function legacyKindFor(name, mime) {
-    mime = String(mime || '');
+    mime = String(mime || '').toLowerCase();
     if (mime.indexOf('image/') === 0) return 'image';
     if (mime.indexOf('audio/') === 0) return 'audio';
     if (mime.indexOf('video/') === 0) return 'video';
     if (mime === 'application/pdf') return 'pdf';
+    if (mime === 'text/csv') return 'csv';
+    if (mime.indexOf('hwp') >= 0) return 'hangul';
     if (mime.indexOf('spreadsheet') >= 0 || mime.indexOf('ms-excel') >= 0) return 'excel';
+    if (mime.indexOf('presentation') >= 0 || mime.indexOf('ms-powerpoint') >= 0) return 'powerpoint';
+    if (mime.indexOf('wordprocessing') >= 0 || mime.indexOf('ms-word') >= 0 || mime.indexOf('msword') >= 0) return 'word';
     var ext = String(name || '').toLowerCase().match(/\.([a-z0-9]+)$/);
     ext = ext ? ext[1] : '';
     if (['xls', 'xlsx'].indexOf(ext) >= 0) return 'excel';
@@ -104,6 +113,12 @@
     if (['ppt', 'pptx'].indexOf(ext) >= 0) return 'powerpoint';
     if (['doc', 'docx'].indexOf(ext) >= 0) return 'word';
     if (ext === 'pdf') return 'pdf';
+    if (['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp', 'heic'].indexOf(ext) >= 0) return 'image';
+    if (['mp3', 'wav', 'm4a', 'flac', 'ogg'].indexOf(ext) >= 0) return 'audio';
+    if (['mp4', 'mov', 'webm', 'mkv', 'avi'].indexOf(ext) >= 0) return 'video';
+    if (['zip', 'rar', '7z', 'tar', 'gz'].indexOf(ext) >= 0) return 'archive';
+    if (['txt', 'md', 'markdown', 'log'].indexOf(ext) >= 0) return 'text';
+    if (['js', 'ts', 'jsx', 'tsx', 'json', 'html', 'css', 'xml', 'yml', 'yaml', 'py'].indexOf(ext) >= 0) return 'code';
     return 'file';
   }
 

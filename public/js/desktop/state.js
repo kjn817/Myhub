@@ -116,9 +116,8 @@
       z: w.z,
       minimized: w.minimized === true,
       space: isFiniteNumber(w.space) ? w.space : 1,
-      // 창 모드(전체화면/줌)의 복원 기억 앱 앱 정보이어야
-      // 새로고침·프로그램 앱에 모드가 유지한다 (2026-11-04 세션기
-      // 보고: 여기만 앱고 최대화 앱 앱는 앱고).
+      // 창 모드(전체화면/줌)를 저장해야 새로고침·재시작 후에도
+      // 모드가 유지된다 (2026-11-04 세션 복원 보고).
       mode: w.mode === 'full' || w.mode === 'zoom' ? w.mode : null,
       prev: clonePrev(w.prev),
     };
@@ -179,13 +178,13 @@
     var yMax = vh - TITLE_GRIP;
     y = yMax >= yMin ? Math.min(Math.max(y, yMin), yMax) : yMin;
 
-    // 정수 스냅 (2026-11-06, Finder 이음만 교감한 이득): 창 rect가 분수
-    // CSS px로 앱으면(드래그 앤드롭 배율 환경에서 분수가 된다) 앱 문서를
-    // 창 바와 iframe 문서의 사이즈바가 같은 경계를 서로 다른 앱 읽기로
-    // 반올림해 교감자에 1~2 소수 px 오차가 칸해진다. 모든 rect 앱이
-    // (열기·이동·크기·저장 복원)가 앱 앱 곳을 거치므로 크기를 정수로
-    // 스냅하면 창 기억 전체가 앱 격자를 공유한다. 반올림 앱 경계 칸넘버는
-    // 최대 0.5px이라 그리드 가능(48px) 판정의 상관이 없다.
+    // 정수 스냅 (2026-11-06, Finder 연결에서 발견한 이득): 창 rect가 분수
+    // CSS px이면(드래그 앤드롭 배율 환경에서 분수가 된다) 창 바와
+    // iframe 문서의 사이드바가 같은 경계를 서로 다르게 반올림해
+    // 1~2px 오차가 생긴다. 모든 rect 연산(열기·이동·크기·저장 복원)이
+    // 이 곳을 거치므로 크기를 정수로 스냅하면 창 기억 전체가 한 격자를
+    // 공유한다. 반올림 오차는 경계당 최대 0.5px이라 48px 그리드 판정에
+    // 영향이 없다.
     return { x: Math.round(x), y: Math.round(y), w: Math.round(w), h: Math.round(h) };
   }
 
@@ -381,9 +380,9 @@
   }
 
   /**
-   * 창 모드(전체화면 'full' / 줌 'zoom' / 없음 null)의 모드 진입 앱
-   * rect(prev)를 기록한다. 기억 변경은 resizeWindow의 합성해서 앱 번의
-   * 앱으로 커밋하는 것이 호출자 몫이다. 모드를 지정하면 prev를 지운다.
+   * 창 모드(전체화면 'full' / 줌 'zoom' / 없음 null)의 모드 진입 시
+   * rect(prev)를 기록한다. 기억 변경은 resizeWindow와 합쳐서 한 번의
+   * 커밋으로 하는 것이 호출자 몫이다. 모드를 지정하면 prev를 지운다.
    */
   function setWindowMode(state, id, mode, prev) {
     var idx = findWindowIndex(state, id);
@@ -445,8 +444,8 @@
   }
 
   /**
-   * 창을 다른 데스크톱으로 앱한다. 대상이 현재 데스크톱이면 그 창을
-   * 사용하고, 아니면 현재 데스크톱의 activeId를 다시 고른다.
+   * 창을 다른 데스크톱으로 옮긴다. 대상이 현재 데스크톱이면 그 창에
+   * 포커스를 주고, 아니면 현재 데스크톱의 activeId를 다시 고른다.
    */
   function moveWindowToSpace(state, id, spaceId) {
     var idx = findWindowIndex(state, id);
@@ -469,12 +468,13 @@
 
   /**
    * 저장 문자열을 검증·복구해 state로 되돌린다. 어떤 입력에도 throw 금지.
-   * - JSON 파싱 실패version ·(1불일치2 ·) 앱 앱 빈. v1상태 Spaces
-   *   기본값으로 마이그레이션한다.
+   * - JSON 파싱 실패·버전 불일치(1도 VERSION도 아님)는 빈 상태.
+   *   v1 상태는 Spaces 기본값으로 마이그레이션한다.
    * - windows가 배열이 아니면 빈 배열 취급
    * - 항목별: 모르는 module이거나 숫자 필드가 유한하지 않으면 제거,
    *   중복 module은 첫 항목만 유지. space가 목록에 없으면 첫 데스크톱으로.
-   * - 복구 앱 앱 항목 clamp, zCounter 보정, activeId 세션
+   * - 복구한 항목은 clamp하고, zCounter를 보정하며, activeId는
+   *   유효하지 않으면 다시 고른다.
    */
   function parse(json, viewport) {
     var raw;

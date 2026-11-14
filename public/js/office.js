@@ -281,12 +281,12 @@
       if (!current && typeof window !== 'undefined' && window.MyHubOfficeTabs) {
         window.MyHubOfficeTabs.setState(appKey, null);
       }
-      // 빠른 실행 가능성: 문서를 열면 호스트를 올리고, 접으면 닫힌
-      // (뷰어 호스트 몫 앱 undo/redo/print/search 앱 앱 별도).
+      // 빠른 실행 가능성: 문서를 열면 호스트를 올리고, 접으면 닫는다
+      // (뷰어 호스트 몫인 undo/redo/print/search와는 별도).
       // 접기는 빠른 실행 동작이 아니라 전용 채널(myhub:office-fold)로
-      // 맞는다 (2026-11-06 방송 교정 트랙): 앱 앞에서는 창 바
-      // 더블로이, 단독 실행에서는 표면 자체 접기 버튼(#fvFoldBtn)가
-      // 같은 코어 접기를 구동한다. 한글만 앱 toggle-collapse 계약.
+      // 맞춘다 (2026-11-06 방송 교정 트랙): 앱 안에서는 창 바
+      // 더블클릭, 단독 실행에서는 표면 자체 접기 버튼(#fvFoldBtn)이
+      // 같은 코어 접기를 구동한다. 한글만 별도 toggle-collapse 계약.
       if (
         typeof window !== 'undefined' &&
         window.MyHubOfficeTabs &&
@@ -295,8 +295,8 @@
         if (current) {
           window.MyHubOfficeTabs.setQuick(appKey, { save: true });
         } else {
-          // 문서가 접히면 앱 앱의 빠른 실행 패널을 닫힌다 (뷰어
-          // 호스트가 접힌 undo/redo/print/search 포함 앱 주요 버튼을
+          // 문서가 접히면 호스트의 빠른 실행 패널을 닫는다 (뷰어
+          // 호스트가 접힌 undo/redo/print/search 포함 주요 버튼을
           // 제목 줄에 합칠 때).
           window.MyHubOfficeTabs.setQuick(appKey, {
             save: false,
@@ -449,8 +449,8 @@
         );
     }
 
-    // 문서를 접은 뒤의 화면: 자동 새 문서 앱(한글·한글)의 시작 화면으로
-    // 돌아가지 않고 빈 문서를 새로 연다. 그 앱 앱 시작 화면으로.
+    // 문서를 접은 뒤의 화면: 시작 화면으로 돌아가지 않고 빈 문서를
+    // 새로 연다.
     function handleClosed() {
       current = null;
       if (autoNew && app.canCreate) {
@@ -663,17 +663,17 @@
     }
 
     // ---------- 배선 ----------
-    // 오피스 앱 앱 (방송 작업 2): 뷰어 호스트가 엔진 앱 상태를 받아
-    // 넣으면 office-tabs.js가 상단 행에 앱더블로이를 그려고, 클릭이 다시
-    // 뷰어 호스트의 명령 채널로 돌아간다. 앱 연동(myhub:office-tabs
-    // postMessage)는 office-tabs.js가 맞는다.
+    // 오피스 탭 배선 (방송 작업 2): 뷰어 호스트가 엔진 상태를 받아
+    // 넣으면 office-tabs.js가 상단 행에 탭을 그리고, 클릭이 다시
+    // 뷰어 호스트의 명령 채널로 돌아간다. 탭 연동(myhub:office-tabs
+    // postMessage)은 office-tabs.js가 맡는다.
     var tabsEl = el('officeTabs');
     if (tabsEl && typeof window !== 'undefined' && window.MyHubOfficeTabs) {
       // 배치 주의: #finderViewer는 position:fixed 전체화면 오버레이
-      // (z-60)앱 페이지 흐름의 앱 행 그 앱에 깔려 클릭이 앱 없다 앱
-      // 행을 뷰어 루트 앱, 본문(fvBody) 바로 앞으로 앱 문서 표면을
-      // 위로 만든다. 문서가 없을 때(앱)는 뷰어뿐이므로 앱으로 앱도
-      // 함께 사라지는 것이 맞다.
+      // (z-60)라 페이지 흐름의 탭 행이 그 아래에 깔려 클릭이 안 된다.
+      // 탭 행을 뷰어 루트 안, 본문(fvBody) 바로 앞으로 옮겨 문서
+      // 표면을 위로 만든다. 문서가 없을 때(빈 상태)는 뷰어뿐이므로
+      // 탭도 함께 사라지는 것이 맞다.
       var fvBodyEl = el('fvBody');
       if (fvBodyEl && fvBodyEl.parentNode) {
         fvBodyEl.parentNode.insertBefore(tabsEl, fvBodyEl);
@@ -684,10 +684,11 @@
         appKey: appKey,
         rootEl: tabsEl,
       });
-      // 빠른 실행 (제목 줄): 호스트 앱 앱 공통으로 앱 앱이 맞는다 앱
-      // 미니멀 접기는 명시 저장 경로를 Ctrl+S를 코어 앱 핸들러로
-      // 그대로 앱에 보낸다 (뷰어 코어의 저장 경로 단일과 유지).
-      // 옛 office-tabs(캐시)가 앞에 붙은 붙임이 끊기지않게 가용한다.
+      // 빠른 실행 (제목 줄): 호스트 공통으로 빠른 실행을 맞춘다.
+      // 미니멀 접기에서는 명시 저장 경로가 없어 Ctrl+S를 코어
+      // 핸들러에 그대로 보낸다 (뷰어 코어의 저장 경로 단일화 유지).
+      // 예전 office-tabs(캐시)가 먼저 붙어 있어도 연결이 끊기지
+      // 않게 유지한다.
       if (typeof window.MyHubOfficeTabs.onQuick === 'function') {
         window.MyHubOfficeTabs.onQuick(appKey, function (action) {
         if (action === 'save') {
@@ -729,8 +730,7 @@
       if (startName) startName.textContent = app.title;
       var startDesc = el('officeStartDesc');
       if (startDesc) startDesc.textContent = app.desc;
-      // 새로 만들기: 만든 뒤 있는 앱만 보인다 현재 (이 앱 앱
-      // 모두 만든 뒤 있다 가 canCreate꺾인 앱 앱 예의 앱 않는다).
+      // 새로 만들기: 만들 수 있는 앱(canCreate)만 버튼을 보인다.
       var startNew = el('officeStartNew');
       if (app.canCreate) {
         if (newBtn) newBtn.hidden = false;
@@ -739,9 +739,9 @@
       if (openBtn) openBtn.addEventListener('click', function () {
         openPicker('open').then(function (file) { if (file) openFile(file); });
       });
-      // 문서가 닫힌 때 다른 파일을 여는 경로는 앱 자체 메뉴(한글
-      // Studio 파일 메뉴 등)의 Finder가 앱 뷰어의 [파일 열기] 버튼을
-      // 앱지 않는다 (사용자 지시: 앱 앱 버튼 제거).
+      // 문서가 닫힌 때 다른 파일을 여는 경로는 각 앱 자체 메뉴(한글·
+      // Studio 파일 메뉴 등)이며, 뷰어의 [파일 열기] 버튼은 두지
+      // 않는다 (사용자 지시: 중복 버튼 제거).
       var startOpen = el('officeStartOpen');
       if (startOpen) startOpen.addEventListener('click', function () {
         openPicker('open').then(function (file) { if (file) openFile(file); });
@@ -828,8 +828,8 @@
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 
   // 단독 실행 열기 판정: ?file=<id>(&name=&mime=&folder=&folderName=)
-  // Finder 단독 실행에서 오피스 파일을 앱 앱 앱 으로 바로 이어주는
-  // 경로다. 숫자가 아닌 file 값은 열기 판정으로 인정하지 않는다.
+  // Finder 단독 실행에서 오피스 파일을 바로 여는 경로다. 숫자가 아닌
+  // file 값은 열기 판정으로 인정하지 않는다.
   function parseOpenTarget(search) {
     var params;
     try {

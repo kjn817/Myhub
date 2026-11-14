@@ -94,7 +94,7 @@
 
   // ---- 자성 스냅 (순수 함수) ----
   var SNAP_DIST = 12; // 앱 거리 앱이면 붙는다
-  var MAG_GAP = 12; // 붙을 때의 앱 간격 (상링 간격과 동일)
+  var MAG_GAP = 12; // 붙을 때의 자석 간격 (쌓기 간격과 동일)
 
   /**
    * pos/size: 잡고 있는 위젯의 후보 위치·크기. others: 다른 위젯들의
@@ -319,17 +319,18 @@
     }
 
     // ---- 배치 (positions) + 크기 (sizes) ----
-    // 위젯은 아이콘처럼 사용자가 원하는 위치를 앱는다 (사용자 지시
-    // 2026-11-02). 위치는 레이어 기본 px 좌표 {x, y}. 2026-11-03
-    // 사용으로 앱 가지가 앱해진다: 앱 드래그 중 다른 위젯의 가까워지면
-    // 모서리·간격이 이징 붙는 자성 스냅, 앱 우하단 핸들로 크기 조절.
+    // 위젯은 아이콘처럼 사용자가 원하는 위치를 정한다 (사용자 지시
+    // 2026-11-02). 위치는 레이어 기준 px 좌표 {x, y}. 2026-11-03
+    // 사용성 개선으로 자석 스냅이 들어갔다: 드래그 중 다른 위젯에
+    // 가까워지면 모서리·간격이 자석처럼 붙는 자성 스냅, 우하단
+    // 핸들로 크기 조절.
     // 겹침 허용, 레이어 안으로만 clamp한다.
-    // 저장: 'myhub.desktop.widgets.v1'앱 { version: 3, positions,
+    // 저장: 'myhub.desktop.widgets.v1'에 { version: 3, positions,
     // sizes }. 구 포맷(순서 배열·v2 positions)을 읽을 때 마이그레이션.
     var POS_KEY = 'myhub.desktop.widgets.v1';
     var CARD_W = 304;
-    // 기본 레이아웃 종전 위젯 앱의 화면 위치 그대로다: 오른쪽 앱에
-    // 132px 앱의 앱 304 앱 앱 레이어 기본 x = areaW - 132 - 304.
+    // 기본 레이아웃: 기존 위젯들의 화면 위치 그대로다 — 오른쪽 열에
+    // 132px 들여쓰기, 카드 너비 304px, 레이어 기본 x = areaW - 132 - 304.
     var COL_RIGHT_INSET = 132;
     var STACK_GAP = MAG_GAP;
     var DRAG_THRESHOLD = 4;
@@ -438,22 +439,22 @@
       return null;
     }
 
-    // 기본 상링은 시작 높이: 바탕화면 아이콘 왼쪽 앞에서 앱 우선으로
-    // 채워고, 위젯 앱(오른쪽)과 수평으로 겹칠 앱 있는 아이콘 첫 앱
-    // 껍질이다. 기본 상링은 그 첫 앱 아래에서 시작해야 신규 프로필에서
-    // 위젯과 아이콘을 가리지 않는다 (2026-11-04 실측 감사 앱 이득:
-    // 1280x800에서 '오늘'이 PowerPoint·PDF 아이콘을 앱음). 아이콘 앱
-    // 높이는 desktop-icons의 노출 상수를 읽고, 없으면 같은 값으로
-    // 대체한다. 저장된 사용자 배치가 있는 경우에는 앱 함수를 앱지
-    // 않으므로 기존 배치를 그대로다.
-    var ICON_TOP = 10; // desktop-icons cellToXY의 상단 앱과 동일
+    // 기본 쌓기의 시작 높이: 바탕화면 아이콘은 왼쪽 앞에서 행 우선으로
+    // 채워지고, 위젯 열(오른쪽)과 수평으로 겹칠 수 있는 아이콘 첫 줄의
+    // 높이이다. 기본 쌓기는 그 첫 줄 아래에서 시작해야 신규 프로필에서
+    // 위젯이 아이콘을 가리지 않는다 (2026-11-04 실측 감사로 발견한
+    // 이득: 1280x800에서 '오늘'이 PowerPoint·PDF 아이콘을 가림).
+    // 아이콘 셀 높이는 desktop-icons의 노출 상수를 읽고, 없으면 같은
+    // 값으로 대체한다. 저장된 사용자 배치가 있는 경우에는 이 함수를
+    // 쓰지 않으므로 기존 배치를 그대로 둔다.
+    var ICON_TOP = 10; // desktop-icons cellToXY의 상단 여백과 동일
     function defaultTopInset() {
       var icons = typeof window !== 'undefined' ? window.MyHubDesktopIcons : null;
       var cellH = icons && Number.isFinite(icons.CELL_H) ? icons.CELL_H : 108;
       return ICON_TOP + cellH;
     }
 
-    // 기본 상링: 오른쪽 앱에 앱에서 실제 카드 높이 + 간격으로 앱는다
+    // 기본 쌓기: 오른쪽 열에 위에서 아래로 실제 카드 높이 + 간격으로 쌓는다
     function stackDefaults(order) {
       var a = area();
       var x = Math.max(0, a.w - COL_RIGHT_INSET - CARD_W);
@@ -729,9 +730,9 @@
 
     var ready = refresh();
     var systemReady = refreshSystem();
-    // 카드 높이는 최초 데이터가 그려진 앱에서 확정한다. 저장된 배치값
-    // 없는 경우(기본 상링 전체)는 제외, 사용자가 아직 앱하지 않으면
-    // 앱 높이로 앱 번 다시 상링이 겹침을 막는다.
+    // 카드 높이는 최초 데이터가 그려진 뒤에 확정한다. 저장된 배치값이
+    // 없는 경우(기본 쌓기 전체)는 제외, 사용자가 아직 정하지 않으면
+    // 실제 높이로 한 번 다시 쌓아 겹침을 막는다.
     if (defaultRegime) {
       Promise.all([ready, systemReady]).then(function () {
         if (destroyed || interacted) return;

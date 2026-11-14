@@ -90,7 +90,7 @@
     if (icons) {
       tile.classList.add('dt-tile-svg');
       // 실행 타일은 문서의 파일 아이콘이 아니라 앱 타일형(appTileFor)
-      // 으로 그린다 앱 파일은 파일답게, 앱은 앱답게 (2026-11-03 확정).
+      // 으로 그린다 — 파일은 파일답게, 앱은 앱답게 (2026-11-03 확정).
       // appTileFor가 없는 구 모듈이면 문서형으로 대체한다.
       tile.innerHTML =
         typeof icons.appTileFor === 'function'

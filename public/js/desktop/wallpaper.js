@@ -1,20 +1,20 @@
-/* MyHub 데스크톱 앱 배경화면 관리자 (wallpaper.js)
+/* MyHub 데스크톱 배경화면 관리자 (wallpaper.js)
  *
  * 설계: docs/desktop-macos-redesign-20261101.md A단계 + 2026-11-02 개혁
- * - 배경은 '오늘의 사진' 하나로 남긴다. 그라데이션 프리셋(흐로·셋·샕·샕
- *   앱을)사용자가 최소한다 "고"판정한 앱이 앱이다 앱 저장된 가 pref앱
- *   gradient 모드도 loadPref가 'today'로 자동 소급한다.
+ * - 배경은 '오늘의 사진' 하나로 남긴다. 그라데이션 프리셋은
+ *   사용자가 최소로 하기로 판정했다 — 저장된 gradient 모드도
+ *   loadPref가 'today'로 자동 소급한다.
  * - 로딩은 macOS 부팅 화면같이: 사진이 준비되기 앞에서는 그레이
- *   (#0b0b0f) 바탕 중앙의 JN 마크 + 가늘고 앱은 흰색 진행 바만 있고,
- *   사진이 로드하면 부팅 레이어도 프로그램으로 사라진다. 선택은
- *   localStorage 'myhub.desktop.wallpaper.v1'앱 앱한다.
+ *   (#0b0b0f) 바탕 중앙의 JN 마크 + 가늘고 옅은 흰색 진행 바만 있고,
+ *   사진이 로드하면 부팅 레이어도 부드럽게 사라진다. 선택은
+ *   localStorage 'myhub.desktop.wallpaper.v1'에 저장한다.
  * - 이미지 로딩은 메타데이터 병렬이다 (2026-11-02 추가 지시 6):
  *   부팅 즉시 날짜를 붙인 이미지 URL(/api/desktop/wallpaper/image?v=
  *   <KST 날짜>)로 Image()를 시작하고, /today 메타데이터는 캡션 표시
  *   전용으로만 연다. 날짜가 붙은 URL은 그날 불변이라 서버가
  *   Cache-Control: max-age=86400, immutable로 내려준다.
- * - 사진 앱은 동일 출처 프록시로만 간다 앱 데스크톱 페이지의 CSP
- *   enforce(img-src 'self')가 외부 URL 직로딩이 차단한다. 이미지 로드
+ * - 사진은 동일 출처 프록시로만 가져온다 — 데스크톱 페이지의 CSP
+ *   enforce(img-src 'self')가 외부 URL 직로딩을 차단한다. 이미지 로드
  *   실패 시에만 부팅 레이어를 유지한다 (대체).
  * 노출: window.MyHubDesktopWallpaper = { PREF_KEY, ENDPOINT,
  *        IMAGE_ENDPOINT, defaultPref, loadPref, savePref, captionText,
@@ -25,30 +25,31 @@
 
   var PREF_KEY = 'myhub.desktop.wallpaper.v1';
   var ENDPOINT = '/api/desktop/wallpaper/today';
-  // 사진 앱은 동일 출처 프록시로 받는다 (CSP img-src 'self' 앱)
+  // 사진은 동일 출처 프록시로 받는다 (CSP img-src 'self' 때문)
   var IMAGE_ENDPOINT = '/api/desktop/wallpaper/image';
 
   function pad2(n) {
     return (n < 10 ? '0' : '') + n;
   }
 
-  /** 로컬 앱와 무관하게 KST(UTC+9) 날짜 문자열(YYYY-MM-DD)을 만든다. */
+  /** 로컬 시간대와 무관하게 KST(UTC+9) 날짜 문자열(YYYY-MM-DD)을 만든다. */
   function kstDateString(now) {
     var t = new Date((now || new Date()).getTime() + 9 * 60 * 60 * 1000);
     return t.getUTCFullYear() + '-' + pad2(t.getUTCMonth() + 1) + '-' + pad2(t.getUTCDate());
   }
 
-  /** 그 날짜의 사진을 붙인 앱 날짜를 캐시 앱로 앱는 버전 쿼리를 붙인다. */
+  /** 그 날짜의 사진 URL에 날짜를 캐시 무효화용 버전 쿼리로 붙인다. */
   function imageUrlFor(dateStr) {
     return IMAGE_ENDPOINT + '?v=' + dateStr;
   }
 
   /**
-   * 배경 사진 상단 앱의 평균색 앱 상단바 합성 앱 (#rrggbb).
+   * 배경 사진 상단의 평균색을 상단바 합성 색(#rrggbb)으로 바꾼다.
    * 데스크톱 상단바는 rgba(255,255,255,0.55) + blur saturate(1.6)이라
-   * 배경색의 채도를 1.6배로 올린 앱 흰색을 55% 앞의 색으로 보인다.
-   * 설치는 PWA의 Window Controls Overlay 버튼 앱는 meta theme-color
-   * 합성으로만 칸해지므로, 앱 앱을 theme-color로 넣어 앱 바를 붇는다.
+   * 배경색의 채도를 1.6배로 올린 뒤 흰색을 55% 섞은 색으로 보인다.
+   * 설치된 PWA의 Window Controls Overlay 버튼은 meta theme-color
+   * 합성으로만 바뀌므로, 계산한 색을 theme-color로 넣어 상단바를
+   * 사진 톤에 맞춘다.
    */
   function barToneHex(r, g, b) {
     var avg = (r + g + b) / 3;
@@ -119,17 +120,17 @@
     var fetchFn = deps.fetchFn || function (url) { return fetch(url); };
     var pref = loadPref(storage);
     var destroyed = false;
-    var seq = 0; // 적용 앱 앱 앱께 끝난 이전 시도가 화면을 앱 못하게
+    var seq = 0; // 적용 순번: 늦게 끝난 이전 시도가 화면을 덮지 못하게 한다
 
     function applyPhoto(url) {
       layer.className = 'dt-wallpaper dt-wp-photo';
       layer.style.backgroundImage = 'url("' + url + '")';
     }
 
-    // ---- 설치된 PWA 타이틀바 앱 동기 (Window Controls Overlay) ----
-    // 스이더블 버튼 앱는 meta theme-color 합성으로 칸해진다. 사진이
-    // 바를면 상단 앱 평균색으로 바 합성 앱을 다시 계산해 넣고,
-    // 전체화면 창이 있으면 바 자체가 경쟁이므로 앱도 경쟁으로 맞춘다.
+    // ---- 설치된 PWA 타이틀바 색 동기 (Window Controls Overlay) ----
+    // WCO 버튼은 meta theme-color 합성으로만 바뀐다. 사진이
+    // 바뀌면 상단 평균색으로 바 합성 색을 다시 계산해 넣고,
+    // 전체화면 창이 있으면 바가 검정이므로 톤도 검정으로 맞춘다.
     var toneHex = null;
     var toneObserver = null;
     function themeDoc() {
@@ -145,8 +146,8 @@
         doc.head.appendChild(meta);
       }
       if (meta) meta.setAttribute('content', hex);
-      // WCO 모드에서는 상단바 배경의 같은 값을 합성으로 연다 (shell.css
-      // .g-nav background: var(--titlebar-tone)) 앱 앱 바가 앱 색이 연다.
+      // WCO 모드에서는 상단바 배경이 같은 값을 합성으로 쓴다 (shell.css
+      // .g-nav background: var(--titlebar-tone)) — 상단바가 같은 색으로 보인다.
       if (doc.documentElement && doc.documentElement.style) {
         doc.documentElement.style.setProperty('--titlebar-tone', hex);
       }
@@ -166,14 +167,14 @@
         var ctx = canvas.getContext('2d');
         if (!ctx) return;
         ctx.drawImage(img, 0, 0, 48, 48);
-        var data = ctx.getImageData(0, 0, 48, 10).data; // 상단 앱 = 바는 앱는 영역
+        var data = ctx.getImageData(0, 0, 48, 10).data; // 상단 10줄 = 상단바가 겹치는 영역
         var r = 0, g = 0, b = 0, n = 0;
         for (var i = 0; i < data.length; i += 4) { r += data[i]; g += data[i + 1]; b += data[i + 2]; n++; }
         if (!n) return;
         toneHex = barToneHex(r / n, g / n, b / n);
         applyTone();
       } catch (e) {
-        console.warn('타이틀바 앱 동기 실패 (기본 theme-color 유지):', e);
+        console.warn('타이틀바 톤 동기 실패 (기본 theme-color 유지):', e);
       }
     }
     function watchTone() {

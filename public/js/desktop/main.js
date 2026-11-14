@@ -27,7 +27,7 @@
     return { w: window.innerWidth || constants.DEFAULT_VIEWPORT.w, h: window.innerHeight || constants.DEFAULT_VIEWPORT.h };
   }
 
-  /** Drive 파일 앱 앱 바탕화면 파일 아이콘 항목 */
+  /** Drive 파일을 바탕화면 파일 아이콘 항목으로 바꾼다 */
   function fileItemFromDrive(f) {
     return {
       id: 'file-' + f.id,
@@ -133,11 +133,10 @@
     ]);
   }
 
-  // 창 질감 플라시 (사용자 지시 2026-11-06): 유리(프로그램, 기본) /
-  // 불투명 중 설정에서 고른다. 기본값이 유리로 근거의 노치·위에서
-  // 상단바가 이미 앱 프로그램 유리로 앱이 앱 것으로 앱이 직이기
-  // 프로그램. 저장소 localStorage, 적용은 body 클래스가 하나로 CSS가
-  // 앱 표면 전체(상단바·위제·독·메뉴·패널·창 바)를 함께 바꾼다.
+  // 창 질감 설정 (사용자 지시 2026-11-06): 유리(기본) / 불투명 중
+  // 설정에서 고른다. 저장소는 localStorage, 적용은 body 클래스가
+  // 하나로 CSS가 앱 표면 전체(상단바·위젯·독·메뉴·패널·창 바)를
+  // 함께 바꾼다.
   // 어떤 플라시에서도 드래그 중에서는 질감이 바를는 전환이 없다.
   var MATERIAL_KEY = 'myhub.desktop.material.v1';
   function currentMaterial() {
@@ -300,8 +299,8 @@
       }
     });
 
-    // 파일 아이콘 우클릭 "내장함으로 이동" = Drive 내장함. 앱하면
-    // 아이콘을 치우고, 실패하면 알림 (아이콘은 그대로 붇다).
+    // 파일 아이콘 우클릭 "휴지통으로 이동" = Drive 휴지통. 성공하면
+    // 아이콘을 치우고, 실패하면 알림 (아이콘은 그대로 둔다).
     function trashDesktopFile(item) {
       var dropApi = window.MyHubDesktopDrop;
       if (!dropApi || typeof dropApi.createDriveDesktop !== 'function') return;
@@ -315,13 +314,13 @@
           }
         })
         .catch(function (err) {
-          console.warn('파일 내장함 이동 실패:', err);
-          window.alert('내장함으로 보내지 못했습니다');
+          console.warn('파일 휴지통 이동 실패:', err);
+          window.alert('휴지통으로 보내지 못했습니다');
         });
     }
 
-    // 드롭·붙인 앱 바탕화면 폴더의 아이콘을 맞춘다 (앱 파일만 추가 앱
-    // 파인더에서 바를 내용까지도 다시한 동기한 범위 바).
+    // 드롭·붙여넣기로 바탕화면 폴더의 아이콘을 맞춘다 (새 파일만
+    // 추가하고, 파인더에서 바꾼 내용까지 다시 동기화하는 범위다).
     function refreshDesktopFileIcons() {
       var iconsMgr = window.MyHubDesktopIconsManager;
       if (!iconsMgr || !driveDesktop) return;
@@ -339,7 +338,7 @@
           });
         })
         .catch(function () {
-          console.warn('바탕화면 파일 새로고침 실패 앱 다음 붙임에서 맞춘다');
+          console.warn('바탕화면 파일 새로고침 실패 (다음 드롭/붙여넣기에서 다시 동기화한다)');
         });
     }
 
@@ -388,7 +387,7 @@
         // 빈 영역 입력은 배경화면까지 통과한다 (desktop.css 밴드 테스트 계약).
         surface: wpLayer,
       });
-      // 대체이 복원: 아이콘 항목이 바탕화면에 다시 앱는다
+      // 휴지통 복원: 아이콘 항목이 바탕화면에 다시 나타난다
       if (manager && typeof manager.setTrashRestorer === 'function') {
         manager.setTrashRestorer(function (entry) {
           if (entry.kind === 'icon' && window.MyHubDesktopIconsManager) {
@@ -410,9 +409,9 @@
       registerMaterialSetting();
     }
 
-    // 배경화면 우클릭 앱 "아이콘 정렬" (사용자 지시 2026-11-02: 자유
-    // 배치에서는 격자 정렬이 명시적으로 앱는 앱만 일어난다).
-    // 메뉴 모듈이 로드하지 않았을면 기본 메뉴만 막고 조용히 내어간다.
+    // 배경화면 우클릭의 "아이콘 정렬" (사용자 지시 2026-11-02: 자유
+    // 배치에서는 격자 정렬이 명시적으로 부를 때만 일어난다).
+    // 메뉴 모듈이 로드되지 않았으면 기본 메뉴만 막고 조용히 넘어간다.
     if (wpLayer) {
       var bgMenu = null;
       wpLayer.addEventListener('contextmenu', function (e) {
@@ -435,10 +434,10 @@
       });
     }
 
-    // OS 파일 드롭 복사: PC에서 파일을 데스크톱으로 앱어 빼면
+    // OS 파일 드롭 복사: PC에서 파일을 데스크톱으로 드래그해 빼면
     // Drive '바탕화면' 폴더로 순차 업로드하고, 끝나면 파일 아이콘을
     // 맞춘다 (drop-upload.js). 대체 드래그의 dataTransfer.types의
-    // 'Files' 앱으로 구분한다.
+    // 'Files' 여부로 구분한다.
     var dropApi = window.MyHubDesktopDrop;
     if (dropApi && typeof dropApi.createDropUpload === 'function') {
       var dropTiles = window.MyHubDesktopTiles;
@@ -498,7 +497,7 @@
         return result.files.map(fileItemFromDrive);
       })
       .catch(function () {
-        console.warn('바탕화면 파일 목록 로드 실패 앱 파일 아이콘 없이 붙인합이다');
+        console.warn('바탕화면 파일 목록 로드 실패 (파일 아이콘 없이 부팅한다)');
         return [];
       });
   }
@@ -548,7 +547,7 @@
         restoreDroppedStudioWindows();
       })
       .catch(function () {
-        console.warn('스튜디오 앱 목록 로드 실패 앱 기본 모듈만으로 붙인합이다');
+        console.warn('스튜디오 앱 목록 로드 실패 (기본 모듈만으로 부팅한다)');
       })
       .then(function () {
         if (timer) clearTimeout(timer);
