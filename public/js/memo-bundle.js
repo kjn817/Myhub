@@ -6,6 +6,12 @@ var textUtils = typeof window !== 'undefined' ? window.MyHubTextUtils : null;
 if (!textUtils) throw new Error('[memo-bundle] text-utils.js가 먼저 로드되어야 합니다');
 var esc = textUtils.esc;
 var friendlyError = textUtils.friendlyError;
+// 공용 상수(common/constants.js) — KST 타임존·첨부 상한 (S5-4, 5-9).
+// 번들 스코프 var로 공유한다 (textUtils 패턴과 동일).
+var myHubConstants = typeof window !== 'undefined' ? window.MyHubConstants : null;
+if (!myHubConstants) throw new Error('[memo-bundle] constants.js가 먼저 로드되어야 합니다');
+var KST_TIME_ZONE = myHubConstants.KST_TIME_ZONE;
+var MAX_UPLOAD_BYTES = myHubConstants.MAX_UPLOAD_BYTES;
 function fmtSize(b) {
   if (b < 1024) return b + 'B';
   if (b < 1048576) return (b/1024).toFixed(1) + 'KB';
@@ -1157,11 +1163,10 @@ composerEditor.el.addEventListener('keydown', (e) => {
 });
 
 async function uploadPendings(memoId, pendings) {
-  // Cloudinary 무료 플랜: 파일당 10MB 제한
-  const MAX_SIZE = 10 * 1024 * 1024;
+  // Cloudinary 무료 플랜: 파일당 10MB 제한 (공용 상수 MAX_UPLOAD_BYTES)
   const valid = [];
   for (const f of pendings) {
-    if (f.size > MAX_SIZE) {
+    if (f.size > MAX_UPLOAD_BYTES) {
       toast(`"${f.name}"은 10MB를 초과해서 업로드할 수 없어요`, 5000);
     } else {
       valid.push(f);
@@ -1449,7 +1454,7 @@ async function renderCal() {
   });
   const first = new Date(calY, calM - 1, 1).getDay();
   const days = new Date(calY, calM, 0).getDate();
-  const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' });
+  const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: KST_TIME_ZONE });
   for (let i = 0; i < first; i++) {
     const b = document.createElement('span');
     b.className = 'blank';
@@ -2378,13 +2383,12 @@ function restoreSel(editor) {
 }
 // 에디터에 파일 붙이기: 이미지는 본문 커서 위치에, 나머지는 첨부 칩으로
 function handleEditorFiles(editor, fileList) {
-  const MAX_SIZE = 10 * 1024 * 1024;
   const files = [...fileList].filter(f => f.size > 0);
   if (!files.length) return;
-  // 10MB 초과 파일은 선택 지점에서 차단
+  // 10MB 초과 파일은 선택 지점에서 차단 (공용 상수 MAX_UPLOAD_BYTES)
   const valid = [];
   for (const f of files) {
-    if (f.size > MAX_SIZE) {
+    if (f.size > MAX_UPLOAD_BYTES) {
       toast(`"${f.name}"은 10MB를 초과해서 첨부가 안 돼요`, 5000);
     } else {
       valid.push(f);

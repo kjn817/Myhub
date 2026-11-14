@@ -5,6 +5,9 @@
 
 import type { PersonaId } from './router';
 
+/** 위임 매니페스트 토큰 예산 상한 (S5-4, 5-9) — 초과 시 검증 위반. */
+const MAX_MANIFEST_TOKENS = 8000;
+
 // ---------------------------------------------------------------------------
 // 1. DelegationManifest: 구조화된 위임 (gemini-elite-core 패턴)
 // ---------------------------------------------------------------------------
@@ -161,8 +164,8 @@ export function validateDelegation(manifest: DelegationManifest): string[] {
   }
   
   // 3. 토큰 예산 확인
-  if (manifest.maxTokens > 8000) {
-    violations.push('토큰 예산 과다 (8000 초과)');
+  if (manifest.maxTokens > MAX_MANIFEST_TOKENS) {
+    violations.push(`토큰 예산 과다 (${MAX_MANIFEST_TOKENS} 초과)`);
   }
   
   return violations;

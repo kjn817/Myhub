@@ -19,11 +19,18 @@
 (function () {
   'use strict';
 
+  // Drive 파일 API 베이스 경로 (S5-4, 5-9) — constants.js 선행 로드.
+  var constants =
+    (typeof window !== 'undefined' && window.MyHubConstants) ||
+    (typeof globalThis !== 'undefined' && globalThis.MyHubConstants) ||
+    null;
+  if (!constants) throw new Error('[drive-io.js] constants.js가 먼저 로드되어야 합니다');
+
   function uploadDriveFile(fetchFn, blob, name, folderId, label) {
     var fd = new FormData();
     fd.append('files', blob, name);
     if (folderId) fd.append('folder_id', String(folderId));
-    return fetchFn('/api/drive/files', { method: 'POST', body: fd })
+    return fetchFn(constants.DRIVE_FILES_API, { method: 'POST', body: fd })
       .then(function (res) {
         if (!res || !res.ok) throw new Error(label + ' http ' + (res && res.status));
         return res.json();

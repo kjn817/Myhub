@@ -11,6 +11,7 @@ import {
   PrivacyBlockedError,
   getLegacyMarkerTools,
 } from '../../ai/legacy-privacy-guard'
+import { MAX_USER_TEXT_LENGTH } from '../../lib/limits'
 import { orchestrate } from '../../services/orchestrator'
 import { PrivacyGatewayBlockedError, privacyGatewayUserNotice } from '../../services/privacy-gateway'
 import { isQuotaError } from '../../services/clef-engine'
@@ -347,7 +348,7 @@ aiApp.post('/orchestrate', async (c) => {
     .map((m) => m.content.trim())
   if (userTexts.length === 0) return c.json({ ok: false, error: 'empty' }, 400)
   const userText = userTexts[userTexts.length - 1]
-  if (userText.length > 8000) return c.json({ ok: false, error: 'too long' }, 400)
+  if (userText.length > MAX_USER_TEXT_LENGTH) return c.json({ ok: false, error: 'too long' }, 400)
 
   try {
     const env = c.env

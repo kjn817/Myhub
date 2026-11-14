@@ -388,13 +388,12 @@ function restoreSel(editor) {
 }
 // 에디터에 파일 붙이기: 이미지는 본문 커서 위치에, 나머지는 첨부 칩으로
 function handleEditorFiles(editor, fileList) {
-  const MAX_SIZE = 10 * 1024 * 1024;
   const files = [...fileList].filter(f => f.size > 0);
   if (!files.length) return;
-  // 10MB 초과 파일은 선택 지점에서 차단
+  // 10MB 초과 파일은 선택 지점에서 차단 (공용 상수 MAX_UPLOAD_BYTES)
   const valid = [];
   for (const f of files) {
-    if (f.size > MAX_SIZE) {
+    if (f.size > MAX_UPLOAD_BYTES) {
       toast(`"${f.name}"은 10MB를 초과해서 첨부가 안 돼요`, 5000);
     } else {
       valid.push(f);

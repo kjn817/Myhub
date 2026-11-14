@@ -9,6 +9,8 @@
  * - 지원: 매일/평일/주말/매주 요일/매월 날짜/ N분·N시간마다, 오전·오후·아침·점심·저녁·밤·새벽.
  */
 
+import { KST_TIME_ZONE } from '../lib/kst'
+
 export type NlCronAction = 'morning-briefing' | 'news-summary' | 'office-doc' | 'schedule-reminder' | 'generic'
 
 export interface NlCronOfficeParams {
@@ -30,7 +32,8 @@ export interface NlCronSchedule {
   dayOfMonth: number | null
   /** INTERVAL: 간격(분) */
   intervalMinutes: number | null
-  timezone: 'Asia/Seoul'
+  /** KST 고정 (타입도 상수와 동기화) */
+  timezone: typeof KST_TIME_ZONE
   /** KST 기준 cron 표현식 (분 시 일 월 요일) */
   cronKst: string
 }
@@ -139,7 +142,7 @@ function build(
   intervalMinutes: number | null,
 ): NlCronSchedule {
   const base = { kind, hour, minute, daysOfWeek, dayOfMonth, intervalMinutes }
-  return { ...base, timezone: 'Asia/Seoul', cronKst: toCronKst(base) }
+  return { ...base, timezone: KST_TIME_ZONE, cronKst: toCronKst(base) }
 }
 
 /**

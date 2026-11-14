@@ -4,6 +4,7 @@
 
 import type { Env } from '../../types'
 import { MODELS } from '../../services/ai'
+import { DEFAULT_MODEL_ID } from '../../services/ai-models'
 import { inspectEgress, canUseRelay } from '../../services/privacy-gateway'
 import { redactStringForLog } from '../../services/privacy-engine'
 import { getLegacyMarkerTools, resolveRequestSensitivity } from '../../ai/legacy-privacy-guard'
@@ -63,7 +64,7 @@ export async function generateArtifactHtml(
   const setting = await db.prepare(
     "SELECT value FROM ai_settings WHERE key='model.code'"
   ).first<{ value: string }>()
-  const modelId = setting?.value || 'gemini-3.5-flash-lite'
+  const modelId = setting?.value || DEFAULT_MODEL_ID
 
   // P0-4: 모델 정책 검증 (공통 레지스트리)
   // 2026-10-15: 3개 프로바이더 지원 (gemini/groq/nvidia, workers-ai 제외)

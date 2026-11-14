@@ -4,6 +4,7 @@
 
 import { expandRecurrence, singleOccurrence } from './recurrence';
 import { normalizeScheduleDateTime } from '../lib/datetime-format';
+import { KST_TIME_ZONE } from '../lib/kst';
 import { parseJsonMarkers } from '../lib/markers';
 import {
   pushScheduleDetailed,
@@ -130,14 +131,15 @@ export async function executeScheduleCreate(env: any, data: any, opts?: Schedule
     }
     const result = await env.DB.prepare(
       `INSERT INTO schedules (title, description, location, start_at, end_at, timezone, status)
-       VALUES (?, ?, ?, ?, ?, 'Asia/Seoul', 'active')`
+       VALUES (?, ?, ?, ?, ?, ?, 'active')`
     ).bind(
       title,
       description || '',
       location || '',
       // M-11: 오프셋 명시 ISO로 정규화해 저장 (lib/datetime-format.ts)
       normalizeScheduleDateTime(start_at),
-      end_at ? normalizeScheduleDateTime(end_at) : null
+      end_at ? normalizeScheduleDateTime(end_at) : null,
+      KST_TIME_ZONE
     ).run();
     const scheduleId = result.meta.last_row_id;
     

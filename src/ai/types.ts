@@ -241,11 +241,14 @@ export type Budget = {
   toolTimeoutMs: number
 }
 
+/** Phase 1 초기 권장 예산 — 총 입력 토큰 기본 상한 (S5-4, 5-9). */
+export const DEFAULT_MAX_TOTAL_INPUT_TOKENS = 8000
+
 /** Phase 1 초기 권장 예산 */
 export const DEFAULT_BUDGET: Budget = {
   maxModelCalls: 3,
   maxToolCalls: 4,
-  maxTotalInputTokens: 8000,
+  maxTotalInputTokens: DEFAULT_MAX_TOTAL_INPUT_TOKENS,
   maxOutputTokensPerCall: 1024,
   maxToolResultChars: 1500,
   toolTimeoutMs: 5000,

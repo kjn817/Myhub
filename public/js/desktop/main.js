@@ -4,6 +4,13 @@
 (function () {
   'use strict';
 
+  // 뷰포트 폴백 (S5-4, 5-9) — constants.js 선행 로드.
+  var constants =
+    (typeof window !== 'undefined' && window.MyHubConstants) ||
+    (typeof globalThis !== 'undefined' && globalThis.MyHubConstants) ||
+    null;
+  if (!constants) throw new Error('[main.js] constants.js가 먼저 로드되어야 합니다');
+
   // Drive '바탕화면' 폴더 접근은 drop-upload.js의 createDriveDesktop
   // 인스턴스 하나를 붙인 조회·드롭 목적지·대체이 공유한다 (폴더 보장
   // 캐시를 함께 열기 위함).
@@ -17,7 +24,7 @@
   var fileItemsByKey = {};
 
   function getViewport() {
-    return { w: window.innerWidth || 1024, h: window.innerHeight || 768 };
+    return { w: window.innerWidth || constants.DEFAULT_VIEWPORT.w, h: window.innerHeight || constants.DEFAULT_VIEWPORT.h };
   }
 
   /** Drive 파일 앱 앱 바탕화면 파일 아이콘 항목 */

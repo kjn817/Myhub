@@ -48,6 +48,7 @@ const MEMORY_HTML = read('public/memory.html')
 const WINDOWS_JS = read('public/js/desktop/windows.js')
 const ANIM_JS = read('public/js/common/anim.js')
 const MENU_ITEMS_JS = read('public/js/common/menu-items.js')
+const CONSTANTS_JS = read('public/js/common/constants.js')
 
 describe('S1-1 — 백업 문구 재작성', () => {
   test('깨진 성공·오류 문구가 없고 새 문구가 있다', () => {
@@ -181,6 +182,8 @@ class MemoryStorage {
 function loadAll() {
   const win = getWin()
   const doc = getDoc()
+  // 5-9: 공용 상수를 가장 먼저 뜬다 (운영 desktop.html 태그 순서와 동일).
+  new Function('window', 'document', CONSTANTS_JS)(win, doc)
   new Function('window', 'document', 'setInterval', NAV_JS)(win, doc, () => 0)
   new Function('window', 'document', STATE_JS)(win, doc)
   new Function('window', 'document', TILES_JS)(win, doc)

@@ -8,6 +8,7 @@ import { aiChat, PERSONAS, buildSystemPrompt } from '../../services/ai'
 import { isPromptV2EnabledForPersona, createRequestTimeContext, composeV2Prompt, resolvePromptVersion } from '../../ai/prompt-integration'
 import { resolveRequestSensitivity, getLegacyMarkerTools } from '../../ai/legacy-privacy-guard'
 import { normalizeSearchMarkers } from '../../lib/search-marker'
+import { MAX_USER_TEXT_LENGTH } from '../../lib/limits'
 import { buildSearchFollowUpPrompt, validateItemSources, dedupeSources, filterFreshSources, resolveNewsIntent, noFreshNewsText } from '../../lib/news-summary'
 import { fetchNewsSources } from '../../services/news-sources'
 import { guardSearchQuery } from '../../services/privacy-gateway'
@@ -54,7 +55,7 @@ export async function callSingleAssistant(env: Env, personaId: string, rawMessag
   });
   if (messages.length === 0) throw new AssistantInputError('empty', 'empty');
   const last = messages[messages.length - 1];
-  if (last.content.length > 8e3) throw new AssistantInputError('too_long', 'too long');
+  if (last.content.length > MAX_USER_TEXT_LENGTH) throw new AssistantInputError('too_long', 'too long');
   const policy = { ...PERSONA_POLICY[personaId] || PERSONA_POLICY.concierge };
   policy.personaId = personaId;
   policy.providerPin = resolvePersonaProvider(personaId);

@@ -31,6 +31,7 @@ import * as path from 'path';
 const ROOT = path.resolve(__dirname, '..');
 const FONTS_JS = fs.readFileSync(path.join(ROOT, 'public/js/fonts.js'), 'utf-8');
 const HTTP_JSON_JS = fs.readFileSync(path.join(ROOT, 'public/js/common/http-json.js'), 'utf-8');
+const CONSTANTS_JS = fs.readFileSync(path.join(ROOT, 'public/js/common/constants.js'), 'utf-8');
 const BRIDGE_JS = fs.readFileSync(path.join(ROOT, 'public/js/sheet-gridcraft.js'), 'utf-8');
 
 const getWin = (): any => (globalThis as any).window;
@@ -45,7 +46,9 @@ function setupBridge(opts: { loading?: boolean } = {}) {
   const doc = getDoc();
   doc.body.innerHTML = '<div id="sheet-host"></div>';
   // F-L8: http-json 공용 코어를 fonts.js보다 먼저 뜬다 (운영 정적 태그 순서).
+  // 5-9: 공용 상수도 마찬가지.
   new Function('window', 'document', HTTP_JSON_JS)(win, doc);
+  new Function('window', 'document', CONSTANTS_JS)(win, doc);
   new Function('window', 'document', FONTS_JS)(win, doc);
   new Function('window', 'document', BRIDGE_JS)(win, doc);
   // load 전 상태를 흉내낸다 (jsdom 기본 readyState는 'complete').

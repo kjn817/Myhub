@@ -21,6 +21,7 @@ import * as path from 'path'
 
 const ROOT = path.resolve(__dirname, '..', '..')
 const CORE_SRC = fs.readFileSync(path.join(ROOT, 'public', 'js', 'craft-prefetch-core.js'), 'utf-8')
+const CONSTANTS_SRC = fs.readFileSync(path.join(ROOT, 'public', 'js', 'common', 'constants.js'), 'utf-8')
 const DECK_SRC = fs.readFileSync(path.join(ROOT, 'public', 'js', 'deckcraft-prefetch.js'), 'utf-8')
 const GRID_SRC = fs.readFileSync(path.join(ROOT, 'public', 'js', 'gridcraft-prefetch.js'), 'utf-8')
 const FINDER_DECK_SRC = fs.readFileSync(path.join(ROOT, 'public', 'js', 'finder-deckcraft.js'), 'utf-8')
@@ -58,7 +59,10 @@ function loadSources(
 ): { win: any; moduleObj: any } {
   const win = opts.win !== undefined ? opts.win : {}
   const moduleObj: any = { exports: {} }
-  for (const src of sources) {
+  // 5-9: 공용 상수를 항상 먼저 뜬다 (운영 페이지의 태그 순서와 동일 —
+  // finder-deckcraft 등 소비처는 상수 없이는 로드 시점에 실패한다).
+  const allSources = [CONSTANTS_SRC, ...sources]
+  for (const src of allSources) {
     const fn = new Function('window', 'document', 'navigator', 'setTimeout', 'console', 'module', src)
     fn(win, opts.doc, opts.navigator, opts.setTimeoutFn || setTimeout, console, moduleObj)
   }

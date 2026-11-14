@@ -17,6 +17,13 @@
 (function () {
   'use strict';
 
+  // Drive 파일 API 베이스 경로 (S5-4, 5-9) — constants.js 선행 로드.
+  var constants =
+    (typeof window !== 'undefined' && window.MyHubConstants) ||
+    (typeof globalThis !== 'undefined' && globalThis.MyHubConstants) ||
+    null;
+  if (!constants) throw new Error('[finder-viewer.js] constants.js가 먼저 로드되어야 합니다');
+
   // 전역 라이브러리(xlsx/jszip/mammoth/purify)는 호스트 페이지가 미리
   // 로딩하지 않는다 — loadLib이 처음 필요할 때 동적 import로 지연
   // 로딩한다 (2026-11-13 성능 4라운드에서 office.html의 eager 태그
@@ -435,7 +442,7 @@
           if (noteEl && ctx.isCurrent()) noteEl.textContent = msg || '';
         },
         contentUrl: function () {
-          return '/api/drive/files/' + file.fileId + '/content';
+          return constants.DRIVE_FILES_API + '/' + file.fileId + '/content';
         },
         // 앞의 URL 다시 fetch 등 현재 파일 content가 아닌 요청(병합 상대
         // 파일 GET파일 파일 POST폴더 목록)를. 호스트가 주요한 fetchFn를
@@ -551,7 +558,7 @@
           ctx.setStatus('저장하는 중');
           return Promise.resolve()
             .then(function () {
-              return fetchFn('/api/drive/files/' + file.fileId + '/content', {
+              return fetchFn(constants.DRIVE_FILES_API + '/' + file.fileId + '/content', {
                 method: 'PUT',
                 body: fd,
               });
@@ -665,7 +672,7 @@
       if (downloadEl) {
         // 등 문서(미세)를 이름 대변 없이 다운로드 마감를 남긴
         downloadEl.hidden = !file.fileId;
-        downloadEl.href = file.fileId ? '/api/drive/files/' + file.fileId : '#';
+        downloadEl.href = file.fileId ? constants.DRIVE_FILES_API + '/' + file.fileId : '#';
       }
       setStatus('');
       bodyEl.innerHTML = '';

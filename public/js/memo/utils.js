@@ -6,6 +6,12 @@ var textUtils = typeof window !== 'undefined' ? window.MyHubTextUtils : null;
 if (!textUtils) throw new Error('[memo-bundle] text-utils.js가 먼저 로드되어야 합니다');
 var esc = textUtils.esc;
 var friendlyError = textUtils.friendlyError;
+// 공용 상수(common/constants.js) — KST 타임존·첨부 상한 (S5-4, 5-9).
+// 번들 스코프 var로 공유한다 (textUtils 패턴과 동일).
+var myHubConstants = typeof window !== 'undefined' ? window.MyHubConstants : null;
+if (!myHubConstants) throw new Error('[memo-bundle] constants.js가 먼저 로드되어야 합니다');
+var KST_TIME_ZONE = myHubConstants.KST_TIME_ZONE;
+var MAX_UPLOAD_BYTES = myHubConstants.MAX_UPLOAD_BYTES;
 function fmtSize(b) {
   if (b < 1024) return b + 'B';
   if (b < 1048576) return (b/1024).toFixed(1) + 'KB';

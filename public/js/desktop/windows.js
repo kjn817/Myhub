@@ -16,6 +16,13 @@
 (function () {
   'use strict';
 
+  // 뷰포트 폴백·Drive 파일 API (S5-4, 5-9) — constants.js 선행 로드.
+  var constants =
+    (typeof window !== 'undefined' && window.MyHubConstants) ||
+    (typeof globalThis !== 'undefined' && globalThis.MyHubConstants) ||
+    null;
+  if (!constants) throw new Error('[windows.js] constants.js가 먼저 로드되어야 합니다');
+
   var MOBILE_MAX = 768;
   var DOCK_ZONE = 96; // css/desktop.css의 --dt-dock-zone과 일치
   var RESIZE_DIRS = ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'];
@@ -46,7 +53,7 @@
 
     function getViewport() {
       if (typeof deps.getViewport === 'function') return deps.getViewport();
-      return { w: window.innerWidth || 1024, h: window.innerHeight || 768 };
+      return { w: window.innerWidth || constants.DEFAULT_VIEWPORT.w, h: window.innerHeight || constants.DEFAULT_VIEWPORT.h };
     }
     function isMobile() {
       return getViewport().w < MOBILE_MAX;
@@ -2406,7 +2413,7 @@
                   urls.push('/api/drive/folders/' + f.id);
                 });
                 (json.files || []).forEach(function (f) {
-                  if (!f.via_folder) urls.push('/api/drive/files/' + f.id);
+                  if (!f.via_folder) urls.push(constants.DRIVE_FILES_API + '/' + f.id);
                 });
                 var chain = Promise.resolve();
                 urls.forEach(function (url) {

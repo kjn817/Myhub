@@ -1,4 +1,5 @@
 import { extractGoogleApiMessage } from './google-client';
+import { KST_TIME_ZONE } from '../lib/kst';
 
 export const CALENDAR_API_BASE = 'https://www.googleapis.com/calendar/v3';
 const GOOGLE_SCHEDULE_PROP = 'myhub_schedule_id';
@@ -104,8 +105,8 @@ function toMarkedEventBody(
 ): Record<string, unknown> {
   const body: Record<string, unknown> = {
     summary: input.summary,
-    start: { dateTime: input.start, timeZone: 'Asia/Seoul' },
-    end: { dateTime: input.end || input.start, timeZone: 'Asia/Seoul' },
+    start: { dateTime: input.start, timeZone: KST_TIME_ZONE },
+    end: { dateTime: input.end || input.start, timeZone: KST_TIME_ZONE },
     extendedProperties: { private: { [GOOGLE_SCHEDULE_PROP]: String(scheduleId) } },
   };
   if (deterministic) {

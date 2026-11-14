@@ -20,6 +20,13 @@
   if (typeof window === 'undefined' || typeof document === 'undefined') return;
   var root = document.getElementById('officeAssistant');
   if (!root || !window.MyHubOffice) return;
+  // Drive 파일 API 베이스 경로 (S5-4, 5-9) — constants.js 선행 로드.
+  // 조기 반환 뒤에 둔다: 오피스 페이지가 아니면 조용히 나가는 기존 동작 유지.
+  var constants =
+    (typeof window !== 'undefined' && window.MyHubConstants) ||
+    (typeof globalThis !== 'undefined' && globalThis.MyHubConstants) ||
+    null;
+  if (!constants) throw new Error('[office-assistant.js] constants.js가 먼저 로드되어야 합니다');
   var appKey = window.MyHubOffice.parseAppKey(window.location.search);
   var kind =
     appKey === 'excel'
@@ -350,7 +357,7 @@
             var filename = title + ' ' + todayLabel() + '.hwpx';
             var form = new FormData();
             form.append('files', new File([u8], filename, { type: 'application/hwp+zip' }));
-            return fetch('/api/drive/files', { method: 'POST', body: form })
+            return fetch(constants.DRIVE_FILES_API, { method: 'POST', body: form })
               .then(function (res) { return res.json().catch(function () { return null; }).then(function (j) { return { res: res, json: j }; }); })
               .then(function (up) {
                 var saved = up.json && up.json.files && up.json.files[0];

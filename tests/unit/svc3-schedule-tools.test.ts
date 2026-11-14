@@ -166,11 +166,12 @@ describe('executeScheduleCreate', () => {
     const stmt = mockPrepare(env, { first: null, run: { meta: { last_row_id: 1 } } });
     // create_todo=false로 할일 생성 스킵
     await executeScheduleCreate(env, { title: 'm', start_at: '2026-10-18T10:00', create_todo: false });
-    // INSERT 바인딩 확인 (title, description='', location='', start_at, end_at=null)
-    const insertCall = stmt.bind.mock.calls.find((c: any[]) => c.length === 5);
+    // INSERT 바인딩 확인 (title, description='', location='', start_at, end_at=null, timezone)
+    const insertCall = stmt.bind.mock.calls.find((c: any[]) => c.length === 6);
     expect(insertCall[1]).toBe('');
     expect(insertCall[2]).toBe('');
     expect(insertCall[4]).toBeNull();
+    expect(insertCall[5]).toBe('Asia/Seoul');
   });
 
   test('DB 실패 시 에러', async () => {

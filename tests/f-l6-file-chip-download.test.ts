@@ -29,6 +29,7 @@ const doc = (): any => (globalThis as any).document
 
 const UTILS_SRC = read('public/js/memo/utils.js')
 const TEXT_UTILS_SRC = read('public/js/common/text-utils.js')
+const CONSTANTS_SRC = read('public/js/common/constants.js')
 
 function loadUtils() {
   const w = win()
@@ -40,7 +41,9 @@ function loadUtils() {
   w.URL.revokeObjectURL = jest.fn()
   // utils.js는 공용 코어(text-utils.js)를 먼저 받는다 — 운영 memo.html의
   // 정적 태그 순서와 같은 조건으로 로드한다 (5-4 F-L3).
+  // 5-9: 공용 상수(constants.js)도 마찬가지.
   w.eval(TEXT_UTILS_SRC)
+  w.eval(CONSTANTS_SRC)
   w.eval(UTILS_SRC)
   return w.downloadMemoFile as (f: any) => Promise<void>
 }

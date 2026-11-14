@@ -4,7 +4,7 @@ import { STUDIO_AGENT_SYSTEM, type StudioToolCall } from './studio-tools'
 import { StudioWorkspace, AwaitingInputSignal } from './studio-workspace'
 import { callWithTools, GeminiCallError } from './studio-gemini-call'
 import { getLegacyMarkerTools, resolveRequestSensitivity } from '../ai/legacy-privacy-guard'
-import { defaultModelForProvider, validateModelProviderPair } from './ai-models'
+import { DEFAULT_MODEL_ID, defaultModelForProvider, validateModelProviderPair } from './ai-models'
 import { getPool } from './ai-key-pool'
 import { isQuotaError } from './clef-engine'
 
@@ -126,7 +126,7 @@ export async function runStudioAgent(
 ): Promise<AgentLoopResult> {
   const maxTurns = options.maxTurns || 10
   const provider = options.provider || 'gemini'
-  const model = options.model || defaultModelForProvider(provider)?.id || 'gemini-3.5-flash-lite'
+  const model = options.model || defaultModelForProvider(provider)?.id || DEFAULT_MODEL_ID
 
   // NVIDIA 운영 제외 (2026-10-30): 이 에이전트는 aiChat/selectModel을 거치지
   // 않는 직접 호출 경로라 레지스트리 비활성만으로는 막히지 않는다 — 진입점에서

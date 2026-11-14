@@ -1,6 +1,6 @@
 // 설정 조회/저장(D1 ai_settings) + 모델 선택 (정책 중심 + 사용자 오버라이드)
 // src/services/ai.ts에서 순수 이동 (트랙 D, 2026-10-31) — 동작 변경 없음.
-import { MODELS } from './ai-models'
+import { DEFAULT_MODEL_ID, MODELS } from './ai-models'
 import type { ModelDef, TaskPolicy } from './ai-types'
 import { dataUseRank } from './provider-allocation'
 import {
@@ -28,7 +28,8 @@ export async function setSetting(db: D1Database, key: string, value: string): Pr
 
 // Gemini 명시적 폴백 체인 — 2026-10-13 실측 기준 살아있는 lite 모델만
 // (3.8/3.7/3.5/3.6-flash는 무료 티어 전멸로 체인에서 제외, 3.7은 어차피 3.8로 라우팅)
-const GEMINI_CHAIN = ['gemini-3.5-flash-lite', 'gemini-3.1-flash-lite']
+// 체인 1순위는 기본 모델과 같은 값이다 (DEFAULT_MODEL_ID).
+const GEMINI_CHAIN = [DEFAULT_MODEL_ID, 'gemini-3.1-flash-lite']
 
 export function isModelSelectableForPolicy(m: ModelDef, policy: TaskPolicy): boolean {
   if (m.status === 'active') return true
@@ -61,7 +62,7 @@ export async function selectModel(db: D1Database, policy: TaskPolicy, exclude: S
   // builder(nova)는 Gemini 고정 (2026-10-15: NVIDIA 코딩 모델 전멸로 nvidia → gemini 변경)
   if ((policy as any).personaId === 'builder' || policy.capability === 'code') {
     const codeOverride = await getSetting(db, 'model.code')
-    const modelId = codeOverride || 'gemini-3.5-flash-lite'
+    const modelId = codeOverride || DEFAULT_MODEL_ID
     const m = MODELS.find((x) => x.id === modelId && x.provider === 'gemini')
     if (m && isModelSelectableForPolicy(m, policy) && !exclude.has(m.id) && (!policy.providerPin || policy.providerPin === m.provider) && !(isPrivate && m.provider !== 'workers-ai') && isProviderAllowed(m.provider)) {
       return m

@@ -13,6 +13,13 @@
 (function () {
   'use strict';
 
+  // Drive 파일 API 베이스 경로 (S5-4, 5-9) — constants.js 선행 로드.
+  var constants =
+    (typeof window !== 'undefined' && window.MyHubConstants) ||
+    (typeof globalThis !== 'undefined' && globalThis.MyHubConstants) ||
+    null;
+  if (!constants) throw new Error('[sheet-gridcraft.js] constants.js가 먼저 로드되어야 합니다');
+
   // GridCraft 자체 레이아웃을 그림으로 이룬다: 자체 제목 중에 경고(파일명인
   // 차 제목중이 보여중) 파일 피벗본 엔진 것이 주인공이다. 따라
   // 파일 메뉴 행인 표시 않는다 (2026-11-03 사용자 지정).
@@ -689,7 +696,7 @@
           var faces = typeof fonts.faces === 'function' ? fonts.faces() : [];
           var driveReady = Promise.all(
             faces.map(function (face) {
-              return fetchFn('/api/drive/files/' + face.fileId + '/content')
+              return fetchFn(constants.DRIVE_FILES_API + '/' + face.fileId + '/content')
                 .then(function (res) {
                   if (!res || !res.ok) throw new Error('font fetch failed');
                   return res.arrayBuffer();

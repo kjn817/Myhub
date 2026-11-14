@@ -43,6 +43,7 @@ import {
   type PendingApprovalRequest,
 } from './approval-flow'
 import { dispatchToolCall, type DispatcherContext } from '../ai/memo-tool-dispatcher'
+import { MAX_TRUNCATED_USER_TEXT_CHARS } from '../lib/limits'
 import type { ExecutionOrigin } from '../ai/types'
 
 /**
@@ -222,7 +223,7 @@ export async function gateFCToolCall(input: FCGateInput): Promise<FCGateOutcome>
       name: input.toolName,
       arguments: args,
       ...(input.toolName === 'memo_create_from_source' && input.sourceUserText
-        ? { sourceUserText: input.sourceUserText.slice(0, 8000) }
+        ? { sourceUserText: input.sourceUserText.slice(0, MAX_TRUNCATED_USER_TEXT_CHARS) }
         : {}),
     }
     const pending = await requestStore.createPending({

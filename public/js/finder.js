@@ -14,6 +14,13 @@
 (function () {
   'use strict';
 
+  // Drive 파일 API 베이스 경로 (S5-4, 5-9) — constants.js 선행 로드.
+  var constants =
+    (typeof window !== 'undefined' && window.MyHubConstants) ||
+    (typeof globalThis !== 'undefined' && globalThis.MyHubConstants) ||
+    null;
+  if (!constants) throw new Error('[finder.js] constants.js가 먼저 로드되어야 합니다');
+
   function fmtDate(v) {
     if (!v) return '';
     return String(v).replace('T', ' ').slice(0, 16);
@@ -835,7 +842,7 @@
         var url =
           row.kind === 'folder'
             ? '/api/drive/folders/' + row.folderId + '/trash'
-            : '/api/drive/files/' + row.fileId + '/trash';
+            : constants.DRIVE_FILES_API + '/' + row.fileId + '/trash';
         return callApi(url, { method: 'POST' }).catch(function () {
           return null;
         });
@@ -893,7 +900,7 @@
         items.push({ label: '열기', onSelect: function () { openFile(row); } });
         items.push({
           label: '다운로드',
-          onSelect: function () { openUrl('/api/drive/files/' + row.fileId); },
+          onSelect: function () { openUrl(constants.DRIVE_FILES_API + '/' + row.fileId); },
         });
         // 이름 변경·휴지통 이동은 모든 뷰(최근 항목·검색 포함)에서
         // 제공한다 — 두 호버 버튼 제거(2026-11-06)는 전제로, 메뉴가
@@ -986,7 +993,7 @@
             var url =
               row.kind === 'tfolder'
                 ? '/api/drive/folders/' + row.folderId
-                : '/api/drive/files/' + row.fileId;
+                : constants.DRIVE_FILES_API + '/' + row.fileId;
             return callApi(url, { method: 'DELETE' }).catch(function () {
               return null;
             });
@@ -1633,7 +1640,7 @@
     function renameFile(row) {
       promptName('파일 이름', row.name, row.name).then(function (name) {
         if (!name) return;
-        callJson('/api/drive/files/' + row.fileId + '/rename', {
+        callJson(constants.DRIVE_FILES_API + '/' + row.fileId + '/rename', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ name: name }),
@@ -1693,7 +1700,7 @@
           mime: row.mime,
           version: row.version || null,
         });
-      else openUrl('/api/drive/files/' + row.fileId);
+      else openUrl(constants.DRIVE_FILES_API + '/' + row.fileId);
     }
 
     function descend(row) {
@@ -1745,7 +1752,7 @@
       var url =
         row.kind === 'tfolder'
           ? '/api/drive/folders/' + row.folderId + '/restore'
-          : '/api/drive/files/' + row.fileId + '/restore';
+          : constants.DRIVE_FILES_API + '/' + row.fileId + '/restore';
       callApi(url, { method: 'POST' })
         .then(function () {
           state.listing = null;
@@ -1771,7 +1778,7 @@
       state.armedKey = null;
       if (state.armTimer) clearTimeout(state.armTimer);
       var url =
-        row.kind === 'tfolder' ? '/api/drive/folders/' + row.folderId : '/api/drive/files/' + row.fileId;
+        row.kind === 'tfolder' ? '/api/drive/folders/' + row.folderId : constants.DRIVE_FILES_API + '/' + row.fileId;
       callApi(url, { method: 'DELETE' })
         .then(function () {
           state.actionMsg = '영구 삭제했습니다';
@@ -1827,7 +1834,7 @@
       });
       state.actionMsg = '올리기 중…';
       render();
-      callJson('/api/drive/files', { method: 'POST', body: fd })
+      callJson(constants.DRIVE_FILES_API, { method: 'POST', body: fd })
         .then(function () {
           state.actionMsg = '파일 ' + files.length + '개를 올렸습니다';
           return loadDrive();
@@ -2206,7 +2213,7 @@
           var isFolder = it.kind === 'folder';
           var url = isFolder
             ? '/api/drive/folders/' + it.id + '/move'
-            : '/api/drive/files/' + it.id + '/move';
+            : constants.DRIVE_FILES_API + '/' + it.id + '/move';
           var payload = isFolder ? { parent_id: zone.id } : { folder_id: zone.id };
           return fetchFn(url, {
             method: 'POST',
@@ -2332,7 +2339,7 @@
           var fd = new FormData();
           fd.append('files', file);
           if (folderId !== null && folderId !== undefined) fd.append('folder_id', String(folderId));
-          return fetchFn('/api/drive/files', { method: 'POST', body: fd }).then(function (res) {
+          return fetchFn(constants.DRIVE_FILES_API, { method: 'POST', body: fd }).then(function (res) {
             return res
               .json()
               .catch(function () {
@@ -2949,7 +2956,7 @@
           if (!picker || !picOpts) return;
           picker.open('open', picOpts).then(function (sel) {
             if (!sel) return;
-            return fetch('/api/drive/files/' + sel.fileId + '/content')
+            return fetch(constants.DRIVE_FILES_API + '/' + sel.fileId + '/content')
               .then(function (res) {
                 if (!res || !res.ok) throw new Error('picture http ' + (res && res.status));
                 return res.arrayBuffer();

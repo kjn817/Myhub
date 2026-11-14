@@ -3,6 +3,7 @@ import type { Env } from '../../types'
 import { emit } from '../../events'
 import { expandRecurrence, singleOccurrence, validateRRule, type ExpandedSchedule } from '../../services/recurrence'
 import { nextDayKey } from '../../lib/kst-date'
+import { KST_TIME_ZONE } from '../../lib/kst'
 import { normalizeScheduleDateTime } from '../../lib/datetime-format'
 import { pushScheduleDetailed, removeScheduleDetailed } from '../../services/schedule-google-sync'
 
@@ -87,7 +88,7 @@ function normalizeInput(json: ScheduleInput): { ok: true; data: Required<Omit<Sc
       // (정본 로직은 lib/datetime-format.ts — 기존 행은 migrations/0075)
       start_at: normalizeScheduleDateTime(json.start_at) as string,
       end_at: json.end_at ? (normalizeScheduleDateTime(json.end_at) as string) : null,
-      timezone: (json.timezone ?? 'Asia/Seoul').slice(0, 50),
+      timezone: (json.timezone ?? KST_TIME_ZONE).slice(0, 50),
       recurrence_rule: json.recurrence_rule ? String(json.recurrence_rule).slice(0, 200) : null,
       status,
     },

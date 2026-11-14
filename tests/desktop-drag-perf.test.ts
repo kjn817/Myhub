@@ -48,6 +48,7 @@ const DOCK_JS = read('public/js/desktop/dock.js')
 const WINDOWS_JS = read('public/js/desktop/windows.js')
 const ANIM_JS = read('public/js/common/anim.js')
 const MENU_ITEMS_JS = read('public/js/common/menu-items.js')
+const CONSTANTS_JS = read('public/js/common/constants.js')
 const DESKTOP_CSS = read('public/css/desktop.css')
 
 const VIEWPORT = { w: 1280, h: 800 }
@@ -67,6 +68,8 @@ class MemoryStorage {
 function loadAll() {
   const win = getWin()
   const doc = getDoc()
+  // 5-9: 공용 상수를 가장 먼저 뜬다 (운영 desktop.html 태그 순서와 동일).
+  new Function('window', 'document', CONSTANTS_JS)(win, doc)
   new Function('window', 'document', 'setInterval', NAV_JS)(win, doc, () => 0)
   new Function('window', 'document', STATE_JS)(win, doc)
   new Function('window', 'document', TILES_JS)(win, doc)

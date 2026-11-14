@@ -212,6 +212,7 @@ describe('office-assistant 코어 — instruct 흐름과 결과 합성', () => {
       }
       throw new Error('unexpected ' + url)
     }
+    g.eval(readPub('/js/common/constants.js')) // 5-9: 상수 선행 로드
     g.eval(readPub('/js/office-assistant.js'))
     const core = g.MyHubOfficeAssistantCore
     const says: string[] = []

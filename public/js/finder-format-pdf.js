@@ -13,6 +13,12 @@
   'use strict';
   var core = typeof window !== 'undefined' ? window.MyHubFinderViewer : null;
   if (!core) return;
+  // Drive 파일 API 베이스 경로 (S5-4, 5-9) — constants.js 선행 로드.
+  var constants =
+    (typeof window !== 'undefined' && window.MyHubConstants) ||
+    (typeof globalThis !== 'undefined' && globalThis.MyHubConstants) ||
+    null;
+  if (!constants) throw new Error('[finder-format-pdf.js] constants.js가 먼저 로드되어야 합니다');
   var pdfOps = typeof window !== 'undefined' ? window.MyHubFinderPdfOps : null;
   if (!pdfOps) return; // finder-pdf-ops.js가 먼저 로드돼야 한다
   // PdfCraft 브리지 호스트 (finder-pdfcraft.js) 가 없으면(구 로드 순서
@@ -808,7 +814,7 @@
                 .then(function (newBytes) {
                   var fd = new FormData();
                   fd.append('files', new Blob([newBytes], { type: PDF_MIME }), derivedName(' (추출)'));
-                  return ctx.fetchRaw('/api/drive/files', { method: 'POST', body: fd });
+                  return ctx.fetchRaw(constants.DRIVE_FILES_API, { method: 'POST', body: fd });
                 })
                 .then(function (res) {
                   if (!res || !res.ok) throw new Error('추출본 저장 실패');
@@ -973,7 +979,7 @@
             if (sel && sel.folderId) fd.append('folder_id', String(sel.folderId));
             if (picker && !sel) throw new Error('__abort'); // 일괄 취소는 조용히 생략한
             return ctx
-              .fetchRaw('/api/drive/files', { method: 'POST', body: fd })
+              .fetchRaw(constants.DRIVE_FILES_API, { method: 'POST', body: fd })
               .then(function (res) {
                 if (!res || !res.ok) throw new Error('create http ' + (res && res.status));
                 ctx.setStatus('추출본을 저장했습니다: ' + name);
@@ -1010,7 +1016,7 @@
               return pdfOps.mergePdfs(lib, buf, other);
             },
             function () {
-              return ctx.fetchRaw('/api/drive/files/' + sel.fileId + '/content').then(function (res) {
+              return ctx.fetchRaw(constants.DRIVE_FILES_API + '/' + sel.fileId + '/content').then(function (res) {
                 if (!res || !res.ok) throw new Error('http ' + (res && res.status));
                 return res.arrayBuffer();
               });

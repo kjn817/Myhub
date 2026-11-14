@@ -8,6 +8,8 @@
  * - 기억: allow_ai_use=1 (AI 사용 동의만)
  */
 
+import { KST_TIME_ZONE } from '../../lib/kst'
+
 export interface BriefingScheduleRow {
   id: number
   title: string
@@ -46,7 +48,7 @@ export interface TodayBriefing {
 
 // 오늘 날짜 (Asia/Seoul 기준, YYYY-MM-DD)
 // 서버 UTC와 한국 시간의 날짜 경계를 정확히 처리
-export function todayStr(timezone: string = 'Asia/Seoul'): string {
+export function todayStr(timezone: string = KST_TIME_ZONE): string {
   const now = new Date()
   // Intl을 사용해 지정 시간대의 날짜 계산
   const parts = new Intl.DateTimeFormat('en-CA', {
@@ -84,7 +86,7 @@ export function dayRange(date: string): { start: string; end: string } {
  * @param date YYYY-MM-DD (없으면 오늘, Asia/Seoul 기준)
  */
 export async function buildTodayBriefing(db: D1Database, date?: string): Promise<TodayBriefing> {
-  const timezone = 'Asia/Seoul'
+  const timezone = KST_TIME_ZONE
   const day = date ?? todayStr(timezone)
   const range = dayRange(day)
 

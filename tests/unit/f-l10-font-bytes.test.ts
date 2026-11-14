@@ -11,6 +11,8 @@
  *   fonts.js의 loadFontBytes를 쓰고, 없으면 warn 후 빈 배열이다.
  */
 // eslint-disable-next-line @typescript-eslint/no-require-imports
+require('../../public/js/common/constants.js') // fonts.js의 선행 상수 (5-9)
+// eslint-disable-next-line @typescript-eslint/no-require-imports
 const fonts = require('../../public/js/fonts.js')
 import * as fs from 'fs'
 import * as path from 'path'

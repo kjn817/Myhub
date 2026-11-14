@@ -10,6 +10,8 @@
  * 6. 사용자 메시지로 변경 불가
  */
 
+import { KST_TIME_ZONE } from '../lib/kst'
+
 export interface ServerTimeContext {
   /** 요청 시점의 ISO 8601 타임스탬프 */
   nowIso: string
@@ -52,7 +54,7 @@ export function createServerTimeContext(
   fixedEpochMs?: number
 ): ServerTimeContext {
   // 시간대 검증 (잘못된 값은 Asia/Seoul로 폴백)
-  const tz = timezone && isValidTimezone(timezone) ? timezone : 'Asia/Seoul'
+  const tz = timezone && isValidTimezone(timezone) ? timezone : KST_TIME_ZONE
 
   const epochMs = fixedEpochMs ?? Date.now()
   const now = new Date(epochMs)

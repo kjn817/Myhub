@@ -54,7 +54,7 @@ export { AI_CHAT_TOTAL_TIMEOUT_MS, buildFCFollowUpMessages, fcWriteSignature, FC
 // Privacy Gateway — 모든 AI 출구의 관문 (차단/토큰화 판정 + 도구 결과 검사)
 // 실행 원장 (K-03) — 런 귀속·검증된 성공 판정
 // 모델 레지스트리·모델 선택은 ai-models.ts / ai-model-selection.ts가 소유한다 (트랙 D 순수 이동)
-import { MODELS } from './ai-models'
+import { DEFAULT_MODEL_ID, MODELS } from './ai-models'
 export { MODELS } from './ai-models'
 import { selectModel } from './ai-model-selection'
 export { getSetting, setSetting } from './ai-model-selection'
@@ -869,7 +869,7 @@ export async function aiChat(
             capability: policy.capability,
             fromProvider: 'workers-ai',
             toProvider: 'gemini',
-            toModel: 'gemini-3.5-flash-lite',
+            toModel: DEFAULT_MODEL_ID,
             fc: false,
             reason: 'workers_ai_quota_exhausted',
           })

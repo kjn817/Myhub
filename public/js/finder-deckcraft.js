@@ -17,6 +17,13 @@
 (function () {
   'use strict';
 
+  // Drive 파일 API 베이스 경로 (S5-4, 5-9) — constants.js 선행 로드.
+  var constants =
+    (typeof window !== 'undefined' && window.MyHubConstants) ||
+    (typeof globalThis !== 'undefined' && globalThis.MyHubConstants) ||
+    null;
+  if (!constants) throw new Error('[finder-deckcraft.js] constants.js가 먼저 로드되어야 합니다');
+
   var APP_URL = '/vendor/deckcraft/index.html?host=parent&chrome=notitlebar&lang=ko';
   // 엔진 내장 앱 복원 (2026-11-06 오후 정합): 엔진 리본 앱 행을 앱
   // URL(chrome=notabs)로 열고 서면은 앱 행을 눌러 그리는 호스트가
@@ -492,7 +499,7 @@
           var faces = typeof fonts.faces === 'function' ? fonts.faces() : [];
           return Promise.all(
             faces.map(function (face) {
-              return fetchFn('/api/drive/files/' + face.fileId + '/content')
+              return fetchFn(constants.DRIVE_FILES_API + '/' + face.fileId + '/content')
                 .then(function (res) {
                   if (!res || !res.ok) throw new Error('font fetch failed');
                   return res.arrayBuffer();

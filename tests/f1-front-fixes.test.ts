@@ -193,6 +193,7 @@ describe('폰트 이름 파싱 parseFontFileName', () => {
       MyHubFonts: { parseFontFileName: typeof parse }
     }
     g.fetch = () => Promise.reject(new Error('stub'))
+    g.eval(readPub('/js/common/constants.js')) // 5-9: 상수 선행 로드
     g.eval(fontsJs)
     parse = g.MyHubFonts.parseFontFileName
   })

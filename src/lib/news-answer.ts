@@ -4,6 +4,7 @@
  */
 
 import { kstTodayStr, newsWindow } from './news-summary'
+import { KST_TIME_ZONE } from './kst'
 
 export const NEWS_BODY_MAX_CHARS = 1200
 export const NEWS_BODY_MIN_CHARS = 120
@@ -237,7 +238,7 @@ export function formatPublishedKst(iso: string | undefined): string | undefined 
   if (Number.isNaN(t)) return undefined
   try {
     const parts = new Intl.DateTimeFormat('ko-KR', {
-      timeZone: 'Asia/Seoul',
+      timeZone: KST_TIME_ZONE,
       month: 'long',
       day: 'numeric',
       hour: 'numeric',

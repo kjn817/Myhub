@@ -15,8 +15,15 @@
 (function () {
   'use strict';
 
+  // Drive 파일 API 베이스 경로 (S5-4, 5-9) — constants.js 선행 로드.
+  var constants =
+    (typeof window !== 'undefined' && window.MyHubConstants) ||
+    (typeof globalThis !== 'undefined' && globalThis.MyHubConstants) ||
+    null;
+  if (!constants) throw new Error('[drop-upload.js] constants.js가 먼저 로드되어야 합니다');
+
   var MAX_SIZE = 10 * 1024 * 1024;
-  var UPLOAD_URL = '/api/drive/files';
+  var UPLOAD_URL = constants.DRIVE_FILES_API;
 
   /** 기본 업로드: 파일 1개를 FormData로 POST한다. {ok:false,error}는 실패로 던진다. */
   function defaultUploadFile(file, folderId) {
@@ -109,7 +116,7 @@
     }
 
     function trashFile(fileId) {
-      return fetchFn('/api/drive/files/' + fileId + '/trash', { method: 'POST' }).then(jsonOrThrow);
+      return fetchFn(constants.DRIVE_FILES_API + '/' + fileId + '/trash', { method: 'POST' }).then(jsonOrThrow);
     }
 
     return {

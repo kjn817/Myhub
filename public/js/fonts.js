@@ -32,11 +32,18 @@
 (function () {
   'use strict';
 
+  // Drive 파일 API 베이스 경로 (S5-4, 5-9) — constants.js 선행 로드.
+  var constants =
+    (typeof window !== 'undefined' && window.MyHubConstants) ||
+    (typeof globalThis !== 'undefined' && globalThis.MyHubConstants) ||
+    null;
+  if (!constants) throw new Error('[fonts.js] constants.js가 먼저 로드되어야 합니다');
+
   var FOLDER_NAME = '폰트';
   var FONT_EXTENSIONS = ['ttf', 'otf', 'woff', 'woff2'];
   var LIST_URL = '/api/drive/list';
   var FOLDERS_URL = '/api/drive/folders';
-  var CONTENT_URL = '/api/drive/files/';
+  var CONTENT_URL = constants.DRIVE_FILES_API + '/';
 
   // 붙은 선택 등 (긴 것 으로 것 ExtraBold등 Bold로 나눠 등 된다)
   var WEIGHT_TOKENS = [

@@ -16,6 +16,7 @@
  */
 
 import { describeNlCron, nextRunAfter, parseNlCron, type NlCronOfficeParams, type NlCronParse } from './nl-cron'
+import { KST_TIME_ZONE } from '../lib/kst'
 import { generateMorningSummary } from './proactive'
 import { generateNewsSummary, type NewsSummarizeFn } from './news-briefing'
 import { recordCronJobRun } from './cron-health'
@@ -78,9 +79,9 @@ export async function createCronJob(
   const result = await db
     .prepare(
       `INSERT INTO user_cron_jobs (action, nl_text, cron_kst, timezone, next_run_at, enabled)
-       VALUES (?, ?, ?, 'Asia/Seoul', ?, 1)`
+       VALUES (?, ?, ?, ?, ?, 1)`
     )
-    .bind(parsed.action, nlText, parsed.schedule.cronKst, nextRunAt)
+    .bind(parsed.action, nlText, parsed.schedule.cronKst, KST_TIME_ZONE, nextRunAt)
     .run()
   const id = (result.meta as { last_row_id?: number } | undefined)?.last_row_id
   if (typeof id !== 'number') throw new Error('cron job insert failed')

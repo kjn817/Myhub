@@ -35,6 +35,13 @@
 (function () {
   'use strict';
 
+  // Drive 파일 API 베이스 경로 (S5-4, 5-9) — constants.js 선행 로드.
+  var constants =
+    (typeof window !== 'undefined' && window.MyHubConstants) ||
+    (typeof globalThis !== 'undefined' && globalThis.MyHubConstants) ||
+    null;
+  if (!constants) throw new Error('[office.js] constants.js가 먼저 로드되어야 합니다');
+
   // 동적 로딩 URL는 공용 헬퍼(asset-url.js)가 배포 버전을 붙인다
   // (N-06 버전 없는 는 URL그대로 immutable 캐시에 고정될 수 있다).
   // 헬퍼가 없는 환경(테스트 등)에서는 원본 URL 그대로다.
@@ -622,7 +629,7 @@
     function fetchPictureBytes(fileId) {
       return Promise.resolve()
         .then(function () {
-          return baseFetch('/api/drive/files/' + fileId + '/content');
+          return baseFetch(constants.DRIVE_FILES_API + '/' + fileId + '/content');
         })
         .then(function (res) {
           if (!res || !res.ok) throw new Error('picture http ' + (res && res.status));

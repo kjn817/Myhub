@@ -75,11 +75,10 @@ composerEditor.el.addEventListener('keydown', (e) => {
 });
 
 async function uploadPendings(memoId, pendings) {
-  // Cloudinary 무료 플랜: 파일당 10MB 제한
-  const MAX_SIZE = 10 * 1024 * 1024;
+  // Cloudinary 무료 플랜: 파일당 10MB 제한 (공용 상수 MAX_UPLOAD_BYTES)
   const valid = [];
   for (const f of pendings) {
-    if (f.size > MAX_SIZE) {
+    if (f.size > MAX_UPLOAD_BYTES) {
       toast(`"${f.name}"은 10MB를 초과해서 업로드할 수 없어요`, 5000);
     } else {
       valid.push(f);

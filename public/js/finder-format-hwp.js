@@ -29,6 +29,10 @@
   var rhwpReady = null; // 초기화된 @rhwp/core 모듈 Promise (성공 시에만 유지)
   var kordocReady = null; // 초기화된 kordoc 모듈 Promise (성공 시에만 유지)
 
+  // iframe 배선 재시도 스케줄 (S5-4, 5-9) — dirty 감시·메뉴 배선 공용.
+  // forEach로만 읽어 공유 배열이 안전하다.
+  var HWP_RETRY_SCHEDULE_MS = [300, 900, 2000, 4500];
+
   function installMeasureTextWidth() {
     if (typeof globalThis === 'undefined') return;
     if (typeof globalThis.measureTextWidth === 'function') return;
@@ -179,7 +183,7 @@
     // iframe의 load가 아직도 않고 캡처 단계에서만큼 허용이
     container.addEventListener('load', tryAttach, true);
     tryAttach();
-    [300, 900, 2000, 4500].forEach(function (ms) {
+    HWP_RETRY_SCHEDULE_MS.forEach(function (ms) {
       state.dirtyWatch.timers.push(setTimeout(tryAttach, ms));
     });
   }
@@ -236,7 +240,7 @@
     };
     container.addEventListener('load', tryWire, true);
     tryWire();
-    [300, 900, 2000, 4500].forEach(function (ms) {
+    HWP_RETRY_SCHEDULE_MS.forEach(function (ms) {
       state[opts.wireKey].timers.push(setTimeout(tryWire, ms));
     });
   }

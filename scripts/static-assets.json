@@ -65,6 +65,7 @@
     "/js/browser.js",
     "/js/chat.js",
     "/js/common/anim.js",
+    "/js/common/constants.js",
     "/js/common/drive-io.js",
     "/js/common/http-json.js",
     "/js/common/json-store.js",

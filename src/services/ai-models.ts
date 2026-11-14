@@ -13,12 +13,19 @@ export type ModelPairValidation =
   | { ok: true; model: ModelDef; provider: ProviderId }
   | { ok: false; code: ModelPairValidationCode; error: string; status?: ModelDef['status'] }
 
+/**
+ * 기본 모델 (S5-4, 5-9) — 설정(model.code)이 없을 때의 폴백.
+ * 2026-10-13 실측 기준 4키 전부 동작하는 1순위 lite 모델.
+ * GEMINI_CHAIN의 1순위와 같은 값이다 (ai-model-selection.ts).
+ */
+export const DEFAULT_MODEL_ID = 'gemini-3.5-flash-lite'
+
 export const MODELS: ModelDef[] = [
   // Gemini — 2026-10-13 12모델×4키 전수 실측
   // - flash(non-lite): 무료 티어 사실상 전멸 (503/타임아웃) → deprecated
   // - 2.5-flash: 키1만 OK, Search grounding 전용으로 유지 (useSearch 시 +50)
   // - 3.5-flash-lite: 4키 전부 OK (1순위), 3.1-flash-lite: 4키 전부 OK (2순위)
-  { id: 'gemini-3.5-flash-lite', provider: 'gemini', quality: 'fast', status: 'active' },
+  { id: DEFAULT_MODEL_ID, provider: 'gemini', quality: 'fast', status: 'active' },
   { id: 'gemini-3.1-flash-lite', provider: 'gemini', quality: 'fast', status: 'active' },
   { id: 'gemini-2.5-flash', provider: 'gemini', quality: 'fast', status: 'active' }, // 키1만, grounding 전용
   { id: 'gemini-3.8-flash', provider: 'gemini', quality: 'high', status: 'deprecated' }, // 2026-10-13 실측 전멸

@@ -15,6 +15,7 @@ import {
   type ServerTimeContext,
 } from './time-context'
 import { resolveDateExpression, resolveMultipleDates } from './date-resolver'
+import { KST_TIME_ZONE } from '../lib/kst'
 import { buildTimeContextSection, type TimeContext as CaliTimeContext } from './prompts/cali'
 import { PERSONA_REGISTRY } from './persona-registry'
 // 레거시 마커 도구는 privacy-guard에서 재사용 (중복 정의 방지)
@@ -106,7 +107,8 @@ export async function createRequestTimeContext(
   } catch {
     // 설정 조회 실패 → 기본값
   }
-  return createServerTimeContext(tz || 'Asia/Seoul', fixedEpochMs)
+  // 설정이 없거나 잘못됐으면 기본값 KST (설정 경로는 위에서만 결정한다)
+  return createServerTimeContext(tz || KST_TIME_ZONE, fixedEpochMs)
 }
 
 // ---------------------------------------------------------------------------

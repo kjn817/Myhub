@@ -12,6 +12,8 @@
  *   낸다. 목록 조회 실패는 전파한다 (호출처 catch가 처리한다).
  */
 // eslint-disable-next-line @typescript-eslint/no-require-imports
+require('../../public/js/common/constants.js') // drive-io의 선행 상수 (5-9)
+// eslint-disable-next-line @typescript-eslint/no-require-imports
 const driveIo = require('../../public/js/common/drive-io.js')
 
 function resOk(body: any, status = 200) {

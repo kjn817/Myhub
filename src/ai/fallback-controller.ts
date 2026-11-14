@@ -20,6 +20,7 @@ import type { ProviderId } from '../services/ai'
 import { ModelRouter, resolveSensitivity, type SensitivityLevel } from './model-router'
 import { AgentRunner } from './runner'
 import type { Budget } from './types'
+import { DEFAULT_MAX_TOTAL_INPUT_TOKENS } from './types'
 import type { AgentRunInput } from './runner'
 import { ToolRegistry } from './tools/registry'
 import type { D1RunLogger } from './run-logger'
@@ -493,7 +494,7 @@ export class FallbackController {
     return {
       maxModelCalls: partial?.maxModelCalls ?? 3,
       maxToolCalls: partial?.maxToolCalls ?? 4,
-      maxTotalInputTokens: partial?.maxTotalInputTokens ?? 8000,
+      maxTotalInputTokens: partial?.maxTotalInputTokens ?? DEFAULT_MAX_TOTAL_INPUT_TOKENS,
       maxOutputTokensPerCall: partial?.maxOutputTokensPerCall ?? 1024,
       maxToolResultChars: partial?.maxToolResultChars ?? 1500,
       toolTimeoutMs: partial?.toolTimeoutMs ?? 10000,

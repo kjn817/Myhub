@@ -29,6 +29,7 @@ const MENU_JS = fs.readFileSync(path.join(ROOT, 'public', 'js', 'desktop', 'menu
 const DOCK_JS = fs.readFileSync(path.join(ROOT, 'public', 'js', 'desktop', 'dock.js'), 'utf-8')
 const WINDOWS_JS = fs.readFileSync(path.join(ROOT, 'public', 'js', 'desktop', 'windows.js'), 'utf-8')
 const MAIN_JS = fs.readFileSync(path.join(ROOT, 'public', 'js', 'desktop', 'main.js'), 'utf-8')
+const CONSTANTS_JS = fs.readFileSync(path.join(ROOT, 'public', 'js', 'common', 'constants.js'), 'utf-8')
 
 const getWin = (): any => (globalThis as any).window
 const getDoc = (): any => (globalThis as any).document
@@ -79,6 +80,8 @@ function setupBoot(artifactImpl: any) {
   // 전역 fetch를 테스트 스텁으로 교체한다 (main.js는 bare fetch를 쓴다).
   const origFetch = (globalThis as any).fetch
   ;(globalThis as any).fetch = fetchImpl
+  // 5-9: 공용 상수를 가장 먼저 뜬다 (운영 desktop.html 태그 순서와 동일).
+  new Function('window', 'document', CONSTANTS_JS)(win, doc)
   new Function('window', 'document', STATE_JS)(win, doc)
   new Function('window', 'document', TILES_JS)(win, doc)
   new Function('window', 'document', MENU_JS)(win, doc)

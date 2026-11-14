@@ -12,6 +12,7 @@
 import { composeV2Prompt } from './prompt-integration'
 import { ALL_EVAL_CASES, type EvalCase } from './prompts/eval-cases'
 import { createServerTimeContext } from './time-context'
+import { KST_TIME_ZONE } from '../lib/kst'
 
 export interface EvalResult {
   caseId: string
@@ -22,7 +23,7 @@ export interface EvalResult {
 
 export function runMockEval(): EvalResult[] {
   const results: EvalResult[] = []
-  const timeCtx = createServerTimeContext('Asia/Seoul')
+  const timeCtx = createServerTimeContext(KST_TIME_ZONE)
 
   for (const c of ALL_EVAL_CASES) {
     const checks: Array<{ name: string; passed: boolean; detail?: string }> = []

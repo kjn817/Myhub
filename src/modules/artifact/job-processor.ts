@@ -4,7 +4,7 @@
  */
 
 import type { Env } from '../../types'
-import { validateModelProviderPair } from '../../services/ai-models'
+import { DEFAULT_MODEL_ID, validateModelProviderPair } from '../../services/ai-models'
 import { saveJobResult } from './job-generation'
 import { logJobEvent } from './job-events'
 import { sha256 } from './artifact-utils'
@@ -169,11 +169,11 @@ export async function processArtifactJob(env: Env, jobId: number): Promise<JobOu
         const setting = await env.DB.prepare(
           "SELECT value FROM ai_settings WHERE key='model.code'"
         ).bind().first() as any
-        modelId = setting?.value || 'gemini-3.5-flash-lite'
+        modelId = setting?.value || DEFAULT_MODEL_ID
       }
       // 관문 40: 2차 시도에서는 폴백 모델 사용
       if (attempt === 2) {
-        const fallbackModel = 'gemini-3.5-flash-lite'
+        const fallbackModel = DEFAULT_MODEL_ID
         if (modelId !== fallbackModel) {
           await logJobEvent(env, jobId, 'model.fallback', { from: modelId, to: fallbackModel, reason: lastErr.slice(0, 200) })
           modelId = fallbackModel

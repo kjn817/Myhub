@@ -34,6 +34,7 @@ const HTTP_JSON_JS = fs.readFileSync(path.join(ROOT, 'public', 'js', 'common', '
 const ICONS_JS = fs.readFileSync(path.join(ROOT, 'public', 'js', 'desktop', 'desktop-icons.js'), 'utf-8')
 const DROP_JS = fs.readFileSync(path.join(ROOT, 'public', 'js', 'desktop', 'drop-upload.js'), 'utf-8')
 const MAIN_JS = fs.readFileSync(path.join(ROOT, 'public', 'js', 'desktop', 'main.js'), 'utf-8')
+const CONSTANTS_JS = fs.readFileSync(path.join(ROOT, 'public', 'js', 'common', 'constants.js'), 'utf-8')
 
 const getWin = (): any => (globalThis as any).window
 const getDoc = (): any => (globalThis as any).document
@@ -90,6 +91,8 @@ function setupDesktop() {
   win.localStorage.clear()
   const origFetch = (globalThis as any).fetch
   ;(globalThis as any).fetch = fetchImpl
+  // 5-9: 공용 상수를 가장 먼저 뜬다 (운영 desktop.html 태그 순서와 동일).
+  new Function('window', 'document', CONSTANTS_JS)(win, doc)
   new Function('window', 'document', STATE_JS)(win, doc)
   new Function('window', 'document', TILES_JS)(win, doc)
   new Function('window', 'document', MENU_JS)(win, doc)

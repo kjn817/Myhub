@@ -22,7 +22,7 @@ async function renderCal() {
   });
   const first = new Date(calY, calM - 1, 1).getDay();
   const days = new Date(calY, calM, 0).getDate();
-  const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' });
+  const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: KST_TIME_ZONE });
   for (let i = 0; i < first; i++) {
     const b = document.createElement('span');
     b.className = 'blank';

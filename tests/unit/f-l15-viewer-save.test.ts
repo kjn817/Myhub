@@ -17,6 +17,8 @@
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 require('../../public/js/finder-codec.js')
 // eslint-disable-next-line @typescript-eslint/no-require-imports
+require('../../public/js/common/constants.js') // finder-viewer의 선행 상수 (5-9)
+// eslint-disable-next-line @typescript-eslint/no-require-imports
 const viewer = require('../../public/js/finder-viewer.js')
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 require('../../public/js/finder-format-text.js')

@@ -16,6 +16,7 @@
  */
 
 import { isValidPersonaId } from '../ai/persona-registry'
+import { MAX_TRUNCATED_USER_TEXT_CHARS } from '../lib/limits'
 
 export interface ChannelMessage {
   /** 채널 플러그인 id ('webhook' 등) */
@@ -100,7 +101,7 @@ export const webhookChannel: ChannelPlugin = {
       channel: 'webhook',
       channelId: senderId,
       senderId,
-      text: p.text.slice(0, 8000),
+      text: p.text.slice(0, MAX_TRUNCATED_USER_TEXT_CHARS),
       personaId,
       receivedAt: Date.now(),
       raw: payload,

@@ -27,14 +27,17 @@ describe('F-L14 hwp 배선 골격', () => {
     expect(src.match(/wireIframeRetry\(ctx, state, container, \{/g)).toHaveLength(2)
   })
 
-  test('재시도 스케줄은 골격 안에 1번, 코드 전체 2번(dirty-watch 별도)', () => {
+  test('재시도 스케줄은 상수 1곳 정의·2곳 참조 (5-9 중앙화)', () => {
     // 주석 속 언급(설계 노트 인용 1건)을 빼고 코드만 센다
     const code = src.replace(/\/\/.*$/gm, '')
-    expect(code.match(/\[300, 900, 2000, 4500\]/g)).toHaveLength(2)
-    // 골격 본문에 스케줄이 있다
+    // 리터럴 정의는 1곳뿐, 두 배선 지점은 상수를 참조한다
+    expect(code.match(/\[300, 900, 2000, 4500\]/g)).toHaveLength(1)
+    expect(code).toMatch(/var HWP_RETRY_SCHEDULE_MS = \[300, 900, 2000, 4500\];/)
+    expect(code.match(/HWP_RETRY_SCHEDULE_MS\.forEach/g)).toHaveLength(2)
+    // 골격 본문에 상수 참조가 있다
     const skeleton = src.slice(src.indexOf('function wireIframeRetry'))
     expect(skeleton.slice(0, skeleton.indexOf('function wireStudioFileMenu'))).toContain(
-      '[300, 900, 2000, 4500]',
+      'HWP_RETRY_SCHEDULE_MS.forEach',
     )
   })
 

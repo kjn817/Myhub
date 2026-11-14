@@ -123,15 +123,16 @@ describe('Google 동기화 고지 — 상태 매핑 (생성 경로)', () => {
   test('end_at이 있으면 정규화돼 저장·동기화에 실리고, 없으면 null이다', async () => {
     const withEnd = makeEnv()
     await create(withEnd.env, { title: '회의', start_at: '2027-01-05T10:00', end_at: '2027-01-05T11:00', create_todo: false })
-    const insertBind = withEnd.binds.find((b) => b.length === 5)
+    const insertBind = withEnd.binds.find((b) => b.length === 6)
     expect(insertBind?.[4]).not.toBeNull()
+    expect(insertBind?.[5]).toBe('Asia/Seoul')
     expect(mockPush.mock.calls[0][2].end_at).not.toBeNull()
 
     jest.clearAllMocks()
     mockPush.mockResolvedValue(null)
     const noEnd = makeEnv()
     await create(noEnd.env)
-    const insertBind2 = noEnd.binds.find((b) => b.length === 5)
+    const insertBind2 = noEnd.binds.find((b) => b.length === 6)
     expect(insertBind2?.[4]).toBeNull()
     expect(mockPush.mock.calls[0][2].end_at).toBeNull()
   })

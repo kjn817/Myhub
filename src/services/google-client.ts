@@ -8,6 +8,8 @@
  * - 응답 파싱은 방어적으로: 필드 누락 시 빈 값으로 처리하고 예외를 던지지 않는다.
  */
 
+import { KST_TIME_ZONE } from '../lib/kst'
+
 const GMAIL_BASE = 'https://gmail.googleapis.com/gmail/v1'
 const CALENDAR_BASE = 'https://www.googleapis.com/calendar/v3'
 
@@ -336,8 +338,8 @@ export interface CalendarEventInput {
 function toCalendarEventBody(input: CalendarEventInput): Record<string, unknown> {
   const body: Record<string, unknown> = {
     summary: input.summary,
-    start: { dateTime: input.start, timeZone: 'Asia/Seoul' },
-    end: { dateTime: input.end || input.start, timeZone: 'Asia/Seoul' },
+    start: { dateTime: input.start, timeZone: KST_TIME_ZONE },
+    end: { dateTime: input.end || input.start, timeZone: KST_TIME_ZONE },
   }
   if (input.description) body.description = input.description
   if (input.location) body.location = input.location
