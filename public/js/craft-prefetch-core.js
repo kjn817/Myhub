@@ -3,7 +3,7 @@
 // deck/grid standalone 래퍼·finder-deckcraft·finder-pdfcraft 내장·
 // 데스크톱 office-prefetch 5곳이 공유하던 drain·체인·발견·once
 // 플래그·자동 부팅 게이트를 한 곳으로 모은다 (F-L1, 5-1).
-// 이 파일을 먼저 받은 서면에서만 래퍼가 동작한다 — office.html·
+// 이 파일을 먼저 받은 페이지에서만 래퍼가 동작한다 — office.html·
 // desktop.html은 정적 순서로, finder.js는 동적 import 체인으로
 // 코어 선행을 보장한다. 코어가 없으면 래퍼는 프리패치를 조용히
 // 건너뛴다 (프리패치는 최적화일 뿐 — 못 데우면 앱이 그때 받는다).
@@ -12,7 +12,7 @@
 // - once 플래그 이름과 공유 관계: standalone deck 래퍼와 finder 내장
 //   deck이 __myhubDeckcraftPrefetched를 공유한다 (한쪽이 데우면
 //   다른 쪽이 건너뛴다).
-// - 자동 부팅 게이트: 오피스 서면이면 자동 실행 안 함, 데이터 절약
+// - 자동 부팅 게이트: 오피스 표면이면 자동 실행 안 함, 데이터 절약
 //   모드면 건너뜀, idle(5000ms 타임아웃) / complete면 1500ms 후 /
 //   아니면 load + 1500ms.
 // - 발견 규칙: index 스캔은 href="./..." 중 .js/.wasm만, 선언 순서
@@ -86,7 +86,7 @@
   }
 
   /**
-   * manifest.json에서 진입 자산 URL을 만든다.
+   * manifest.json에서 진입 에셋 URL을 만든다.
    * opts = { wasm, wasmParts, snippets, loader } — 호출부가 명시한다.
    * 순서: js → wasm → wasmParts → files (files 안에서는 선언 순서).
    * pdfcraft는 단일 wasm(47MB)을 받지 않고 wasmParts만 받으므로
@@ -149,9 +149,9 @@
     };
   }
 
-  // 오피스 서면 판정: office.html은 한 번에 두 형식(?app=)만 열고 그
-  // 엔진 문서를 두 번 iframe이 직접 받으므로, 진입 시점의 두 엔진
-  // 데우는 자동 프리패치를 오피스에서는 하지 않는다 (지연 로드 두 엔진
+  // 오피스 표면 판정: office.html은 한 번에 두 포맷(?app=)만 열고 그
+  // 엔진의 문서를 두 대 iframe이 직접 받으므로, 진입 시점의 두 엔진을
+  // 데우는 자동 프리페치는 오피스에서 하지 않는다 (지연 로드 두 엔진을
   // 한 때만 로드). Finder에서는 종전대로 데운다.
   function isOfficeSurface() {
     return (
@@ -162,7 +162,7 @@
     );
   }
 
-  // 자동 프리패치 예약: 오피스 서면·데이터 절약 모드에서는 건너뛰고,
+  // 자동 프리패치 예약: 오피스 표면·데이터 절약 모드에서는 건너뛰고,
   // 아니면 idle(5000ms 타임아웃) / complete면 1500ms 후 / 아니면
   // load + 1500ms에 fn을 한 번 부른다. fn은 인자 없이 부른다
   // (idle deadline·load 이벤트가 prefetch의 deps로 새지 않게).

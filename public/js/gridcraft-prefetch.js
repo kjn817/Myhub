@@ -1,13 +1,13 @@
 // GridCraft 엔진 자산 프리패치 — public/js/gridcraft-prefetch.js
 //
 // 시트를 열 때 가장 무거운 단일 비용은 GridCraft WASM(17MB)를 전송한다.
-// · 에서 finder.html유효office.html시간은 벤더 쪽이 선언한 진입 자산
+// · 에서 finder.html유효office.html시간은 벤더 쪽이 선언한 진입 에셋
 // 글루 ·런타임(JS 을ASM미리)받아 캐시를 데워 HTTP 둔다 자산은 캐시.
-// 자산은 캐시 파일명 + immutable 캐시며, 데운 뒤 바이트는 실제로 앱 네트워크
+// 자산은 해시 파일명 + immutable 캐시며, 데운 뒤 바이트는 실제로 앱 네트워크
 // 를 다시 건드리지 않는다.
 //
 // 자산 목록은 하드코딩하지 않는다: 벤더 앱(index.html)의 preload·
-// modulepreload 선언에서 상대 경로를 읽으므로, 규칙으로 캐시 파일명이
+// modulepreload 선언에서 상대 경로를 읽으므로, 규칙으로 해시 파일명이
 // 바뀌어도 그대로 따라간다. HTML 자체는 Worker가 no-store로 주므로
 // 데울 수 없고 상대도 아니다.
 //
@@ -88,7 +88,7 @@
   // 자동 프리패치: 두 모듈이 정적으로 로드하는 문서(finder.html·
   // office.html)에서만 알고, 문서는 한 번, 유효 시간은 있다. 데이터
   // 예약 모드에서는 건너뛴다 (17MB 전송을 강요하지 않는다). 오피스
-  // 서면에서는 앱 게이트로 건너뛴다 — 게이트·예약은 코어가 맡는다.
+  // 표면에서는 앱 게이트로 건너뛴다 — 게이트·예약은 코어가 맡는다.
   if (typeof window !== 'undefined' && typeof document !== 'undefined') {
     var core = getCore();
     if (core) core.scheduleAutoBoot(prefetch);

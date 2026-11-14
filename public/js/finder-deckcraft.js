@@ -1,17 +1,17 @@
-// 파인더 뷰어 형식 보조 모듈 — DeckCraft 호스트 브리지 (finder-deckcraft.js)
+// 파인더 뷰어 포맷 보조 모듈 — DeckCraft 호스트 브리지 (finder-deckcraft.js)
 // DeckCraft(storytold/deckcraft, MIT/Apache-2.0)의 앱 빌드를 MyHub
-// 다운스트림 합치(Stage C)로 임베드용 호스트 브리지를 감싼다: iframe은
+// 다운스트림 패치(Stage C)로 임베드용 호스트 브리지를 갖는다: iframe은
 // ?host=parent&chrome=notitlebar&lang=ko 로 열면 deckcraft:ready/open/
 // save/dirty/failed/fonts/request-save/exec 메시지로 부모와 말한다
-// (대응 apps/deckcraft-web/src/host.rs가 정합). 이 모듈은 그 판(호스트
-// 층)만 맡는다 — iframe 생성·출처 검증·eady 위치끈·xec 서명 관리·
-// 폰트 전달·메시지 정규화. 서면 전환(삽기/삽치기·덮밥)과 저장
+// (이론 apps/deckcraft-web/src/host.rs가 정본). 이 모듈은 그 지(호스트
+// 층)만 맡는다 — iframe 생성·출처 검증·ready 워치독·exec 태그 관리·
+// 폰트 전달·메시지 정규화. 표면 전환(접기/펼치기·폴백)과 저장은
 // finder-format-slide.js가 ctx 계약(putContent/saveAsContent)으로 맡는다.
 //
-// 무겁게 문제: WASM은 수십 MB라 Finder를 열 때 유효 시간은 매니호스트의
-// 진입 자산을 미리 받아 둔다 (아래 prefetch — PdfCraft와 같은 방식).
-// DeckCraft WASM은 raw 21.5MB로 자산 상한(25MB) 미만이라 단일본을
-// 그대로 서면한다. 상한을 넘는 경우는 대조로 PdfCraft처럼 raw를 조각
+// 무게 대책: WASM은 수십 MB라 Finder를 열 때 유휴 시간은 매니페스트의
+// 진입 에셋을 미리 받아 둔다 (아래 prefetch — PdfCraft와 같은 방식).
+// DeckCraft WASM은 raw 21.5MB로 에셋 상한(25MB) 미만이라 단일본을
+// 그대로 서빙한다. 상한을 넘는 경우는 이법이 PdfCraft처럼 raw를 조각
 // 내는 것이다 — Worker가 Content-Encoding을 직접 찍는 흡수는 CF
 // 넣는 이중 인코더으로 깨짐이 실측 정정된 적도 않는다.
 (function () {
@@ -32,9 +32,9 @@
   // 동적 로딩 URL은 공용 핼퍼(asset-url.js)가 배포 버전을 붙인다
   // (N-06 — 버전 없는 URL은 immutable 캐시가 고정할 수 있다).
   // 핼퍼가 없는 환경(테스트 등)에서는 원본 URL 그대로이다.
-  // 매니호스트에서 뽑은 진입 자산은 캐시 파일명이은 파일명 자체가
+  // 매니페스트에서 뽑은 진입 에셋은 해시 파일명이은 파일명 자체가
   // 버전이고, iframe은 요청한 URL과 같아야 캐시 타입이 오므로
-  // 그밖에는 붙이지 않는다 — 파일명이 고정된 매니호스트 자체는
+  // 그쪽에는 붙이지 않는다 — 파일명이 고정된 매니페스트 자체는
   // 번호붙 폰트 fetch만 두 핼퍼를 거친다.
   function versionedAssetUrl(url) {
     var h = typeof window !== 'undefined' ? window.MyHubAssetUrl : null;
@@ -119,9 +119,9 @@
 
   // 테스트가 주입할 수 있는 다음만 (스탠다론 경로는 기본값 그대로)
   var internals = {
-    // ready 위치끈: 수십 MB 전송+컴파일과 WebGPU/WebGL 초기화가 겹친
-    // 코드 기동까지 기다린다. 한 안에 ready가 없으면 호스트는 최소
-    // 리본 서면으로 낸다 (폴백 보존의 계약).
+    // ready 워치독: 수십 MB 전송+컴파일과 WebGPU/WebGL 초기화가 겹친
+    // 콜드 기동까지 기다린다. 이 안에 ready가 없으면 호스트는 최소
+    // 리더 표면이 남는다 (폴백 보존의 계약).
     readyTimeoutMs: 60000,
     execTimeoutMs: 20000,
   };
@@ -146,7 +146,7 @@
   // 두 넣을 번호붙 폰트 목록: MyHubFonts가 있으면 공용 앱
   // (POOL_FACES 앱 오피스 프로그램 내장 폰트 모음, fonts.js가 정합)앱
   // 연고, 없을 때만 앱 한글 폴백 텍스트로 최소 보장한다. 두 안에는
-  // NanumGothic 텍스트 같은 순서(맥 앱)는 서면 서면 한글 보장이 같다.
+  // NanumGothic 획이 같은 순서(맥 앱)는 들어 있어 한글 보장이 같다.
   function poolSpecs(fontsDep) {
     var pool = fontsDep && fontsDep.POOL_FACES;
     if (Array.isArray(pool) && pool.length) return pool;
@@ -251,14 +251,14 @@
    *          onRequestOpen(purpose, request),
    *          onRibbonState({ tab, collapsed, tabs }),
    *          onFallback(reason) }
-   * onRequestOpen은 엔진의 파일 선택이 호스트에 귀결한 것이다
+   * onRequestOpen은 엔진의 파일 선택이 호스트에 위임한 것이다
    * (deckcraft:request-open 앱 파일열기는 찾아보기 그림/오디오/비디오
-   * 삽입·때만 찾아보기). 서면은 보관함 다이얼로 고른 파일을
+   * 삽입·테마 찾아보기). 표면은 보관함 피커로 고른 파일을
    * answerPick(request, name, buffer)으로 알려주고, 취소는 무응답이
-   * 기본 계약이라 답을 보내지 않으면 낸다 (명시 취소는 cancelPick).
-   * onFallback은 ready 위치끈 초과('timeout')와 deckcraft:failed에서
-   * 최대 두 번만 부른다 이 호스트는 그때 이 세션을 destroy하고 최소
-   * 리본 서면으로 합치며 낸다 (폴백 보존의 계약).
+   * 기본 계약이라 답을 보내지 않으면 된다 (명시 취소는 cancelPick).
+   * onFallback은 ready 워치독 초과('timeout')와 deckcraft:failed에서
+   * 최대 두 번만 불린다 이 호스트는 그때 이 세션을 destroy하고 최소
+   * 리더 표면으로 남으면 된다 (폴백 보존의 계약).
    * @returns {{ frame, open(name, buffer), requestSave(),
    *   answerPick(request, name, buffer), cancelPick(request),
    *   exec(commands), pushFonts(), destroy(), isReady() } | null}
@@ -358,7 +358,7 @@
 
     // ---------- 클립보드 이미지 붙여넣기 ----------
     // 붙여넣기가 포커스 있는 문서에서만 발생한다. 엔진 iframe 문서
-    // (캔버스 포커스)는 여기에 넣고, 서면 문서(뷰어 설계)는 서면
+    // (캔버스 포커스)는 여기에 넣고, 표면 문서(뷰어 크롬)는 표면
     // 모듈(finder-format-slide)과 같은 exec로 직접 삽입한다.
     var pasteDoc = null;
     var pasteTimers = [];
@@ -437,7 +437,7 @@
     // 서면한. 길이를 앱이 두 프레임을 실제로 번역 해야 하므로 원복을
     // 정교게 부른다 (rAF 한 번으로 내리면 앱이 중간 길이를 못 보고
     // 합게한 버퍼인 것을 실측으로 확인). 원복 두 플래이아껏이 한 번 두
-    // 서면한 최종 길이+적용한 폰트로 배치가 확정한다.
+    // 일어난 최종 크기+적용된 폰트로 배치가 확정된다.
     // 폰트 적용 직후 세션당 1회: exec로 줌을 한 단계 올렸다가 별도
     // exec로 곧바로 창 맞춤(fit)으로 되돌려, 엔진이 텍스트를 현재
     // 폰트로 다시 shaping하게 한다. 폰트 도착 전에 배치된 텍스트
@@ -564,9 +564,9 @@
         // 도착해도 앱이 UI 폰트를 새로 빌리고 본문을 즉시 다시 그린다.
         pushFonts();
       } else if (d.type === 'deckcraft:print') {
-        // 인쇄 전용 채널 (인쇄 정보): backstage 인쇄·app.print가 만든
-        // 인쇄는 PDF는 앱 주소으로 다운로드가 아닌, 서면은 합체 프레임
-        // 으로 시스템 인쇄 두요상를 여는 것이 유일한 때문 방식이다.
+        // 인쇄 전용 채널 (인쇄 정본): backstage 인쇄·app.print가 만든
+        // 인쇄는 PDF는 앱 저장도 다운로드는 아니라, 표면은 남은 프레임
+        // 으로 시스템 인쇄 대화상자를 여는 것이 유일한 때비 방식이다.
         if (typeof deps.onPrint === 'function') {
           deps.onPrint({
             name: typeof d.name === 'string' ? d.name : '',
@@ -653,9 +653,9 @@
           [buffer],
         );
       },
-      // 명시한 취소 답 두 엔진의 남기 요청을 정리한다. 서면은 무응답
-      // 취소를 생해와 계약의 문제가 없다 (엔진은 두 없는 요청은
-      // 그냥 넣게 두어, id는 사용하지 않는다).
+      // 명시한 취소 답 두 엔진의 남기 요청을 정리한다. 표면은 무응답
+      // 취소를 생해와 계약의 문제는 없다 (엔진에 답 없는 요청은
+      // 그냥 남겨 두며, id는 재사용되지 않는다).
       cancelPick: function (request) {
         if (!ready || dead) return false;
         return post({ type: 'deckcraft:pick-cancelled', request: request });
@@ -707,7 +707,7 @@
 
   var prefetchImpl = null;
   /**
-   * 매니호스트를 읽어 진입 자산(JS 글루·ASM·온라인)을 미리 받는다.
+   * 매니페스트를 읽어 진입 에셋(JS 글루·ASM·온라인)을 미리 받는다.
    * HTML은 Worker가 no-store로 주므로 데울 수 없이 상체에서는 제외.
    * 실패는 조용히 무시한다 — 프리패치는 최적화일 뿐.
    * deps = { fetchFn, win } (테스트 주입용).
@@ -757,7 +757,7 @@
   // 자동 프리패치: 두 모듈이 정적으로 로드하는 문서(finder.html·
   // office.html)에서만 알고, 문서는 한 번, 유효 시간은 있다. 데이터
   // 예약 모드에서는 건너뛴다 (36MB가 전송을 강요하지 않는다).
-  // 오피스 서면에서는 앱 게이트로 건너뛴다 — 게이트·예약은 코어가 맡는다.
+  // 오피스 표면에서는 앱 게이트로 건너뛴다 — 게이트·예약은 코어가 맡는다.
   if (typeof window !== 'undefined' && typeof document !== 'undefined') {
     var prefetchCore = getPrefetchCore();
     if (prefetchCore) prefetchCore.scheduleAutoBoot(prefetch);

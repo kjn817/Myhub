@@ -2309,7 +2309,7 @@
     // 보기에서는 받지 않고(shouldAccept), 는 파일을 여는
     // 기본 동작인 모듈이 막고 거부 사유는 onRejectedDrop로 고정한다.
     // 검색 결과에서는 폴더 만 받고 명시된,-드롭은 resolveFolderId가
-    // 사유를 서면 거부한다 (현재 폴더가 화면에 보이지 않으므로).
+    // 사유를 들어 거부한다 (현재 폴더가 화면에 보이지 않으므로).
     var dropManager = null;
     var dropApi =
       deps.dropApi || (typeof window !== 'undefined' ? window.MyHubDesktopDrop : null);
@@ -2342,7 +2342,7 @@
           if (state.search) {
             // 검색 결과에서 "현재 폴더"는 화면에 보이지 않는다 — 배경에
             // 뽑으면 검색 위에 있던 폴더로 조용히 올라간 버린다. 폴더 외
-            // 곳(명시적인 대상)만 허용하고, 그 밖은 사유를 서면 거부한다
+            // 데(명확한 대상)만 허용하고, 그 외는 사유를 들어 거부한다
             // (drop-upload은 두 항목 실패로 고정하는 경로).
             return Promise.reject(
               new Error('검색 결과에서는 폴더 위에 뽑거나, 검색을 끝낸 뒤에 올려 주세요'),
@@ -2956,7 +2956,7 @@
             });
           });
         });
-        // 그림 삽입 귀결: 고른 그림을 바인딩 deliver로 서면에
+        // 그림 삽입 위임: 고른 그림을 바인딩 deliver로 서면에
         // 알려준다. 취소·실패면 deliver를 부르지 않는다 (무응답
         // 취소 계약). 옵션은 office-picker.js와 공용 정보를 낸다 —
         // 오피스와 Finder가 같은 그림 형식을 본다.
@@ -2980,8 +2980,8 @@
                 if (bytes) deliver(sel.name, bytes);
               })
               .catch(function (e) {
-                // 실패하면 서면에 보내지 않는다 — 삽입 쪽에 값이
-                // 없는 것을 취소로 낸다.
+                // 실패하면 서면에 보내지 않는다 — 삽입 쪽은 답이
+                // 없는 것을 취소로 안다.
                 console.warn('그림 전달 실패 — 취소로 처리:', e);
               });
           });
@@ -2995,7 +2995,7 @@
       confirmFn: bootDialogs.confirmDialog,
       prefetchEngines: startEnginePrefetch,
     });
-    // 비서 도구 브리지·노바 서면은 현재 폴더 조회·목록 새로고침을 낸다
+    // 비서 도구 브리지·노멀 표면은 현재 폴더 조회·목록 새로고침을 내다
     if (typeof window !== 'undefined') window.MyHubFinderApp = bootApp;
     // 비서 진입(uiAction 브리지)는 Finder 진입의 두 노바의 파일
     // 검색 도구 결과를 실제 화면에 표시한다 (assistant-widget.js가
@@ -3048,7 +3048,7 @@
           bootApp.refreshIconTrash();
           return;
         }
-        // 창 바 두 호스트: 채워진 뒤의 창 바 컨트롤의 동작 귀결
+        // 창 바 두 호스트: 채워진 뒤의 창 바 컨트롤의 동작 위임
         if (d.type === 'myhub:finder-toolbar-adopt' || d.type === 'myhub:finder-toolbar-action') {
           bootApp.handleToolbarMessage(d);
           return;

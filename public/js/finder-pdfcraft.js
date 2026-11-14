@@ -1,17 +1,17 @@
-// 파인더 뷰어 형식 보조 모듈 — PdfCraft 호스트 브리지 (finder-pdfcraft.js)
+// 파인더 뷰어 포맷 보조 모듈 — PdfCraft 호스트 브리지 (finder-pdfcraft.js)
 // PdfCraft(storytold/pdfcraft, MIT/Apache-2.0)의 상류에 임베드용 호스트
 // 브리지가 내장돼 있다: iframe은 ?host=parent로 열면(동일 출처일 때만
 // 활성) pdfcraft:ready/open/save/dirty/failed 메시지로 부모와 말한다.
-// 자체 열기는 호스트 귀결(pdfcraft:request-open)이 다운스트림 합치로
+// 자체 열기는 호스트 위임(pdfcraft:request-open)이 다운스트림 패치로
 // 해결한다 — 엔진은 OS 선택기를 여는 대신 부모가 보관함 다이얼로 연다.
-// 이 모듈은 그 판(호스트 층)만 맡는다 — iframe 생성·출처 검증·eady
-// 위치끈·찓서 정규화. 서면 전환(삽기/삽치기·덮밥)과 저장
+// 이 모듈은 그 지(호스트 층)만 맡는다 — iframe 생성·출처 검증·ready
+// 워치독·메시지 정규화. 표면 전환(접기/펼치기·폴백)과 저장은
 // finder-format-pdf.js가 ctx 계약(putContent/saveAsContent)으로 맡는다.
 //
-// 무겁게 문제: WASM은 raw 36MB를 Finder열 때 유효 시간은 매니 호스트의
-// 진입 자산을 미리 받아 둔다 (아래 prefetch). WASM은 자산 상한(25MB)을
-// 넘어 raw 조각 둘(.part0/.part1)로 올라가 있고 벤더 쪽이 loader.js가
-// 받아 이어 붙인다 — 프리패치 상대도 그 조각들과 로더이다.
+// 무게 대책: WASM은 raw 36MB라 Finder를 열 때 유휴 시간은 매니페스트의
+// 진입 에셋을 미리 받아 둔다 (아래 prefetch). WASM은 에셋 상한(25MB)을
+// 넘어 raw 조각 둘(.part0/.part1)로 올라가 있고 벤더 편의 loader.js가
+// 받아 이어 붙인다 — 프리페치 대상도 그 조각들과 로더다.
 (function () {
   'use strict';
 
@@ -27,7 +27,7 @@
   // 상단바고, 모드 등 창 두 번 클릭(office-tabs)도 소유한. 전환은
   // pdfcraft:mode, 상태는 pdfcraft:mode-state, 메뉴 정의·상태는
   // pdfcraft:menus-state, 메뉴 선택 실행은 pdfcraft:menu-command 앱
-  // 전부 앱 엔진(c966e689)의 다운스트림 합치가 제공하는 서면이다.
+  // 전부 앱 엔진(c966e689)의 다운스트림 패치가 제공하는 표면이다.
   var APP_URL_HOSTED =
     '/vendor/pdfcraft/index.html?host=parent&chrome=nomodetabs,nomenubar,nomodebar,notabstrip';
   var MANIFEST_URL = '/vendor/pdfcraft/manifest.json';
@@ -35,9 +35,9 @@
   // 동적 로딩 URL은 공용 핼퍼(asset-url.js)가 배포 버전을 붙인다
   // (N-06 — 버전 없는 URL은 immutable 캐시가 고정할 수 있다).
   // 핼퍼가 없는 환경(테스트 등)에서는 원본 URL 그대로이다.
-  // 매니호스트에서 뽑은 진입 자산은 캐시 파일명이은 파일명 자체가
+  // 매니페스트에서 뽑은 진입 에셋은 해시 파일명이은 파일명 자체가
   // 버전이고, iframe은 요청한 URL과 같아야 캐시 타입이 오므로
-  // 그밖에는 붙이지 않는다 — 파일명이 고정된 매니호스트 자체만
+  // 그쪽에는 붙이지 않는다 — 파일명이 고정된 매니페스트 자체만
   // 두 핼퍼를 거친다.
   function versionedAssetUrl(url) {
     var h = typeof window !== 'undefined' ? window.MyHubAssetUrl : null;
@@ -46,8 +46,8 @@
 
   // 테스트가 주입할 수 있는 다음만 (스탠다론 경로는 기본값 그대로)
   var internals = {
-    // ready 위치끈: 코드 기동(전송+36MB 컴파일)이 마른 기계까지 기다린다.
-    // 한 안에 ready가 없으면 호스트가 pdf.js 서면으로 낸다.
+    // ready 워치독: 콜드 기동(전송+36MB 컴파일)에 느린 기기까지 기다린다.
+    // 이 안에 ready가 없으면 호스트가 pdf.js 표면으로 남는다.
     readyTimeoutMs: 45000,
   };
 
@@ -73,13 +73,13 @@
    *          onReady(version), onDirty(dirty),
    *          onSave({ name, saveAs, bytes }), onRequestOpen(),
    *          onModeState(mode), onMenusState(menus), onFallback(reason) }
-   * onRequestOpen은 엔진이 자체 열기가 호스트로 귀결한 것이다
-   * (pdfcraft:request-open 앱 엔진 host_open 합치). 서면은 호스트
+   * onRequestOpen은 엔진이 자체 열기가 호스트로 위임한 것이다
+   * (pdfcraft:request-open 앱 엔진 host_open 패치). 표면은 호스트
    * 열기 경로로 고른 파일을 open()으로 다시 내려보내면 하고,
    * 취소하면 아무것도 보내지 않는다.
-   * onFallback은 ready 위치끈 초과('timeout')와 pdfcraft:failed에서
+   * onFallback은 ready 워치독 초과('timeout')와 pdfcraft:failed에서
    * 최대 두 번만 부른다 이 호스트는 그때 이 세션을 destroy하고 pdf.js
-   * 서면으로 합치며 낸다 (폴백 보존의 계약).
+   * 표면으로 남으면 된다 (폴백 보존의 계약).
    * @returns {{ frame, open(name, buffer), sendMode(mode), sendMenuCommand(command, params?), destroy(), isReady() }}
    */
   function createHost(deps) {
@@ -94,7 +94,7 @@
 
     // UI 언어는 한국어로 고정한다. 앱의 Auto 판정은 navigator.languages를
     // 따르는데, 브라우저·밸런스 보고 언어가 영어로 굳으면 카탈로그가
-    // 97% 번역돼 있어도 서면 전체가 영어로 뜬다 (사용자 실측 2026-11-04).
+    // 97% 번역돼 있어도 표면 전체가 영어로 뜬다 (사용자 실측 2026-11-04).
     // 앱의 eframe 스토리지 두 'pdfcraft'도 JSON "language"를 맥 붙은
     // 적용하므로, 프레임을 만들기 전에 호스트(동일 출처)가 ko를 뜬다.
     // 기존 prefs는 다른 설정은 그대로 보존한다.
@@ -272,7 +272,7 @@
   var prefetchImpl = null;
 
   /**
-   * 매니호스트를 읽어 진입 자산(JS 글루·ASM·온라인)을 미리 받는다.
+   * 매니페스트를 읽어 진입 에셋(JS 글루·ASM·온라인)을 미리 받는다.
    * HTML은 Worker가 no-store로 주므로 데울 수 없이 상체에서는 제외.
    * 실패는 조용히 무시한다 — 프리패치는 최적화일 뿐, 못 데우면 넣기가
    * 두 두 그대로 넣으면 낸다. deps = { fetchFn, win } (테스트 주입용).
@@ -320,7 +320,7 @@
   // 자동 프리패치: 두 모듈이 정적으로 로드하는 문서(finder.html·
   // office.html)에서만 알고, 문서는 한 번, 유효 시간은 있다. 데이터
   // 예약 모드에서는 건너뛴다 (36MB가 전송을 강요하지 않는다).
-  // 오피스 서면에서는 앱 게이트로 건너뛴다 — 게이트·예약은 코어가 맡는다.
+  // 오피스 표면에서는 앱 게이트로 건너뛴다 — 게이트·예약은 코어가 맡는다.
   if (typeof window !== 'undefined' && typeof document !== 'undefined') {
     var prefetchCore = getPrefetchCore();
     if (prefetchCore) prefetchCore.scheduleAutoBoot(prefetch);

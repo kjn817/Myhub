@@ -1,15 +1,15 @@
 // 시트 편집 페이지(sheet.html)의 GridCraft 호스트 브리지.
 // 파인더 뷰어(finder-format-sheet.js)와 myhub-sheet:* 프로토콜로,
-// 넣소 GridCraft iframe와 gridcraft:* 프로토콜로 말하는 등 뷰어 쪽
-// 계약(숨긴 CAS비서 세션)의 엔진 교체를 균일하게 그림이다.
-// 비 서(myhub-sheet:ops)연산 GridCraft 를 엔진(cell.set 명령)로
-// 번역해 gridcraft:exec로 실행한다 등 엔진의 컨테이너 층이 파일 진짜이다.
-// 폰트: Drive '의' 폴더의 페이지를 gridcraft:fonts로 받아서 넣는다.
-// 안에 내장 공용 등(MyHubFonts.POOL_FACES 의 오피스 프로그램 내장
-// 폰트 모양)를 항상 병합한다: 파일 Inter와JetBrains Mono 같은 등
-// 페이스 이름으로 지정하면 Drive에 없어 그 페이지로 그림진다
-// (엔진가 bind_host_faces페이스 이름으로 바인딩 에). Drive 페이지가
-// 먼저 사용자 폰트가 같은 페이스 가지면 그쪽이 숨긴다.
+// 안쪽 GridCraft iframe와 gridcraft:* 프로토콜로 말한다. 뷰어 쪽
+// 계약(숨긴 CAS·비서 세션)은 엔진 교체에도 균일하게 유지된다.
+// 비서 연산(myhub-sheet:ops)은 GridCraft 엔진 명령(cell.set 등)으로
+// 번역해 gridcraft:exec로 실행한다.
+// 폰트: Drive '폰트' 폴더의 파일을 gridcraft:fonts로 받아서 넣는다.
+//   내장 공용 풀(MyHubFonts.POOL_FACES — 오피스 프로그램 내장 폰트)을
+//   항상 병합한다: 파일이 Inter나 JetBrains Mono 같은 페이스 이름으로
+//   지정하면 Drive에 없어도 풀에서 그려진다(엔진이 bind_host_faces로
+//   페이스 이름으로 바인딩한다). Drive 폰트가 풀과 같은 페이스를
+//   가지면 Drive 폰트가 우선한다.
 (function () {
   'use strict';
 

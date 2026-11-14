@@ -1,22 +1,19 @@
-// 파인더 뷰어 플러그 모듈 등 시트 (finder-format-sheet.js)
-// xlsx: SheetJS 그리드로 전용 편집 페이지(sheet.html)로 교체한다
-//       (감시의전체 D1 조직도 SheetJS 차트 이미지 마크대로
-//       파싱하는 문제). 편집 페이지가 GridCraft 엔진 넣소 iframe로
-//       넣고(js/sheet-gridcraft.js가 프로토콜 버전), 시작에 실패하면
-//       FortuneSheet 대관 페이지(sheet-fortune.html)로 교체한다 등
-//       어느 쪽이든 등 모듈과의 myhub-sheet:* 계약은 같다. 파인더는
-//       iframe로 프레 postMessage(origin 임하고)로 바이트를
-//       주요받으면, 길이가 코어 putContent(base_version)로만 보낸다.
-// 자체 값은: 숨긴 전에 zip 항목을 검사해 마크다운같은미지가 있으면
-//       편 집기 상단(sheet.html 배너 의)그 대로 함께 보낸다.
-//       마크다운 파일은 기본 보기 전용이고, 편집기에서 "그레이 편집"의
-//       플러그(edit-enabled 가) 길이가 활성화된다.
-// 편집 실행 엔진 자체 넣소재 주인공이다 (2026-11-03): GridCraft가
-// 자체 파일 기록 으로 숨기고, 길이가 myhub-sheet:saved로 올라온다.
-// file-action(의)구 형 대관(FortuneSheet) 실행
-// 자체 [메뉴] 중에만 올라 온다.
-// xls: 구형 BIFF가 ExcelJS읽지 못해 기존 보기 SheetJS 전용 경 로를
-//       유지한다 (아래 저장 불가능).
+// 파인더 뷰어 포맷 모듈 — 시트 (finder-format-sheet.js)
+// xlsx: 전용 편집 페이지(sheet.html)로 연다. 편집 페이지는 GridCraft
+//       엔진을 안쪽 iframe으로 넣고(js/sheet-gridcraft.js가 브리지),
+//       시작에 실패하면 FortuneSheet 대체 페이지(sheet-fortune.html)로
+//       교체한다. 어느 쪽이든 이 모듈과의 myhub-sheet:* 계약은 같다.
+//       파인더는 iframe에 postMessage로 바이트를 보내고, 저장은
+//       코어 putContent(base_version)로만 보낸다.
+// 손실 고지: 열기 전에 zip 항목을 검사해 차트·이미지가 있으면 편집기
+//       상단 배너에 알리고, 매크로가 있으면 기본 보기 전용으로 연다.
+//       매크로가 있는 파일은 편집기에서 "그레이 편집"을 누르면
+//       edit-enabled가 활성화된다.
+// 저장: GridCraft가 파일을 기록하면 myhub-sheet:saved로 올라온다.
+// file-action: 대체(FortuneSheet) 엔진 자체 [메뉴]의 파일 단축키를
+//       myhub-sheet:file-action으로 받는다.
+// xls: 구형 BIFF는 ExcelJS가 읽지 못해 기존 SheetJS 전용 보기 경로를
+//       유지한다 (저장 불가능).
 (function () {
   'use strict';
   var core = typeof window !== 'undefined' ? window.MyHubFinderViewer : null;
@@ -39,7 +36,7 @@
       else if (name.indexOf('xl/media/') === 0) media = true;
     });
     var losses = [];
-    if (chart) losses.push('李⑦듃');
+    if (chart) losses.push('차트');
     if (media) losses.push('이미지');
     return { macro: macro, losses: losses };
   }
@@ -212,8 +209,8 @@
     // 실행(저장 등)과 엔진 자체 리본의 파일 탭이 맡는다. 항목 내용이
     // 회수되면 그때 메뉴를 다시 게시한다.
 
-    // 파일 실행 접근: 아래 시트 넣소재 리본/아래 영역(.fortune-workarea)
-    // 등 함께 모서리 등 엔진을 그림으로 알고 chrome만 남긴다.
+    // 크롬 동기화: 접기 상태(folded)를 엔진 iframe에 myhub-sheet:chrome으로
+    // 알려, 엔진이 리본·아래 영역(.fortune-workarea)을 접었다 폈다 하게 한다.
     function postChrome() {
       if (frame.contentWindow) {
         frame.contentWindow.postMessage(
@@ -298,7 +295,7 @@
     // [메뉴와] 단축키 코어 파일 명령을 공유 하는 실행 경로
     function saveViaEditor() {
       if (guard.macro && !state.editEnabled) {
-        ctx.setStatus('마크다운이 있는 보기 전용입니다. 편집기에서 "그레이 편집"를 눌러 주세요');
+        ctx.setStatus('매크로가 있는 보기 전용입니다. 편집기에서 "그레이 편집"를 눌러 주세요');
         return Promise.resolve(false);
       }
       if (!frame.contentWindow) return Promise.resolve(false);
@@ -454,7 +451,7 @@
         var w2 = state.saveWaiter;
         state.saveWaiter = null;
         if (d.message === 'macro-readonly') {
-          ctx.setStatus('마크다운이 있는 보기 전용입니다. 편집기에서 "그레이 편집"를 눌러 주세요');
+          ctx.setStatus('매크로가 있는 보기 전용입니다. 편집기에서 "그레이 편집"를 눌러 주세요');
         } else {
           ctx.setStatus('처음에 실패했습니다');
         }
@@ -502,7 +499,7 @@
     if (ctx.saveBtn) ctx.saveBtn.hidden = false;
     ctx.setSaveHandler(saveViaEditor);
     if (guard.macro) {
-      ctx.setNote('마크다운이 있는 파일 등 편집기에서 보기 전용으로 대변한다');
+      ctx.setNote('매크로가 있는 파일 등 편집기에서 보기 전용으로 대변한다');
     }
     if (isNew) {
       ctx.setNote('등 워크북 등 저장할 등 위치의 이름을 정합한다');

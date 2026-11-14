@@ -409,25 +409,25 @@
 
   /* 내장 공용 폰트 풀 (public/fonts/, 전부 SIL OFL 1.1 원본 무손실)
    *
-   * 실행 프로그램이 가져다 넣은 폰트를 모은 것이다:
-   * - Inter 400/500/600/700 + Italic 400 의본문폰트 DeckCraft(craft-fonts
-   *   카탈)로그 PdfCraft(assets/fonts)와 내장하는 실행 본문 폰트.
-   *   다만 DeckCraft 빌드도 craft-fonts 없이 만들 Inter었을 비어
-   *   있었다. 정보대조 의를: Regular/SemiBold/Bold/Italic확인한다 craft-fonts
-   *   매니페스트의 SHA-256 와 일치함을 확인한다 (2026-11-05).
-   * - JetBrains Mono 400, Dancing Script 400 등 PdfCraft 내장분.
-   * - BIZ UDPGothic 400 등 DeckCraft craft-fonts 카탈 로그 일본어
-   *   폰트 (등 카탈로그가 Regular만 있는 upstream 판단에 따라 Bold를
+   * 각 엔진이 가져다 쓰는 폰트를 모은 것이다:
+   * - Inter 400/500/600/700 + Italic 400 — 본문 폰트. DeckCraft(craft-fonts
+   *   카탈로그)·PdfCraft(assets/fonts)가 내장하는 것과 같은 본문 폰트.
+   *   다만 DeckCraft 빌드는 craft-fonts 없이 만들면 Inter가 비어
+   *   있었다. 대조: Regular/SemiBold/Bold/Italic이 craft-fonts
+   *   매니페스트의 SHA-256과 일치함을 확인한다 (2026-11-05).
+   * - JetBrains Mono 400, Dancing Script 400 — PdfCraft 내장분.
+   * - BIZ UDPGothic 400 — DeckCraft craft-fonts 카탈로그의 일본어
+   *   폰트 (카탈로그가 Regular만 있는 upstream 사정에 따라 Bold를
    *   위에서 제외).
-   * - NanumGothic 400/700 등한글대관 수정된 정보 (2026-11-05 DeckCraft .notdef
-   *   수정된 정보).
-   * 라이선스 텍스트는 각 폰트 풀 *-OFL.txt가 정보한다.
+   * - NanumGothic 400/700 — 한글 대체 폰트 (2026-11-05 DeckCraft .notdef
+   *   수정본).
+   * 라이선스 텍스트는 각 폰트 풀 *-OFL.txt가 제공한다.
    *
-   * 적용 방식: 바이 너리 엔진 바이너리 넣는(DeckCraft실행GridCraft)와
-   * Drive '폴더' 페 이지 위에 등 실행 파일을 보내 등 사용자 폰트가
-   * 그리는 동안은 사용자 폰트가 숨기고, 파일 나머지를 메운다.
-   * 순서에 실행 전용 폰트를 한글 폰트보다 앞에 넣는다: 커버리지가 겹치는
-   * 전용 동안은 Inter가 숨기고 몸의 본문 에서 가깝다.
+   * 적용 방식: 바이너리 엔진(DeckCraft·GridCraft)에 Drive '폰트' 폴더
+   * 파일과 함께 보내, 사용자 폰트가 있으면 사용자 폰트가 우선하고,
+   * 파일 나머지를 풀이 메운다.
+   * 순서: 라틴 전용 폰트를 한글 폰트보다 앞에 넣는다 — 커버리지가 겹치는
+   * 동안은 Inter가 우선한다.
    */
   var POOL_FACES = [
     { family: 'Inter', weight: 400, style: 'normal', url: '/fonts/Inter-Regular.ttf' },

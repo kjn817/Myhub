@@ -4,7 +4,7 @@
 // sheet-gridcraft·finder-pdfcraft 5곳이 공유하던 붙여넣기 헬퍼
 // (isFormFieldTarget·pasteImageFile·fileToBase64·normalizeBytes와
 // PASTE_MAX_BYTES 상한)를 한 곳으로 모은다 (F-L2, 5-3).
-// 이 파일을 먼저 받은 서면에서만 소비처가 동작한다 — office.html·
+// 이 파일을 먼저 받은 페이지에서만 소비처가 동작한다 — office.html·
 // sheet.html은 정적 순서로, finder.js는 동적 import 체인으로 코어
 // 선행을 보장한다. 코어가 없으면 소비처는 붙여넣기를 조용히 건너뛴다
 // (붙여넣기 실패는 편집기 동작을 막지 않는다 — 엔진 자체의 텍스트
