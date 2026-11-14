@@ -5,8 +5,9 @@
  * 실제 FC 경로와 디버그 엔드포인트(GET /api/ai/tools)가 같은 팩토리를
  * 읽으므로, 등록 도구 목록이 두 곳에서 어긋나지 않는다.
  *
- * 죽은 간이 레지스트리(src/services/tools.ts)와는 무관하다 — D2 결정이
- * 날 때까지 간이 레지스트리를 되살리거나 연결하지 않는다.
+ * 죽은 간이 레지스트리(src/services/tools.ts)와는 무관하다 — D2 결정
+ * (2026-11-14)으로 tools-builtin이 삭제됐고, 간이 레지스트리를 되살리거나
+ * 연결하지 않는다.
  */
 import { ToolRegistry } from './registry'
 import { SearchMemoDefinition, SearchMemoInputSchema, executeSearchMemo } from './search-memo'

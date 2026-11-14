@@ -42,22 +42,6 @@ interface MemoRow {
 }
 
 // 대시보드 위젯용 통계
-memoApp.get('/stats', async (c) => {
-  const memos = await c.env.DB.prepare('SELECT COUNT(*) AS n FROM memos').first<{ n: number }>()
-  const files = await c.env.DB.prepare(
-    'SELECT COUNT(*) AS n, COALESCE(SUM(size), 0) AS s FROM files WHERE url IS NOT NULL'
-  ).first<{ n: number; s: number }>()
-  const week = await c.env.DB.prepare(
-    "SELECT COUNT(*) AS n FROM memos WHERE created_at >= datetime('now', '-7 days')"
-  ).first<{ n: number }>()
-  return c.json({
-    memos: memos?.n ?? 0,
-    files: files?.n ?? 0,
-    bytes: files?.s ?? 0,
-    week: week?.n ?? 0,
-  })
-})
-
 memoApp.get('/tags', async (c) => {
   const { results } = await c.env.DB.prepare(
     'SELECT tag, COUNT(*) AS n FROM memo_tags GROUP BY tag ORDER BY n DESC, tag'

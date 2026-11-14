@@ -149,30 +149,6 @@ beforeEach(() => {
   mockEmit.mockResolvedValue(undefined)
 })
 
-// ---------------- GET /stats ----------------
-describe('GET /stats', () => {
-  test('통계 반환', async () => {
-    const { json, db } = makeApp()
-    db.firstQueue.push({ n: 10 })
-    db.firstQueue.push({ n: 5, s: 1234 })
-    db.firstQueue.push({ n: 3 })
-    const res = await json('/stats', 'GET')
-    const j = await body(res)
-    expect(res.status).toBe(200)
-    expect(j).toEqual({ memos: 10, files: 5, bytes: 1234, week: 3 })
-  })
-
-  test('null 결과 → 0 폴백', async () => {
-    const { json, db } = makeApp()
-    db.firstQueue.push(null)
-    db.firstQueue.push(null)
-    db.firstQueue.push(null)
-    const res = await json('/stats', 'GET')
-    const j = await body(res)
-    expect(j).toEqual({ memos: 0, files: 0, bytes: 0, week: 0 })
-  })
-})
-
 // ---------------- GET /tags ----------------
 describe('GET /tags', () => {
   test('태그 목록', async () => {

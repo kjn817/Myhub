@@ -197,35 +197,3 @@ describe('POST /disconnect', () => {
     expect(fake.tables.google_integrations).toHaveLength(0)
   })
 })
-
-describe('GET /gmail/search · /calendar/events (미연동)', () => {
-  test('미연동이면 google_not_connected', async () => {
-    const { env } = makeEnv()
-    const gmail = await call(env, '/gmail/search?q=test')
-    expect(gmail.status).toBe(401)
-    expect((await gmail.json()).error).toBe('google_not_connected')
-    const cal = await call(env, '/calendar/events?from=2026-10-27&to=2026-10-27')
-    expect(cal.status).toBe(401)
-    expect((await cal.json()).error).toBe('google_not_connected')
-  })
-})
-
-describe('POST /calendar/events (연동·읽기 전용)', () => {
-  test('쓰기 scope 없으면 403 scope_missing', async () => {
-    const { env } = makeEnv()
-    await saveGoogleTokens(env, {
-      email: 'u@x.com',
-      accessToken: 'at-1',
-      refreshToken: 'rt-1',
-      scope: READONLY_SCOPE,
-      expiresIn: 3600,
-    })
-    const res = await call(env, '/calendar/events', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ summary: '치과', start: '2026-10-27T15:00:00' }),
-    })
-    expect(res.status).toBe(403)
-    expect((await res.json()).error).toBe('scope_missing')
-  })
-})

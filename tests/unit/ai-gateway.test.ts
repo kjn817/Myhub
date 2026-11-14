@@ -9,7 +9,6 @@
 
 import { AI_GATEWAY_ID, AI_GATEWAY_OPTIONS } from '../../src/services/ai-gateway'
 import { CLEF_MODEL, createClefInvoker } from '../../src/services/router'
-import { testFunctionCalling } from '../../src/ai/fc-test'
 import {
   VOICE_STT_MODEL,
   VOICE_TTS_MODEL,
@@ -51,17 +50,6 @@ describe('createClefInvoker', () => {
     expect(calls).toHaveLength(1)
     expect(calls[0][0]).toBe(CLEF_MODEL)
     expect(calls[0][1]).toEqual({ question: 'q' })
-    expect(calls[0][2]).toEqual(AI_GATEWAY_OPTIONS)
-  })
-})
-
-describe('testFunctionCalling', () => {
-  test('FC 실증 호출에 gateway 옵션을 단다', async () => {
-    const { calls, run } = recordingRun({ tool_calls: [{ name: 'test_echo' }] })
-    await testFunctionCalling({ AI: { run } })
-    expect(calls).toHaveLength(1)
-    expect(calls[0][0]).toBe('@cf/meta/llama-3.3-70b-instruct-fp8-fast')
-    expect(calls[0][1]).toBeDefined()
     expect(calls[0][2]).toEqual(AI_GATEWAY_OPTIONS)
   })
 })

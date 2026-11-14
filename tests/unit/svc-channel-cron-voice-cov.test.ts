@@ -123,11 +123,7 @@ async function cronCall(
 }
 
 describe('cron routes — db_error 500 경로', () => {
-  test('목록·생성·수정·삭제 모두 DB 실패 시 500 db_error', async () => {
-    const listed = await cronCall(throwingDb, '/')
-    expect(listed.status).toBe(500)
-    expect(listed.body.error).toBe('db_error')
-
+  test('생성 DB 실패 시 500 db_error', async () => {
     const created = await cronCall(throwingDb, '/', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -135,58 +131,10 @@ describe('cron routes — db_error 500 경로', () => {
     })
     expect(created.status).toBe(500)
     expect(created.body.error).toBe('db_error')
-
-    const patched = await cronCall(throwingDb, '/1', {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ enabled: false }),
-    })
-    expect(patched.status).toBe(500)
-    expect(patched.body.error).toBe('db_error')
-
-    const deleted = await cronCall(throwingDb, '/1', { method: 'DELETE' })
-    expect(deleted.status).toBe(500)
-    expect(deleted.body.error).toBe('db_error')
   })
 })
 
-describe('cron routes — 설명 폴백·id·입력 검증', () => {
-  test('파싱 불가 nl_text 작업은 설명이 nl_text 그대로', async () => {
-    const fake = new FakeD1()
-    fake.tables.user_cron_jobs.push({
-      id: 1,
-      action: 'custom',
-      nl_text: '안녕하세요',
-      cron_kst: '0 8 * * *',
-      timezone: 'Asia/Seoul',
-      next_run_at: null,
-      enabled: 1,
-      created_at: '2026-10-26T00:00:00Z',
-      updated_at: '2026-10-26T00:00:00Z',
-    })
-    const { status, body } = await cronCall(fake, '/')
-    expect(status).toBe(200)
-    expect(body.jobs).toHaveLength(1)
-    expect(body.jobs[0].description).toBe('안녕하세요')
-    expect(body.jobs[0].enabled).toBe(true)
-  })
-
-  test('id 0·음수·소수는 invalid_id 400 (PATCH·DELETE)', async () => {
-    const fake = new FakeD1()
-    for (const id of ['0', '-3', '1.5']) {
-      const patched = await cronCall(fake, `/${id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ enabled: false }),
-      })
-      expect(patched.status).toBe(400)
-      expect(patched.body.error).toBe('invalid_id')
-      const deleted = await cronCall(fake, `/${id}`, { method: 'DELETE' })
-      expect(deleted.status).toBe(400)
-      expect(deleted.body.error).toBe('invalid_id')
-    }
-  })
-
+describe('cron routes — 입력 검증', () => {
   test('nl_text 500자 초과·공백만·본문 파싱 실패 → invalid_nl_text 400', async () => {
     const fake = new FakeD1()
     const tooLong = await cronCall(fake, '/', {
@@ -213,17 +161,6 @@ describe('cron routes — 설명 폴백·id·입력 검증', () => {
     })
     expect(badJson.status).toBe(400)
     expect(badJson.body.error).toBe('invalid_nl_text')
-  })
-
-  test('PATCH 본문 파싱 실패 → invalid_enabled 400', async () => {
-    const fake = new FakeD1()
-    const res = await cronCall(fake, '/1', {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: '{invalid json',
-    })
-    expect(res.status).toBe(400)
-    expect(res.body.error).toBe('invalid_enabled')
   })
 })
 

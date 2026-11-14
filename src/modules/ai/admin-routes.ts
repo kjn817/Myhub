@@ -16,24 +16,6 @@ import { revealTextOrPlaceholder, isStorageEncryptionEnabled } from '../../servi
 
 export const aiAdminApp = new Hono<{ Bindings: Env }>()
 
-aiAdminApp.get('/history', async (c) => {
-  const personaId = c.req.query('personaId') || 'concierge'
-  try {
-    const { results } = await c.env.DB.prepare(
-      'SELECT id, role, content, model, created_at FROM ai_chats WHERE persona_id = ? ORDER BY id DESC LIMIT 50'
-    ).bind(personaId).all<{ id: number; role: string; content: string; model: string | null; created_at: string }>()
-    // 저장 암호화(storage-protection)된 본문은 복호해 돌려준다 — 실패 시
-    // 원문(암호문) 대신 플레이스홀더 (운영 번들 계약).
-    const messages: Array<{ id: number; role: string; content: string; model: string | null; created_at: string }> = []
-    for (const m of (results || []).reverse()) {
-      messages.push({ ...m, content: await revealTextOrPlaceholder(c.env, m.content) })
-    }
-    return c.json({ ok: true, messages })
-  } catch {
-    return c.json({ ok: true, messages: [] })
-  }
-})
-
 // 대화방 목록 — 페이지네이션 + 미리보기 절단 (계약: src/lib/conversation-list.ts)
 // 기본 최근 50건, last_msg는 미리보기 40자만. hasMore/nextOffset으로 이어보기 가능.
 aiAdminApp.get('/conversations', async (c) => {
@@ -131,57 +113,11 @@ aiAdminApp.delete('/conversations/:id', async (c) => {
 })
 
 // 메모리 저장
-aiAdminApp.post('/memory', async (c) => {
-  const body = await c.req.json<{ category?: string; key?: string; value?: string }>().catch(() => ({} as { category?: string; key?: string; value?: string }))
-  if (!body.key || !body.value) return c.json({ ok: false, error: 'key/value 필요' }, 400)
-  try {
-    const now = new Date().toISOString()
-    await c.env.DB.batch([
-      c.env.DB.prepare('DELETE FROM ai_memory WHERE key = ?').bind(body.key),
-      c.env.DB.prepare(
-        'INSERT INTO ai_memory (category, key, value, created_at, updated_at) VALUES (?, ?, ?, ?, ?)'
-      ).bind(body.category || 'fact', body.key, body.value, now, now),
-    ])
-    return c.json({ ok: true })
-  } catch (e) {
-    return c.json({ ok: false, error: String(e).slice(0, 100) }, 500)
-  }
-})
-
-// 메모리 조회
-aiAdminApp.get('/memory', async (c) => {
-  const category = c.req.query('category')
-  const key = c.req.query('key')
-  try {
-    let sql = 'SELECT category, key, value, updated_at FROM ai_memory'
-    const params: any[] = []
-    const conds: string[] = []
-    if (category) { conds.push('category = ?'); params.push(category) }
-    if (key) { conds.push('key LIKE ?'); params.push(`%${key}%`) }
-    if (conds.length) sql += ' WHERE ' + conds.join(' AND ')
-    sql += ' ORDER BY updated_at DESC LIMIT 50'
-    const { results } = await c.env.DB.prepare(sql).bind(...params).all()
-    return c.json({ ok: true, memories: results || [] })
-  } catch {
-    return c.json({ ok: true, memories: [] })
-  }
-})
-
-// 메모리 삭제
-aiAdminApp.delete('/memory/:key', async (c) => {
-  const key = c.req.param('key')
-  try {
-    await c.env.DB.prepare('DELETE FROM ai_memory WHERE key = ?').bind(key).run()
-    return c.json({ ok: true })
-  } catch {
-    return c.json({ ok: false }, 500)
-  }
-})
-
 // 등록된 도구 목록 (디버깅용)
 // tools는 실제 FC 경로의 레지스트리(공유 팩토리)에서 읽는다. 간이 레지스트리
-// (services/tools.ts)는 D2 미결로 비어 있어 tools: []라는 거짓 정보를 주던
-// 것을 별도 필드로 분리했다 — 죽은 도구 시스템을 되살리는 것이 아니다.
+// (services/tools.ts)는 D2 결정(2026-11-14)으로 tools-builtin이 삭제되어
+// 비어 있다 — tools: []라는 거짓 정보를 주지 않도록 별도 필드로 분리했다.
+// 죽은 도구 시스템을 되살리는 것이 아니다.
 aiAdminApp.get('/tools', async (c) => {
   const { createFCToolRegistry } = await import('../../ai/tools/fc-registry')
   const { getToolDefinitions } = await import('../../services/tools')
@@ -449,18 +385,6 @@ aiAdminApp.post('/image', async (c) => {
 })
 
 // 디버그: 최근 에러 로그 (인증 필요)
-aiAdminApp.get('/debug/errors', async (c) => {
-  try {
-    const { results } = await c.env.DB.prepare(
-      `SELECT provider, model, capability, error, http_status, created_at
-       FROM ai_error_log ORDER BY id DESC LIMIT 20`
-    ).all()
-    return c.json({ ok: true, errors: results || [] })
-  } catch {
-    return c.json({ ok: true, errors: [] })
-  }
-})
-
 // 운영 지표 (GPT 재평가 P1 — 2026-10-30)
 // GET /api/ai/metrics?days=14 (기본 14, 1~90 클램프)
 // ai_usage·ai_error_log·tool_execution_audit·tool_approval_requests를

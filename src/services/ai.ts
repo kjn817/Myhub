@@ -65,10 +65,10 @@ import { redactStringForLog } from './privacy-engine'
 import { newSpanId, newTraceId, type TraceContext } from '../lib/trace'
 import { remainingMs } from '../lib/deadline'
 import { newLedgerRunId, finishLedgerRun, isLedgerVerifiedSuccess, findLedgerVerifiedSuccess, hasUnverifiedSuccess } from './tool-ledger'
-// 도구 시스템은 안정성 확인 후 재활성화 예정
-// import { getToolDefinitions, executeTool } from './tools'
-// import { registerBuiltinTools } from './tools-builtin'
-// registerBuiltinTools()
+// 구 도구 시스템(services/tools.ts 간이 레지스트리 + tools-builtin)은 D2 결정
+// (2026-11-14)으로 tools-builtin을 삭제했다. live 도구 경로는 FC 레지스트리
+// (src/ai/tools/fc-registry.ts)이며, 간이 레지스트리는 /api/ai/tools의
+// legacySimpleRegistryTools 필드로만 읽힌다 — 되살리거나 연결하지 않는다.
 
 // ---------------------------------------------------------------------------
 // 사용량 원장 (D1 — KV는 정확한 카운터에 부적합)

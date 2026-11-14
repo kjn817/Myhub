@@ -3,14 +3,16 @@
  * admin-routes 복호 반영 계약 (실제 SQLite + Hono) — F3에서 운영 번들
  * 대조로 복원한 revealTextOrPlaceholder 적용을 고정한다.
  *
- * 배경: 저장 암호화(storage-protection)가 켜진 상태에서 /history·
- * /room-history·/conversations가 DB 원문을 그대로 돌려주면, 암호문이
- * UI에 노출되고 대화 목록 미리보기는 암호문을 잘라 복호 자체가 깨진다.
- * 운영 번들은 세 라우트 모두 복호(실패 시 플레이스홀더)를 거친다.
+ * 배경: 저장 암호화(storage-protection)가 켜진 상태에서 /room-history·
+ * /conversations가 DB 원문을 그대로 돌려주면, 암호문이 UI에 노출되고
+ * 대화 목록 미리보기는 암호문을 잘라 복호 자체가 깨진다.
+ * 운영 번들은 두 라우트 모두 복호(실패 시 플레이스홀더)를 거친다.
+ * (/history는 D3 결정(2026-11-14)으로 삭제 — 같은 복호 속성은
+ * /room-history 테스트가 고정한다.)
  *
  * 검증 성질:
  * - 암호화된 마지막 메시지의 last_msg는 "복호 후" 40자로 절단된다
- * - /history·/room-history의 content는 복호된 평문이다
+ * - /room-history의 content는 복호된 평문이다
  * - 복호할 수 없는 암호문은 원문 대신 플레이스홀더가 된다
  * - 평문 메시지는 그대로 통과한다
  * 카나리아: admin-routes에서 reveal 적용을 되돌리면 전부 실패한다.
@@ -95,15 +97,6 @@ describe('admin-routes 복호 반영 (운영 번들 계약)', () => {
     const { body } = await get('/conversations')
     const conv2 = body.conversations.find((c: any) => c.id === 2)
     expect(conv2.last_msg).toBe(DECRYPT_FAILED_PLACEHOLDER.slice(0, 40))
-  })
-
-  test('/history: content가 복호되고 평문은 그대로다', async () => {
-    const { body } = await get('/history?personaId=keeper')
-    const contents = body.messages.map((m: any) => m.content)
-    expect(contents).toContain('평문 질문')
-    expect(contents).toContain(PLAIN_LONG)
-    expect(contents).toContain(DECRYPT_FAILED_PLACEHOLDER)
-    for (const c of contents) expect(c.startsWith('ENC')).toBe(false)
   })
 
   test('/room-history: content가 복호된다', async () => {

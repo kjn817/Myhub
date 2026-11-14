@@ -207,11 +207,11 @@ describe('리터럴 잔존 금지 (주석 제외)', () => {
     expect(offenders).toEqual([])
   })
 
-  test('기본 모델 리터럴은 정의·역사 기록·D2 파일 외에 없다', () => {
+  test('기본 모델 리터럴은 정의·역사 기록 외에 없다', () => {
     const allowed = new Set([
       'src/services/ai-models.ts', // 정의처
       'src/ai/verified-models.ts', // 2026-10-10 검증 당시 역사 기록
-      'src/services/nova-subagents.ts', // D2 미결
+      // nova-subagents.ts는 D2 결정(2026-11-14)으로 삭제됨 — 허용 목록에서 제외
     ])
     const offenders: string[] = []
     for (const f of walkTs(path.join(ROOT, 'src'))) {

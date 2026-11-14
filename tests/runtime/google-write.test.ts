@@ -10,9 +10,9 @@
  *   ON 경로는 googleApp.request에 env를 주입해 검증한다):
  *   GET /oauth/start?mode=write → 302, 동의 URL에 calendar.events 포함,
  *   KV state의 mode='write'
- * - POST /api/google/calendar/events (플래그와 무관하게 scope가 게이트):
- *   토큰 없음 → 401 google_not_connected / 읽기 전용 scope → 403 scope_missing
- *   (두 경우 모두 Google fetch에 도달하지 않는다)
+ * - POST /api/google/calendar/events 엔드포인트는 D3 결정(2026-11-14)으로
+ *   삭제됐다. scope 게이팅은 executeGcalCreate 서비스 수준에서 검증한다
+ *   (아래 쓰기 scope 토큰 항목 참조).
  * - 쓰기 scope 토큰 + 스텁 Google fetch:
  *   executeGcalCreate가 Calendar API에 일정 생성 POST를 보내고 생성된
  *   일정을 반환한다. 읽기 전용 scope면 scope_missing + fetch 미호출.
@@ -171,28 +171,6 @@ describe('google write flag (miniflare)', () => {
     const states = [...store.values()].map((v) => JSON.parse(v))
     expect(states).toHaveLength(1)
     expect(states[0].mode).toBe('write')
-  })
-
-  it('POST /calendar/events: 토큰 없으면 401 google_not_connected', async () => {
-    await clearTokens()
-    const { status, body } = await fetchJson('/api/google/calendar/events', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ summary: '테스트', start: '2026-10-29T15:00:00+09:00' }),
-    })
-    expect(status).toBe(401)
-    expect(body.error).toBe('google_not_connected')
-  })
-
-  it('POST /calendar/events: 읽기 전용 scope 토큰이면 403 scope_missing (Google 미호출)', async () => {
-    await seedToken(READONLY_SCOPE)
-    const { status, body } = await fetchJson('/api/google/calendar/events', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ summary: '테스트', start: '2026-10-29T15:00:00+09:00' }),
-    })
-    expect(status).toBe(403)
-    expect(body.error).toBe('scope_missing')
   })
 
   it('GET /api/google/status: 쓰기 scope 토큰이면 scope에 calendar.events 포함', async () => {

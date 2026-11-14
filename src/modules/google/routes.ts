@@ -1,4 +1,7 @@
-// Google 연동 모듈 — OAuth + Gmail/Calendar 읽기 API
+// Google 연동 모듈 — OAuth + 연동 상태·동기화
+// Gmail/Calendar 직접 조회·생성 HTTP 엔드포인트는 D3 결정(2026-11-14)으로
+// 삭제 — 비서·일정 동기화는 google-tools·schedule-google-events 서비스를
+// 직접 사용한다.
 // 인증은 전역 미들웨어(verifySession)에서 처리됨
 // 설계: docs/gmail-calendar-design.md §7
 // - 실제 Google 콘솔 설정(결정 ①)이 없어도 라우트·토큰 저장은 동작한다.
@@ -23,16 +26,10 @@ import {
   deleteGoogleTokens,
   getGoogleStatus,
   getGoogleTokens,
-  getValidAccessToken,
-  hasCalendarWriteScope,
   saveGoogleTokens,
 } from '../../services/google-tokens'
 import {
-  getGmailMessage,
   getGmailProfile,
-  listCalendarEvents,
-  listGmailMessages,
-  createCalendarEvent,
 } from '../../services/google-client'
 import { getLastSyncLog } from '../../services/google-sync'
 import { backfillUnsyncedSchedules, getScheduleSyncCounts } from '../../services/schedule-google-sync'
@@ -148,73 +145,3 @@ googleApp.post('/disconnect', async (c) => {
   return c.json({ ok: true })
 })
 
-// Gmail 검색 — q 없으면 읽지 않은 메일
-googleApp.get('/gmail/search', async (c) => {
-  const token = await getValidAccessToken(fetch, c.env as any)
-  if (!token.ok) {
-    return c.json({ ok: false, error: token.reason === 'not_connected' ? 'google_not_connected' : token.reason }, 401)
-  }
-  const q = c.req.query('q')?.trim() || 'is:unread'
-  const max = Math.min(Math.max(Number(c.req.query('max')) || 10, 1), 10)
-  const res = await listGmailMessages(fetch, token.accessToken, { q, maxResults: max })
-  if (!res.ok) return c.json({ ok: false, error: res.error }, 502)
-  return c.json({
-    ok: true,
-    messages: res.data.map((m) => ({ id: m.id, from: m.from, subject: m.subject, date: m.date, snippet: m.snippet })),
-  })
-})
-
-// Gmail 단건 조회 — 본문은 5,000자로 절단 (사용자 본인 화면용)
-googleApp.get('/gmail/:id', async (c) => {
-  const token = await getValidAccessToken(fetch, c.env as any)
-  if (!token.ok) {
-    return c.json({ ok: false, error: token.reason === 'not_connected' ? 'google_not_connected' : token.reason }, 401)
-  }
-  const res = await getGmailMessage(fetch, token.accessToken, c.req.param('id'), true)
-  if (!res.ok) return c.json({ ok: false, error: res.error }, 502)
-  return c.json({
-    ok: true,
-    message: { ...res.data, bodyText: res.data.bodyText.slice(0, 5000) },
-  })
-})
-
-// 캘린더 이벤트 조회 — from/to = YYYY-MM-DD (기본: 오늘)
-googleApp.get('/calendar/events', async (c) => {
-  const token = await getValidAccessToken(fetch, c.env as any)
-  if (!token.ok) {
-    return c.json({ ok: false, error: token.reason === 'not_connected' ? 'google_not_connected' : token.reason }, 401)
-  }
-  const today = new Date(Date.now() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10)
-  const from = c.req.query('from')?.trim() || today
-  const to = c.req.query('to')?.trim() || from
-  const res = await listCalendarEvents(fetch, token.accessToken, {
-    timeMin: `${from}T00:00:00+09:00`,
-    timeMax: `${to}T23:59:59+09:00`,
-  })
-  if (!res.ok) return c.json({ ok: false, error: res.error }, 502)
-  return c.json({ ok: true, events: res.data })
-})
-
-// 캘린더 일정 생성 — 쓰기 scope가 없으면 거부 (설계 §3 결정 필요)
-googleApp.post('/calendar/events', async (c) => {
-  const token = await getValidAccessToken(fetch, c.env as any)
-  if (!token.ok) {
-    return c.json({ ok: false, error: token.reason === 'not_connected' ? 'google_not_connected' : token.reason }, 401)
-  }
-  if (!hasCalendarWriteScope(token.tokens)) {
-    return c.json({ ok: false, error: 'scope_missing' }, 403)
-  }
-  const json = await c.req.json().catch(() => null)
-  const summary = typeof json?.summary === 'string' ? json.summary.trim() : ''
-  const start = typeof json?.start === 'string' ? json.start.trim() : ''
-  if (!summary || !start) return c.json({ ok: false, error: 'invalid_input' }, 400)
-  const res = await createCalendarEvent(fetch, token.accessToken, {
-    summary,
-    start,
-    end: typeof json?.end === 'string' ? json.end : undefined,
-    description: typeof json?.description === 'string' ? json.description : undefined,
-    location: typeof json?.location === 'string' ? json.location : undefined,
-  })
-  if (!res.ok) return c.json({ ok: false, error: res.error }, 502)
-  return c.json({ ok: true, event: res.data })
-})

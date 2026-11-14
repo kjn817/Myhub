@@ -9,7 +9,6 @@ import { artifactApp } from './modules/artifact/routes'
 import { briefingApp } from './modules/briefing/routes'
 import { pptxApp } from './modules/pptx/routes'
 import { pushApp } from './modules/push/routes'
-import { searchApp } from './modules/search/routes'
 import memoryApp from './modules/memory/routes'
 import backupApp from './modules/backup/routes'
 import { keyRotationApp } from './modules/key-rotation/routes'
@@ -56,7 +55,8 @@ export const modules: ModuleDef[] = [
   { id: 'briefing', name: '오늘 브리핑', desc: '오늘 일정·할일 요약', path: '/schedule.html', app: briefingApp, hidden: true },
   { id: 'pptx', name: 'PPT 내보내기', desc: '아침 브리핑·주간 보고서 PPTX 내보내기', path: '', app: pptxApp, hidden: true },
   { id: 'push', name: '푸시 알림', desc: '일정 알림 구독', path: '/schedule.html', app: pushApp, hidden: true },
-  { id: 'search', name: '통합 검색', desc: '메모·대화·일정·할 일 통합 검색', path: '/memo.html', app: searchApp, hidden: true },
+  // 통합 검색(search) 모듈은 D3 결정(2026-11-14)으로 제거 — GET /api/search/
+  // 호출자 없음. unifiedSearch 서비스는 유지된다.
   { id: 'memory', name: '장기 기억', desc: '사용자 동의 기반 장기 기억', path: '/memory.html', app: memoryApp, hidden: true },
   // backup 앱은 AppEnv(Variables 포함)로 타입되지만 모듈 레지스트리의
   // 공통 형태는 Bindings-only다 — 구성 루트에서만 경계 캐스트로 맞춘다 (L-05).

@@ -2723,35 +2723,6 @@ describe('POST /orchestrate', () => {
   })
 })
 
-// ---------------- GET /history ----------------
-describe('GET /history', () => {
-  test('최근 50개 역순 반환', async () => {
-    const { json, db } = makeApp()
-    db.allQueue.push([{ id: 2, role: 'assistant', content: 'b' }, { id: 1, role: 'user', content: 'a' }])
-    const j = await body(await json('/history?personaId=keeper', 'GET'))
-    expect(j.ok).toBe(true)
-    expect(j.messages).toEqual([
-      { id: 1, role: 'user', content: 'a' },
-      { id: 2, role: 'assistant', content: 'b' },
-    ])
-    expect(db.calls[0].params).toEqual(['keeper'])
-  })
-
-  test('personaId 기본값 concierge', async () => {
-    const { json, db } = makeApp()
-    db.allQueue.push([])
-    await json('/history', 'GET')
-    expect(db.calls[0].params).toEqual(['concierge'])
-  })
-
-  test('DB 실패 → 빈 배열', async () => {
-    const { json, db } = makeApp()
-    db.allQueue.push(new Error('db down'))
-    const j = await body(await json('/history', 'GET'))
-    expect(j).toEqual({ ok: true, messages: [] })
-  })
-})
-
 // ---------------- 대화방 API ----------------
 describe('대화방 API', () => {
   test('GET /conversations 목록', async () => {
@@ -2836,94 +2807,6 @@ describe('대화방 API', () => {
     const { json, db } = makeApp()
     db.batchQueue.push(new Error('db down'))
     const res = await json('/conversations/5', 'DELETE')
-    expect(res.status).toBe(500)
-  })
-})
-
-// ---------------- 메모리 API ----------------
-describe('메모리 API', () => {
-  test('POST /memory 저장', async () => {
-    const { json, db } = makeApp()
-    db.batchQueue.push([])
-    const j = await body(await json('/memory', 'POST', { category: 'fact', key: 'k', value: 'v' }))
-    expect(j).toEqual({ ok: true })
-  })
-
-  test('POST /memory: key 없음 → 400', async () => {
-    const { json } = makeApp()
-    const res = await json('/memory', 'POST', { value: 'v' })
-    expect(res.status).toBe(400)
-  })
-
-  test('POST /memory: value 없음 → 400', async () => {
-    const { json } = makeApp()
-    const res = await json('/memory', 'POST', { key: 'k' })
-    expect(res.status).toBe(400)
-  })
-
-  test('POST /memory: JSON 파싱 실패 → 400', async () => {
-    const { req } = makeApp()
-    const res = await req('/memory', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: '{{{',
-    })
-    expect(res.status).toBe(400)
-  })
-
-  test('POST /memory 실패 → 500', async () => {
-    const { json, db } = makeApp()
-    db.batchQueue.push(new Error('db down'))
-    const res = await json('/memory', 'POST', { key: 'k', value: 'v' })
-    expect(res.status).toBe(500)
-  })
-
-  test('GET /memory: 필터 없음', async () => {
-    const { json, db } = makeApp()
-    db.allQueue.push([{ category: 'fact', key: 'k', value: 'v', updated_at: 'u' }])
-    const j = await body(await json('/memory', 'GET'))
-    expect(j.ok).toBe(true)
-    expect(j.memories).toHaveLength(1)
-    expect(db.calls[0].sql).not.toContain('WHERE')
-  })
-
-  test('GET /memory: category+key 필터', async () => {
-    const { json, db } = makeApp()
-    db.allQueue.push([])
-    await json('/memory?category=fact&key=abc', 'GET')
-    expect(db.calls[0].sql).toContain('WHERE category = ? AND key LIKE ?')
-    expect(db.calls[0].params).toEqual(['fact', '%abc%'])
-  })
-
-  test('GET /memory: category만', async () => {
-    const { json, db } = makeApp()
-    db.allQueue.push([])
-    await json('/memory?category=pref', 'GET')
-    expect(db.calls[0].params).toEqual(['pref'])
-  })
-
-  test('GET /memory: key만', async () => {
-    const { json, db } = makeApp()
-    db.allQueue.push([])
-    await json('/memory?key=z', 'GET')
-    expect(db.calls[0].params).toEqual(['%z%'])
-  })
-
-  test('GET /memory 실패 → 빈 배열', async () => {
-    const { json, db } = makeApp()
-    db.allQueue.push(new Error('db down'))
-    expect((await body(await json('/memory', 'GET'))).memories).toEqual([])
-  })
-
-  test('DELETE /memory/:key 성공/실패', async () => {
-    const { json, db } = makeApp()
-    db.runQueue.push({ meta: { changes: 1 } })
-    expect((await body(await json('/memory/mykey', 'DELETE'))).ok).toBe(true)
-    expect(db.calls[0].params).toEqual(['mykey'])
-
-    const t2 = makeApp({ db: new MockDb() })
-    t2.db.runQueue.push(new Error('db down'))
-    const res = await t2.json('/memory/mykey', 'DELETE')
     expect(res.status).toBe(500)
   })
 })
@@ -3146,19 +3029,6 @@ describe('쿼터·사용량·에러로그', () => {
     expect((await body(await json('/usage', 'GET'))).usage).toEqual([])
   })
 
-  test('GET /debug/errors', async () => {
-    const { json, db } = makeApp()
-    db.allQueue.push([{ provider: 'gemini', error: 'e' }])
-    const j = await body(await json('/debug/errors', 'GET'))
-    expect(j.ok).toBe(true)
-    expect(j.errors).toHaveLength(1)
-  })
-
-  test('GET /debug/errors 실패 → 빈 배열', async () => {
-    const { json, db } = makeApp()
-    db.allQueue.push(new Error('db down'))
-    expect((await body(await json('/debug/errors', 'GET'))).errors).toEqual([])
-  })
 })
 
 // ---------------- 외부 API 라우트 ----------------
@@ -3543,22 +3413,10 @@ describe('추가 브랜치 커버', () => {
     expect(ins!.params[3]).toBe('')
   })
 
-  test('GET /history: results null → 빈 배열', async () => {
-    const { json, db } = makeApp()
-    db.allQueue.push(null)
-    expect((await body(await json('/history', 'GET'))).messages).toEqual([])
-  })
-
   test('GET /conversations: results null → 빈 배열', async () => {
     const { json, db } = makeApp()
     db.allQueue.push(null)
     expect((await body(await json('/conversations', 'GET'))).conversations).toEqual([])
-  })
-
-  test('GET /memory: results null → 빈 배열', async () => {
-    const { json, db } = makeApp()
-    db.allQueue.push(null)
-    expect((await body(await json('/memory', 'GET'))).memories).toEqual([])
   })
 
   test('GET /room-history: results null → 빈 배열', async () => {
@@ -3588,12 +3446,6 @@ describe('추가 브랜치 커버', () => {
     const { json, db } = makeApp()
     db.allQueue.push(null)
     expect((await body(await json('/usage', 'GET'))).usage).toEqual([])
-  })
-
-  test('GET /debug/errors: results null → 빈 배열', async () => {
-    const { json, db } = makeApp()
-    db.allQueue.push(null)
-    expect((await body(await json('/debug/errors', 'GET'))).errors).toEqual([])
   })
 
   test('GET /websearch: 비-Error throw → 502', async () => {
