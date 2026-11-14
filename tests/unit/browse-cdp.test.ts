@@ -10,6 +10,8 @@
  * - 단계별 실패는 실패한 단계 이름으로 돌아온다 (targets/attach 폴백은
  *   세션 없는 직접 navigate로 이어지고, 그 실패는 원래 단계로 보고된다).
  * - 응답이 없으면 timeoutMs 안에 현재 단계로 종료하고 소켓은 닫힌다.
+ * - 키오스크 모드(2026-11-14): 이동 시 영구 탭 외의 페이지 타깃(팝업 창)을
+ *   닫아 MyHub 주소창을 탈출구로 만든다. 영구 탭은 닫지 않는다.
  * 카나리아: 단계 보고(stage)나 폴백 조건을 깨면 해당 테스트가 실패한다.
  */
 import { navigateSession, wsToHttpUrl, type CdpSocket } from '../../src/modules/browse/cdp'
@@ -122,6 +124,42 @@ describe('navigateSession — 정상 경로', () => {
     sock.throwOnClose = true
     const r = await navigateSession(WS_URL, TARGET, async () => sock as CdpSocket)
     expect(r).toEqual({ ok: true, stage: 'ok' })
+  })
+})
+
+describe('navigateSession — 키오스크 팝업 정리 (2026-11-14)', () => {
+  test('영구 탭 외의 페이지 타깃은 이동 전에 닫고, 영구 탭은 닫지 않는다', async () => {
+    const sock = new FakeSocket((msg, emit) => {
+      if (msg.method === 'Target.getTargets') {
+        emit({ id: msg.id, result: { targetInfos: [
+          { type: 'page', targetId: 'page-1' },
+          { type: 'page', targetId: 'popup-1' },
+          { type: 'page', targetId: 'popup-2' },
+          { type: 'service_worker', targetId: 'sw-1' },
+        ] } })
+      } else if (msg.method === 'Target.attachToTarget') {
+        emit({ id: msg.id, result: { sessionId: 's' } })
+      } else if (msg.method === 'Page.navigate') {
+        emit({ id: msg.id, result: {} })
+      }
+      // closeTarget 응답은 없어도 된다 (발사 후 망각)
+    })
+    const r = await navigateSession(WS_URL, TARGET, async () => sock as CdpSocket)
+    expect(r).toEqual({ ok: true, stage: 'ok' })
+    const closes = sock.sent.filter((m) => m.method === 'Target.closeTarget')
+    expect(closes.map((m) => m.params.targetId).sort()).toEqual(['popup-1', 'popup-2'])
+    expect(sock.sent.find((m) => m.method === 'Target.attachToTarget')?.params.targetId).toBe('page-1')
+    const closeIdx = sock.sent.findIndex((m) => m.method === 'Target.closeTarget')
+    const attachIdx = sock.sent.findIndex((m) => m.method === 'Target.attachToTarget')
+    expect(closeIdx).toBeGreaterThan(-1)
+    expect(closeIdx).toBeLessThan(attachIdx)
+  })
+
+  test('페이지 타깃이 하나면 closeTarget을 보내지 않는다', async () => {
+    const sock = new FakeSocket(happyHandler)
+    const r = await navigateSession(WS_URL, TARGET, async () => sock as CdpSocket)
+    expect(r).toEqual({ ok: true, stage: 'ok' })
+    expect(sock.sent.some((m) => m.method === 'Target.closeTarget')).toBe(false)
   })
 })
 

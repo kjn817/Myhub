@@ -173,6 +173,16 @@ export async function navigateSession(
             }
             return
           }
+          // 키오스크 모드(2026-11-14)에서는 팝업 창이 전체 화면으로 떠서 돌아올
+          // 방법이 없다 — 이동 시 영구 탭 외의 페이지 타깃을 닫아 MyHub 주소창을
+          // 탈출구로 만든다. 닫기는 응답을 안 기다리는 발사 후 망각이다.
+          // (비서 읽기가 진행 중이면 그 탭도 닫혀 읽기가 실패할 수 있으나 드물고
+          // 우아하게 실패한다 — 읽기는 실패를 보고하고 탭은 어차피 닫힐 운명이다.)
+          for (const t of infos) {
+            if (t.type === 'page' && t.targetId !== page.targetId) {
+              send('Target.closeTarget', { targetId: t.targetId })
+            }
+          }
           phase = 'attach'
           attachId = send('Target.attachToTarget', { targetId: page.targetId, flatten: true })
         } else if (msg.id === attachId) {
