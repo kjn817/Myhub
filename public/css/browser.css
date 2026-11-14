@@ -355,6 +355,10 @@
 }
 .bw-frame { position: absolute; inset: 0; width: 100%; height: 100%; border: none; background: #fff; }
 .bw-frame[hidden] { display: none; }
+/* 탭 전환 시 라이브 iframe 주차 상태: display:none이 아니라
+   visibility:hidden으로 숨겨 iframe 문서를 살려 둔다. display:none은
+   Selkies 스트림을 멈추고 복귀 시 재연결 갭을 만든다 (2026-11-14). */
+.bw-frame-parked { visibility: hidden; }
 .bw-pill {
   position: absolute;
   left: 50%;

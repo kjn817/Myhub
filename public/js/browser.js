@@ -394,10 +394,17 @@
       live.syncChrome();
       // 라이브 소유 요소(화면·토글…)는 뷰를 소유한 탭에서만
       // 보인다 — 다른 탭에서는 실행 중인 것처럼 보이지 않게 가린다.
+      // 단, iframe은 display:none(hidden)이 아니라 visibility:hidden
+      // 으로 숨긴다. display:none은 iframe 문서를 hidden으로 만들어
+      // Selkies 클라이언트가 스트림을 멈추고, 돌아올 때 재연결·
+      // 재동기화 갭이 생긴다 (2026-11-14 전환 시 끊김 보고).
+      // visibility:hidden은 문서를 살려 둬 복귀가 즉시 된다.
       if (!mine && busy) {
-        if (liveFrame) liveFrame.hidden = true;
+        if (liveFrame) liveFrame.classList.add('bw-frame-parked');
         if (pillEl) pillEl.hidden = true;
         if (noticeEl) noticeEl.hidden = true;
+      } else if (liveFrame) {
+        liveFrame.classList.remove('bw-frame-parked');
       }
       if (home) home.hidden = mine && on;
       if (elsewhereEl) {
