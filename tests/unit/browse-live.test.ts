@@ -110,7 +110,10 @@ describe('GET /view/* — 화면 프록시', () => {
     expect(fetchCalls).toHaveLength(0)
   })
 
-  test('하위 경로·쿼리를 8080으로 중계하고 시크릿+Basic을 주입한다', async () => {
+  test('하위 경로·쿼리를 접두사째 8080으로 중계하고 시크릿+Basic을 주입한다', async () => {
+    // view는 접두사를 떼지 않는다 — 컨테이너 kclient·nginx가
+    // SUBFOLDER=/api/browse/view/로 같은 접두사를 알기 때문이다. 접두사를
+    // 떼면 화면 WS가 루트 /websockify로 가서 끊긴다 (2026-11-14 실증).
     stubFetch(upstreamOk({}))
     const res = await app.request(
       '/api/browse/view/selkies/index.html?foo=bar',
@@ -120,7 +123,7 @@ describe('GET /view/* — 화면 프록시', () => {
     expect(res.status).toBe(200)
     expect(fetchCalls).toHaveLength(1)
     const call = fetchCalls[0]
-    expect(call.url).toBe(`http://${HOST}:8080/selkies/index.html?foo=bar`)
+    expect(call.url).toBe(`http://${HOST}:8080/api/browse/view/selkies/index.html?foo=bar`)
     expect(call.headers['x-origin-secret']).toBe('origin-secret')
     expect(call.headers['authorization']).toBe(
       `Basic ${Buffer.from('myhub:selkies-pw').toString('base64')}`,
@@ -129,7 +132,7 @@ describe('GET /view/* — 화면 프록시', () => {
     expect(call.headers['x-cdp-secret']).toBeUndefined()
   })
 
-  test('/view 루트는 사이드카 /로, 클라이언트 자격증명은 전달하지 않는다', async () => {
+  test('/view 루트도 접두사째 보내고, 클라이언트 자격증명은 전달하지 않는다', async () => {
     stubFetch(upstreamOk({}))
     await app.request(
       '/api/browse/view',
@@ -144,7 +147,7 @@ describe('GET /view/* — 화면 프록시', () => {
     )
     expect(fetchCalls).toHaveLength(1)
     const call = fetchCalls[0]
-    expect(call.url).toBe(`http://${HOST}:8080/`)
+    expect(call.url).toBe(`http://${HOST}:8080/api/browse/view`)
     expect(call.headers['cookie']).toBeUndefined()
     expect(call.headers['x-origin-secret']).toBe('origin-secret')
     expect(call.headers['authorization']).not.toBe('Bearer stolen')

@@ -287,6 +287,15 @@ def test_build_worker_metadata_assets():
     flag = next((b for b in md['bindings'] if b['name'] == 'GOOGLE_WRITE_ENABLED'), None)
     assert flag is not None, bindings
     assert flag['type'] == 'plain_text' and flag['text'] == 'true', flag
+    # Oracle 브라우저 호스트 (2026-11-14): 반드시 호스트명이어야 한다.
+    # Workers의 fetch()는 IP 리터럴을 직접 쓸 수 없어 엣지가 error code 1003을
+    # 돌려준다 (라이브 실증). IP 리터럴로 되돌리면 이 단언이 실패한다.
+    oracle = next((b for b in md['bindings'] if b['name'] == 'ORACLE_BROWSER_HOST'), None)
+    assert oracle is not None, bindings
+    assert oracle['type'] == 'plain_text', oracle
+    import re as _re
+    assert not _re.fullmatch(r'\d{1,3}(\.\d{1,3}){3}', oracle['text']), oracle
+    assert oracle['text'].endswith(('.nip.io', '.sslip.io')), oracle
     print('build_worker_metadata ASSETS 연결 PASS')
 
 

@@ -39,7 +39,7 @@ export type Env = {
   // Oracle 원격 브라우저 (2026-11-14 설계 변경: 터널·Browser Run 폐기,
   // Worker가 오라클 서버 사이드카로 직접 프록시). 시크릿 3종은 사용자가
   // 대시보드에 등록, ORACLE_BROWSER_HOST는 deploy_full.py 평문 바인딩.
-  ORACLE_BROWSER_HOST?: string // 오라클 브라우저 서버 공인 IP
+  ORACLE_BROWSER_HOST?: string // 오라클 브라우저 서버 호스트 (호스트명 필수 — IP 리터럴은 Workers fetch 1003)
   ORIGIN_SECRET?: string // 사이드카 오리진 시크릿 (view·cdp 공통 게이트)
   CDP_SECRET?: string // CDP 프록시 추가 시크릿
   SELKIES_PASSWORD?: string // Selkies 기본 인증 비밀번호 (사용자 myhub)

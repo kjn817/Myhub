@@ -3,8 +3,13 @@
  * 화면·CDP를 중계한다 (2026-11-14 설계 변경: Cloudflare Browser Run
  * 세션 발급 폐기, 상시 기동 서버로 단일화).
  *
- * - GET /view/* → http://<호스트>:8080/* (Selkies 화면, WS 포함)
+ * - GET /view/* → http://<호스트>:8080/api/browse/view/* (Selkies 화면, WS 포함)
+ *   — 접두사를 떼지 않고 통째로 보낸다. 컨테이너의 kclient·nginx가
+ *   SUBFOLDER=/api/browse/view/로 같은 접두사를 알기 때문이다. 접두사를
+ *   떼면 kclient가 화면 WS를 루트 /websockify로 보내 Worker에 닿지 않아
+ *   화면이 검은 채 "WebSocket disconnected"가 된다 (2026-11-14 라이브 실증).
  * - GET /cdp/*  → http://<호스트>:8081/* (CDP HTTP/WS, WS 포함)
+ *   — CDP는 접두사 개념이 없어 사이드카가 바라는 맨 경로로 떼서 보낸다.
  * - POST /navigate → 사이드카 CDP로 영구 탭을 이동시킨다
  *
  * 세션 게이트는 전역 /api/* 미들웨어가 맡는다. 여기는 사이드카 시크릿
@@ -71,9 +76,12 @@ async function proxyToSidecar(
   port: number,
   prefix: string,
   extraHeaders: Record<string, string>,
+  keepPrefix = false,
 ): Promise<Response> {
   const url = new URL(c.req.url)
-  const rest = url.pathname.slice(prefix.length) || '/'
+  // keepPrefix면 전체 경로를 그대로 보낸다 (view — 컨테이너 SUBFOLDER와 일치).
+  // 아니면 마운트 접두사를 떼고 맨 경로만 보낸다 (CDP).
+  const rest = keepPrefix ? url.pathname : url.pathname.slice(prefix.length) || '/'
   const upstream = `http://${cfg.host}:${port}${rest}${url.search}`
   const req = c.req.raw
   const method = req.method.toUpperCase()
@@ -112,7 +120,7 @@ export function registerOracleProxyRoutes(app: Hono<{ Bindings: Env }>): void {
     return proxyToSidecar(c, cfg, ORACLE_VIEW_PORT, `${ORACLE_PROXY_MOUNT}/view`, {
       'x-origin-secret': cfg.originSecret,
       authorization: basic,
-    })
+    }, true)
   })
   app.all('/view/*', (c) => {
     const cfg = oracleConfigOf(c.env)
@@ -121,7 +129,7 @@ export function registerOracleProxyRoutes(app: Hono<{ Bindings: Env }>): void {
     return proxyToSidecar(c, cfg, ORACLE_VIEW_PORT, `${ORACLE_PROXY_MOUNT}/view`, {
       'x-origin-secret': cfg.originSecret,
       authorization: basic,
-    })
+    }, true)
   })
   app.all('/cdp', (c) => {
     const cfg = oracleConfigOf(c.env)
