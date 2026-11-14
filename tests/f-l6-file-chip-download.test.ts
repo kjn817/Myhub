@@ -28,6 +28,7 @@ const win = (): any => (globalThis as any).window
 const doc = (): any => (globalThis as any).document
 
 const UTILS_SRC = read('public/js/memo/utils.js')
+const TEXT_UTILS_SRC = read('public/js/common/text-utils.js')
 
 function loadUtils() {
   const w = win()
@@ -37,6 +38,9 @@ function loadUtils() {
   w._fetchStepUp = jest.fn()
   w.URL.createObjectURL = jest.fn(() => 'blob:fake-url')
   w.URL.revokeObjectURL = jest.fn()
+  // utils.js는 공용 코어(text-utils.js)를 먼저 받는다 — 운영 memo.html의
+  // 정적 태그 순서와 같은 조건으로 로드한다 (5-4 F-L3).
+  w.eval(TEXT_UTILS_SRC)
   w.eval(UTILS_SRC)
   return w.downloadMemoFile as (f: any) => Promise<void>
 }

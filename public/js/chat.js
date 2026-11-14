@@ -1,3 +1,11 @@
+// esc·friendlyError는 공용 코어(common/text-utils.js)가 맡는다 (F-L3, 5-4).
+// 코어는 이 파일보다 먼저 받아야 한다 (chat.html 정적 태그 순서).
+// escapeHtml은 호출처가 많아 이름을 유지한 채 코어 esc의 별칭으로 둔다.
+const textUtils = typeof window !== 'undefined' ? window.MyHubTextUtils : null;
+if (!textUtils) throw new Error('[chat.js] text-utils.js가 먼저 로드되어야 합니다');
+const escapeHtml = textUtils.esc;
+const friendlyError = textUtils.friendlyError;
+
 const $ = (id) => document.getElementById(id);
 let personas = [];
 let history = [];
@@ -259,12 +267,6 @@ function addMsg(role, text, personaId, meta, sources, images, messageId, approva
   lastSender = groupKey;
 }
 
-function escapeHtml(s) {
-  return String(s || '').replace(/[&<>"']/g, (c) => ({
-    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
-  }[c]));
-}
-
 function showTyping(personaId) {
   const persona = personas.find((p) => p.id === personaId);
   if (!persona) return null;
@@ -302,28 +304,6 @@ function routeMessage(text) {
   if (caliKw.some((k) => t.includes(k))) return { personaId: 'scheduler', clean: text, routedBy: 'keyword' };
   // 3. 기본: 루미
   return { personaId: 'concierge', clean: text };
-}
-
-// I-09 (2026-11-05): 서버 오류는 공통 오류 문구 맵(public/js/common/
-// error-messages.js의 friendlyErrorMessage)로 거쳐 표시한다 — 원시 코드는
-// (decrypt_failed 등)는 화면에 내지 않고 콘솔로만 남긴다. 맵 스크립트가
-// 없을 때도 원시 코드 패턴을 남기고 폴백 문구를 낸다 (fail-safe).
-function friendlyError(input, fallback) {
-  const fn = (typeof window !== 'undefined') ? window.friendlyErrorMessage : undefined;
-  if (typeof fn === 'function') {
-    try { return fn(input, fallback); } catch (e) { console.warn('오류 문구 변환 실패:', e); }
-  }
-  const raw = (typeof input === 'object' && input !== null)
-    ? (input.error?.code || input.error?.message || (typeof input.error === 'string' ? input.error : '') || input.code || '')
-    : (typeof input === 'string' ? input : '');
-  if (typeof raw === 'string' && raw) {
-    if (/^[a-z][a-z0-9]*(_[a-z0-9]+)+$/.test(raw) || /^[A-Z][A-Z0-9]*(_[A-Z0-9]+)+$/.test(raw)) {
-      console.warn('[MyHub] 오류 코드:', raw);
-      return fallback;
-    }
-    return raw;
-  }
-  return fallback;
 }
 
 // 서버 오류 응답에서 표시할 문구를 만든다 (객체로 오면 맵이 code를 먼저

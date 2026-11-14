@@ -5,9 +5,11 @@
 (function () {
   'use strict';
 
-  function esc(s) {
-    return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-  }
+  // esc는 공용 코어(common/text-utils.js)가 맡는다 (F-L3, 5-4).
+  // 코어는 이 파일보다 먼저 받아야 한다 (trace.html 정적 태그 순서).
+  var textUtils = typeof window !== 'undefined' ? window.MyHubTextUtils : null;
+  if (!textUtils) throw new Error('[trace.js] text-utils.js가 먼저 로드되어야 합니다');
+  var esc = textUtils.esc;
 
   function fmtMs(ms) {
     if (ms == null) return '';

@@ -1,37 +1,11 @@
 /* ================= 1. 유틸 ================= */
-function esc(s) {
-  return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-}
-/* I-09 오류 배경 (2026-11-05): 서버 오류는 공통 오류 문구 만
-   (public/js/common/error-messages.js의 friendlyErrorMessage)를 거쳐
-   표시한다 등 자체 코드(decrypt_failed·"서버 오류 (500)" 등)는 화면에
-   내지 않고 콘솔로만 낸다. 만 스크립트가 없을 때도 자체 코드 패턴을
-   걸러내고 내부 문구를 낸다 (chat.js의 같은 fail-safe). 번호 첫 파일인
-   utils.js에 있어 메모 등 모듈이 공유한다. */
-function friendlyError(input, fallback) {
-  const fn = (typeof window !== 'undefined') ? window.friendlyErrorMessage : undefined;
-  if (typeof fn === 'function') {
-    try { return fn(input, fallback); } catch (e) { console.warn('오류 문구 변환 실패:', e); }
-  }
-  let raw = '';
-  if (typeof input === 'string') raw = input;
-  else if (input && typeof input === 'object') {
-    raw = (input.error && typeof input.error === 'object' ? (input.error.code || input.error.message || '') : '')
-      || (typeof input.error === 'string' ? input.error : '')
-      || input.code || input.message || '';
-  }
-  if (typeof raw === 'string' && raw) {
-    const t = raw.trim();
-    if (/^http_\d{3}$/i.test(t) || /^서버 오류\s*\(\d{3}\)$/.test(t)
-      || /^[a-z][a-z0-9]*(_[a-z0-9]+)+$/.test(t) || /^[A-Z][A-Z0-9]*(_[A-Z0-9]+)+$/.test(t)
-      || /^[A-Z]{2,}$/.test(t)) {
-      console.warn('[MyHub] 오류 코드:', t);
-      return fallback;
-    }
-    return raw;
-  }
-  return fallback;
-}
+// esc·friendlyError는 공용 코어(common/text-utils.js)가 맡는다 (F-L3, 5-4).
+// 코어는 memo-bundle.js보다 먼저 받아야 한다 (memo.html 정적 태그 순서).
+// 코어가 없으면 로드 시점에 명확한 오류를 낸다 (이스케이프는 생략 불가).
+var textUtils = typeof window !== 'undefined' ? window.MyHubTextUtils : null;
+if (!textUtils) throw new Error('[memo-bundle] text-utils.js가 먼저 로드되어야 합니다');
+var esc = textUtils.esc;
+var friendlyError = textUtils.friendlyError;
 function fmtSize(b) {
   if (b < 1024) return b + 'B';
   if (b < 1048576) return (b/1024).toFixed(1) + 'KB';

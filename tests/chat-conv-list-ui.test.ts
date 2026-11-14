@@ -19,6 +19,7 @@ const ROOT = path.resolve(__dirname, '..')
 const doc: any = (globalThis as any).document
 const win: any = (globalThis as any).window
 const CHAT_JS = fs.readFileSync(path.join(ROOT, 'public', 'js', 'chat.js'), 'utf-8')
+const TEXT_UTILS_JS = fs.readFileSync(path.join(ROOT, 'public', 'js', 'common', 'text-utils.js'), 'utf-8')
 const CHAT_HTML = fs.readFileSync(path.join(ROOT, 'public', 'chat.html'), 'utf-8')
 
 const TOTAL = 120
@@ -71,6 +72,9 @@ describe('chat.js 대화 목록 이어보기', () => {
       requestedUrls.push(String(url))
       return fakeServer(String(url))
     }
+    // chat.js는 공용 코어(text-utils.js)를 먼저 받는다 — 운영 chat.html의
+    // 정적 태그 순서와 같은 조건으로 로드한다 (5-4 F-L3).
+    win.eval(TEXT_UTILS_JS)
     const loader = new Function(
       'window', 'document', 'fetch', 'marked', 'DOMPurify', 'hljs', 'confirm',
       CHAT_JS,

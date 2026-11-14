@@ -12,38 +12,13 @@
   function parseDate(s) { return new Date(s + 'T12:00:00'); }
   function addDays(s, n) { var d = parseDate(s); d.setDate(d.getDate() + n); return ymd(d); }
   function weekStartOf(s) { var d = parseDate(s); d.setDate(d.getDate() - d.getDay()); return ymd(d); }
-  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (m) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]; }); }
+  // esc·friendlyError는 공용 코어(common/text-utils.js)가 맡는다 (F-L3, 5-4).
+  // 코어는 이 파일보다 먼저 받아야 한다 (schedule.html 정적 태그 순서).
+  var textUtils = typeof window !== 'undefined' ? window.MyHubTextUtils : null;
+  if (!textUtils) throw new Error('[schedule.js] text-utils.js가 먼저 로드되어야 합니다');
+  var esc = textUtils.esc;
+  var friendlyError = textUtils.friendlyError;
   function fmtTime(iso) { return iso ? (iso.slice(11, 16) || '') : ''; }
-
-  // I-09 배선 서버 (2026-11-05): 오 류의 공통 오류 문구 맵
-  // (public/js/common/error-messages.js의 friendlyErrorMessage)를 거쳐
-  // 표시 한다 등 자체(decrypt_failed코드http_500 등)화 면에 내지 않고
-  // 코드로만 남긴다. 맵 스크립트가 없을 때도 자체 코드 패턴을 읽고
-  // 대관 문구를 낸다 (chat.js와 같은 fail-safe).
-  function friendlyError(input, fallback) {
-    var fn = (typeof window !== 'undefined') ? window.friendlyErrorMessage : undefined;
-    if (typeof fn === 'function') {
-      try { return fn(input, fallback); } catch (e) { console.warn('오류 문구 변환 실패:', e); }
-    }
-    var raw = '';
-    if (typeof input === 'string') raw = input;
-    else if (input && typeof input === 'object') {
-      raw = (input.error && typeof input.error === 'object' ? (input.error.code || input.error.message || '') : '')
-        || (typeof input.error === 'string' ? input.error : '')
-        || input.code || input.message || '';
-    }
-    if (typeof raw === 'string' && raw) {
-      var t = raw.trim();
-      if (/^http_\d{3}$/i.test(t) || /^서버 오류\s*\(\d{3}\)$/.test(t)
-        || /^[a-z][a-z0-9]*(_[a-z0-9]+)+$/.test(t) || /^[A-Z][A-Z0-9]*(_[A-Z0-9]+)+$/.test(t)
-        || /^[A-Z]{2,}$/.test(t)) {
-        console.warn('[MyHub] 오류 코드:', t);
-        return fallback;
-      }
-      return raw;
-    }
-    return fallback;
-  }
 
   async function api(path, opts) {
     var res = await fetch(path, opts);

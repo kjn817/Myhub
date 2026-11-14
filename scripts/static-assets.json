@@ -61,6 +61,7 @@
     "/js/browser-live.js",
     "/js/browser.js",
     "/js/chat.js",
+    "/js/common/text-utils.js",
     "/js/desktop/desktop-icons.js",
     "/js/desktop/dock.js",
     "/js/desktop/drop-upload.js",

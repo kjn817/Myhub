@@ -419,6 +419,8 @@ describe('todo 삭제는 인페이지 모달 (네이티브 confirm 금지)', () 
       }
       return jsonResponse({ ok: true, todos: [] })
     }
+    // 5-4 F-L3: todo.js는 text-utils.js 코어를 먼저 필요로 한다 (운영 HTML 순서와 동일)
+    g.eval(readPub('/js/common/text-utils.js'))
     g.eval(readPub('/js/todo.js'))
     await tick(); await tick()
     const delBtn = DOC.querySelector('[data-act="del"]') as any
