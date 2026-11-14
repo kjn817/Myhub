@@ -7,6 +7,7 @@
  */
 
 import type { FCToolDefinition } from './memo-fc-tools'
+import { validateFCArgsBase } from './fc-validate'
 
 export const CRON_FC_TOOLS: FCToolDefinition[] = [
   {
@@ -74,33 +75,7 @@ export function getCronFCTool(name: string): FCToolDefinition | undefined {
   return CRON_FC_TOOLS.find((t) => t.name === name)
 }
 
-/** cron 도구 인자 검증 (memo-fc-tools.validateFCArgs와 같은 규칙) */
+/** cron 도구 인자 검증 (공용 코어 + cron 도구 정의) */
 export function validateCronFCArgs(toolName: string, args: any): { valid: boolean; error?: string } {
-  const tool = getCronFCTool(toolName)
-  if (!tool) {
-    return { valid: false, error: `Unknown tool: ${toolName}` }
-  }
-  if (!args || typeof args !== 'object') {
-    return { valid: false, error: 'Arguments must be an object' }
-  }
-  for (const required of tool.parameters.required) {
-    if (!(required in args)) {
-      return { valid: false, error: `Missing required argument: ${required}` }
-    }
-  }
-  for (const [key, def] of Object.entries(tool.parameters.properties)) {
-    if (key in args) {
-      const val = args[key]
-      if (def.type === 'string' && typeof val !== 'string') {
-        return { valid: false, error: `Argument ${key} must be a string` }
-      }
-      if (def.type === 'number' && typeof val !== 'number') {
-        return { valid: false, error: `Argument ${key} must be a number` }
-      }
-      if (def.type === 'boolean' && typeof val !== 'boolean') {
-        return { valid: false, error: `Argument ${key} must be a boolean` }
-      }
-    }
-  }
-  return { valid: true }
+  return validateFCArgsBase(getCronFCTool, toolName, args)
 }

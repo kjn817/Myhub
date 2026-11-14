@@ -12,6 +12,8 @@
  * - 열기/닫기/편집모드/서식모드는 memo_ui_action 하나로 통합
  */
 
+import { validateFCArgsBase } from './fc-validate'
+
 export interface FCToolDefinition {
   name: string
   description: string
@@ -152,38 +154,10 @@ export function getFCTool(name: string): FCToolDefinition | undefined {
 }
 
 /**
- * 도구 호출 인자 검증
+ * 도구 호출 인자 검증 (공용 코어 + 메모 도구 정의)
  */
 export function validateFCArgs(toolName: string, args: any): { valid: boolean; error?: string } {
-  const tool = getFCTool(toolName)
-  if (!tool) {
-    return { valid: false, error: `Unknown tool: ${toolName}` }
-  }
-
-  if (!args || typeof args !== 'object') {
-    return { valid: false, error: 'Arguments must be an object' }
-  }
-
-  for (const required of tool.parameters.required) {
-    if (!(required in args)) {
-      return { valid: false, error: `Missing required argument: ${required}` }
-    }
-  }
-
-  // 타입 검사
-  for (const [key, def] of Object.entries(tool.parameters.properties)) {
-    if (key in args) {
-      const val = args[key]
-      if (def.type === 'string' && typeof val !== 'string') {
-        return { valid: false, error: `Argument ${key} must be a string` }
-      }
-      if (def.type === 'number' && typeof val !== 'number') {
-        return { valid: false, error: `Argument ${key} must be a number` }
-      }
-    }
-  }
-
-  return { valid: true }
+  return validateFCArgsBase(getFCTool, toolName, args)
 }
 
 // ---------------------------------------------------------------------------

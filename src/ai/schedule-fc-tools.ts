@@ -14,6 +14,7 @@
  */
 
 import type { FCToolDefinition } from './memo-fc-tools'
+import { validateFCArgsBase } from './fc-validate'
 
 export const SCHEDULE_FC_TOOLS: FCToolDefinition[] = [
   {
@@ -59,34 +60,10 @@ export function getScheduleFCTool(name: string): FCToolDefinition | undefined {
 
 const ISO_LOCAL_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/
 
-/** schedule 도구 인자 검증 (cron-fc-tools.validateCronFCArgs와 같은 규칙 + start_at 형식) */
+/** schedule 도구 인자 검증 (공용 코어 + schedule 전용 말미 검사) */
 export function validateScheduleFCArgs(toolName: string, args: any): { valid: boolean; error?: string } {
-  const tool = getScheduleFCTool(toolName)
-  if (!tool) {
-    return { valid: false, error: `Unknown tool: ${toolName}` }
-  }
-  if (!args || typeof args !== 'object') {
-    return { valid: false, error: 'Arguments must be an object' }
-  }
-  for (const required of tool.parameters.required) {
-    if (!(required in args)) {
-      return { valid: false, error: `Missing required argument: ${required}` }
-    }
-  }
-  for (const [key, def] of Object.entries(tool.parameters.properties)) {
-    if (key in args) {
-      const val = args[key]
-      if (def.type === 'string' && typeof val !== 'string') {
-        return { valid: false, error: `Argument ${key} must be a string` }
-      }
-      if (def.type === 'number' && typeof val !== 'number') {
-        return { valid: false, error: `Argument ${key} must be a number` }
-      }
-      if (def.type === 'boolean' && typeof val !== 'boolean') {
-        return { valid: false, error: `Argument ${key} must be a boolean` }
-      }
-    }
-  }
+  const base = validateFCArgsBase(getScheduleFCTool, toolName, args)
+  if (!base.valid) return base
   if (typeof args.title !== 'string' || !args.title.trim()) {
     return { valid: false, error: 'Argument title must be a non-empty string' }
   }
