@@ -35,9 +35,20 @@ export interface CalendarEvent {
   status: string
 }
 
+export type GoogleApiFailure = { ok: false; error: string; unauthorized: boolean; apiMessage?: string }
+
 export type GoogleApiResult<T> =
   | { ok: true; data: T }
-  | { ok: false; error: string; unauthorized: boolean; apiMessage?: string }
+  | GoogleApiFailure
+
+/**
+ * 실패 판별 타입 가드 — jest(ts-jest, strict:false)에서는 판별자 narrowing이
+ * 동작하지 않아 `!res.ok`만으로는 실패 분기로 좁혀지지 않으므로, 가드로 명시한다
+ * (프로젝트 tsc strict:true와 jest 양쪽에서 통과 — /tmp 재현으로 확인).
+ */
+function isApiFailure<T>(res: GoogleApiResult<T>): res is GoogleApiFailure {
+  return !res.ok
+}
 
 export async function extractGoogleApiMessage(res: Response): Promise<string | undefined> {
   try {
@@ -52,6 +63,17 @@ export async function extractGoogleApiMessage(res: Response): Promise<string | u
 export function googleApiErrorDetail(res: GoogleApiResult<unknown>): string {
   if (res.ok) return 'error=unknown'
   return res.apiMessage ? `error=${res.error} msg=${res.apiMessage}` : `error=${res.error}`
+}
+
+/**
+ * callApi 결과 매핑 (B-L9, 5-7) — 실패면 그대로 반환, 성공이면 data를 변환한다.
+ * 실패 객체는 재구성하지 않고 그대로 돌려준다: 기존에 일부 호출처가
+ * { error, unauthorized }로 재구성해 apiMessage를 떨어뜨렸는데, 호출처가
+ * 실패 시 error만 읽으므로 관측 동작은 동일하고 상세는 보존된다.
+ */
+function mapApiResult<T, U>(res: GoogleApiResult<T>, map: (data: T) => U): GoogleApiResult<U> {
+  if (isApiFailure(res)) return res
+  return { ok: true, data: map(res.data) }
 }
 
 async function callApi<T>(
@@ -162,7 +184,7 @@ export async function listGmailMessages(
   if (opts.q) url.searchParams.set('q', opts.q)
   url.searchParams.set('maxResults', String(max))
   const list = await callApi<{ messages?: Array<{ id: string }> }>(fetchFn, url.toString(), accessToken)
-  if (!list.ok) return { ok: false, error: list.error, unauthorized: list.unauthorized }
+  if (isApiFailure(list)) return list
   const ids = (list.data.messages || []).map((m) => m.id)
   const out: GmailMessageSummary[] = []
   for (const id of ids) {
@@ -181,10 +203,11 @@ export async function getGmailMessage(
 ): Promise<GoogleApiResult<GmailMessage>> {
   const url = `${GMAIL_BASE}/users/me/messages/${encodeURIComponent(messageId)}?format=full`
   const raw = await callApi<any>(fetchFn, url, accessToken)
-  if (!raw.ok) return raw
-  const summary = toSummary(raw.data)
-  const bodyText = withBody ? extractBodyText(raw.data?.payload) || summary.snippet : ''
-  return { ok: true, data: { ...summary, bodyText } }
+  return mapApiResult(raw, (data) => {
+    const summary = toSummary(data)
+    const bodyText = withBody ? extractBodyText(data?.payload) || summary.snippet : ''
+    return { ...summary, bodyText }
+  })
 }
 
 /** Google 캘린더 이벤트 목록 (기간 지정). */
@@ -201,8 +224,7 @@ export async function listCalendarEvents(
   url.searchParams.set('orderBy', 'startTime')
   url.searchParams.set('maxResults', String(max))
   const res = await callApi<{ items?: any[] }>(fetchFn, url.toString(), accessToken)
-  if (!res.ok) return { ok: false, error: res.error, unauthorized: res.unauthorized }
-  return { ok: true, data: (res.data.items || []).map(toCalendarEvent) }
+  return mapApiResult(res, (data) => (data.items || []).map(toCalendarEvent))
 }
 
 function toCalendarEvent(raw: any): CalendarEvent {
@@ -342,8 +364,7 @@ export async function createCalendarEvent(
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(toCalendarEventBody(input)),
   })
-  if (!res.ok) return res
-  return { ok: true, data: toCalendarEvent(res.data) }
+  return mapApiResult(res, toCalendarEvent)
 }
 
 export async function updateCalendarEvent(
@@ -358,8 +379,7 @@ export async function updateCalendarEvent(
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(toCalendarEventBody(input)),
   })
-  if (!res.ok) return res
-  return { ok: true, data: toCalendarEvent(res.data) }
+  return mapApiResult(res, toCalendarEvent)
 }
 
 export async function deleteCalendarEvent(
@@ -369,6 +389,5 @@ export async function deleteCalendarEvent(
 ): Promise<GoogleApiResult<{ deleted: boolean }>> {
   const url = `${CALENDAR_BASE}/calendars/primary/events/${encodeURIComponent(eventId)}`
   const res = await callApi<any>(fetchFn, url, accessToken, { method: 'DELETE' })
-  if (!res.ok) return res
-  return { ok: true, data: { deleted: true } }
+  return mapApiResult(res, () => ({ deleted: true }))
 }

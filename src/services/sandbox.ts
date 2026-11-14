@@ -107,6 +107,16 @@ function memoHidden(row: { is_locked?: unknown; sensitivity?: unknown }): boolea
 const LOCKED_LABEL = '(잠긴 메모 — 내용을 볼 수 없어요)'
 const HIDDEN_LABEL = '(내용을 볼 수 없어요)'
 
+/** 대상 행을 찾지 못한 경우의 미리보기 (기존 대상 5개 케이스 공통 문안). */
+function notFoundPreview(base: DryRunPreview, label: string): DryRunPreview {
+  return { ...base, targetLabel: label, warnings: ['대상을 찾을 수 없어요. 승인해도 실행이 실패할 거예요.'] }
+}
+
+/** `명사 #id "제목 스니펫"` 형태의 대상 표시 (메모 제외 4개 케이스 공통). */
+function titledLabel(noun: string, id: number, title: unknown): string {
+  return `${noun} #${id} "${snippet(String(title ?? ''))}"`
+}
+
 /**
  * dry-run 미리보기 — 읽기 전용 SELECT만 발행한다 (쓰기 쿼리 없음).
  * db 조회 실패는 예외로 전파한다 — 호출자(승인 게이트)가 잡아
@@ -196,7 +206,7 @@ export async function buildDryRunPreview(
         .bind(id)
         .first<Record<string, unknown>>()
       if (!row || typeof row !== 'object') {
-        return { ...base, targetLabel: `메모 #${id}`, warnings: ['대상을 찾을 수 없어요. 승인해도 실행이 실패할 거예요.'] }
+        return notFoundPreview(base, `메모 #${id}`)
       }
       const locked = row.is_locked === 1 || row.is_locked === true
       const hidden = memoHidden(row)
@@ -229,9 +239,9 @@ export async function buildDryRunPreview(
         .bind(id)
         .first<Record<string, unknown>>()
       if (!row || typeof row !== 'object') {
-        return { ...base, targetLabel: `일정 #${id}`, warnings: ['대상을 찾을 수 없어요. 승인해도 실행이 실패할 거예요.'] }
+        return notFoundPreview(base, `일정 #${id}`)
       }
-      const label = `일정 #${id} "${snippet(String(row.title ?? ''))}"`
+      const label = titledLabel('일정', id, row.title)
       const when = String(row.start_at ?? '')
       if (upper === 'SCHEDULE_DELETE') {
         return {
@@ -259,9 +269,9 @@ export async function buildDryRunPreview(
         .bind(id)
         .first<Record<string, unknown>>()
       if (!row || typeof row !== 'object') {
-        return { ...base, targetLabel: `할 일 #${id}`, warnings: ['대상을 찾을 수 없어요. 승인해도 실행이 실패할 거예요.'] }
+        return notFoundPreview(base, `할 일 #${id}`)
       }
-      const label = `할 일 #${id} "${snippet(String(row.title ?? ''))}"`
+      const label = titledLabel('할 일', id, row.title)
       if (upper === 'TODO_DELETE') {
         return { ...base, targetFound: true, targetLabel: label, changes: [{ field: '할 일', before: label, after: null }] }
       }
@@ -289,9 +299,9 @@ export async function buildDryRunPreview(
         .bind(id)
         .first<Record<string, unknown>>()
       if (!row || typeof row !== 'object') {
-        return { ...base, targetLabel: `아티팩트 #${id}`, warnings: ['대상을 찾을 수 없어요. 승인해도 실행이 실패할 거예요.'] }
+        return notFoundPreview(base, `아티팩트 #${id}`)
       }
-      const label = `아티팩트 #${id} "${snippet(String(row.title ?? ''))}"`
+      const label = titledLabel('아티팩트', id, row.title)
       return {
         ...base,
         targetFound: true,
@@ -306,9 +316,9 @@ export async function buildDryRunPreview(
         .bind(id)
         .first<Record<string, unknown>>()
       if (!row || typeof row !== 'object') {
-        return { ...base, targetLabel: `자동화 #${id}`, warnings: ['대상을 찾을 수 없어요. 승인해도 실행이 실패할 거예요.'] }
+        return notFoundPreview(base, `자동화 #${id}`)
       }
-      const label = `자동화 #${id} "${snippet(String(row.nl_text ?? ''))}"`
+      const label = titledLabel('자동화', id, row.nl_text)
       if (upper === 'CRON_DELETE') {
         return { ...base, targetFound: true, targetLabel: label, changes: [{ field: '자동화', before: label, after: null }] }
       }

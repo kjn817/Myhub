@@ -5,6 +5,7 @@
 
 import { guardSearchQuery } from './privacy-gateway'
 import { escapeHtml } from '../lib/escape'
+import { parseJsonMarkers } from '../lib/markers'
 
 // SHA-256 해시
 async function sha256hex(text: string): Promise<string> {
@@ -50,41 +51,22 @@ async function createArtifactWithV1(
 export function parseArtifactMarkers(text: string): Array<{ full: string; action: string; data: any }> {
   const results: Array<{ full: string; action: string; data: any }> = [];
 
-  const createRe = /\[ARTIFACT_CREATE\]([\s\S]*?)\[\/ARTIFACT_CREATE\]/gi;
-  let m: RegExpExecArray | null;
-  while ((m = createRe.exec(text)) !== null) {
-    try {
-      const data = JSON.parse(m[1].trim());
-      if (data.title && (data.html || data.python || data.code)) {
-        // python 타입은 code 필드를 html로 변환하지 않고 별도 저장
-        results.push({ full: m[0], action: 'create', data });
-      }
-    } catch {}
-    if (results.length >= 3) break;
-  }
+  parseJsonMarkers(text, /\[ARTIFACT_CREATE\]([\s\S]*?)\[\/ARTIFACT_CREATE\]/gi,
+    (data, full) =>
+      // python 타입은 code 필드를 html로 변환하지 않고 별도 저장
+      data.title && (data.html || data.python || data.code)
+        ? { full, action: 'create', data }
+        : null,
+    3, results);
 
   // [ARTIFACT_FROM_GITHUB]{...}[/ARTIFACT_FROM_GITHUB]
-  const githubRe = /\[ARTIFACT_FROM_GITHUB\]([\s\S]*?)\[\/ARTIFACT_FROM_GITHUB\]/gi;
-  while ((m = githubRe.exec(text)) !== null) {
-    try {
-      const data = JSON.parse(m[1].trim());
-      if (data.repo) {
-        results.push({ full: m[0], action: 'from_github', data });
-      }
-    } catch {}
-    if (results.length >= 3) break;
-  }
+  parseJsonMarkers(text, /\[ARTIFACT_FROM_GITHUB\]([\s\S]*?)\[\/ARTIFACT_FROM_GITHUB\]/gi,
+    (data, full) => (data.repo ? { full, action: 'from_github', data } : null),
+    3, results);
 
-  const deleteRe = /\[ARTIFACT_DELETE\]([\s\S]*?)\[\/ARTIFACT_DELETE\]/gi;
-  while ((m = deleteRe.exec(text)) !== null) {
-    try {
-      const data = JSON.parse(m[1].trim());
-      if (data.id || data.title) {
-        results.push({ full: m[0], action: 'delete', data });
-      }
-    } catch {}
-    if (results.length >= 3) break;
-  }
+  parseJsonMarkers(text, /\[ARTIFACT_DELETE\]([\s\S]*?)\[\/ARTIFACT_DELETE\]/gi,
+    (data, full) => ((data.id || data.title) ? { full, action: 'delete', data } : null),
+    3, results);
 
   return results;
 }

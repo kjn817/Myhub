@@ -13,17 +13,8 @@ export interface SearchSource {
 /** 출처 신선도 기준: 이 일수보다 오래된 결과는 제외 대상 (기본 30일). */
 export const SOURCE_MAX_AGE_DAYS = 30
 
-/** KST 기준 오늘 날짜 'YYYY-MM-DD'. */
-export function kstTodayStr(now: Date = new Date()): string {
-  const parts = new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Asia/Seoul',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).formatToParts(now)
-  const get = (t: string) => parts.find((p) => p.type === t)?.value ?? ''
-  return `${get('year')}-${get('month')}-${get('day')}`
-}
+/** KST 기준 오늘 날짜 'YYYY-MM-DD' (공용 코어 src/lib/kst.ts). */
+export { kstDateStr as kstTodayStr } from './kst'
 
 /** 출처 URL 정규화: 프래그먼트 제거, 호스트 소문자화, 말단 슬래시 제거. */
 export function normalizeSourceUrl(url: string): string {

@@ -4,6 +4,7 @@
  */
 
 import type { Env } from '../../types'
+import { kstDateStr } from '../../lib/kst'
 
 export interface Wallpaper {
   date: string
@@ -25,15 +26,9 @@ const CACHE_PREFIX = 'desktop:wallpaper:v1:'
 const BING_CACHE_TTL = 21600
 const FALLBACK_CACHE_TTL = 900
 
+/** KST 기준 날짜 'YYYY-MM-DD' (공용 코어 src/lib/kst.ts — en-US 본문과 출력 동일). */
 export function kstDateString(now: Date): string {
-  const parts = new Intl.DateTimeFormat('en-US', {
-    timeZone: 'Asia/Seoul',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).formatToParts(now)
-  const get = (type: string) => parts.find((p) => p.type === type)?.value ?? ''
-  return `${get('year')}-${get('month')}-${get('day')}`
+  return kstDateStr(now)
 }
 
 export function parseBingCopyright(copyright: unknown): { caption: string | null; credit: string | null } {

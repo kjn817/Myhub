@@ -25,6 +25,7 @@
 
 import { kstTodayStr, type SearchSource } from '../lib/news-summary'
 import { remainingMs, withTimeout } from '../lib/deadline'
+import { metaContent } from '../lib/html-meta'
 
 export interface ArticleDateWindow {
   startDate: string
@@ -111,25 +112,6 @@ export function parseDateValue(raw: unknown, now: Date = new Date()): string | u
   const t = Date.parse(s)
   if (!Number.isNaN(t)) return new Date(t).toISOString()
   return parseKoreanDate(s, now)
-}
-
-function getAttr(tag: string, name: string): string | undefined {
-  const m = tag.match(new RegExp(`${name}\\s*=\\s*["']([^"']*)["']`, 'i'))
-  return m ? m[1] : undefined
-}
-
-/** <meta property|name="..." content="..."> 에서 content를 찾는다. */
-function metaContent(html: string, attr: 'property' | 'name', value: string): string | undefined {
-  const tags = html.match(/<meta\b[^>]*>/gi) || []
-  const want = value.toLowerCase()
-  for (const tag of tags) {
-    const v = getAttr(tag, attr)
-    if (v && v.toLowerCase() === want) {
-      const content = getAttr(tag, 'content')
-      if (content) return content
-    }
-  }
-  return undefined
 }
 
 /** JSON-LD 블록 안에서 datePublished를 재귀 탐색한다. */

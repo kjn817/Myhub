@@ -145,17 +145,34 @@ function validateMatrix(raw: unknown): SheetCellInput[][] | null {
   return out;
 }
 
-export function validateSheetOps(raw: unknown): { ops: SheetOp[]; errors: string[] } {
+/**
+ * 연산 목록 검증 공용 루프 (B-L9, 5-7) — validateSheetOps·validateHwpOps·
+ * validatePdfOps의 프롤로그(배열 검사·상한 절단·형식 불량 건너뜀)를 공유한다.
+ * sheet만 초과 시 오류를 남기므로 warnTooMany로 그 차이를 보존한다
+ * (오류 순서는 루프 전 — 원본과 동일).
+ */
+function validateOpsList<T>(
+  raw: unknown,
+  validateOne: (o: Record<string, unknown>, ops: T[], errors: string[]) => void,
+  opts?: { warnTooMany?: boolean },
+): { ops: T[]; errors: string[] } {
   const errors: string[] = [];
-  const ops: SheetOp[] = [];
+  const ops: T[] = [];
   if (!Array.isArray(raw)) return { ops, errors: ['연산 목록이 배열이 아닙니다'] };
-  if (raw.length > MAX_OPS) errors.push(`연산이 너무 많습니다 (최대 ${MAX_OPS}개)`);
+  if (opts?.warnTooMany && raw.length > MAX_OPS) errors.push(`연산이 너무 많습니다 (최대 ${MAX_OPS}개)`);
   for (const item of raw.slice(0, MAX_OPS)) {
     const o = item as Record<string, unknown> | null;
     if (!o || typeof o !== 'object' || typeof o.type !== 'string') {
       errors.push('형식이 잘못된 연산을 건너뜀');
       continue;
     }
+    validateOne(o, ops, errors);
+  }
+  return { ops, errors };
+}
+
+export function validateSheetOps(raw: unknown): { ops: SheetOp[]; errors: string[] } {
+  return validateOpsList<SheetOp>(raw, (o, ops, errors) => {
     switch (o.type) {
       case 'set_cell': {
         const cell = parseA1Cell(o.cell);
@@ -296,8 +313,7 @@ export function validateSheetOps(raw: unknown): { ops: SheetOp[]; errors: string
       default:
         errors.push(`알 수 없는 연산: ${o.type}`);
     }
-  }
-  return { ops, errors };
+  }, { warnTooMany: true });
 }
 
 export function inspectSheetSnapshot(snapshot: SheetSnapshot | null | undefined): SheetFinding[] {
@@ -373,15 +389,7 @@ export function inspectSheetSnapshot(snapshot: SheetSnapshot | null | undefined)
 }
 
 export function validateHwpOps(raw: unknown): { ops: HwpOp[]; errors: string[] } {
-  const errors: string[] = [];
-  const ops: HwpOp[] = [];
-  if (!Array.isArray(raw)) return { ops, errors: ['연산 목록이 배열이 아닙니다'] };
-  for (const item of raw.slice(0, MAX_OPS)) {
-    const o = item as Record<string, unknown> | null;
-    if (!o || typeof o !== 'object' || typeof o.type !== 'string') {
-      errors.push('형식이 잘못된 연산을 건너뜀');
-      continue;
-    }
+  return validateOpsList<HwpOp>(raw, (o, ops, errors) => {
     switch (o.type) {
       case 'append_paragraphs': {
         if (
@@ -433,22 +441,13 @@ export function validateHwpOps(raw: unknown): { ops: HwpOp[]; errors: string[] }
       default:
         errors.push(`알 수 없는 연산: ${o.type}`);
     }
-  }
-  return { ops, errors };
+  });
 }
 
 export function validatePdfOps(raw: unknown, pageCount: number): { ops: PdfOp[]; errors: string[] } {
-  const errors: string[] = [];
-  const ops: PdfOp[] = [];
-  if (!Array.isArray(raw)) return { ops, errors: ['연산 목록이 배열이 아닙니다'] };
   const page = (v: any): number | null =>
     Number.isInteger(v) && v >= 1 && (pageCount <= 0 || v <= pageCount) ? v : null;
-  for (const item of raw.slice(0, MAX_OPS)) {
-    const o = item as Record<string, unknown> | null;
-    if (!o || typeof o !== 'object' || typeof o.type !== 'string') {
-      errors.push('형식이 잘못된 연산을 건너뜀');
-      continue;
-    }
+  return validateOpsList<PdfOp>(raw, (o, ops, errors) => {
     switch (o.type) {
       case 'rotate_page': {
         const p = page(o.page);
@@ -498,8 +497,7 @@ export function validatePdfOps(raw: unknown, pageCount: number): { ops: PdfOp[];
       default:
         errors.push(`알 수 없는 연산: ${o.type}`);
     }
-  }
-  return { ops, errors };
+  });
 }
 
 export function parseOfficeOpsResponse(text: unknown): {

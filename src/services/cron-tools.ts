@@ -17,6 +17,7 @@ import {
   type CronJob,
 } from './cron-jobs'
 import { describeNlCron, parseNlCron } from './nl-cron'
+import { parseJsonMarkers, parseRawMarkers } from '../lib/markers'
 
 export interface CronToolResult {
   success: boolean
@@ -55,50 +56,36 @@ export function formatCronJob(job: CronJob): string {
  * - text 필드 필수 (자연어 원문 그대로 — 서버가 파싱·검증한다).
  */
 export function parseCronCreateMarkers(text: string): Array<{ full: string; text: string }> {
-  const results: Array<{ full: string; text: string }> = []
-  const re = /\[CRON_CREATE\]([\s\S]*?)\[\/CRON_CREATE\]/gi
-  let m: RegExpExecArray | null
-  while ((m = re.exec(text)) !== null) {
-    try {
-      const parsed = JSON.parse(m[1].trim())
-      if (parsed.text && typeof parsed.text === 'string' && parsed.text.trim()) {
-        results.push({ full: m[0], text: parsed.text.trim().slice(0, 500) })
-      }
-    } catch {
-      // JSON 파싱 실패 시 무시 (호출자가 남은 마커를 실패 안내로 대체)
-    }
-    if (results.length >= 2) break
-  }
-  return results
+  return parseJsonMarkers(
+    text,
+    /\[CRON_CREATE\]([\s\S]*?)\[\/CRON_CREATE\]/gi,
+    (parsed, full) =>
+      parsed.text && typeof parsed.text === 'string' && parsed.text.trim()
+        ? { full, text: parsed.text.trim().slice(0, 500) }
+        : null,
+    2,
+  )
 }
 
 /** [CRON_LIST][/CRON_LIST] 파싱 (내용 없음) */
 export function parseCronListMarkers(text: string): Array<{ full: string }> {
-  const results: Array<{ full: string }> = []
-  const re = /\[CRON_LIST\]([\s\S]*?)\[\/CRON_LIST\]/gi
-  let m: RegExpExecArray | null
-  while ((m = re.exec(text)) !== null) {
-    results.push({ full: m[0] })
-    if (results.length >= 2) break
-  }
-  return results
+  return parseRawMarkers(
+    text,
+    /\[CRON_LIST\]([\s\S]*?)\[\/CRON_LIST\]/gi,
+    (full) => ({ full }),
+    2,
+  )
 }
 
 /** [CRON_DELETE]{"id": 3}[/CRON_DELETE] 파싱 */
 export function parseCronDeleteMarkers(text: string): Array<{ full: string; id: number }> {
-  const results: Array<{ full: string; id: number }> = []
-  const re = /\[CRON_DELETE\]([\s\S]*?)\[\/CRON_DELETE\]/gi
-  let m: RegExpExecArray | null
-  while ((m = re.exec(text)) !== null) {
-    try {
-      const parsed = JSON.parse(m[1].trim())
-      if (parsed.id && Number.isInteger(parsed.id)) {
-        results.push({ full: m[0], id: parsed.id })
-      }
-    } catch {}
-    if (results.length >= 2) break
-  }
-  return results
+  return parseJsonMarkers(
+    text,
+    /\[CRON_DELETE\]([\s\S]*?)\[\/CRON_DELETE\]/gi,
+    (parsed, full) =>
+      parsed.id && Number.isInteger(parsed.id) ? { full, id: parsed.id } : null,
+    2,
+  )
 }
 
 /**
@@ -108,21 +95,19 @@ export function parseCronDeleteMarkers(text: string): Array<{ full: string; id: 
 export function parseCronToggleMarkers(
   text: string,
 ): Array<{ full: string; id: number; enabled: boolean | null }> {
-  const results: Array<{ full: string; id: number; enabled: boolean | null }> = []
-  const re = /\[CRON_TOGGLE\]([\s\S]*?)\[\/CRON_TOGGLE\]/gi
-  let m: RegExpExecArray | null
-  while ((m = re.exec(text)) !== null) {
-    try {
-      const parsed = JSON.parse(m[1].trim())
+  return parseJsonMarkers(
+    text,
+    /\[CRON_TOGGLE\]([\s\S]*?)\[\/CRON_TOGGLE\]/gi,
+    (parsed, full) => {
       if (parsed.id && Number.isInteger(parsed.id)) {
         const enabled =
           typeof parsed.enabled === 'boolean' ? parsed.enabled : null
-        results.push({ full: m[0], id: parsed.id, enabled })
+        return { full, id: parsed.id, enabled }
       }
-    } catch {}
-    if (results.length >= 2) break
-  }
-  return results
+      return null
+    },
+    2,
+  )
 }
 
 /** 자연어 → cron 작업 생성. 파싱 실패 시 success:false (저장 안 함). */

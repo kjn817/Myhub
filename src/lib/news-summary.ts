@@ -5,6 +5,7 @@
  */
 
 import { kstTodayStr, type SearchSource } from './news-core'
+import { kstDateKoStr } from './kst'
 
 export {
   kstTodayStr,
@@ -40,16 +41,9 @@ export function newsWindow(now: Date = new Date()): { startDate: string; endDate
   }
 }
 
-/** 'YYYY년 M월 D일' 형태의 오늘 표기. */
+/** 'YYYY년 M월 D일' 형태의 오늘 표기 (공용 코어 src/lib/kst.ts). */
 export function kstTodayKoStr(now: Date = new Date()): string {
-  const parts = new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Asia/Seoul',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).formatToParts(now)
-  const get = (t: string) => parts.find((p) => p.type === t)?.value ?? ''
-  return `${get('year')}년 ${Number(get('month'))}월 ${Number(get('day'))}일`
+  return kstDateKoStr(now)
 }
 
 /** 검색 쿼리에 오늘 날짜를 명시해 최신 뉴스로 유도한다. */

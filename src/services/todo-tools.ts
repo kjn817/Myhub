@@ -2,67 +2,30 @@
  * AI 할일 도구
  */
 
+import { parseJsonMarkers } from '../lib/markers';
+
 export function parseTodoMarkers(text: string): Array<{ full: string; action: string; data: any }> {
   const results: Array<{ full: string; action: string; data: any }> = [];
-  
+
   // [TODO_ADD]{...}[/TODO_ADD]
-  const addRe = /\[TODO_ADD\]([\s\S]*?)\[\/TODO_ADD\]/gi;
-  let m: RegExpExecArray | null;
-  while ((m = addRe.exec(text)) !== null) {
-    try {
-      const data = JSON.parse(m[1].trim());
-      if (data.title) {
-        results.push({ full: m[0], action: 'add', data });
-      }
-    } catch {}
-    if (results.length >= 3) break;
-  }
-  
+  parseJsonMarkers(text, /\[TODO_ADD\]([\s\S]*?)\[\/TODO_ADD\]/gi,
+    (data, full) => (data.title ? { full, action: 'add', data } : null), 3, results);
+
   // [TODO_LIST]{...}[/TODO_LIST]
-  const listRe = /\[TODO_LIST\]([\s\S]*?)\[\/TODO_LIST\]/gi;
-  while ((m = listRe.exec(text)) !== null) {
-    try {
-      const data = JSON.parse(m[1].trim());
-      results.push({ full: m[0], action: 'list', data });
-    } catch {}
-    if (results.length >= 3) break;
-  }
-  
+  parseJsonMarkers(text, /\[TODO_LIST\]([\s\S]*?)\[\/TODO_LIST\]/gi,
+    (data, full) => ({ full, action: 'list', data }), 3, results);
+
   // [TODO_DONE]{...}[/TODO_DONE]
-  const doneRe = /\[TODO_DONE\]([\s\S]*?)\[\/TODO_DONE\]/gi;
-  while ((m = doneRe.exec(text)) !== null) {
-    try {
-      const data = JSON.parse(m[1].trim());
-      if (data.id || data.title) {
-        results.push({ full: m[0], action: 'done', data });
-      }
-    } catch {}
-    if (results.length >= 3) break;
-  }
+  parseJsonMarkers(text, /\[TODO_DONE\]([\s\S]*?)\[\/TODO_DONE\]/gi,
+    (data, full) => ((data.id || data.title) ? { full, action: 'done', data } : null), 3, results);
 
   // [TODO_UPDATE]{...}[/TODO_UPDATE]
-  const updateRe = /\[TODO_UPDATE\]([\s\S]*?)\[\/TODO_UPDATE\]/gi;
-  while ((m = updateRe.exec(text)) !== null) {
-    try {
-      const data = JSON.parse(m[1].trim());
-      if (data.id || data.title) {
-        results.push({ full: m[0], action: 'update', data });
-      }
-    } catch {}
-    if (results.length >= 3) break;
-  }
+  parseJsonMarkers(text, /\[TODO_UPDATE\]([\s\S]*?)\[\/TODO_UPDATE\]/gi,
+    (data, full) => ((data.id || data.title) ? { full, action: 'update', data } : null), 3, results);
 
   // [TODO_DELETE]{...}[/TODO_DELETE]
-  const deleteRe = /\[TODO_DELETE\]([\s\S]*?)\[\/TODO_DELETE\]/gi;
-  while ((m = deleteRe.exec(text)) !== null) {
-    try {
-      const data = JSON.parse(m[1].trim());
-      if (data.id || data.title) {
-        results.push({ full: m[0], action: 'delete', data });
-      }
-    } catch {}
-    if (results.length >= 3) break;
-  }
+  parseJsonMarkers(text, /\[TODO_DELETE\]([\s\S]*?)\[\/TODO_DELETE\]/gi,
+    (data, full) => ((data.id || data.title) ? { full, action: 'delete', data } : null), 3, results);
 
   return results;
 }

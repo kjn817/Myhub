@@ -8,6 +8,7 @@
 import { searchAccessibleMemos, getAccessibleMemo } from './ai-access';
 import { isMemoLocked } from './policy-guard';
 import { syncTags } from '../modules/memo/helpers';
+import { parseJsonMarkers } from '../lib/markers';
 
 export interface MemoToolResult {
   success: boolean;
@@ -32,42 +33,28 @@ function normalizeMarkerId(raw: unknown): number | undefined {
  * [MEMO_SEARCH]{"query": "..."}[/MEMO_SEARCH] 파싱
  */
 export function parseMemoSearchMarkers(text: string): Array<{ full: string; query: string }> {
-  const results: Array<{ full: string; query: string }> = [];
-  const re = /\[MEMO_SEARCH\]([\s\S]*?)\[\/MEMO_SEARCH\]/gi;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(text)) !== null) {
-    try {
-      const parsed = JSON.parse(m[1].trim());
-      if (parsed.query && typeof parsed.query === 'string') {
-        results.push({ full: m[0], query: parsed.query.slice(0, 200) });
-      }
-    } catch {
-      // JSON 파싱 실패 시 무시
-    }
-    if (results.length >= 3) break; // 턴당 최대 3회
-  }
-  return results;
+  return parseJsonMarkers(
+    text,
+    /\[MEMO_SEARCH\]([\s\S]*?)\[\/MEMO_SEARCH\]/gi,
+    (parsed, full) =>
+      parsed.query && typeof parsed.query === 'string'
+        ? { full, query: parsed.query.slice(0, 200) }
+        : null,
+    3,
+  );
 }
 
 /**
  * [MEMO_GET]{"id": 123}[/MEMO_GET] 파싱
  */
 export function parseMemoGetMarkers(text: string): Array<{ full: string; id: number }> {
-  const results: Array<{ full: string; id: number }> = [];
-  const re = /\[MEMO_GET\]([\s\S]*?)\[\/MEMO_GET\]/gi;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(text)) !== null) {
-    try {
-      const parsed = JSON.parse(m[1].trim());
-      if (parsed.id && Number.isSafeInteger(parsed.id)) {
-        results.push({ full: m[0], id: parsed.id });
-      }
-    } catch {
-      // 무시
-    }
-    if (results.length >= 3) break;
-  }
-  return results;
+  return parseJsonMarkers(
+    text,
+    /\[MEMO_GET\]([\s\S]*?)\[\/MEMO_GET\]/gi,
+    (parsed, full) =>
+      parsed.id && Number.isSafeInteger(parsed.id) ? { full, id: parsed.id } : null,
+    3,
+  );
 }
 
 /**
@@ -110,63 +97,56 @@ export async function executeMemoGet(
  * - 본문이 없거나 JSON이 깨졌으면 무시 (호출자가 남은 마커를 실패 안내로 대체)
  */
 export function parseMemoCreateMarkers(text: string): Array<{ full: string; text: string }> {
-  const results: Array<{ full: string; text: string }> = [];
-  const re = /\[MEMO_CREATE\]([\s\S]*?)\[\/MEMO_CREATE\]/gi;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(text)) !== null) {
-    try {
-      const parsed = JSON.parse(m[1].trim());
+  return parseJsonMarkers(
+    text,
+    /\[MEMO_CREATE\]([\s\S]*?)\[\/MEMO_CREATE\]/gi,
+    (parsed, full) => {
       const body = [parsed.text, parsed.content].find(
         (v) => typeof v === 'string' && v.trim().length > 0
       ) as string | undefined;
-      if (!body) continue;
+      if (!body) return null;
       const title = typeof parsed.title === 'string' ? parsed.title.trim() : '';
       const combined = title ? `${title}\n\n${body}` : body;
-      results.push({ full: m[0], text: combined.slice(0, 10000) });
-    } catch {}
-    if (results.length >= 2) break;
-  }
-  return results;
+      return { full, text: combined.slice(0, 10000) };
+    },
+    2,
+  );
 }
 
 /**
  * [MEMO_UPDATE]{"id": 123, "text": "..."}[/MEMO_UPDATE] 파싱
  */
 export function parseMemoUpdateMarkers(text: string): Array<{ full: string; id: number; text: string }> {
-  const results: Array<{ full: string; id: number; text: string }> = [];
-  const re = /\[MEMO_UPDATE\]([\s\S]*?)\[\/MEMO_UPDATE\]/gi;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(text)) !== null) {
-    try {
-      const parsed = JSON.parse(m[1].trim());
+  return parseJsonMarkers(
+    text,
+    /\[MEMO_UPDATE\]([\s\S]*?)\[\/MEMO_UPDATE\]/gi,
+    (parsed, full) => {
       const id = normalizeMarkerId(parsed.id);
       if (id !== undefined && parsed.text) {
-        results.push({ full: m[0], id, text: String(parsed.text).slice(0, 10000) });
+        return { full, id, text: String(parsed.text).slice(0, 10000) };
       }
-    } catch {}
-    if (results.length >= 2) break;
-  }
-  return results;
+      return null;
+    },
+    2,
+  );
 }
 
 /**
  * [MEMO_DELETE]{"id": 123}[/MEMO_DELETE] 파싱
  */
 export function parseMemoDeleteMarkers(text: string): Array<{ full: string; id: number }> {
-  const results: Array<{ full: string; id: number }> = [];
-  const re = /\[MEMO_DELETE\]([\s\S]*?)\[\/MEMO_DELETE\]/gi;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(text)) !== null) {
-    try {
-      const parsed = JSON.parse(m[1].trim());
+  return parseJsonMarkers(
+    text,
+    /\[MEMO_DELETE\]([\s\S]*?)\[\/MEMO_DELETE\]/gi,
+    (parsed, full) => {
       const id = normalizeMarkerId(parsed.id);
       if (id !== undefined) {
-        results.push({ full: m[0], id });
+        return { full, id };
       }
-    } catch {}
-    if (results.length >= 2) break;
-  }
-  return results;
+      return null;
+    },
+    2,
+  );
 }
 
 /**

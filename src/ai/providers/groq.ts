@@ -12,13 +12,13 @@
 import type {
   ToolDefinition,
   ToolCall,
-  ToolResult,
   ModelStep,
   ProviderSession,
   TokenUsage,
 } from '../types'
 import { ProviderError } from '../types'
 import { toJsonSchema } from '../tools/registry'
+import { OpenAIStyleSession, applyNextSystemPrompt } from './session-base'
 
 // ---------------------------------------------------------------------------
 // 오류 정규화
@@ -64,33 +64,16 @@ export type GroqAdapterConfig = {
   model: string
 }
 
-export class GroqAdapter implements ProviderSession {
+export class GroqAdapter extends OpenAIStyleSession implements ProviderSession {
   readonly provider = 'groq' as const
   readonly modelId: string
 
   private apiKey: string
-  /** OpenAI 형식 메시지 이력 (원본 보존) */
-  private messages: any[] = []
 
   constructor(config: GroqAdapterConfig) {
+    super()
     this.apiKey = config.apiKey
     this.modelId = config.model
-  }
-
-  /**
-   * 시스템 프롬프트 설정 (첫 호출 전)
-   */
-  setSystemPrompt(prompt: string): void {
-    // 기존 system 메시지가 있으면 교체
-    this.messages = this.messages.filter((m) => m.role !== 'system')
-    this.messages.unshift({ role: 'system', content: prompt })
-  }
-
-  /**
-   * 사용자 메시지 추가
-   */
-  addUserMessage(content: string): void {
-    this.messages.push({ role: 'user', content })
   }
 
   async next(options: {
@@ -99,9 +82,7 @@ export class GroqAdapter implements ProviderSession {
     maxOutputTokens: number
     systemPrompt?: string
   }): Promise<ModelStep> {
-    if (options.systemPrompt) {
-      this.setSystemPrompt(options.systemPrompt)
-    }
+    applyNextSystemPrompt(this, options)
 
     // ToolDefinition → OpenAI tools 형식
     const tools = options.tools.map((t) => ({
@@ -203,27 +184,6 @@ export class GroqAdapter implements ProviderSession {
       finishReason,
       usage,
     }
-  }
-
-  appendToolResults(results: ToolResult[]): void {
-    for (const r of results) {
-      // 원본 tool_call_id와 연결
-      const toolMsg: any = {
-        role: 'tool',
-        tool_call_id: r.callId,
-        content: JSON.stringify(
-          r.output.ok
-            ? r.output.data
-            : { error: r.output.errorCode, message: r.output.message }
-        ),
-      }
-      this.messages.push(toolMsg)
-    }
-  }
-
-  /** 디버깅용: 현재 이력 반환 */
-  getMessages(): any[] {
-    return [...this.messages]
   }
 }
 

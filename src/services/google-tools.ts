@@ -36,6 +36,7 @@ import {
   sanitizeCalendarListForAI,
 } from './google-privacy'
 import { executeScheduleList } from './schedule-tools'
+import { parseJsonMarkers } from '../lib/markers'
 
 export const GOOGLE_NOT_CONNECTED_MESSAGE =
   'Google 연동이 안 되어 있어요. 설정 메뉴의 Google 연동에서 계정을 연결하면 Gmail·캘린더를 함께 볼 수 있어요.'
@@ -54,18 +55,13 @@ function parseMarker(
   name: string,
 ): Array<{ full: string; data: Record<string, unknown> }> {
   const re = new RegExp(`\\[${name}\\]([\\s\\S]*?)\\[\\/${name}\\]`, 'gi')
-  const out: Array<{ full: string; data: Record<string, unknown> }> = []
-  let m: RegExpExecArray | null
-  while ((m = re.exec(text)) !== null) {
-    try {
-      const data = JSON.parse(m[1].trim())
-      if (data && typeof data === 'object') out.push({ full: m[0], data })
-    } catch {
-      // 깨진 JSON은 무시
-    }
-    if (out.length >= 3) break
-  }
-  return out
+  return parseJsonMarkers(
+    text,
+    re,
+    (data, full) =>
+      data && typeof data === 'object' ? { full, data: data as Record<string, unknown> } : null,
+    3,
+  )
 }
 
 export function parseGoogleMarkers(text: string): GoogleMarker[] {

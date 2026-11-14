@@ -6,6 +6,7 @@ import {
   NEWS_BODY_MIN_CHARS,
 } from '../lib/news-answer'
 import { withTimeout } from '../lib/deadline'
+import { metaContent } from '../lib/html-meta'
 
 export const NEWS_BODY_FETCH_TIMEOUT_MS = 4000
 export const NEWS_BODY_FETCH_CONCURRENCY = 3
@@ -82,22 +83,9 @@ function htmlToText(fragment: string): string {
     .trim()
 }
 
-function getAttr(tag: string, name: string): string | undefined {
-  const m = tag.match(new RegExp(`${name}\\s*=\\s*["']([^"']*)["']`, 'i'))
-  return m ? m[1] : undefined
-}
-
-function metaContent(html: string, attr: string, value: string): string | undefined {
-  const tags = html.match(/<meta\b[^>]*>/gi) || []
-  const want = value.toLowerCase()
-  for (const tag of tags) {
-    const v = getAttr(tag, attr)
-    if (v && v.toLowerCase() === want) {
-      const content = getAttr(tag, 'content')
-      if (content) return decodeEntities(content).trim()
-    }
-  }
-  return undefined
+/** og:description·description 메타에서 본문 요약 후보를 찾는다 (엔티티 디코드 + trim). */
+function metaDescription(html: string, attr: 'property' | 'name', value: string): string | undefined {
+  return metaContent(html, attr, value, (content) => decodeEntities(content).trim())
 }
 
 function findJsonLdBody(value: unknown): string | undefined {
@@ -175,7 +163,7 @@ export function extractArticleBodyText(html: string): string | undefined {
   }
   const joined = paras.join('\n')
   if (joined.length >= NEWS_BODY_MIN_CHARS) return capBody(joined)
-  const og = metaContent(html, 'property', 'og:description') || metaContent(html, 'name', 'description')
+  const og = metaDescription(html, 'property', 'og:description') || metaDescription(html, 'name', 'description')
   if (og && og.length >= NEWS_OG_DESC_MIN_CHARS) return capBody(og)
   return undefined
 }

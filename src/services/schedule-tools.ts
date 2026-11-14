@@ -4,6 +4,7 @@
 
 import { expandRecurrence, singleOccurrence } from './recurrence';
 import { normalizeScheduleDateTime } from '../lib/datetime-format';
+import { parseJsonMarkers } from '../lib/markers';
 import {
   pushScheduleDetailed,
   removeScheduleDetailed,
@@ -49,53 +50,22 @@ async function pushCreatedOrUpdated(env: any, row: ScheduleSyncRow): Promise<Pus
 
 export function parseScheduleMarkers(text: string): Array<{ full: string; action: string; data: any }> {
   const results: Array<{ full: string; action: string; data: any }> = [];
-  
+
   // [SCHEDULE_CREATE]{...}[/SCHEDULE_CREATE]
-  const createRe = /\[SCHEDULE_CREATE\]([\s\S]*?)\[\/SCHEDULE_CREATE\]/gi;
-  let m: RegExpExecArray | null;
-  while ((m = createRe.exec(text)) !== null) {
-    try {
-      const data = JSON.parse(m[1].trim());
-      if (data.title) {
-        results.push({ full: m[0], action: 'create', data });
-      }
-    } catch {}
-    if (results.length >= 3) break;
-  }
-  
+  parseJsonMarkers(text, /\[SCHEDULE_CREATE\]([\s\S]*?)\[\/SCHEDULE_CREATE\]/gi,
+    (data, full) => (data.title ? { full, action: 'create', data } : null), 3, results);
+
   // [SCHEDULE_LIST]{...}[/SCHEDULE_LIST]
-  const listRe = /\[SCHEDULE_LIST\]([\s\S]*?)\[\/SCHEDULE_LIST\]/gi;
-  while ((m = listRe.exec(text)) !== null) {
-    try {
-      const data = JSON.parse(m[1].trim());
-      results.push({ full: m[0], action: 'list', data });
-    } catch {}
-    if (results.length >= 3) break;
-  }
+  parseJsonMarkers(text, /\[SCHEDULE_LIST\]([\s\S]*?)\[\/SCHEDULE_LIST\]/gi,
+    (data, full) => ({ full, action: 'list', data }), 3, results);
 
   // [SCHEDULE_UPDATE]{...}[/SCHEDULE_UPDATE]
-  const updateRe = /\[SCHEDULE_UPDATE\]([\s\S]*?)\[\/SCHEDULE_UPDATE\]/gi;
-  while ((m = updateRe.exec(text)) !== null) {
-    try {
-      const data = JSON.parse(m[1].trim());
-      if (data.id || data.title) {
-        results.push({ full: m[0], action: 'update', data });
-      }
-    } catch {}
-    if (results.length >= 3) break;
-  }
+  parseJsonMarkers(text, /\[SCHEDULE_UPDATE\]([\s\S]*?)\[\/SCHEDULE_UPDATE\]/gi,
+    (data, full) => ((data.id || data.title) ? { full, action: 'update', data } : null), 3, results);
 
   // [SCHEDULE_DELETE]{...}[/SCHEDULE_DELETE]
-  const deleteRe = /\[SCHEDULE_DELETE\]([\s\S]*?)\[\/SCHEDULE_DELETE\]/gi;
-  while ((m = deleteRe.exec(text)) !== null) {
-    try {
-      const data = JSON.parse(m[1].trim());
-      if (data.id || data.title) {
-        results.push({ full: m[0], action: 'delete', data });
-      }
-    } catch {}
-    if (results.length >= 3) break;
-  }
+  parseJsonMarkers(text, /\[SCHEDULE_DELETE\]([\s\S]*?)\[\/SCHEDULE_DELETE\]/gi,
+    (data, full) => ((data.id || data.title) ? { full, action: 'delete', data } : null), 3, results);
 
   return results;
 }
@@ -292,21 +262,34 @@ export async function executeScheduleList(env: any, data: any): Promise<any> {
   }
 }
 
-export async function executeScheduleUpdate(env: any, data: any): Promise<any> {
-  try {
-    let id = Number(data.id);
-    // ID가 없고 title이 있으면 제목으로 조회
-    if ((!id || !Number.isInteger(id) || id <= 0) && data.title) {
-      const titleQuery = String(data.title).trim();
-      const found = await env.DB.prepare(
-        'SELECT id, title, start_at FROM schedules WHERE title LIKE ? AND status = ? ORDER BY start_at DESC LIMIT 5'
-      ).bind(`%${titleQuery}%`, 'active').all();
-      const rows = found.results || [];
-      if (rows.length === 0) {
-        return { success: false, error: `"${data.title}" 일정을 찾을 수 없음` };
-      }
-      if (rows.length > 1) {
-        return {
+export type ScheduleIdResolution =
+  | { ok: true; id: number }
+  | { ok: false; result: { success: false; error: string; candidates?: any[]; message?: string } };
+
+/**
+ * Update/Delete 공통 프롤로그 (B-L4, 5-7): id 해석 + 제목 조회 폴백.
+ * - id가 유효하면 그대로, 없으면 title로 조회한다 (0건 오류·복수 후보 반환·1건 확정).
+ * - 존재 확인(SELECT id)은 Update만 하므로 여기에 포함하지 않는다.
+ *   Delete는 DELETE changes로 부재를 판단한다.
+ * - 게이트 호출은 디스패처 측에 있어 이 추출은 호출 순서를 바꾸지 않는다.
+ */
+export async function resolveScheduleId(env: any, data: any, verb: '수정' | '삭제'): Promise<ScheduleIdResolution> {
+  let id = Number(data.id);
+  // ID가 없고 title이 있으면 제목으로 조회
+  if ((!id || !Number.isInteger(id) || id <= 0) && data.title) {
+    const titleQuery = String(data.title).trim();
+    const found = await env.DB.prepare(
+      'SELECT id, title, start_at FROM schedules WHERE title LIKE ? AND status = ? ORDER BY start_at DESC LIMIT 5'
+    ).bind(`%${titleQuery}%`, 'active').all();
+    const rows = found.results || [];
+    if (rows.length === 0) {
+      return { ok: false, result: { success: false, error: `"${data.title}" 일정을 찾을 수 없음` } };
+    }
+    if (rows.length > 1) {
+      // 후보 목록 반환 (프론트엔드에서 버튼으로 표시)
+      return {
+        ok: false,
+        result: {
           success: false,
           error: 'multiple_candidates',
           candidates: rows.map((r: any) => ({
@@ -314,14 +297,23 @@ export async function executeScheduleUpdate(env: any, data: any): Promise<any> {
             title: r.title,
             start_at: r.start_at,
           })),
-          message: `여러 일정이 발견됨. 수정할 일정을 선택해주세요.`,
-        };
-      }
-      id = rows[0].id;
+          message: `여러 일정이 발견됨. ${verb}할 일정을 선택해주세요.`,
+        },
+      };
     }
-    if (!id || !Number.isInteger(id) || id <= 0) {
-      return { success: false, error: '유효한 일정 ID나 제목이 필요' };
-    }
+    id = rows[0].id;
+  }
+  if (!id || !Number.isInteger(id) || id <= 0) {
+    return { ok: false, result: { success: false, error: '유효한 일정 ID나 제목이 필요' } };
+  }
+  return { ok: true, id };
+}
+
+export async function executeScheduleUpdate(env: any, data: any): Promise<any> {
+  try {
+    const resolved = await resolveScheduleId(env, data, '수정');
+    if (!resolved.ok) return resolved.result;
+    const id = resolved.id;
     // 존재 확인
     const existing = await env.DB.prepare('SELECT id FROM schedules WHERE id = ?').bind(id).first();
     if (!existing) {
@@ -368,35 +360,9 @@ export async function executeScheduleUpdate(env: any, data: any): Promise<any> {
 
 export async function executeScheduleDelete(env: any, data: any): Promise<any> {
   try {
-    let id = Number(data.id);
-    // ID가 없고 title이 있으면 제목으로 조회
-    if ((!id || !Number.isInteger(id) || id <= 0) && data.title) {
-      const titleQuery = String(data.title).trim();
-      const found = await env.DB.prepare(
-        'SELECT id, title, start_at FROM schedules WHERE title LIKE ? AND status = ? ORDER BY start_at DESC LIMIT 5'
-      ).bind(`%${titleQuery}%`, 'active').all();
-      const rows = found.results || [];
-      if (rows.length === 0) {
-        return { success: false, error: `"${data.title}" 일정을 찾을 수 없음` };
-      }
-      if (rows.length > 1) {
-        // 후보 목록 반환 (프론트엔드에서 버튼으로 표시)
-        return {
-          success: false,
-          error: 'multiple_candidates',
-          candidates: rows.map((r: any) => ({
-            id: r.id,
-            title: r.title,
-            start_at: r.start_at,
-          })),
-          message: `여러 일정이 발견됨. 삭제할 일정을 선택해주세요.`,
-        };
-      }
-      id = rows[0].id;
-    }
-    if (!id || !Number.isInteger(id) || id <= 0) {
-      return { success: false, error: '유효한 일정 ID나 제목이 필요' };
-    }
+    const resolved = await resolveScheduleId(env, data, '삭제');
+    if (!resolved.ok) return resolved.result;
+    const id = resolved.id;
     let linkRow: any = null;
     try {
       linkRow = await env.DB.prepare('SELECT google_event_id FROM schedules WHERE id = ?').bind(id).first();

@@ -16,12 +16,10 @@ import type {
   TokenUsage,
 } from '../types'
 import { ProviderError } from '../types'
+import { OpenAIStyleSession, applyNextSystemPrompt } from './session-base'
 // Cloudflare AI Gateway 통합 관측성 (트랙 B2, 2026-10-26) — Native 경로에만 적용.
 // OpenAI 호환 REST 경로(api.cloudflare.com/.../ai/v1)는 env.AI.run이 아니라서 그대로 둔다.
 import { AI_GATEWAY_OPTIONS } from '../../services/ai-gateway'
-
-// Groq Adapter의 변환 로직 재사용을 위해 유사 구조 유지
-// (실제 코드 중복을 피하기 위해 공통 헬퍼는 추후 분리)
 
 function toProviderError(e: any): ProviderError {
   const msg = String(e?.message || '')
@@ -56,7 +54,7 @@ export type WorkersAIAdapterConfig = {
   apiToken?: string
 }
 
-export class WorkersAIAdapter implements ProviderSession {
+export class WorkersAIAdapter extends OpenAIStyleSession implements ProviderSession {
   readonly provider = 'workers-ai' as const
   readonly modelId: string
 
@@ -64,26 +62,16 @@ export class WorkersAIAdapter implements ProviderSession {
   private apiMode: 'openai' | 'native'
   private accountId?: string
   private apiToken?: string
-  /** 메시지 이력 (OpenAI 형식 또는 Native 형식) */
-  private messages: any[] = []
   /** 도구가 이미 실행된 여부 (모드 변경 금지 판단용) */
   private hasExecutedTools: boolean = false
 
   constructor(config: WorkersAIAdapterConfig) {
+    super()
     this.ai = config.ai
     this.modelId = config.model
     this.apiMode = config.apiMode
     this.accountId = config.accountId
     this.apiToken = config.apiToken
-  }
-
-  setSystemPrompt(prompt: string): void {
-    this.messages = this.messages.filter((m) => m.role !== 'system')
-    this.messages.unshift({ role: 'system', content: prompt })
-  }
-
-  addUserMessage(content: string): void {
-    this.messages.push({ role: 'user', content })
   }
 
   async next(options: {
@@ -92,9 +80,7 @@ export class WorkersAIAdapter implements ProviderSession {
     maxOutputTokens: number
     systemPrompt?: string
   }): Promise<ModelStep> {
-    if (options.systemPrompt) {
-      this.setSystemPrompt(options.systemPrompt)
-    }
+    applyNextSystemPrompt(this, options)
 
     // 세션 시작 시 확정된 API 모드 사용 (세션 중 변경 금지)
     // 도구가 이미 실행된 세션에서는 모드 변경 불가
@@ -265,20 +251,6 @@ export class WorkersAIAdapter implements ProviderSession {
     if (results.length > 0) {
       this.hasExecutedTools = true
     }
-    for (const r of results) {
-      this.messages.push({
-        role: 'tool',
-        tool_call_id: r.callId,
-        content: JSON.stringify(
-          r.output.ok
-            ? r.output.data
-            : { error: r.output.errorCode, message: r.output.message }
-        ),
-      })
-    }
-  }
-
-  getMessages(): any[] {
-    return [...this.messages]
+    super.appendToolResults(results)
   }
 }

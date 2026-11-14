@@ -20,6 +20,7 @@ import type {
 } from '../types'
 import { ProviderError } from '../types'
 import { canUseRelay } from '../../services/privacy-gateway'
+import { applyNextSystemPrompt } from './session-base'
 
 /**
  * Gemini API용 스키마 정제
@@ -114,9 +115,7 @@ export class GeminiAdapter implements ProviderSession {
     maxOutputTokens: number
     systemPrompt?: string
   }): Promise<ModelStep> {
-    if (options.systemPrompt) {
-      this.setSystemPrompt(options.systemPrompt)
-    }
+    applyNextSystemPrompt(this, options)
 
     const body: any = {
       contents: this.contents,

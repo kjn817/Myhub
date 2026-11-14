@@ -6,6 +6,9 @@
 // 날짜 기준은 Asia/Seoul (브리핑 라우트와 동일).
 
 import type { PptxDeck, PptxSlide } from './pptx-builder'
+import { kstDateStr } from '../lib/kst'
+
+export { kstDateStr }
 
 interface ScheduleRow {
   id: number
@@ -29,19 +32,7 @@ interface MemoRow {
   created_at: string
 }
 
-// ---- 날짜 (Asia/Seoul) ----
-
-/** 지정 시각의 KST 날짜 부분 (YYYY-MM-DD). */
-export function kstDateStr(now: Date = new Date()): string {
-  const parts = new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Asia/Seoul',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).formatToParts(now)
-  const get = (t: string) => parts.find((p) => p.type === t)?.value ?? ''
-  return `${get('year')}-${get('month')}-${get('day')}`
-}
+// ---- 날짜 (Asia/Seoul, 공용 코어 src/lib/kst.ts) ----
 
 /** YYYY-MM-DD에 일수를 더한다 (UTC 기준 연산으로 DST 영향 없음). */
 export function addDays(dateStr: string, days: number): string {
