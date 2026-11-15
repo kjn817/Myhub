@@ -1,0 +1,8 @@
+{
+ "loadMs": 899,
+ "hasModule": false,
+ "consoleErrs": [
+  "[console] The Content Security Policy directive 'frame-ancestors' is ignored when delivered via a <meta> element.",
+  "[console] Failed to load resource: the server responded with a status of 404 (Not Found)"
+ ]
+}

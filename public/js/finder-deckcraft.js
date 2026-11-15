@@ -124,6 +124,11 @@
     // 리더 표면이 남는다 (폴백 보존의 계약).
     readyTimeoutMs: 60000,
     execTimeoutMs: 20000,
+    // 부팅 게이트 프리패치 재시도: 한 번의 시도가 멈춰도 두 번 더
+    // 시도한다. 파일별 재시도(코어 maxAttempts)와 별개로, 전체
+    // 프리패치 자체를 다시 돌리는 횟수다.
+    bootMaxAttempts: 3,
+    bootRetryDelayMs: 1000,
   };
 
   // 번호붙 한글 폴백 폰트 (나눔고딕, SIL OFL 1.1 앱 public/fonts/
@@ -301,7 +306,9 @@
     // 같은 출처의 자체 앱 페이지는 두 sheet.html·PdfCraft뷰어와 같은 최소
     // 조건(스크립트 실행 + 동일 출처 자산 로딩·origin 검증 통과) (gate-74).
     frame.setAttribute('sandbox', 'allow-scripts allow-same-origin');
-    frame.src = deps.url || APP_URL;
+    // src는 부팅 프리패치가 끝난 뒤에 붙인다 (아래 runBootPrefetch) —
+    // iframe이 22MB를 직접 받으면 60초 워치독이 먼저 터진다. 요소는
+    // 동기 생성해야 호출부가 host.frame을 즉시 쓸 수 있다.
     deps.parentEl.appendChild(frame);
 
     var ready = false;
@@ -310,9 +317,64 @@
     var execSeq = 0;
     var execWaiters = {}; // tag -> {resolve}
 
-    var timer = setTimeout(function () {
-      if (!ready) fireFallback('timeout');
-    }, readyTimeoutMs);
+    // ready 워치독은 iframe src를 붙인 시점부터 돈다 — 프리패치
+    // 시간은 워치독에 안 잡힌다 (워밍된 캐시에서는 ready가 수 초 안에 온다).
+    var timer = null;
+    function startWatchdog() {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(function () {
+        if (!ready) fireFallback('timeout');
+      }, readyTimeoutMs);
+    }
+
+    // 부팅 게이트 프리패치 (2026-11-15): 엔진 자산을 먼저 받아 캐시를
+    // 데운 뒤 iframe을 띄운다. 실패하면 재시도하고, 전부 실패하면
+    // 폴백('prefetch-failed')으로 간다 — 단발 폴백 대신 재시도 후
+    // 최종 실패 시에만 폴백하는 것이 계약이다.
+    var bootAttempts = 0;
+    var bootMaxAttempts =
+      typeof deps.bootMaxAttempts === 'number' ? deps.bootMaxAttempts : internals.bootMaxAttempts;
+    var bootRetryDelayMs =
+      typeof deps.bootRetryDelayMs === 'number' ? deps.bootRetryDelayMs : internals.bootRetryDelayMs;
+    function runBootPrefetch() {
+      if (dead) return;
+      bootAttempts += 1;
+      var bootFn =
+        typeof deps.prefetchForBoot === 'function' ? deps.prefetchForBoot : prefetchForBoot;
+      bootFn({
+        fetchFn: fetchFn,
+        win: win,
+        stallTimeoutMs: deps.stallTimeoutMs,
+        maxAttempts: deps.prefetchMaxAttempts,
+        retryDelayMs: deps.prefetchRetryDelayMs,
+        onProgress: function (p) {
+          if (typeof deps.onBootProgress === 'function') {
+            deps.onBootProgress({
+              receivedBytes: p.receivedBytes,
+              filesDone: p.filesDone,
+              filesTotal: p.filesTotal,
+              currentUrl: p.currentUrl,
+              attempt: bootAttempts,
+              maxAttempts: bootMaxAttempts,
+            });
+          }
+        },
+      })
+        .then(function () {
+          if (dead) return;
+          frame.src = deps.url || APP_URL;
+          startWatchdog();
+        })
+        .catch(function () {
+          if (dead) return;
+          if (bootAttempts < bootMaxAttempts) {
+            setTimeout(runBootPrefetch, bootRetryDelayMs);
+          } else {
+            fireFallback('prefetch-failed');
+          }
+        });
+    }
+    runBootPrefetch();
 
     function fireFallback(reason) {
       if (dead || fallbackFired) return;
@@ -488,6 +550,41 @@
     // 폴백 앱)도 Drive 페이지가 없어도 항상 뒤에 붙여 보낸다 — 폴더가
     // 비었거나 Drive가 실패한 전에도 슬라이드 한글이 .notdef로 한
     // 않게 하는 최소 보장이다. 폰트 실패는 넣기를 막지 않는다.
+    //
+    // P1 재푸시 (2026-11-15): driveFaces는 whenReady(4000)만 기다리는데
+    // load()가 5~12초 걸리면 1차 푸시에 사용자 폰트가 안 닿고, 재시도가
+    // 없어 그 세션에서는 영영 누락됐다. pushFonts는 1차 푸시 뒤에
+    // whenLoaded()로 로딩 완료를 기다렸다가, 새로 생긴 페이스만 한 번
+    // 더 푸시한다. 이미 보낸 페이스는 키로 걸러 다시 보내지 않는다.
+    var pushedFaceKeys = {};
+    var lateFontPushAttached = false;
+    function faceKey(f) {
+      return (f.family || '') + '|' + (f.weight || 400) + '|' + (f.style || 'normal');
+    }
+    function fetchFaceBytes(faces) {
+      return Promise.all(
+        faces.map(function (face) {
+          return fetchFn(constants.DRIVE_FILES_API + '/' + face.fileId + '/content')
+            .then(function (res) {
+              if (!res || !res.ok) throw new Error('font fetch failed');
+              return res.arrayBuffer();
+            })
+            .then(function (bytes) {
+              return {
+                family: face.family,
+                weight: face.weight,
+                style: face.style,
+                bytes: bytes,
+              };
+            })
+            .catch(function () {
+              return null;
+            });
+        }),
+      ).then(function (list) {
+        return list.filter(Boolean);
+      });
+    }
     function driveFaces() {
       if (!fonts || typeof fonts.whenReady !== 'function' || !fetchFn) {
         return Promise.resolve([]);
@@ -496,38 +593,29 @@
         .whenReady(4000)
         .then(function () {
           var faces = typeof fonts.faces === 'function' ? fonts.faces() : [];
-          return Promise.all(
-            faces.map(function (face) {
-              return fetchFn(constants.DRIVE_FILES_API + '/' + face.fileId + '/content')
-                .then(function (res) {
-                  if (!res || !res.ok) throw new Error('font fetch failed');
-                  return res.arrayBuffer();
-                })
-                .then(function (bytes) {
-                  return {
-                    family: face.family,
-                    weight: face.weight,
-                    style: face.style,
-                    bytes: bytes,
-                  };
-                })
-                .catch(function () {
-                  return null;
-                });
-            }),
-          ).then(function (list) {
-            return list.filter(Boolean);
-          });
+          return fetchFaceBytes(faces);
         })
         .catch(function () {
           return []; // Drive 실패가 폴백까지 막지 않는다
         });
     }
+    // 로딩 완료 뒤: 이미 보낸 페이스는 제외하고 바이트를 받는다.
+    function driveFacesFresh() {
+      if (!fonts || typeof fonts.faces !== 'function' || !fetchFn) {
+        return Promise.resolve([]);
+      }
+      var faces = fonts.faces().filter(function (f) {
+        return !pushedFaceKeys[faceKey(f)];
+      });
+      return fetchFaceBytes(faces).catch(function () {
+        return [];
+      });
+    }
 
     function pushFonts() {
       if (!ready || dead) return Promise.resolve(0);
       if (!fetchFn) return Promise.resolve(0);
-      return Promise.all([driveFaces(), loadFallbackFonts(fetchFn, poolSpecs(fonts))])
+      var first = Promise.all([driveFaces(), loadFallbackFonts(fetchFn, poolSpecs(fonts))])
         .then(function (both) {
           var usable = both[0].concat(
             both[1].map(function (f) {
@@ -540,6 +628,9 @@
             }),
           );
           if (!usable.length) return 0;
+          usable.forEach(function (f) {
+            pushedFaceKeys[faceKey(f)] = true;
+          });
           var transfer = usable.map(function (f) {
             return f.bytes;
           });
@@ -548,6 +639,35 @@
         .catch(function () {
           return 0; // 폰트 실패는 넣기를 막지 않는다
         });
+      // P1 재푸시: 1차 푸시가 whenReady 타임아웃으로 끝났어도, 로딩이
+      // 실제로 끝나면 새로 생긴 페이스만 한 번 더 푸시한다. 1차 푸시
+      // 뒤에 체인해야 이미 보낸 페이스를 정확히 걸러낼 수 있다.
+      // 세션당 한 번만 붙인다 (pushFonts가 여러 번 불려도 중복 부착 없음).
+      if (!lateFontPushAttached && fonts && typeof fonts.whenLoaded === 'function') {
+        lateFontPushAttached = true;
+        first
+          .then(function () {
+            return fonts.whenLoaded();
+          })
+          .then(function () {
+            if (!ready || dead) return null;
+            return driveFacesFresh();
+          })
+          .then(function (fresh) {
+            if (!ready || dead || !fresh || !fresh.length) return;
+            fresh.forEach(function (f) {
+              pushedFaceKeys[faceKey(f)] = true;
+            });
+            var transfer = fresh.map(function (f) {
+              return f.bytes;
+            });
+            post({ type: 'deckcraft:fonts', fonts: fresh }, transfer);
+          })
+          .catch(function () {
+            return 0; // 폰트 실패는 넣기를 막지 않는다
+          });
+      }
+      return first;
     }
 
     function onMessage(e) {
@@ -738,9 +858,74 @@
     return prefetchImpl(deps);
   }
 
+  function getFetchFn(deps) {
+    deps = deps || {};
+    if (typeof deps.fetchFn === 'function') return deps.fetchFn;
+    var win = deps.win || (typeof window !== 'undefined' ? window : null);
+    return win && typeof win.fetch === 'function' ? win.fetch.bind(win) : null;
+  }
+
+  // 부팅 게이트용 프리패치 (2026-11-15): 매니페스트를 읽어 진입 에셋을
+  // 진행 보고와 함께 받고, 멈춘 파일이 남으면 reject한다. 백그라운드
+  // 프리패치와 달리 once 플래그를 타지 않는다 — 백그라운드가 중간에
+  // 실패했어도 부팅 때는 다시 받아야 한다.
+  // deps = { fetchFn, win, onProgress, stallTimeoutMs, maxAttempts,
+  //          retryDelayMs, setTimeoutFn, clearTimeoutFn }.
+  // @returns {Promise<{done, failed, stalled, receivedBytes}>}
+  function prefetchForBoot(deps) {
+    var core = getPrefetchCore();
+    if (!core) return Promise.resolve({ done: [], failed: [], stalled: [], receivedBytes: 0 });
+    var fetchFn = getFetchFn(deps);
+    if (!fetchFn) return Promise.resolve({ done: [], failed: [], stalled: [], receivedBytes: 0 });
+    deps = deps || {};
+    return core
+      .fetchWithProgress(fetchFn, versionedAssetUrl(MANIFEST_URL), {
+        stallTimeoutMs: deps.stallTimeoutMs,
+        maxAttempts: deps.maxAttempts,
+        retryDelayMs: deps.retryDelayMs,
+        collectBody: true,
+        setTimeoutFn: deps.setTimeoutFn,
+        clearTimeoutFn: deps.clearTimeoutFn,
+      })
+      .then(function (r) {
+        var text = '';
+        if (r.body) {
+          try {
+            text = new TextDecoder().decode(r.body);
+          } catch (e) {
+            text = '';
+          }
+        }
+        var man = JSON.parse(text);
+        return core.manifestAssetUrls('/vendor/deckcraft/', man, {
+          wasm: true,
+          snippets: true,
+        });
+      })
+      .then(function (urls) {
+        return core.fetchSequentialTracked(fetchFn, urls, {
+          stallTimeoutMs: deps.stallTimeoutMs,
+          maxAttempts: deps.maxAttempts,
+          retryDelayMs: deps.retryDelayMs,
+          setTimeoutFn: deps.setTimeoutFn,
+          clearTimeoutFn: deps.clearTimeoutFn,
+          onProgress: deps.onProgress,
+        });
+      })
+      .then(function (r) {
+        if (r.stalled.length) {
+          throw new Error(
+            'DeckCraft 자산을 받지 못했습니다 (멈춤: ' + r.stalled.join(', ') + ')'
+          );
+        }
+        return r;
+      });
+  }
+
   var api = {
     createHost: createHost,
     prefetch: prefetch,
+    prefetchForBoot: prefetchForBoot,
     normalizeBytes: normalizeBytes,
     isPresentationName: isPresentationName,
     sniffDeckFormat: sniffDeckFormat,

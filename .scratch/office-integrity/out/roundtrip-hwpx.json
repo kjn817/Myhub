@@ -1,0 +1,23 @@
+{
+ "scenario": "hwpx",
+ "errors": [],
+ "openMs": 4008,
+ "readTextMs": 14737,
+ "usedMarkdown": false,
+ "markersFound": 2,
+ "mdLen": 15,
+ "mdTableLines": 0,
+ "editCellRes": {
+  "applied": 1,
+  "errors": []
+ },
+ "editBodyRes": {
+  "applied": 1,
+  "errors": []
+ },
+ "editMs": 9073,
+ "engineFrames": [],
+ "savedCaptured": true,
+ "savedBytes": 17568,
+ "totalMs": 23810
+}

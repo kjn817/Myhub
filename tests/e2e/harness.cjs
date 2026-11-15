@@ -155,7 +155,29 @@ function createServer(opts = {}) {
 
     const file = path.join(PUBLIC, p === '/' ? 'desktop.html' : p);
     if (!fs.existsSync(file) || fs.statSync(file).isDirectory()) { res.writeHead(404); res.end(); return; }
-    res.writeHead(200, { 'Content-Type': MIME[path.extname(file)] || 'application/octet-stream' });
+    const stat = fs.statSync(file);
+    const ext = path.extname(file);
+    // 운영과 같은 캐시 헤더 (2026-11-15): HTML은 no-store, 그 외 정적
+    // 자산은 immutable — 프리패치가 데운 캐시를 iframe이 재사용하는
+    // 부팅 강건화 흐름을 하네스에서도 검증하려면 필요하다. 헤더가
+    // 없으면 브라우저가 매번 다시 받아 프리패치가 무의미해진다.
+    const headers = { 'Content-Type': MIME[ext] || 'application/octet-stream' };
+    if (ext === '.html' || ext === '.htm') {
+      headers['Cache-Control'] = 'no-store';
+    } else {
+      headers['Cache-Control'] = 'public, max-age=31536000, immutable';
+      headers['Last-Modified'] = stat.mtime.toUTCString();
+      headers['Content-Length'] = stat.size;
+    }
+    if (
+      req.headers['if-modified-since'] && headers['Last-Modified'] &&
+      req.headers['if-modified-since'] === headers['Last-Modified']
+    ) {
+      res.writeHead(304, headers);
+      res.end();
+      return;
+    }
+    res.writeHead(200, headers);
     fs.createReadStream(file).pipe(res);
   });
   return new Promise((resolve) => {

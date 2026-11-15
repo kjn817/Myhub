@@ -29,7 +29,7 @@ function flush(ms = 0) {
   return new Promise((r) => setTimeout(r, ms))
 }
 
-function setupHost() {
+async function setupHost() {
   const win = getWin()
   const doc = getDoc()
   doc.body.innerHTML = '<div id="host-parent"></div>'
@@ -55,6 +55,11 @@ function setupHost() {
     fonts: null,
   })
   const posts: any[] = []
+  // 2026-11-15 부팅 게이트: frame.src는 프리패치 뒤에 비동기로 붙고,
+  // src를 붙이면 jsdom이 contentWindow를 교체한다. 스텁은 src 부착
+  // 뒤의 창에 걸어야 한다 — 생성 직후 창에 걸면 비동기 폰트 푸시가
+  // 스텁 없는 새 창으로 간다.
+  await flush(10)
   const cw = host.frame.contentWindow
   cw.postMessage = (msg: any) => {
     posts.push(msg)
@@ -76,7 +81,7 @@ function setupHost() {
 
 describe('deckcraft fonts-applied zoom reshape nudge', () => {
   test('fonts-applied → exec view.zoomIn, 결과 후 별도 exec view.fit', async () => {
-    const { host, posts, fromEngine, execPosts, answerExec } = setupHost()
+    const { host, posts, fromEngine, execPosts, answerExec } = await setupHost()
     fromEngine({ type: 'deckcraft:ready', version: 'test' })
     await flush(10)
     // ready 직후 폰트 푸시가 나갔는지 (넛지의 전제)
@@ -104,7 +109,7 @@ describe('deckcraft fonts-applied zoom reshape nudge', () => {
   })
 
   test('fonts-applied가 반복돼도 넛지는 세션당 1회만', async () => {
-    const { host, fromEngine, execPosts, answerExec } = setupHost()
+    const { host, fromEngine, execPosts, answerExec } = await setupHost()
     fromEngine({ type: 'deckcraft:ready', version: 'test' })
     await flush(10)
     fromEngine({ type: 'deckcraft:fonts-applied', faces: 13 })
@@ -125,7 +130,7 @@ describe('deckcraft fonts-applied zoom reshape nudge', () => {
   })
 
   test('fonts-applied가 없으면 exec는 나가지 않는다', async () => {
-    const { host, fromEngine, execPosts } = setupHost()
+    const { host, fromEngine, execPosts } = await setupHost()
     fromEngine({ type: 'deckcraft:ready', version: 'test' })
     await flush(20)
     expect(execPosts()).toHaveLength(0)

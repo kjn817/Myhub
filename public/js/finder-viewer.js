@@ -262,8 +262,12 @@
       if (name === 'rhwp') return import(versionedAssetUrl('/vendor/rhwp/rhwp.js'));
       if (name === 'rhwpEditor') return import(versionedAssetUrl('/vendor/rhwp-editor/index.js'));
       if (name === 'kordoc')
-        return import(versionedAssetUrl('/vendor/kordoc/kordoc.js')).then(function () {
-          return typeof window !== 'undefined' ? window.__kordoc : undefined;
+        // 재빌드된 kordoc.js는 ESM 번들이라 전역 변수를 설정하지
+        // 않는다 — import 반환값(기본은 default 객체)을 써야 한다.
+        // 전역만 읽으면 undefined가 되어 레거시 폴백으로 떨어진다
+        // (2026-11-15 무결성 검증 P0: 표 마커 247개 중 2개만 추출).
+        return import(versionedAssetUrl('/vendor/kordoc/kordoc.js')).then(function (mod) {
+          return (mod && mod.default) || mod;
         });
       var globalName = LIBS[name];
       if (typeof window !== 'undefined' && window[globalName]) {

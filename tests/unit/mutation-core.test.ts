@@ -203,16 +203,21 @@ describe('grantStepUp 발급 토큰 보존 (AP-21)', () => {
         }
       },
     }
-    const headers: Record<string, string> = {}
+    const headers: Record<string, string[]> = {}
     const c: any = {
       req: { header: (n: string) => (n === 'Cookie' ? `myhub_session=${token0}` : undefined) },
       env: { DB: db, SESSION_SECRET: secret },
-      header: (k: string, v: string) => {
-        headers[k] = v
+      // Hono의 append 동작을 흉내낸다 — setSessionCookie는 새 쿠키 설정과
+      // 구 쿠키 삭제를 두 Set-Cookie 헤더로 낸다.
+      header: (k: string, v: string, opts?: { append?: boolean }) => {
+        if (opts?.append && headers[k]) headers[k].push(v)
+        else headers[k] = [v]
       },
     }
     await expect(grantStepUp(c)).resolves.toBe(true)
-    const m = (headers['Set-Cookie'] || '').match(/myhub_session=([^;]+)/)
+    const issued = (headers['Set-Cookie'] || []).find((v) => v.startsWith('__Host-myhub_session='))
+    expect(issued).toBeDefined()
+    const m = (issued || '').match(/__Host-myhub_session=([^;]+)/)
     expect(m).not.toBeNull()
     const info = await verifySessionInfo(m![1], secret)
     expect(info).not.toBeNull()

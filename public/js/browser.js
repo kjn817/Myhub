@@ -150,6 +150,7 @@
     var overviewCloseBtn = doc.getElementById('bwOverviewClose');
     var liveFrame = doc.getElementById('bwLiveFrame');
     var noticeEl = doc.getElementById('bwNoticeCard');
+    var lockEl = doc.getElementById('bwLockCard');
     var elsewhereEl = doc.getElementById('bwElsewhere');
     var elsewhereMsg = doc.getElementById('bwElsewhereMsg');
     var elsewhereGoBtn = doc.getElementById('bwElsewhereGo');
@@ -419,10 +420,10 @@
     function syncChrome() {
       var state = live.state();
       var on = state === 'on';
-      var busy = on || state === 'notice';
+      var busy = on || state === 'notice' || state === 'locked';
       var mine = liveTabId !== null && liveTabId === activeTabId;
       live.syncChrome();
-      // 라이브 소유 요소(화면·안내 카드)는 뷰를 소유한 탭에서만
+      // 라이브 소유 요소(화면·안내 카드·잠금 카드)는 뷰를 소유한 탭에서만
       // 보인다 — 다른 탭에서는 실행 중인 것처럼 보이지 않게 가린다.
       // 단, iframe은 display:none(hidden)이 아니라 visibility:hidden
       // 으로 숨긴다. display:none은 iframe 문서를 hidden으로 만들어
@@ -432,10 +433,11 @@
       if (!mine && busy) {
         if (liveFrame) liveFrame.classList.add('bw-frame-parked');
         if (noticeEl) noticeEl.hidden = true;
+        if (lockEl) lockEl.hidden = true;
       } else if (liveFrame) {
         liveFrame.classList.remove('bw-frame-parked');
       }
-      if (home) home.hidden = mine && on;
+      if (home) home.hidden = mine && (on || state === 'locked');
       if (elsewhereEl) {
         var showElse = !mine && liveTabId !== null && on;
         elsewhereEl.hidden = !showElse;

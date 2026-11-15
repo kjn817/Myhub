@@ -27,6 +27,10 @@
   // 파일 그 림의 등 등(?tabs=host 호스트 chrome=notabs + 상태 중첩)
   // 등 의한다 등 등 실행에서 엔진의 행이 그림으로 주인 공이다.
   var GC_URL = '/vendor/gridcraft/index.html?host=parent&chrome=notitlebar';
+  var GC_SHELL_URL = '/vendor/gridcraft/index.html';
+  var GC_BASE = '/vendor/gridcraft/';
+  var BOOT_MAX_ATTEMPTS = 3;
+  var BOOT_RETRY_DELAY_MS = 1000;
 
   /**
    * 엔진 캔버스가 iframe보다 앞선 낮은 곱하기 (구했다 찾기 진단).
@@ -334,6 +338,14 @@
       pasteTimers: [],
       queuedRequests: [],
     };
+    // 부팅 게이트 프리패치 상태 (2026-11-15). showError의 '다시 시도'
+    // 버튼이 runBootPrefetch를 부르므로 둘 다 createBridge 스코프에 둔다.
+    var bootAttempts = 0;
+    var destroyed = false;
+    var bootMaxAttempts =
+      typeof deps.bootMaxAttempts === 'number' ? deps.bootMaxAttempts : BOOT_MAX_ATTEMPTS;
+    var bootRetryDelayMs =
+      typeof deps.bootRetryDelayMs === 'number' ? deps.bootRetryDelayMs : BOOT_RETRY_DELAY_MS;
     // 엔진의 부족한 시간 차 그림 등 수째 차이 흘러 컨테이너 엔진의
     // 분리 그림을 앗고 있으면(브라 우저별) 차이 확정 그림이다.
     state.bootW = (win && win.innerWidth) || 0;
@@ -357,7 +369,10 @@
     // 없으면 브라우저가 그 노출을 조용히 무시한다 (프로브 기록
     // 2026-11-06; 반쯤 sheet.html 프레임에 같은 선택이 있다).
     frame.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-modals');
-    frame.src = GC_URL;
+    // src는 부팅 프리패치가 끝난 뒤에 붙인다 (createBridge 끝의
+    // runBootPrefetch) — iframe이 18MB를 직접 받으면 45초 로드
+    // 타임아웃이 먼저 터진다. 요소는 동기 생성해야 호출부가
+    // bridge.frame을 즉시 쓸 수 있다.
     // 풀 폰트 조기 fetch (2026-11-13 성능 4라운드, 5라운드에서 load 이후로
     // 지연): 엔진 WASM 부팅과 병렬로 내장 폰트 풀(11MB)을 받아 둔다.
     // load 전에 받으면 느린 네트워크에서 문서 자체의 로딩을 가로막는다
@@ -577,11 +592,25 @@
       veil.hidden = !isMacroBlocked();
     }
 
-    function showError(message) {
+    function showError(message, opts) {
+      opts = opts || {};
       banner.innerHTML = '';
       var p = doc.createElement('p');
       p.textContent = message;
       banner.appendChild(p);
+      if (opts.retry) {
+        var retryBtn = doc.createElement('button');
+        retryBtn.type = 'button';
+        retryBtn.className = 'sheet-banner-btn myhub-sheet-boot-retry';
+        retryBtn.textContent = '다시 시도';
+        retryBtn.addEventListener('click', function () {
+          banner.hidden = true;
+          loading.hidden = false;
+          bootAttempts = 0;
+          runBootPrefetch();
+        });
+        banner.appendChild(retryBtn);
+      }
       var btn = doc.createElement('button');
       btn.type = 'button';
       btn.className = 'sheet-banner-btn';
@@ -682,6 +711,40 @@
       postToGc({ type: 'gridcraft:open', name: open.name, bytes: open.bytes }, [open.bytes]);
     }
 
+    // P1 재푸시 (2026-11-15): pushFonts는 whenReady(4000)만 기다리는데
+    // load()가 5~12초 걸리면 1차 푸시에 사용자 폰트가 안 닿고, 재시도가
+    // 없어 그 세션에서는 영영 누락됐다. 1차 푸시 뒤에 whenLoaded()로
+    // 로딩 완료를 기다렸다가, 새로 생긴 페이스만 한 번 더 푸시한다.
+    // deckcraft의 pushFonts와 같은 패턴이다.
+    var pushedFaceKeys = {};
+    var lateFontPushAttached = false;
+    function faceKey(f) {
+      return (f.family || '') + '|' + (f.weight || 400) + '|' + (f.style || 'normal');
+    }
+    function fetchFaceBytes(faces) {
+      return Promise.all(
+        faces.map(function (face) {
+          return fetchFn(constants.DRIVE_FILES_API + '/' + face.fileId + '/content')
+            .then(function (res) {
+              if (!res || !res.ok) throw new Error('font fetch failed');
+              return res.arrayBuffer();
+            })
+            .then(function (bytes) {
+              return {
+                family: face.family,
+                weight: face.weight,
+                style: face.style,
+                bytes: bytes,
+              };
+            })
+            .catch(function () {
+              return null;
+            });
+        }),
+      ).then(function (list) {
+        return list.filter(Boolean);
+      });
+    }
     function pushFonts() {
       if (!fonts || typeof fonts.whenReady !== 'function') return;
       var poolReady =
@@ -690,30 +753,11 @@
               return [];
             })
           : Promise.resolve([]);
-      fonts
+      var first = fonts
         .whenReady(4000)
         .then(function () {
           var faces = typeof fonts.faces === 'function' ? fonts.faces() : [];
-          var driveReady = Promise.all(
-            faces.map(function (face) {
-              return fetchFn(constants.DRIVE_FILES_API + '/' + face.fileId + '/content')
-                .then(function (res) {
-                  if (!res || !res.ok) throw new Error('font fetch failed');
-                  return res.arrayBuffer();
-                })
-                .then(function (bytes) {
-                  return {
-                    family: face.family,
-                    weight: face.weight,
-                    style: face.style,
-                    bytes: bytes,
-                  };
-                })
-                .catch(function () {
-                  return null;
-                });
-            }),
-          );
+          var driveReady = fetchFaceBytes(faces);
           return Promise.all([driveReady, poolReady]);
         })
         .then(function (both) {
@@ -728,6 +772,9 @@
             }),
           );
           if (!usable.length) return;
+          usable.forEach(function (f) {
+            pushedFaceKeys[faceKey(f)] = true;
+          });
           var transfer = usable.map(function (f) {
             return f.bytes;
           });
@@ -736,6 +783,39 @@
         .catch(function () {
           return null; // 폰트 실패는 편집을 막지 않는다
         });
+      // 1차 푸시 뒤에 체인해야 이미 보낸 페이스를 정확히 걸러낼 수 있다.
+      // 세션당 한 번만 붙인다.
+      if (!lateFontPushAttached && fonts && typeof fonts.whenLoaded === 'function') {
+        lateFontPushAttached = true;
+        first
+          .then(function () {
+            return fonts.whenLoaded();
+          })
+          .then(function () {
+            if (destroyed || !state.gcReady) return null;
+            var faces =
+              typeof fonts.faces === 'function'
+                ? fonts.faces().filter(function (f) {
+                    return !pushedFaceKeys[faceKey(f)];
+                  })
+                : [];
+            if (!faces.length) return null;
+            return fetchFaceBytes(faces);
+          })
+          .then(function (fresh) {
+            if (destroyed || !state.gcReady || !fresh || !fresh.length) return;
+            fresh.forEach(function (f) {
+              pushedFaceKeys[faceKey(f)] = true;
+            });
+            var transfer = fresh.map(function (f) {
+              return f.bytes;
+            });
+            postToGc({ type: 'gridcraft:fonts', fonts: fresh }, transfer);
+          })
+          .catch(function () {
+            return null; // 폰트 실패는 편집을 막지 않는다
+          });
+      }
     }
 
     // 제목 중 빠른 실행 등 엔진 exec 번역. 결과 exec-result에서
@@ -961,11 +1041,52 @@
     };
     doc.addEventListener('visibilitychange', onVisible);
     win.addEventListener('focus', onVisible);
-    state.loadTimer = setTimeoutFn(function () {
-      if (!state.gcReady) {
-        showError('시트 편집기를 불러오지 못했습니다. 네트워크를 확인하거나 기존 편집기로 열어 주세요.');
-      }
-    }, LOAD_TIMEOUT_MS);
+    // 부팅 게이트 프리패치 (2026-11-15): 엔진 자산을 먼저 받아 캐시를
+    // 데운 뒤 iframe src를 붙인다. 45초 로드 타임아웃은 src를 붙인
+    // 시점부터 돈다 — 프리패치 시간은 타임아웃에 안 잡힌다 (워밍된
+    // 캐시에서는 ready가 수 초 안에 온다). 프리패치가 전부 실패하면
+    // 에러에 '다시 시도' 버튼을 단다.
+    function runBootPrefetch() {
+      if (destroyed) return;
+      bootAttempts += 1;
+      var bootFn =
+        typeof deps.prefetchForBoot === 'function' ? deps.prefetchForBoot : prefetchForBoot;
+      bootFn({
+        fetchFn: fetchFn,
+        win: win,
+        stallTimeoutMs: deps.stallTimeoutMs,
+        maxAttempts: deps.prefetchMaxAttempts,
+        retryDelayMs: deps.prefetchRetryDelayMs,
+        setTimeoutFn: setTimeoutFn,
+        clearTimeoutFn: clearTimeoutFn,
+        onProgress: function (p) {
+          if (loadingStatus) {
+            var mb = ((p.receivedBytes || 0) / 1048576).toFixed(1);
+            var msg = '시트 엔진 받는 중… ' + mb + 'MB';
+            if (bootAttempts > 1) msg += ' (다시 시도 ' + bootAttempts + '/' + bootMaxAttempts + ')';
+            loadingStatus.textContent = msg;
+          }
+        },
+      })
+        .then(function () {
+          if (destroyed) return;
+          frame.src = GC_URL;
+          state.loadTimer = setTimeoutFn(function () {
+            if (!state.gcReady) {
+              showError('시트 편집기를 불러오지 못했습니다. 네트워크를 확인하거나 기존 편집기로 열어 주세요.');
+            }
+          }, LOAD_TIMEOUT_MS);
+        })
+        .catch(function () {
+          if (destroyed) return;
+          if (bootAttempts < bootMaxAttempts) {
+            setTimeoutFn(runBootPrefetch, bootRetryDelayMs);
+          } else {
+            showError('시트 편집기 자산을 받지 못했습니다. 네트워크를 확인한 뒤 다시 시도해 주세요.', { retry: true });
+          }
+        });
+    }
+    runBootPrefetch();
 
     postToParent({ type: 'myhub-sheet:ready' });
 
@@ -973,6 +1094,7 @@
       state: state,
       frame: frame,
       destroy: function () {
+        destroyed = true;
         win.removeEventListener('message', onParentMessage);
         win.removeEventListener('message', onGcMessage);
         win.removeEventListener('resize', onWinResize);
@@ -995,11 +1117,86 @@
     };
   }
 
+  var warnedMissingCore = false;
+  function getPrefetchCore() {
+    var core =
+      typeof window !== 'undefined' ? window.MyHubCraftPrefetchCore : null;
+    if (!core && !warnedMissingCore) {
+      warnedMissingCore = true;
+      if (typeof console !== 'undefined' && console.warn) {
+        console.warn(
+          '[sheet-gridcraft] 코어(craft-prefetch-core.js)가 없어 프리패치를 건너뜁니다'
+        );
+      }
+    }
+    return core;
+  }
+
+  function getFetchFn(deps) {
+    deps = deps || {};
+    if (typeof deps.fetchFn === 'function') return deps.fetchFn;
+    var win = deps.win || (typeof window !== 'undefined' ? window : null);
+    return win && typeof win.fetch === 'function' ? win.fetch.bind(win) : null;
+  }
+
+  // 부팅 게이트용 프리패치 (2026-11-15): 스튜디오 shell을 스캔해 진입
+  // 에셋(JS 글루·WASM)을 진행 보고와 함께 받고, 멈춘 파일이 남으면
+  // reject한다. grid는 매니페스트가 없어 shell 스캔 발견을 쓴다.
+  // deps = { fetchFn, win, onProgress, stallTimeoutMs, maxAttempts,
+  //          retryDelayMs, setTimeoutFn, clearTimeoutFn }.
+  // @returns {Promise<{done, failed, stalled, receivedBytes}>}
+  function prefetchForBoot(deps) {
+    var core = getPrefetchCore();
+    if (!core) return Promise.resolve({ done: [], failed: [], stalled: [], receivedBytes: 0 });
+    var fetchFn = getFetchFn(deps);
+    if (!fetchFn) return Promise.resolve({ done: [], failed: [], stalled: [], receivedBytes: 0 });
+    deps = deps || {};
+    return core
+      .fetchWithProgress(fetchFn, GC_SHELL_URL, {
+        stallTimeoutMs: deps.stallTimeoutMs,
+        maxAttempts: deps.maxAttempts,
+        retryDelayMs: deps.retryDelayMs,
+        collectBody: true,
+        setTimeoutFn: deps.setTimeoutFn,
+        clearTimeoutFn: deps.clearTimeoutFn,
+      })
+      .then(function (r) {
+        var text = '';
+        if (r.body) {
+          try {
+            text = new TextDecoder().decode(r.body);
+          } catch (e) {
+            text = '';
+          }
+        }
+        return core.extractAssetPaths(text, GC_BASE);
+      })
+      .then(function (urls) {
+        return core.fetchSequentialTracked(fetchFn, urls, {
+          stallTimeoutMs: deps.stallTimeoutMs,
+          maxAttempts: deps.maxAttempts,
+          retryDelayMs: deps.retryDelayMs,
+          setTimeoutFn: deps.setTimeoutFn,
+          clearTimeoutFn: deps.clearTimeoutFn,
+          onProgress: deps.onProgress,
+        });
+      })
+      .then(function (r) {
+        if (r.stalled.length) {
+          throw new Error(
+            'GridCraft 자산을 받지 못했습니다 (멈춤: ' + r.stalled.join(', ') + ')'
+          );
+        }
+        return r;
+      });
+  }
+
   var api = {
     GC_URL: GC_URL,
     opsToCommands: opsToCommands,
     aggregateExecResults: aggregateExecResults,
     createBridge: createBridge,
+    prefetchForBoot: prefetchForBoot,
     annotateSnapshotCaps: annotateSnapshotCaps,
     SNAPSHOT_ROW_CAP: SNAPSHOT_ROW_CAP,
     SNAPSHOT_COL_CAP: SNAPSHOT_COL_CAP,
@@ -1027,8 +1224,8 @@
           window.parent.postMessage(msg, ORIGIN);
         },
         fonts: window.MyHubFonts || null,
-        fetchFn: function (url) {
-          return window.fetch(url);
+        fetchFn: function (url, init) {
+          return window.fetch(url, init);
         },
       });
     }

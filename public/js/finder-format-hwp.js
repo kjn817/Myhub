@@ -33,6 +33,33 @@
   // forEach로만 읽어 공유 배열이 안전하다.
   var HWP_RETRY_SCHEDULE_MS = [300, 900, 2000, 4500];
 
+  // 한글 편집기 부팅 강건화 훅 (2026-11-15): vendor SDK의 createEditor는
+  // 스튜디오 iframe의 load를 시간 제한 없이 기다린다. 느린 네트워크에서
+  // 다운로드가 멈추면 부팅이 영영 pending이 되어 스피너만 돈다. 부팅
+  // 시도를 시간 제한과 함께 재시도한다. 테스트에서 값을 줄여 쓴다.
+  var internals = {
+    bootAttemptTimeoutMs: 30000,
+    bootMaxAttempts: 3,
+    bootRetryDelayMs: 1000,
+    bootElapsedIntervalMs: 500,
+    // 부팅 게이트 프리패치: 바이트가 이 시간 동안 안 오면 멈춘 것으로
+    // 보고 재시도한다. 고정 벽시계 타임아웃이 아니라 진행 감지라,
+    // 느리지만 계속 받는 부팅은 안 죽인다.
+    prefetchStallTimeoutMs: 30000,
+    prefetchMaxAttempts: 3,
+    prefetchRetryDelayMs: 1000,
+  };
+
+  // 늦게 도착한 에디터 정리용 — destroy 실패는 경고만 남기고 삼킨다.
+  function destroyEditorBestEffort(editor) {
+    if (!editor || typeof editor.destroy !== 'function') return;
+    try {
+      editor.destroy();
+    } catch (e) {
+      console.warn('[hwp] 편집기 정리 실패', e);
+    }
+  }
+
   function installMeasureTextWidth() {
     if (typeof globalThis === 'undefined') return;
     if (typeof globalThis.measureTextWidth === 'function') return;
@@ -770,10 +797,36 @@
   }
 
   function renderView(ctx, state) {
-    return fontsReady().then(function () {
-      if (!ctx.isCurrent()) return undefined;
-      return renderViewLoaded(ctx, state);
-    });
+    return fontsReady()
+      .then(function () {
+        if (!ctx.isCurrent()) return undefined;
+        return renderViewLoaded(ctx, state);
+      })
+      .then(function () {
+        // P1 재렌더 (2026-11-15): fontsReady는 2500ms만 기다리는데
+        // load()가 그보다 늦으면 1차 렌더가 대체 폰트 기준으로
+        // 측정된다. 로딩이 실제로 끝나면 새로 생긴 폰트가 있는지 보고,
+        // 있으면 렌더된 페이지를 다시 그린다.
+        var fonts = typeof window !== 'undefined' ? window.MyHubFonts : null;
+        if (!fonts || typeof fonts.whenLoaded !== 'function') return;
+        if (typeof fonts.families !== 'function') return;
+        var before = fonts.families().slice();
+        fonts
+          .whenLoaded()
+          .then(function () {
+            if (!ctx.isCurrent() || state.surface !== 'view') return;
+            var after = fonts.families();
+            var fresh = after.some(function (f) {
+              return before.indexOf(f) === -1;
+            });
+            if (fresh && typeof state.rerenderRenderedPages === 'function') {
+              state.rerenderRenderedPages();
+            }
+          })
+          .catch(function () {
+            return null; // 폰트 실패는 보기를 막지 않는다
+          });
+      });
   }
 
   function renderViewLoaded(ctx, state) {
@@ -829,6 +882,22 @@
       }
     }
     if (!holders.length) return;
+    // P1 재렌더 (2026-11-15): 이미 렌더된 페이지만 다시 그린다.
+    // SVG 텍스트 위치가 측정 시점 폰트 기준으로 박혀 있어, 폰트가
+    // 늦게 로딩되면 글리프는 DOM이 갈아끼워도 위치·줄바꿈이 틀어진다.
+    // 보이지 않은 페이지는 lazy로 두면 다음에 새 폰트로 그려진다.
+    // IntersectionObserver 없는 환경의 early return보다 앞에 둔다.
+    state.rerenderRenderedPages = function () {
+      var done = Object.keys(rendered).map(function (k) {
+        return Number(k);
+      });
+      done.forEach(function (i) {
+        delete rendered[i];
+      });
+      done.forEach(function (i) {
+        renderOne(i);
+      });
+    };
     renderOne(0);
     if (typeof IntersectionObserver === 'undefined') {
       for (var i = 1; i < holders.length; i++) renderOne(i);
@@ -863,22 +932,49 @@
     var statusEl = doc.createElement('div');
     statusEl.className = 'fv-hwp-loading-status';
     statusEl.textContent = status;
+    // 시도 횟수·경과 시간 표시줄 (2026-11-15): 스피너만 돌면 받는
+    // 중인지 멈춘 건지 알 수 없어, 부팅이 얼마나 진행됐는지 보인다.
+    var detailEl = doc.createElement('div');
+    detailEl.className = 'fv-hwp-loading-detail';
     el.appendChild(titleEl);
     el.appendChild(spin);
     el.appendChild(statusEl);
+    el.appendChild(detailEl);
     return el;
+  }
+
+  function setLoadingText(loading, cls, text) {
+    if (!loading) return;
+    var el = loading.querySelector('.' + cls);
+    if (el) el.textContent = text;
+  }
+
+  function delay(ms) {
+    return new Promise(function (resolve) {
+      setTimeout(resolve, ms);
+    });
   }
 
   function openEditor(ctx, state) {
     var loading = null;
+    var elapsedTimer = null;
+    var bootStartedAt = Date.now();
+    var currentAttempt = 0;
+    var stopElapsed = function () {
+      if (elapsedTimer) {
+        clearInterval(elapsedTimer);
+        elapsedTimer = null;
+      }
+    };
     var removeLoading = function () {
+      stopElapsed();
       if (loading && loading.parentNode) loading.parentNode.removeChild(loading);
       loading = null;
     };
     // 로딩 화면을 SDK 로드 전에 먼저 띄운다 (2026-11-13): loadLib이 끝날
     // 때까지 빈 화면이 보이는 틈이 있었고, 오피스 진행 막대와 원형 로딩이
     // 겹쳐 보였다. 다운로드가 끝나는 'parse' 시점에 막대가 사라지고 로딩
-    // 화면이 이어받는다. 실패 시 제거는 아래 .catch가 맡는다.
+    // 화면이 이어받는다.
     destroyEditor(state);
     ctx.clearBody();
     ctx.body.classList.add('fv-fill');
@@ -888,83 +984,315 @@
     ctx.body.appendChild(container);
     loading = buildLoadingEl(ctx.doc, '한글 2020', '한글 편집기를 불러오는 중');
     container.appendChild(loading);
-    return ctx.loadLib('rhwpEditor').then(function (sdk) {
-      if (!ctx.isCurrent()) {
-        removeLoading();
-        return;
-      }
-      if (!sdk || typeof sdk.createEditor !== 'function') {
-        throw new Error('편집기 SDK 형태가 올바르지 않습니다');
-      }
-      return Promise.resolve(
-        sdk.createEditor(container, {
-          studioUrl: studioEmbedOn(ctx)
-            ? '/rhwp-studio/index.html?chrome=embed'
-            : '/rhwp-studio/index.html',
-        }),
-      ).then(function (editor) {
+
+    function elapsedSecs() {
+      return Math.max(0, Math.floor((Date.now() - bootStartedAt) / 1000));
+    }
+    function updateDetail() {
+      setLoadingText(
+        loading,
+        'fv-hwp-loading-detail',
+        '시도 ' +
+          currentAttempt +
+          '/' +
+          internals.bootMaxAttempts +
+          ' · ' +
+          elapsedSecs() +
+          '초 경과',
+      );
+    }
+    function startElapsed() {
+      stopElapsed();
+      updateDetail();
+      elapsedTimer = setInterval(updateDetail, internals.bootElapsedIntervalMs);
+    }
+    function stageText(stage) {
+      if (currentAttempt <= 1) return stage;
+      return (
+        '다시 시도 중 (' +
+        currentAttempt +
+        '/' +
+        internals.bootMaxAttempts +
+        ') — ' +
+        stage
+      );
+    }
+
+    // 부팅 시도 1회: SDK 로드 + 에디터 생성 + 파일 로드. 시간 안에 안
+    // 끝나면 해당 시도의 상자를 통째로 제거해(iframe 로딩 중단) reject한다.
+    // 늦게 도착한 결과는 무시하고, 늦게 생긴 에디터는 정리한다.
+    function bootOnce() {
+      var attemptBox = ctx.doc.createElement('div');
+      attemptBox.className = 'fv-hwp-editor-attempt';
+      container.appendChild(attemptBox);
+      var settled = false;
+      var timer = null;
+      var pendingEditor = null;
+      var cleanup = function () {
+        if (timer) {
+          clearTimeout(timer);
+          timer = null;
+        }
+        if (pendingEditor) {
+          destroyEditorBestEffort(pendingEditor);
+          pendingEditor = null;
+        }
+        if (attemptBox.parentNode) attemptBox.parentNode.removeChild(attemptBox);
+      };
+      return new Promise(function (resolve, reject) {
+        timer = setTimeout(function () {
+          if (settled) return;
+          settled = true;
+          cleanup();
+          reject(new Error('한글 편집기 부팅 시간 초과 (시도 ' + currentAttempt + ')'));
+        }, internals.bootAttemptTimeoutMs);
+        setLoadingText(loading, 'fv-hwp-loading-status', stageText('편집기 받는 중…'));
+        ctx
+          .loadLib('rhwpEditor')
+          .then(function (sdk) {
+            if (settled) return;
+            if (!ctx.isCurrent()) {
+              settled = true;
+              cleanup();
+              resolve(null);
+              return;
+            }
+            if (!sdk || typeof sdk.createEditor !== 'function') {
+              settled = true;
+              cleanup();
+              reject(new Error('편집기 SDK 형태가 올바르지 않습니다'));
+              return;
+            }
+            setLoadingText(
+              loading,
+              'fv-hwp-loading-status',
+              stageText('편집기 시작하는 중…'),
+            );
+            return Promise.resolve(
+              sdk.createEditor(attemptBox, {
+                studioUrl: studioEmbedOn(ctx)
+                  ? '/rhwp-studio/index.html?chrome=embed'
+                  : '/rhwp-studio/index.html',
+              }),
+            ).then(function (editor) {
+              if (settled) {
+                destroyEditorBestEffort(editor);
+                return;
+              }
+              pendingEditor = editor;
+              if (!ctx.isCurrent()) {
+                settled = true;
+                cleanup();
+                resolve(null);
+                return;
+              }
+              setLoadingText(loading, 'fv-hwp-loading-status', stageText('문서 여는 중…'));
+              return editor.loadFile(state.buf, ctx.file.name).then(function () {
+                if (settled) return;
+                settled = true;
+                if (timer) {
+                  clearTimeout(timer);
+                  timer = null;
+                }
+                resolve(editor);
+              });
+            });
+          })
+          .catch(function (err) {
+            if (settled) return;
+            settled = true;
+            cleanup();
+            reject(err);
+          });
+      });
+    }
+
+    // 부팅 성공 후속: 에디터 등록·저장 배선·메뉴 배선.
+    function onBootSuccess(editor) {
+      state.editor = editor;
+      state.editorContainer = container;
+      removeLoading();
+      state.surface = 'editor';
+      if (ctx.saveBtn) ctx.saveBtn.hidden = false;
+      attachDirtyWatch(ctx, state, container);
+      var saveViaEditor = function () {
+        var exporter =
+          ctx.file.kind === 'hwpx' ? editor.exportHwpx : editor.exportHwp;
+        return exporter
+          .call(editor)
+          .then(function (bytes) {
+            return ctx.putContent(
+              new Blob([bytes], { type: 'application/octet-stream' }),
+            );
+          })
+          .then(function (ok) {
+            if (ok) notifySavedBestEffort(ctx, state);
+            return ok;
+          });
+      };
+      state.saveViaEditor = saveViaEditor;
+      var saveAsViaEditor = function () {
+        return editor
+          .exportHwpx()
+          .then(function (bytes) {
+            return ctx.saveAsContent(
+              new Blob([bytes], { type: 'application/octet-stream' }),
+              ctx.file.name,
+            );
+          })
+          .then(function (ok) {
+            if (ok) notifySavedBestEffort(ctx, state);
+            return ok;
+          });
+      };
+      state.saveAsViaEditor = saveAsViaEditor;
+      ctx.setSaveHandler(saveViaEditor);
+      wireStudioFileMenu(ctx, state, container);
+      listenFileActions(ctx, state);
+      wireMenuHost(ctx, state, container);
+      listenMenuHost(ctx, state);
+      listenShellAdopt(ctx, state);
+      ctx.setNote('한글 문서 쪽 편집 중');
+    }
+
+    // 전부 실패하면 에러 표시 + 다시 시도 버튼을 보여준다. reject하면
+    // 호출부가 보기 폴백으로 화면을 갈아버리고, pending을 유지하면
+    // office.js의 부팅 로딩이 영영 안 사라지므로 (viewer.open settle을
+    // 기다린다), 에러 카드 표시와 함께 'error-card' 센티넬로 resolve한다.
+    // 다시 시도 버튼은 부팅을 처음부터 다시 돌리고 같은 마무리를 탄다.
+    var BOOT_ERROR_CARD = 'error-card';
+    function showBootError() {
+      stopElapsed();
+      var spin = loading.querySelector('.fv-hwp-loading-spin');
+      if (spin) spin.style.display = 'none';
+      setLoadingText(loading, 'fv-hwp-loading-status', '편집기를 불러오지 못했습니다');
+      setLoadingText(
+        loading,
+        'fv-hwp-loading-detail',
+        '네트워크 연결을 확인하고 다시 시도해 주세요.',
+      );
+      var retryBtn = ctx.doc.createElement('button');
+      retryBtn.type = 'button';
+      retryBtn.className = 'myhub-hwp-boot-retry';
+      retryBtn.textContent = '다시 시도';
+      loading.appendChild(retryBtn);
+      retryBtn.addEventListener('click', function () {
         if (!ctx.isCurrent()) {
-          if (editor && typeof editor.destroy === 'function') editor.destroy();
           removeLoading();
           return;
         }
-        state.editor = editor;
-        state.editorContainer = container;
-        return editor.loadFile(state.buf, ctx.file.name).then(function () {
-          if (!ctx.isCurrent()) {
+        if (retryBtn.parentNode) retryBtn.parentNode.removeChild(retryBtn);
+        if (spin) spin.style.display = '';
+        setLoadingText(loading, 'fv-hwp-loading-status', '한글 편집기를 불러오는 중');
+        bootStartedAt = Date.now();
+        runBoot()
+          .then(finishBoot)
+          .catch(function () {
             removeLoading();
-            return;
-          }
-          removeLoading();
-          state.surface = 'editor';
-          if (ctx.saveBtn) ctx.saveBtn.hidden = false;
-          attachDirtyWatch(ctx, state, container);
-          var saveViaEditor = function () {
-            var exporter =
-              ctx.file.kind === 'hwpx' ? editor.exportHwpx : editor.exportHwp;
-            return exporter
-              .call(editor)
-              .then(function (bytes) {
-                return ctx.putContent(
-                  new Blob([bytes], { type: 'application/octet-stream' }),
-                );
-              })
-              .then(function (ok) {
-                if (ok) notifySavedBestEffort(ctx, state);
-                return ok;
-              });
-          };
-          state.saveViaEditor = saveViaEditor;
-          var saveAsViaEditor = function () {
-            return editor
-              .exportHwpx()
-              .then(function (bytes) {
-                return ctx.saveAsContent(
-                  new Blob([bytes], { type: 'application/octet-stream' }),
-                  ctx.file.name,
-                );
-              })
-              .then(function (ok) {
-                if (ok) notifySavedBestEffort(ctx, state);
-                return ok;
-              });
-          };
-          state.saveAsViaEditor = saveAsViaEditor;
-          ctx.setSaveHandler(saveViaEditor);
-          wireStudioFileMenu(ctx, state, container);
-          listenFileActions(ctx, state);
-          wireMenuHost(ctx, state, container);
-          listenMenuHost(ctx, state);
-          listenShellAdopt(ctx, state);
-              ctx.setNote('한글 문서 쪽 편집 중');
-        });
+          });
       });
-    }).catch(function (err) {
-      // 부팅 실패 시에도 로딩 화면이 남지 않게 한다 (호출부의
-      // renderView 폴백이 빈 몸통에서 시작한다).
-      removeLoading();
-      throw err;
-    });
+      return Promise.resolve(BOOT_ERROR_CARD);
+    }
+
+    // 부팅 마무리 (최초 부팅·다시 시도 버튼 공통): 에러 카드면 카드를
+    // 유지하고, null이면 로딩을 지우고, 에디터면 성공 후속을 탄다.
+    function finishBoot(editor) {
+      if (editor === BOOT_ERROR_CARD) return;
+      if (!editor) {
+        removeLoading();
+        return;
+      }
+      onBootSuccess(editor);
+    }
+
+    // 부팅 전체: 최대 N회 시도, 각 시도에 시간 제한. 성공하면 에디터를,
+    // 사용자가 다른 파일로 이동하면 null을 resolve한다.
+    function bootWithRetries() {
+      var attempt = 0;
+      function next() {
+        if (!ctx.isCurrent()) return Promise.resolve(null);
+        attempt += 1;
+        currentAttempt = attempt;
+        startElapsed();
+        return bootOnce()
+          .then(function (editor) {
+            if (!editor) return null;
+            return editor;
+          })
+          .catch(function (err) {
+            if (!ctx.isCurrent()) return null;
+            if (attempt < internals.bootMaxAttempts) {
+              currentAttempt = attempt + 1;
+              updateDetail();
+              setLoadingText(
+                loading,
+                'fv-hwp-loading-status',
+                '다시 시도 중 (' + (attempt + 1) + '/' + internals.bootMaxAttempts + ')…',
+              );
+              return delay(internals.bootRetryDelayMs).then(next);
+            }
+            return showBootError();
+          });
+      }
+      return next();
+    }
+
+    // 부팅 게이트 프리패치 (2026-11-15): 스튜디오 자산(21MB)을 먼저
+    // 받아 캐시를 데운 뒤 부팅한다. 느린 네트워크에서 createEditor가
+    // 직접 받으면 iframe load가 늦어지고 _waitReady 15초 안에 ready가
+    // 안 와 부팅이 실패한다. 프리패치 모듈이 없으면 건너뛰고 기존
+    // 부팅으로 간다. ctx.prefetchForBoot는 테스트 주입용이다.
+    function runBootPrefetch() {
+      var prefetchApi =
+        typeof window !== 'undefined' ? window.MyHubRhwpPrefetch : null;
+      var bootFn =
+        ctx.prefetchForBoot || (prefetchApi && prefetchApi.prefetchForBoot);
+      if (typeof bootFn !== 'function') return Promise.resolve();
+      setLoadingText(loading, 'fv-hwp-loading-status', '한글 엔진 받는 중…');
+      setLoadingText(loading, 'fv-hwp-loading-detail', '0.0MB 받음 · 0초 경과');
+      return bootFn({
+        stallTimeoutMs: internals.prefetchStallTimeoutMs,
+        maxAttempts: internals.prefetchMaxAttempts,
+        retryDelayMs: internals.prefetchRetryDelayMs,
+        onProgress: function (p) {
+          if (!ctx.isCurrent()) return;
+          var mb = ((p.receivedBytes || 0) / 1048576).toFixed(1);
+          setLoadingText(
+            loading,
+            'fv-hwp-loading-status',
+            '한글 엔진 받는 중… ' + mb + 'MB',
+          );
+          setLoadingText(
+            loading,
+            'fv-hwp-loading-detail',
+            mb + 'MB 받음 · ' + elapsedSecs() + '초 경과',
+          );
+        },
+      });
+    }
+
+    // 부팅 전체: 프리패치 → 최대 N회 시도. 프리패치 실패도 같은
+    // 에러 카드로 간다 (다시 시도 버튼이 프리패치부터 다시 돈다).
+    function runBoot() {
+      return runBootPrefetch()
+        .then(function () {
+          if (!ctx.isCurrent()) return null;
+          return bootWithRetries();
+        })
+        .catch(function () {
+          if (!ctx.isCurrent()) return null;
+          return showBootError();
+        });
+    }
+
+    return runBoot()
+      .then(finishBoot)
+      .catch(function (err) {
+        // 부팅 실패 시에도 로딩 화면이 남지 않게 한다 (호출부의
+        // renderView 폴백이 빈 몸통에서 시작한다).
+        removeLoading();
+        throw err;
+      });
   }
 
   function exportEditorBytes(ctx, state) {
@@ -1337,6 +1665,7 @@
   var api = {
     handleHwp: handleHwp,
     cleanSvgHolder: cleanSvgHolder,
+    internals: internals,
     printReserve: {
       installOpenShim: installPrintOpenShim,
       isPrintSurfaceUrl: isPrintSurfaceUrl,

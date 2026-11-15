@@ -119,6 +119,61 @@ export async function sendOtpEmail(
 export const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000
 export const SESSION_COOKIE_MAX_AGE = SESSION_TTL_MS / 1000
 
+// ---------------- 세션 쿠키 (__Host- 접두사) ----------------
+// __Host- 접두사 (MDN Set-Cookie): 브라우저가 Secure + Path=/ + Domain
+// 없음을 강제한다 — 서브도메인의 쿠키 주입·경로 섀도잉을 막는다.
+// 규칙을 어긴 Set-Cookie는 브라우저가 조용히 버리므로, 발급 함수는
+// Domain을 절대 붙이지 않는다.
+/** 현행 세션 쿠키 이름. */
+export const SESSION_COOKIE_NAME = '__Host-myhub_session'
+/** 구 쿠키 이름 — 전환 기간에만 읽는다. 검증되면 새 이름으로 재발급하고
+ *  구 쿠키는 삭제한다 (아래 readSessionToken·미들웨어 마이그레이션 참조). */
+export const LEGACY_SESSION_COOKIE_NAME = 'myhub_session'
+
+function cookieValue(cookieHeader: string, name: string): string | null {
+  // 이름 경계가 필요: 'myhub_session='은 '__Host-myhub_session='의 부분
+  // 문자열이라 경계 없는 매칭은 새 쿠키를 구 쿠키로 오인한다.
+  const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const m = cookieHeader.match(new RegExp(`(?:^|;\\s*)${escaped}=([^;]+)`))
+  return m ? m[1] : null
+}
+
+/** 세션 토큰 읽기 — 새 이름을 먼저, 없으면 구 이름을 본다.
+ *  legacy=true면 호출자가 새 이름으로 재발급해야 한다. */
+export function readSessionToken(cookieHeader: string): { token: string; legacy: boolean } | null {
+  const fresh = cookieValue(cookieHeader, SESSION_COOKIE_NAME)
+  if (fresh) return { token: fresh, legacy: false }
+  const legacy = cookieValue(cookieHeader, LEGACY_SESSION_COOKIE_NAME)
+  if (legacy) return { token: legacy, legacy: true }
+  return null
+}
+
+/** 새 세션 쿠키의 Set-Cookie 값 (구 쿠키 삭제는 setSessionCookie가 함께 한다). */
+export function sessionSetCookieValue(token: string): string {
+  return `${SESSION_COOKIE_NAME}=${token}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${SESSION_COOKIE_MAX_AGE}`
+}
+
+function clearCookieValue(name: string): string {
+  return `${name}=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0`
+}
+
+type HeaderSetter = {
+  header(name: string, value: string, opts?: { append?: boolean }): void
+}
+
+/** 세션 쿠키 발급 — 새 이름으로 설정하고 구 쿠키가 남아 있으면 삭제한다.
+ *  두 Set-Cookie 헤더가 필요하므로 두 번째는 append로 붙인다. */
+export function setSessionCookie(c: HeaderSetter, token: string): void {
+  c.header('Set-Cookie', sessionSetCookieValue(token))
+  c.header('Set-Cookie', clearCookieValue(LEGACY_SESSION_COOKIE_NAME), { append: true })
+}
+
+/** 세션 쿠키 삭제 — 새·구 이름 둘 다 지운다 (로그아웃). */
+export function clearSessionCookies(c: HeaderSetter): void {
+  c.header('Set-Cookie', clearCookieValue(SESSION_COOKIE_NAME))
+  c.header('Set-Cookie', clearCookieValue(LEGACY_SESSION_COOKIE_NAME), { append: true })
+}
+
 // ---------------- 비밀번호 (PBKDF2-SHA256) ----------------
 export const PBKDF2_ITERATIONS = 100_000
 
@@ -345,16 +400,16 @@ export function hasActiveStepUp(info: SessionInfo | null, now: number = Date.now
 export async function grantStepUp(c: any): Promise<boolean> {
   try {
     const cookie = (typeof c.req?.header === 'function' ? c.req.header('Cookie') : '') || ''
-    const m = cookie.match(/myhub_session=([^;]+)/)
-    if (!m) return false
-    const info = await verifySessionForEnv(c.env, m[1])
+    const found = readSessionToken(cookie)
+    if (!found) return false
+    const info = await verifySessionForEnv(c.env, found.token)
     if (!info || !info.method) return false
     const suUntil = Date.now() + STEP_UP_TTL_MS
     const token = await createSession(info.email, c.env.SESSION_SECRET, info.method, info.version, {
       suUntil,
       otpAt: info.otpAt ?? undefined,
     })
-    c.header('Set-Cookie', `myhub_session=${token}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${SESSION_COOKIE_MAX_AGE}`)
+    setSessionCookie(c, token)
     return true
   } catch {
     return false

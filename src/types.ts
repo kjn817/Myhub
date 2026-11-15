@@ -43,6 +43,7 @@ export type Env = {
   ORIGIN_SECRET?: string // 사이드카 오리진 시크릿 (view·cdp 공통 게이트)
   CDP_SECRET?: string // CDP 프록시 추가 시크릿
   SELKIES_PASSWORD?: string // Selkies 기본 인증 비밀번호 (사용자 myhub)
+  UNLOCK_SECRET?: string // LUKS 언록 서비스 인증 시크릿 (호스트 unlock.env와 동일 값)
   MEMO_ENCRYPTION_KEY?: string // 메모 AES-GCM 암호화 키
   CHANNEL_WEBHOOK_SECRET?: string // 채널 게이트웨이 웹훅 공유 시크릿 (미설정 시 웹훅 비활성화)
   // Google 연동 (Gmail·Calendar) — OAuth 클라이언트 (설계 docs/gmail-calendar-design.md §9-①)

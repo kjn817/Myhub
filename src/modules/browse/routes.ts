@@ -8,7 +8,9 @@
 import { Hono } from 'hono'
 import type { Env } from '../../types'
 import { registerOracleProxyRoutes } from './oracle-proxy'
+import { registerUnlockRoutes } from './unlock'
 
 export const browseApp = new Hono<{ Bindings: Env }>()
 
 registerOracleProxyRoutes(browseApp)
+registerUnlockRoutes(browseApp)

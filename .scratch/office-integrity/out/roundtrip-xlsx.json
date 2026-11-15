@@ -1,0 +1,172 @@
+{
+ "scenario": "xlsx",
+ "errors": [],
+ "openMs": 2716,
+ "snapshotMs": 9440,
+ "rowsCaptured": 8,
+ "head": [
+  [
+   {
+    "v": "2026년 3분기 부서 실적 (합성)"
+   },
+   null,
+   null,
+   null,
+   null,
+   null
+  ],
+  [
+   {
+    "v": "부서"
+   },
+   {
+    "v": "담당자"
+   },
+   {
+    "v": "목표"
+   },
+   {
+    "v": "실적"
+   },
+   {
+    "v": "달성률"
+   },
+   {
+    "v": "비고"
+   }
+  ],
+  [
+   {
+    "v": "영업1팀"
+   },
+   {
+    "v": "김합성"
+   },
+   {
+    "v": 1000
+   },
+   {
+    "v": 1234
+   },
+   {
+    "f": "=D3/C3",
+    "v": 1.234
+   },
+   {
+    "v": "초과 달성"
+   }
+  ],
+  [
+   {
+    "v": "영업2팀"
+   },
+   {
+    "v": "이테스트"
+   },
+   {
+    "v": 1000
+   },
+   {
+    "v": 876
+   },
+   {
+    "f": "=D4/C4",
+    "v": 0.876
+   },
+   null
+  ],
+  [
+   {
+    "v": "개발팀"
+   },
+   {
+    "v": "박픽스처"
+   },
+   {
+    "v": 800
+   },
+   {
+    "v": 802
+   },
+   {
+    "f": "=D5/C5",
+    "v": 1.0025
+   },
+   {
+    "v": "목표 근접"
+   }
+  ],
+  [
+   {
+    "v": "지원팀"
+   },
+   {
+    "v": "최샘플"
+   },
+   {
+    "v": 500
+   },
+   {
+    "v": 430
+   },
+   {
+    "f": "=D6/C6",
+    "v": 0.86
+   },
+   null
+  ],
+  [
+   {
+    "v": "합계"
+   },
+   null,
+   {
+    "f": "=SUM(C3:C6)",
+    "v": 3300
+   },
+   {
+    "f": "=SUM(D3:D6)",
+    "v": 3342
+   },
+   null,
+   null
+  ],
+  [
+   {
+    "v": "평균 달성률"
+   },
+   null,
+   null,
+   null,
+   {
+    "f": "=AVERAGE(E3:E6)",
+    "v": 0.9931249999999999
+   },
+   null
+  ]
+ ],
+ "editRes": {
+  "applied": 1,
+  "errors": []
+ },
+ "editMs": 1997,
+ "afterEdit": {
+  "d3": {
+   "v": 1500
+  },
+  "e3": {
+   "f": "=D3/C3",
+   "v": 1.5
+  }
+ },
+ "engineFrames": [
+  "http://127.0.0.1:42473/office.html?app=excel&file=21&name=%EB%B6%84%EA%B8%B0%EC%8B%A4%EC%A0%81.xlsx&mime=application%2Fvnd.openxmlformats-officedocument.spreadsheetml.sheet&version=v1",
+  "http://127.0.0.1:42473/sheet.html",
+  "http://127.0.0.1:42473/vendor/gridcraft/index.html?host=parent&chrome=notitlebar"
+ ],
+ "saveButton": null,
+ "saveViaCtrlS": true,
+ "savedCaptured": true,
+ "savedBytes": 5983,
+ "totalMs": 26702
+}

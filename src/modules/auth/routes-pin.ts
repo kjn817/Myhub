@@ -3,8 +3,8 @@ import type { Env } from '../../types'
 import {
   getAuthEmail, isValidPin, hashPin, verifyPin, createSession, getSessionVersion,
   bumpSessionVersion, verifySessionForEnv, getClientIp, checkRateLimit, checkRateLimitForIp,
-  isValidB64, PIN_FAIL_LIMIT, PIN_FAIL_WINDOW_SEC, SESSION_COOKIE_MAX_AGE, STEP_UP_TTL_MS,
-  OTP_SET_PIN_WINDOW_MS, type DbLike,
+  isValidB64, PIN_FAIL_LIMIT, PIN_FAIL_WINDOW_SEC, STEP_UP_TTL_MS,
+  OTP_SET_PIN_WINDOW_MS, readSessionToken, setSessionCookie, type DbLike,
 } from './primitives'
 
 /** PIN 실패 카운터 초기화 — 일시 D1 오류 시 1회 재시도한다.
@@ -42,8 +42,7 @@ async function pinLoginKvFallback(c: any, normEmail: string, pin: string) {
   }
   await c.env.KV.put(failKey, '0', { expirationTtl: PIN_FAIL_WINDOW_SEC })
   const token = await createSession(normEmail, c.env.SESSION_SECRET, 'pin', await getSessionVersion(c.env, normEmail))
-  const cookie = `myhub_session=${token}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${SESSION_COOKIE_MAX_AGE}`
-  c.header('Set-Cookie', cookie)
+  setSessionCookie(c, token)
   return c.json({ ok: true })
 }
 
@@ -151,8 +150,7 @@ authApp.post('/pin-login', async (c) => {
     await resetPinCounter(c.env.DB, normEmail)
     // PIN 확인 직후이므로 step-up 창(5분)을 함께 발급한다 (보호 메모 게이트와 통합).
     const token = await createSession(normEmail, c.env.SESSION_SECRET, 'pin', await getSessionVersion(c.env, normEmail), { suUntil: Date.now() + STEP_UP_TTL_MS })
-    const cookie = `myhub_session=${token}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${SESSION_COOKIE_MAX_AGE}`
-    c.header('Set-Cookie', cookie)
+    setSessionCookie(c, token)
     return c.json({ ok: true })
   }
 
@@ -208,8 +206,7 @@ authApp.post('/pin-login', async (c) => {
   // PIN 로그인 세션 발급 (PIN 재설정 불가 — set-pin은 OTP 세션만 받는다)
   // PIN 확인 직후이므로 step-up 창(5분)을 함께 발급한다 (보호 메모 게이트와 통합).
   const token = await createSession(normEmail, c.env.SESSION_SECRET, 'pin', await getSessionVersion(c.env, normEmail), { suUntil: Date.now() + STEP_UP_TTL_MS })
-  const cookie = `myhub_session=${token}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${SESSION_COOKIE_MAX_AGE}`
-  c.header('Set-Cookie', cookie)
+  setSessionCookie(c, token)
   return c.json({ ok: true })
 })
 
@@ -229,9 +226,9 @@ authApp.post('/set-pin', async (c) => {
     return c.json({ ok: false, error: '인증 설정 오류' }, 500)
   }
   const cookie = c.req.header('Cookie') || ''
-  const m = cookie.match(/myhub_session=([^;]+)/)
-  if (!m) return c.json({ ok: false, error: '로그인이 필요합니다.' }, 401)
-  const session = await verifySessionForEnv(c.env, m[1], normEmail)
+  const found = readSessionToken(cookie)
+  if (!found) return c.json({ ok: false, error: '로그인이 필요합니다.' }, 401)
+  const session = await verifySessionForEnv(c.env, found.token, normEmail)
   if (!session) return c.json({ ok: false, error: '로그인이 필요합니다.' }, 401)
   if (session.method !== 'otp') {
     return c.json({ ok: false, error: 'PIN 재설정은 인증코드로 로그인한 세션에서만 가능합니다.' }, 403)
@@ -279,7 +276,7 @@ authApp.post('/set-pin', async (c) => {
   // (OTP 본인확인을 마친 사용자가 바로 앱으로 들어가게 한다).
   // 방금 PIN을 직접 입력했으므로 step-up 창(5분)도 함께 발급한다.
   const token = await createSession(normEmail, c.env.SESSION_SECRET, 'pin', nextVersion, { suUntil: Date.now() + STEP_UP_TTL_MS })
-  c.header('Set-Cookie', `myhub_session=${token}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${SESSION_COOKIE_MAX_AGE}`)
+  setSessionCookie(c, token)
   return c.json({ ok: true })
 })
 

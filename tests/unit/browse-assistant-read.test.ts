@@ -15,7 +15,7 @@
  * 실 Browser Run 연결은 하지 않는다.
  * 카나리아: 차단 대역 판정이나 절단 로직을 깨면 해당 테스트가 실패한다.
  */
-import { readPage, validatePublicUrl, type PageReadResult } from '../../src/modules/browse/assistant-read'
+import { readPage, validatePublicUrl, validatePublicUrlAsync, type PageReadResult } from '../../src/modules/browse/assistant-read'
 import type { CdpSocket } from '../../src/modules/browse/cdp'
 
 describe('validatePublicUrl — 차단 대역', () => {
@@ -103,6 +103,137 @@ describe('validatePublicUrl — 차단 대역', () => {
   })
 })
 
+describe('validatePublicUrlAsync — DNS 리바인딩', () => {
+  // 호스트명 → DoH Answer를 주입하는 가짜 fetch. 매핑이 없으면 NXDOMAIN(Status 3).
+  function makeDohFetch(
+    answers: Record<string, Array<{ type: number; data: string }>>,
+    fail?: 'throw' | 'status',
+  ) {
+    const calls: string[] = []
+    const fetchFn = (async (url: unknown) => {
+      const u = String(url)
+      calls.push(u)
+      if (fail === 'throw') throw new Error('doh down')
+      if (fail === 'status') return { ok: false, status: 500, json: async () => ({}) }
+      const q = new URL(u)
+      const name = q.searchParams.get('name') ?? ''
+      const type = Number(q.searchParams.get('type') ?? 1)
+      // 실제 리졸버는 A/AAAA 질의에도 CNAME 레코드를 Answer에 함께 싣는다.
+      const list = (answers[name] ?? []).filter((a) => a.type === type || a.type === 5)
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          Status: list.length ? 0 : 3,
+          Answer: list.map((a) => ({ name, type: a.type, TTL: 60, data: a.data })),
+        }),
+      }
+    }) as unknown as typeof fetch
+    return { fetchFn, calls }
+  }
+
+  const PUBLIC = {
+    'example.com': [
+      { type: 1, data: '93.184.216.34' },
+      { type: 28, data: '2606:2800:220:1:248:1893:25c8:1946' },
+    ],
+  }
+
+  test('공인 IP로 해석되면 ok이고 A/AAAA 둘 다 조회한다', async () => {
+    const { fetchFn, calls } = makeDohFetch(PUBLIC)
+    const r = await validatePublicUrlAsync('https://example.com/page', fetchFn)
+    expect(r).toEqual({ ok: true, url: 'https://example.com/page' })
+    expect(calls).toHaveLength(2)
+    expect(calls.map((c) => new URL(c).searchParams.get('type')).sort()).toEqual(['1', '28'])
+    expect(calls[0]).toContain('cloudflare-dns.com/dns-query')
+  })
+
+  test.each([
+    ['사설 A (10/8)', { 'example.com': [{ type: 1, data: '10.0.0.5' }] }],
+    ['메타데이터 A (169.254/16)', { 'example.com': [{ type: 1, data: '169.254.169.254' }] }],
+    ['CGNAT A (100.64/10)', { 'example.com': [{ type: 1, data: '100.64.0.9' }] }],
+    ['ULA AAAA (fd00::/8)', { 'example.com': [{ type: 28, data: 'fd12::1' }] }],
+    ['링크-로컬 AAAA (fe80::/10)', { 'example.com': [{ type: 28, data: 'fe80::1' }] }],
+    ['공인+사설 혼합', { 'example.com': [{ type: 1, data: '93.184.216.34' }, { type: 1, data: '192.168.1.1' }] }],
+  ])('%s → blocked_host', async (_name, answers) => {
+    const { fetchFn } = makeDohFetch(answers)
+    await expect(validatePublicUrlAsync('https://example.com/', fetchFn)).resolves.toEqual({
+      ok: false,
+      error: 'blocked_host',
+    })
+  })
+
+  test('CNAME 타깃이 공인이면 ok, 사설이면 blocked_host', async () => {
+    const toPublic = makeDohFetch({
+      'a.example': [{ type: 5, data: 'b.example.' }],
+      'b.example': [{ type: 1, data: '93.184.216.34' }],
+    })
+    await expect(validatePublicUrlAsync('https://a.example/', toPublic.fetchFn)).resolves.toEqual({
+      ok: true,
+      url: 'https://a.example/',
+    })
+    const toPrivate = makeDohFetch({
+      'a.example': [{ type: 5, data: 'b.example.' }],
+      'b.example': [{ type: 1, data: '10.1.2.3' }],
+    })
+    await expect(validatePublicUrlAsync('https://a.example/', toPrivate.fetchFn)).resolves.toEqual({
+      ok: false,
+      error: 'blocked_host',
+    })
+  })
+
+  test('NXDOMAIN·DoH 예외·DoH 500은 fail-closed로 blocked_host', async () => {
+    const nx = makeDohFetch({})
+    await expect(validatePublicUrlAsync('https://nope.example/', nx.fetchFn)).resolves.toEqual({
+      ok: false,
+      error: 'blocked_host',
+    })
+    const throwing = makeDohFetch(PUBLIC, 'throw')
+    await expect(validatePublicUrlAsync('https://example.com/', throwing.fetchFn)).resolves.toEqual({
+      ok: false,
+      error: 'blocked_host',
+    })
+    const status = makeDohFetch(PUBLIC, 'status')
+    await expect(validatePublicUrlAsync('https://example.com/', status.fetchFn)).resolves.toEqual({
+      ok: false,
+      error: 'blocked_host',
+    })
+  })
+
+  test('DoH 타임아웃도 fail-closed로 blocked_host', async () => {
+    const hanging = (async (_url: unknown, init?: { signal?: AbortSignal }) => {
+      await new Promise((_r, reject) => {
+        init?.signal?.addEventListener('abort', () => reject(new Error('aborted')), { once: true })
+      })
+    }) as unknown as typeof fetch
+    await expect(
+      validatePublicUrlAsync('https://example.com/', hanging, { timeoutMs: 20 }),
+    ).resolves.toEqual({ ok: false, error: 'blocked_host' })
+  })
+
+  test('리터럴 IP 호스트는 DNS 조회를 건너뛴다 (fetch 호출 0건)', async () => {
+    const { fetchFn, calls } = makeDohFetch(PUBLIC)
+    await expect(validatePublicUrlAsync('https://8.8.8.8/dns', fetchFn)).resolves.toEqual({
+      ok: true,
+      url: 'https://8.8.8.8/dns',
+    })
+    expect(calls).toHaveLength(0)
+  })
+
+  test('동기 검사에서 걸리는 URL은 DNS 조회 없이 blocked_host/invalid_url', async () => {
+    const { fetchFn, calls } = makeDohFetch(PUBLIC)
+    await expect(validatePublicUrlAsync('http://127.0.0.1/', fetchFn)).resolves.toEqual({
+      ok: false,
+      error: 'blocked_host',
+    })
+    await expect(validatePublicUrlAsync('ftp://example.com/', fetchFn)).resolves.toEqual({
+      ok: false,
+      error: 'invalid_url',
+    })
+    expect(calls).toHaveLength(0)
+  })
+})
+
 type Listener = (ev: { data: unknown }) => void
 
 interface ScriptOpts {
@@ -172,10 +303,36 @@ const VERSION_DATA = {
   webSocketDebuggerUrl: 'wss://myhub.myhub-app.workers.dev/api/browse/cdp/devtools/browser/abc',
 }
 
-function versionFetch(versionData: unknown, status = 200) {
+type DohRoute = (name: string, type: number) => {
+  Status: number
+  Answer: Array<{ name: string; type: number; TTL: number; data: string }>
+}
+
+/** 기본 DoH 응답 — 공인 IP만 돌려준다 (readPage 성공 경로용). */
+const PUBLIC_DOH: DohRoute = (name, type) => ({
+  Status: 0,
+  Answer: [
+    {
+      name,
+      type,
+      TTL: 60,
+      data: type === 1 ? '93.184.216.34' : '2606:2800:220:1:248:1893:25c8:1946',
+    },
+  ],
+})
+
+function versionFetch(versionData: unknown, status = 200, doh: DohRoute = PUBLIC_DOH) {
   const calls: Array<{ url: string; method: string; headers: Record<string, string> }> = []
   const fetchFn = (async (url: unknown, init?: { method?: string; headers?: Record<string, string> }) => {
     calls.push({ url: String(url), method: init?.method ?? 'GET', headers: init?.headers ?? {} })
+    const u = String(url)
+    // DoH 조회는 DNS JSON 응답으로, /json/version은 버전 데이터로 답한다.
+    if (u.includes('dns-query')) {
+      const q = new URL(u)
+      const name = q.searchParams.get('name') ?? ''
+      const type = Number(q.searchParams.get('type') ?? 1)
+      return { ok: true, status: 200, json: async () => doh(name, type) }
+    }
     return { ok: status >= 200 && status < 300, status, json: async () => versionData }
   }) as unknown as typeof fetch
   return { fetchFn, calls }
@@ -212,8 +369,17 @@ describe('readPage — 버전 조회·연결 단계 실패 구분', () => {
     const sock = new ScriptSocket()
     let f = versionFetch({}, 500)
     await expect(readPage(ENV, PAGE_URL, deps(f.fetchFn, sock))).resolves.toEqual({ ok: false, error: 'upstream' })
-    const throwing = (async () => { throw new Error('down') }) as unknown as typeof fetch
-    await expect(readPage(ENV, PAGE_URL, deps(throwing, sock))).resolves.toEqual({ ok: false, error: 'upstream' })
+    // 버전 조회만 예외를 내고 DoH는 정상 답하는 fetch — DoH 실패는
+    // blocked_host이므로 버전 실패를 보려면 DoH를 따로 라우팅해야 한다.
+    const throwingVersion = (async (url: unknown) => {
+      const u = String(url)
+      if (u.includes('dns-query')) {
+        const q = new URL(u)
+        return { ok: true, status: 200, json: async () => PUBLIC_DOH(q.searchParams.get('name') ?? '', Number(q.searchParams.get('type') ?? 1)) }
+      }
+      throw new Error('down')
+    }) as unknown as typeof fetch
+    await expect(readPage(ENV, PAGE_URL, deps(throwingVersion, sock))).resolves.toEqual({ ok: false, error: 'upstream' })
     f = versionFetch({ Browser: 'Chrome' })
     await expect(readPage(ENV, PAGE_URL, deps(f.fetchFn, sock))).resolves.toEqual({ ok: false, error: 'upstream' })
     f = versionFetch({ webSocketDebuggerUrl: 'wss://example.com/somewhere/else' })
@@ -223,10 +389,26 @@ describe('readPage — 버전 조회·연결 단계 실패 구분', () => {
   test('/json/version 조회는 사이드카 직접 URL에 두 시크릿을 싣는다', async () => {
     const { fetchFn, calls } = versionFetch(VERSION_DATA)
     await readPage(ENV, PAGE_URL, deps(fetchFn, new ScriptSocket()))
-    expect(calls).toHaveLength(1)
-    expect(calls[0].url).toBe('https://203.0.113.7:8081/json/version')
-    expect(calls[0].headers['x-origin-secret']).toBe('origin-secret')
-    expect(calls[0].headers['x-cdp-secret']).toBe('cdp-secret')
+    // DoH A/AAAA 조회 2건 + /json/version 1건
+    const versionCalls = calls.filter((c) => c.url.includes('/json/version'))
+    expect(versionCalls).toHaveLength(1)
+    expect(versionCalls[0].url).toBe('https://203.0.113.7:8081/json/version')
+    expect(versionCalls[0].headers['x-origin-secret']).toBe('origin-secret')
+    expect(versionCalls[0].headers['x-cdp-secret']).toBe('cdp-secret')
+    const dohCalls = calls.filter((c) => c.url.includes('dns-query'))
+    expect(dohCalls).toHaveLength(2)
+    expect(dohCalls.map((c) => new URL(c.url).searchParams.get('type')).sort()).toEqual(['1', '28'])
+  })
+
+  test('DNS 해석이 사설 IP면 blocked_host이고 /json/version은 호출되지 않는다', async () => {
+    const privateDoh: DohRoute = (name, type) => ({
+      Status: 0,
+      Answer: [{ name, type, TTL: 60, data: type === 1 ? '10.0.0.5' : 'fd12::1' }],
+    })
+    const { fetchFn, calls } = versionFetch(VERSION_DATA, 200, privateDoh)
+    const r = await readPage(ENV, PAGE_URL, deps(fetchFn, new ScriptSocket()))
+    expect(r).toEqual({ ok: false, error: 'blocked_host' })
+    expect(calls.filter((c) => c.url.includes('/json/version'))).toHaveLength(0)
   })
 
   test('connect가 null이거나 던지면 connect', async () => {

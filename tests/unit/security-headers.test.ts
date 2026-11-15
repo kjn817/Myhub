@@ -123,6 +123,45 @@ describe('정적 HTML 보안 헤더', () => {
     expect(csp).not.toContain('default-src')
   })
 
+  test('일반 인증 페이지는 스크립트와 무관한 fetch 지시자를 전부 제한한다', async () => {
+    const env = makeEnv()
+    env.ASSETS.fetch.mockResolvedValue(
+      new Response('<html>memo</html>', { headers: { 'Content-Type': 'text/html' } })
+    )
+    const res = await get('/memo.html', env, { Cookie: 'myhub_session=t' })
+    expect(res.status).toBe(200)
+    const csp = res.headers.get('Content-Security-Policy') ?? ''
+    // 메모가 blob URL 이미지를 쓰므로 img-src에 blob:이 필요하다.
+    expect(csp).toContain("img-src 'self' data: blob:")
+    expect(csp).toContain("font-src 'self' data:")
+    expect(csp).toContain("connect-src 'self'")
+    expect(csp).toContain("media-src 'self' blob:")
+    expect(csp).toContain("frame-src 'self'")
+    expect(csp).toContain("worker-src 'self'")
+    expect(csp).toContain("manifest-src 'self'")
+    // 인라인 스타일은 쓰므로 unsafe-inline을 유지하고 외부 스타일만 차단한다.
+    expect(csp).toContain("style-src 'self' 'unsafe-inline'")
+    expect(csp).toContain('upgrade-insecure-requests')
+  })
+
+  test('/sheet-fortune.html은 enforce CSP를 받는다 (new Function 때문에 unsafe-eval 포함)', async () => {
+    const env = makeEnv()
+    env.ASSETS.fetch.mockResolvedValue(
+      new Response('<html>fortune</html>', { headers: { 'Content-Type': 'text/html' } })
+    )
+    const res = await get('/sheet-fortune.html', env, { Cookie: 'myhub_session=t' })
+    expect(res.status).toBe(200)
+    const csp = res.headers.get('Content-Security-Policy') ?? ''
+    expect(csp).toContain("default-src 'none'")
+    expect(csp).toContain("script-src 'self' 'unsafe-eval'")
+    // script 계열에는 unsafe-inline이 없어야 한다 (style-src-attr의
+    // unsafe-inline은 정적 style 속성용으로 허용 — 데스크톱과 동일).
+    const scriptParts = csp.split(';').filter((d) => d.trim().startsWith('script-src'))
+    for (const part of scriptParts) expect(part).not.toContain("'unsafe-inline'")
+    expect(csp).toContain("script-src-attr 'none'")
+    expect(csp).toContain("frame-ancestors 'self'")
+  })
+
   test('/desktop.html 파일럿은 unsafe-inline 없는 전면 CSP를 받는다', async () => {
     const env = makeEnv()
     env.ASSETS.fetch.mockResolvedValue(

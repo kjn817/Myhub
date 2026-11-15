@@ -1,0 +1,115 @@
+{
+ "scenario": "pptx",
+ "errors": [],
+ "openMs": 1747,
+ "info": {
+  "title": "분기리뷰",
+  "slideCount": 2,
+  "dirty": false,
+  "slides": [
+   {
+    "index": 0,
+    "shapes": [
+     {
+      "id": 2,
+      "text": "분기 리뷰 (합성)",
+      "name": "TextBox 1",
+      "kind": "textBox",
+      "placeholder": null
+     },
+     {
+      "id": 3,
+      "text": "",
+      "name": "Table 2",
+      "kind": "table",
+      "placeholder": null,
+      "cells": [
+       [
+        "항목",
+        "목표",
+        "실적"
+       ],
+       [
+        "신규 계약",
+        "120건",
+        "131건"
+       ],
+       [
+        "갱신율",
+        "85%",
+        "88%"
+       ],
+       [
+        "해지",
+        "10건 이하",
+        "7건"
+       ]
+      ]
+     },
+     {
+      "id": 4,
+      "text": "핵심 지표 박스",
+      "name": "Rounded Rectangle 3",
+      "kind": "shape",
+      "placeholder": null
+     },
+     {
+      "id": 5,
+      "text": "88%",
+      "name": "Oval 4",
+      "kind": "shape",
+      "placeholder": null
+     }
+    ],
+    "layout": "Blank"
+   },
+   {
+    "index": 1,
+    "shapes": [
+     {
+      "id": 2,
+      "text": "다음 분기 계획",
+      "name": "TextBox 1",
+      "kind": "textBox",
+      "placeholder": null
+     },
+     {
+      "id": 3,
+      "text": "• 목표 재설정",
+      "name": "TextBox 2",
+      "kind": "textBox",
+      "placeholder": null
+     },
+     {
+      "id": 4,
+      "text": "• 인력 충원 검토",
+      "name": "TextBox 3",
+      "kind": "textBox",
+      "placeholder": null
+     },
+     {
+      "id": 5,
+      "text": "• 자동화 확대",
+      "name": "TextBox 4",
+      "kind": "textBox",
+      "placeholder": null
+     }
+    ],
+    "layout": "Blank"
+   }
+  ]
+ },
+ "editRes": {
+  "applied": 1,
+  "errors": []
+ },
+ "editMs": 18108,
+ "engineFrames": [
+  "http://127.0.0.1:39557/vendor/deckcraft/index.html?host=parent&chrome=notitlebar&lang=ko"
+ ],
+ "saveButton": null,
+ "saveViaCtrlS": true,
+ "savedCaptured": true,
+ "savedBytes": 25632,
+ "totalMs": 41904
+}

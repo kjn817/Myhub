@@ -979,12 +979,23 @@
           }
           printPdfBytes(evt.bytes);
         },
+        // 부팅 프리패치 진행 (2026-11-15): 엔진 22MB를 받는 동안
+        // 리더가 보이므로 상태 표시줄에 진행을 띄운다. ready가 오면
+        // onReady에서 지운다.
+        onBootProgress: function (p) {
+          if (!ctx.isCurrent()) return;
+          var mb = ((p.receivedBytes || 0) / 1048576).toFixed(1);
+          var msg = '프레젠테이션 엔진 받는 중… ' + mb + 'MB';
+          if (p.attempt > 1) msg += ' (다시 시도 ' + p.attempt + '/' + p.maxAttempts + ')';
+          ctx.setStatus(msg);
+        },
         onReady: function () {
           if (!ctx.isCurrent()) {
             stopDeck();
             return;
           }
           state.deckReady = true;
+          ctx.setStatus('');
           publishQuick();
           if (isNew) {
             // 등 발프의 호스트 모두가 빈 값으로 시작한다 등 등 바이트가

@@ -99,16 +99,32 @@ runScenario('prefetch-engines', async (t) => {
     const prefetchFetches = requested.filter(
       (r) =>
         r.type === 'fetch' &&
-        /\/vendor\/(deckcraft|gridcraft|pdfcraft)\/(index\.html|manifest\.json)/.test(r.url),
+        /\/(vendor\/(deckcraft|gridcraft|pdfcraft)|rhwp-studio)\/(index\.html|manifest\.json)/.test(
+          r.url,
+        ),
     );
     const docNavs = requested.filter(
       (r) =>
         r.type === 'document' &&
-        /\/vendor\/(deckcraft|gridcraft|pdfcraft)\//.test(r.url),
+        /\/(vendor\/(deckcraft|gridcraft|pdfcraft)|rhwp-studio)\//.test(r.url),
     );
     console.log(`  office: 프리패치 fetch ${prefetchFetches.length}건: ${prefetchFetches.map((r) => r.url).join(', ')}`);
     console.log(`  office: (참고) 에디터 iframe 탐색 ${docNavs.length}건 — 문서 열기라 게이트 대상이 아님`);
-    assertEq(prefetchFetches.length, 0, 'office.html에서는 프리패치가 자동으로 실행되면 안 된다 (오피스 서면 게이트)');
+    // 부팅 게이트 프리패치 (2026-11-15): 문서를 열면 그 엔진만 프리패치로
+    // 데운다 — 자동 프리패치가 아니라 문서 열기의 일부다. 그래서 shell·
+    // manifest fetch는 iframe 탐색이 있는(실제로 열린) 엔진에 대해서만
+    // 허용하고, 열지 않은 엔진의 fetch는 여전히 금지한다.
+    const engineOf = (url) => {
+      const m = /\/(?:vendor\/)?(deckcraft|gridcraft|pdfcraft|rhwp-studio)\//.exec(url);
+      return m ? m[1] : null;
+    };
+    const openedEngines = new Set(docNavs.map((r) => engineOf(r.url)).filter(Boolean));
+    const strayFetches = prefetchFetches.filter((r) => !openedEngines.has(engineOf(r.url)));
+    assertEq(
+      strayFetches.length,
+      0,
+      `열지 않은 엔진의 프리패치 fetch가 있으면 안 된다 (오피스 서면 게이트): ${strayFetches.map((r) => r.url).join(', ')}`,
+    );
     assertEq(errors.pageErrors.length, 0, `오피스 페이지 오류가 없어야 한다: ${errors.pageErrors.slice(0, 3).join(' | ')}`);
     await page.context().close();
   }

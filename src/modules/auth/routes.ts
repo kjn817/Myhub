@@ -2,7 +2,8 @@ import { Hono } from 'hono'
 import type { Env } from '../../types'
 import {
   getAuthEmail, isValidPin, verifyPin, createSession, verifySessionForEnv, verifySessionInfo,
-  bumpSessionVersion, checkRateLimit, isValidB64, SESSION_COOKIE_MAX_AGE, STEP_UP_TTL_MS,
+  bumpSessionVersion, checkRateLimit, isValidB64, STEP_UP_TTL_MS,
+  readSessionToken, setSessionCookie, clearSessionCookies,
 } from './primitives'
 import { registerAuthOtpRoutes } from './routes-otp'
 import { registerAuthPinRoutes } from './routes-pin'
@@ -20,9 +21,9 @@ authApp.post('/step-up', async (c) => {
     return c.json({ ok: false, error: '인증 설정 오류' }, 500)
   }
   const cookie = c.req.header('Cookie') || ''
-  const m = cookie.match(/myhub_session=([^;]+)/)
-  if (!m) return c.json({ ok: false, error: '로그인이 필요합니다.' }, 401)
-  const session = await verifySessionForEnv(c.env, m[1], normEmail)
+  const found = readSessionToken(cookie)
+  if (!found) return c.json({ ok: false, error: '로그인이 필요합니다.' }, 401)
+  const session = await verifySessionForEnv(c.env, found.token, normEmail)
   if (!session) return c.json({ ok: false, error: '로그인이 필요합니다.' }, 401)
 
   let row: { pin_hash: string; pin_salt: string; iterations: number } | null = null
@@ -72,31 +73,31 @@ authApp.post('/step-up', async (c) => {
     suUntil,
     otpAt: session.otpAt ?? undefined,
   })
-  c.header('Set-Cookie', `myhub_session=${token}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${SESSION_COOKIE_MAX_AGE}`)
+  setSessionCookie(c, token)
   return c.json({ ok: true, stepUpUntil: suUntil })
 })
 
 // 로그아웃 — 쿠키 삭제 + 서버 측 세션 무효화 (버전 +1; run-001 low auth/session-no-revocation 수정)
 authApp.post('/logout', async (c) => {
   const cookie = c.req.header('Cookie') || ''
-  const m = cookie.match(/myhub_session=([^;]+)/)
-  if (m) {
-    const info = await verifySessionInfo(m[1], c.env.SESSION_SECRET)
+  const found = readSessionToken(cookie)
+  if (found) {
+    const info = await verifySessionInfo(found.token, c.env.SESSION_SECRET)
     if (info) {
       await bumpSessionVersion(c.env, info.email)
     }
   }
-  c.header('Set-Cookie', 'myhub_session=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0')
+  clearSessionCookies(c)
   return c.json({ ok: true })
 })
 
 // 현재 사용자 (+ PIN 설정 여부 — 로그인 UI의 발급 안내용. hasPassword는 구 UI 호환용으로 유지)
 authApp.get('/me', async (c) => {
   const cookie = c.req.header('Cookie') || ''
-  const m = cookie.match(/myhub_session=([^;]+)/)
-  if (!m) return c.json({ ok: false }, 401)
+  const found = readSessionToken(cookie)
+  if (!found) return c.json({ ok: false }, 401)
   const allowedEmail = getAuthEmail(c.env)
-  const session = await verifySessionForEnv(c.env, m[1], allowedEmail || undefined)
+  const session = await verifySessionForEnv(c.env, found.token, allowedEmail || undefined)
   if (!session) return c.json({ ok: false }, 401)
   const email = session.email
   let hasPin = false

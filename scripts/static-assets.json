@@ -96,6 +96,7 @@
     "/js/craft-clipboard.js",
     "/js/craft-prefetch-core.js",
     "/js/deckcraft-prefetch.js",
+    "/js/rhwp-prefetch.js",
     "/js/finder-codec.js",
     "/js/finder-deckcraft.js",
     "/js/finder-pdf-ops.js",

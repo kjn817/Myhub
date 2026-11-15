@@ -23,7 +23,8 @@
  * - Excel: 브릿지 생성 직후 로딩 화면이 보이고, 앱 이름·스피너·
  *   상태 문구가 있다. gridcraft:ready 뒤에는 숨겨진다.
  * - 한글: loadFile이 끝나기 전에는 로딩 화면이 보이고, 성공하면
- *   사라지고, 실패해도 사라진다 (남으면 흰 화면이 영원히 남는다).
+ *   사라진다. 실패하면 3회 재시도 후 에러 표시 + 다시 시도 버튼이
+ *   뜬다 (2026-11-15 부팅 강건화: 스피너가 영원히 남지 않는다).
  * - JS가 만드는 로딩 클래스명이 CSS에 실제로 존재한다 (이름이
  *   어긋나면 스타일 없이 맨 텍스트만 보이는 원상태로 돌아간다).
  *
@@ -197,8 +198,9 @@ describe('한글 로딩 화면', () => {
     expect(loading).not.toBeNull();
     expect(loading.querySelector('.fv-hwp-loading-title')?.textContent).toBe('한글 2020');
     expect(loading.querySelector('.fv-hwp-loading-spin')).not.toBeNull();
+    // 2026-11-15: 단계별 상태 문구 — loadFile 대기 중에는 '문서 여는 중…'이다.
     expect(loading.querySelector('.fv-hwp-loading-status')?.textContent).toBe(
-      '한글 편집기를 불러오는 중',
+      '문서 여는 중…',
     );
     // 테스트 종료 전에 펜딩을 정리한다 (열린 핸들 방지).
     resolveLoad();
@@ -215,14 +217,40 @@ describe('한글 로딩 화면', () => {
     expect(body.querySelector('.fv-hwp-loading')).toBeNull();
   });
 
-  test('loadFile 실패 후에도 로딩 화면이 남지 않는다', async () => {
-    const { body, api, ctx, rejectLoad } = setupHwp();
+  test('loadFile 실패 후 3회 재시도하고 에러 표시가 뜬다 (스피너가 남지 않는다)', async () => {
+    // 2026-11-15 부팅 강건화: 실패하면 바로 reject하지 않고 3회 재시도한
+    // 뒤 에러 표시 + 다시 시도 버튼을 보여준다. 스피너가 영원히 남는
+    // 기존 실패 양상은 사라져야 한다.
+    const { body, api, ctx, sdk, rejectLoad } = setupHwp();
+    api.internals.bootRetryDelayMs = 10;
     const p = api.handleHwp(ctx);
     await flush(20);
     expect(body.querySelector('.fv-hwp-loading')).not.toBeNull();
     rejectLoad(new Error('studio boot failed'));
-    await expect(p).rejects.toThrow('studio boot failed');
-    expect(body.querySelector('.fv-hwp-loading')).toBeNull();
+    let shown = false;
+    for (let i = 0; i < 150; i++) {
+      if (body.querySelector('.myhub-hwp-boot-retry')) {
+        shown = true;
+        break;
+      }
+      await flush(20);
+    }
+    expect(shown).toBe(true);
+    expect(sdk.createEditor).toHaveBeenCalledTimes(3);
+    const loading = body.querySelector('.fv-hwp-loading') as any;
+    expect(loading.querySelector('.fv-hwp-loading-status')?.textContent).toBe(
+      '편집기를 불러오지 못했습니다',
+    );
+    expect(loading.querySelector('.fv-hwp-loading-spin').style.display).toBe('none');
+    // 에러 카드가 보이는 상태로 부팅 Promise가 resolve한다 — reject하면
+    // 호출부의 보기 폴백이 에러 카드를 갈아버리고, pending이면 office.js의
+    // 부팅 로딩이 영영 안 사라진다 (viewer.open settle을 기다린다).
+    const settled = await Promise.race([
+      p.then(() => 'settled'),
+      flush(150).then(() => 'pending'),
+    ]);
+    expect(settled).toBe('settled');
+    expect(body.querySelector('.myhub-hwp-boot-retry')).not.toBeNull();
   });
 });
 

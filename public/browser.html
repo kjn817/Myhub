@@ -83,6 +83,18 @@
         <p id="bwNoticeMsg"></p>
         <button type="button" id="bwNoticeClose">닫기</button>
       </div>
+      <div class="bw-lock-card" id="bwLockCard" hidden>
+        <div class="bw-lock-ic"><i data-lucide="lock"></i></div>
+        <h2 class="bw-lock-title" id="bwLockTitle">브라우저가 잠겨 있어요</h2>
+        <p class="bw-lock-desc" id="bwLockDesc">서버가 다시 시작돼 프로필 보관함이 잠겼어요. 암호를 입력하면 열립니다.</p>
+        <div class="bw-lock-form" id="bwLockForm">
+          <input type="password" id="bwLockPassword" placeholder="보관함 암호" autocomplete="current-password" minlength="8">
+          <input type="password" id="bwLockConfirm" placeholder="암호 다시 입력" autocomplete="new-password" hidden>
+          <p class="bw-lock-msg" id="bwLockMsg" hidden></p>
+          <button type="button" class="bw-lock-btn" id="bwLockSubmit">풀기</button>
+          <button type="button" class="bw-lock-close" id="bwLockClose">닫기</button>
+        </div>
+      </div>
       <div class="bw-sidebar-backdrop" id="bwSidebarBackdrop" hidden></div>
       <aside class="bw-sidebar" id="bwSidebar" hidden aria-label="사이드바">
         <div class="bw-sidebar-head">

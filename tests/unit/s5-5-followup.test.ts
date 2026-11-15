@@ -166,7 +166,7 @@ describe('S5-5 후속 — 서면 잔존 허용 목록 (4곳만)', () => {
   const ALLOWED: Array<[string, number]> = [
     ['public/js/finder.js', 2959],
     ['public/js/finder.js', 2983],
-    ['public/js/finder-deckcraft.js', 437],
+    ['public/js/finder-deckcraft.js', 499],
     ['public/js/finder-pdf-ops.js', 5],
   ]
 

@@ -314,12 +314,15 @@
     function loadKordocGen() {
       if (kordocReady) return kordocReady;
       var p = import(versionedAssetUrl('/vendor/kordoc/kordoc.js'))
-        .then(function () {
-          var mod = typeof window !== 'undefined' ? window.__kordoc : undefined;
-          if (!mod || typeof mod.markdownToHwpx !== 'function') {
+        .then(function (mod) {
+          // 재빌드된 kordoc.js는 ESM 번들이라 전역 변수를 설정하지
+          // 않는다 — import 반환값(기본은 default 객체)을 써야 한다
+          // (2026-11-15 무결성 검증 P0).
+          var api = (mod && mod.default) || mod;
+          if (!api || typeof api.markdownToHwpx !== 'function') {
             throw new Error('kordoc 생성 모듈 형태가 올바르지 않습니다');
           }
-          return mod;
+          return api;
         })
         .catch(function (err) {
           if (kordocReady === p) kordocReady = null;

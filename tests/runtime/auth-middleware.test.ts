@@ -55,6 +55,15 @@ async function call(path: string, cookie?: string): Promise<Response> {
   )
 }
 
+async function callPost(path: string, opts: { cookie?: string; origin?: string } = {}): Promise<Response> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  if (opts.cookie) headers.Cookie = opts.cookie
+  if (opts.origin) headers.Origin = opts.origin
+  return worker.default.fetch(
+    new Request(`http://localhost${path}`, { method: 'POST', headers, body: '{}', redirect: 'manual' }),
+  )
+}
+
 describe('auth middleware (miniflare)', () => {
   beforeAll(async () => {
     // session_versions 테이블이 없으면 모든 세션이 fail-closed로 거부된다
@@ -160,6 +169,38 @@ describe('auth middleware (miniflare)', () => {
     // D1에 행이 없어 현재 버전은 0 — v:99 토큰은 거부돼야 한다.
     const token = await mintSessionToken(TEST_EMAIL, testEnv.SESSION_SECRET, { version: 99 })
     const res = await call('/api/modules', `myhub_session=${token}`)
+    expect(res.status).toBe(401)
+  })
+
+  it('__Host- 세션 쿠키면 보호 API가 200이고 재발급 헤더가 없다', async () => {
+    const token = await mintSessionToken(TEST_EMAIL, testEnv.SESSION_SECRET)
+    const res = await call('/api/modules', `__Host-myhub_session=${token}`)
+    expect(res.status).toBe(200)
+    expect(res.headers.getSetCookie()).toHaveLength(0)
+  })
+
+  it('구 쿠키로 인증되면 새 __Host- 쿠키로 재발급하고 구 쿠키를 지운다', async () => {
+    const token = await mintSessionToken(TEST_EMAIL, testEnv.SESSION_SECRET)
+    const res = await call('/api/modules', `myhub_session=${token}`)
+    expect(res.status).toBe(200)
+    const setCookies = res.headers.getSetCookie()
+    const fresh = setCookies.find((v) => v.startsWith('__Host-myhub_session='))
+    expect(fresh).toBeDefined()
+    expect(fresh).toContain(`__Host-myhub_session=${token}`)
+    expect(fresh).toContain('Secure')
+    expect(fresh).not.toContain('Domain=')
+    const cleared = setCookies.find((v) => v.startsWith('myhub_session='))
+    expect(cleared).toBeDefined()
+    expect(cleared).toContain('Max-Age=0')
+  })
+
+  it('교차 출처 POST는 CSRF 403 (인증보다 먼저 차단)', async () => {
+    const res = await callPost('/api/memos', { origin: 'https://evil.example.com' })
+    expect(res.status).toBe(403)
+  })
+
+  it('동일 출처 POST는 CSRF를 통과해 인증 401로 간다', async () => {
+    const res = await callPost('/api/memos', { origin: 'http://localhost' })
     expect(res.status).toBe(401)
   })
 })

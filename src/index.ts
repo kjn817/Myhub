@@ -2,10 +2,23 @@ import { Hono } from 'hono'
 import type { Env } from './types'
 import { modules } from './modules'
 import { authApp, verifySessionForEnv } from './modules/auth/routes'
+import { readSessionToken, setSessionCookie } from './modules/auth/primitives'
+import { isCsrfSafeRequest } from './lib/csrf'
 import { handleScheduled, handleCronJobs, handleSleepConsolidation, handleGoogleSync, handleLogPrune, handleDecryptHealth } from './scheduled'
 import { CONFIG } from './config'
 
 const app = new Hono<{ Bindings: Env; Variables: { userEmail: string; stepUpUntil: number } }>()
+
+// 전역 CSRF 방어 (Origin/Referer 검사) — 가장 앞에 둬 /api/auth/*도 보호한다.
+// 안전 메서드는 통과하고, Origin·Referer가 둘 다 없는 비브라우저 클라이언트
+// (curl·MCP·웹훅 발신자)도 통과한다. 브라우저의 교차 출처 상태 변경 요청은
+// Origin을 반드시 보내므로 여기서 걸린다.
+app.use(async (c, next) => {
+  if (!isCsrfSafeRequest(c.req)) {
+    return c.json({ ok: false, error: 'forbidden' }, 403)
+  }
+  return next()
+})
 
 // 헬스체크 (인증 불필요)
 app.get('/api/health', (c) => c.json({ ok: true, app: c.env.APP_NAME }))
@@ -39,14 +52,17 @@ app.use(async (c, next) => {
   }
   // 정적 에셋 중 로그인 페이지용은 허용 (CSS/JS는 보호됨)
   const cookie = c.req.header('Cookie') || ''
-  const m = cookie.match(/myhub_session=([^;]+)/)
-  if (m) {
+  const found = readSessionToken(cookie)
+  if (found) {
     // 세션 버전까지 대조한다 — 로그아웃·PIN 재발급 후 구 토큰은 여기서 차단된다.
-    const session = await verifySessionForEnv(c.env, m[1])
+    const session = await verifySessionForEnv(c.env, found.token)
     if (session) {
       c.set('userEmail', session.email)
       // 보호 메모 step-up 창 (트랙 2): 게이트가 c.get('stepUpUntil')로 판정한다.
       c.set('stepUpUntil', session.suUntil ?? 0)
+      // 구 쿠키 전환: 검증된 구 세션을 새 __Host- 이름으로 재발급하고
+      // 구 쿠키를 지운다 — 재로그인 없이 전환된다.
+      if (found.legacy) setSessionCookie(c, found.token)
       return next()
     }
   }
@@ -222,10 +238,17 @@ const LOGIN_CSP =
 // CSP 단계 적용 (2026-11-01, docs/security-csp-20261101.md):
 // 전수 실측 — 인라인 <script> 블록 13개·속성형 인라인 핸들러 67곳이 11개
 // 페이지에 남아 있어 전 페이지 script-src enforce는 페이지를 깨뜨린다.
-// script-src와 무관하게 안전한 지시자만 전 페이지에 적용한다:
-// object/base/form은 전 페이지·전 서빙 JS에서 사용처 0건임을 grep으로 확인.
+// script-src와 무관하게 안전한 지시자만 전 페이지에 적용한다.
+// 일반 페이지 CSP (agent/memo/memory — 인라인 스크립트·속성형 핸들러가
+// 있어 script-src/default-src는 걸 수 없지만, 스크립트와 무관한
+// fetch 지시자는 전부 제한한다. 실측 근거 (2026-11-15):
+// - img-src blob:: 메모가 붙여넣은 이미지를 blob URL로 띄운다.
+// - connect-src 'self': 세 페이지의 fetch는 전부 /api/* (외부 호출 0건).
+// - frame-src 'self': agent의 iframe은 src 없는 미리보기 틀(about:blank).
+// - style-src 'unsafe-inline': 인라인 스타일 속성·블록을 쓰므로 유지하고
+//   외부 스타일시트만 차단한다.
 const GENERAL_HTML_CSP =
-  "object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'self'"
+  "img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; media-src 'self' blob:; frame-src 'self'; worker-src 'self'; manifest-src 'self'; style-src 'self' 'unsafe-inline'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'self'; upgrade-insecure-requests"
 // 파일럿 enforce는 /desktop.html만: 인라인 스크립트 0·속성형 핸들러 0·
 // <style> 블록 0 (실측). 자기 출처 + lucide CDN 외 스크립트 실행을 차단한다.
 // - style-src-attr 'unsafe-inline': 정적 style 속성 1곳(브랜드 로고 img) 때문.
@@ -258,6 +281,13 @@ const BROWSER_CSP =
   "default-src 'none'; script-src 'self'; script-src-attr 'none'; style-src-elem 'self'; style-src-attr 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; frame-src 'self' https:; manifest-src 'self'; form-action 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'self'"
 const SHEET_CSP =
   "default-src 'none'; script-src 'self'; script-src-attr 'none'; style-src-elem 'self'; style-src-attr 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; frame-src 'self'; worker-src 'self'; manifest-src 'self'; form-action 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'self'"
+// 운세 시트 enforce CSP — sheet-fortune.html은 인라인 스크립트·핸들러·
+// <style>이 없어 enforce가 된다. 단 fortune.js(luckysheet)가 행·열
+// 삽입에 new Function을 쓰므로 'unsafe-eval'이 필요하다 (실측 5곳 —
+// setImmediate 폴백 2곳·삽입 경로 3곳). 인라인·외부 스크립트는 여전히
+// 차단된다. WASM은 쓰지 않으므로 'wasm-unsafe-eval'은 붙이지 않는다.
+const FORTUNE_CSP =
+  "default-src 'none'; script-src 'self' 'unsafe-eval'; script-src-attr 'none'; style-src-elem 'self'; style-src-attr 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; frame-src 'self'; worker-src 'self'; manifest-src 'self'; form-action 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'self'"
 // 버전 관리 정적 에셋의 캐시 정책 (구 인라인 라우트와 동일)
 const STATIC_IMMUTABLE_CC = 'public, max-age=31536000, immutable'
 app.get('/*', async (c) => {
@@ -297,6 +327,7 @@ app.get('/*', async (c) => {
       else if (pathname === '/todo.html') headers.set('Content-Security-Policy', TODO_CSP)
       else if (pathname === '/browser.html') headers.set('Content-Security-Policy', BROWSER_CSP)
       else if (pathname === '/sheet.html') headers.set('Content-Security-Policy', SHEET_CSP)
+      else if (pathname === '/sheet-fortune.html') headers.set('Content-Security-Policy', FORTUNE_CSP)
       // 그 외 인증 페이지들은 인라인 스크립트·속성형 핸들러를 쓰므로
       // script-src는 걸 수 없지만, 사용처 0건인 object/base/form과
       // 프레이밍(동일 출처 iframe 허용·교차 출처 클릭재킹 차단)은 제한한다.

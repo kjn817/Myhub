@@ -76,7 +76,7 @@ describe('F3 부팅: trace', () => {
 })
 
 describe('F3 부팅: sheet', () => {
-  test('시트 페이지가 부팅하고 gridcraft 브리지가 엔진 iframe을 GC_URL로 건다', () => {
+  test('시트 페이지가 부팅하고 gridcraft 브리지가 엔진 iframe을 GC_URL로 건다', async () => {
     const page = loadPage('sheet.html', okHandler)
     expect(page.externalSkipped).toEqual([])
     // 운영 sheet-gridcraft.js는 #sheetApp이 있는 문서에서 스스로 브리지를
@@ -102,9 +102,13 @@ describe('F3 부팅: sheet', () => {
       },
       setTimeoutFn: () => 0,
       clearTimeoutFn: () => undefined,
+      // 2026-11-15 부팅 게이트: src는 프리패치 뒤에 붙는다. 이 테스트는
+      // src 값 자체를 단언하므로 프리패치를 즉시 성공으로 주입한다.
+      prefetchForBoot: async () => ({ done: [], failed: [], stalled: [], receivedBytes: 0 }),
     })
     const frame = mount.querySelector('iframe.sheet-gc-frame')
     expect(frame).not.toBeNull()
+    expect(await until(() => frame.getAttribute('src'))).toBe(true)
     expect(frame.getAttribute('src')).toContain('/vendor/gridcraft/index.html')
     expect(frame.getAttribute('src')).toContain('host=parent')
     bridge.destroy()

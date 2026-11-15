@@ -413,6 +413,59 @@
   padding: 7px 18px;
   cursor: pointer;
 }
+/* LUKS 잠금 카드 (2026-11-15): 안내 카드와 같은 가운데 카드. 암호 입력
+   + 풀기/닫기. 잠긴 상태에서는 이 카드만 보이고 시작 화면은 가린다. */
+.bw-lock-card {
+  position: absolute;
+  left: 50%;
+  top: 38%;
+  transform: translate(-50%, -50%);
+  width: calc(100% - 48px);
+  max-width: 330px;
+  background: #fff;
+  border-radius: 18px;
+  box-shadow: 0 10px 34px rgba(15, 23, 42, 0.18);
+  padding: 24px 20px 16px;
+  text-align: center;
+}
+.bw-lock-card[hidden] { display: none; }
+.bw-lock-ic { color: #64748b; margin-bottom: 10px; }
+.bw-lock-ic svg { width: 26px; height: 26px; }
+.bw-lock-title { margin: 0 0 8px; font-size: 16px; font-weight: 700; color: #111827; }
+.bw-lock-desc { margin: 0 0 16px; font-size: 13px; color: #64748b; line-height: 1.5; }
+.bw-lock-form { display: flex; flex-direction: column; gap: 8px; }
+.bw-lock-form input {
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 9px 12px;
+  font-size: 14px;
+  outline: none;
+}
+.bw-lock-form input:focus { border-color: #93c5fd; box-shadow: 0 0 0 3px rgba(147, 197, 253, 0.35); }
+.bw-lock-form input[hidden] { display: none; }
+.bw-lock-msg { margin: 0; font-size: 12px; color: #dc2626; line-height: 1.4; }
+.bw-lock-msg[hidden] { display: none; }
+.bw-lock-btn {
+  border: none;
+  border-radius: 999px;
+  background: #2563eb;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  padding: 9px 18px;
+  cursor: pointer;
+}
+.bw-lock-btn:disabled { background: #93c5fd; cursor: default; }
+.bw-lock-close {
+  border: none;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.06);
+  color: #1f2937;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 7px 18px;
+  cursor: pointer;
+}
 /* 사이드바 (사파리식 좌측 패널): 즐겨찾기·최근 방문·열린 탭.
    스테이지 안에서만 뜨며(툴바·탭 줄은 위에 남는다), 배경을 누르거나
    Esc로 닫는다. */

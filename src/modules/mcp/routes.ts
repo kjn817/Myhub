@@ -3,7 +3,7 @@
  * + 토큰 관리 (/api/mcp/tokens — PIN 세션 전용)
  *
  * 인증 (두 가지 중 하나 — 미인증 요청은 401):
- * - PIN 세션: 기존 myhub_session 쿠키 (verifySessionForEnv 재사용).
+ * - PIN 세션: __Host- 세션 쿠키 (verifySessionForEnv 재사용).
  * - MCP 토큰: Authorization: Bearer <token> (mcp_tokens, 해시만 저장).
  *
  * 라우팅 주의: 전역 인증 미들웨어(src/index.ts)는 /api/*에 세션을 요구한다.
@@ -30,6 +30,7 @@ import {
   checkRateLimit,
   checkRateLimitForIp,
   getClientIp,
+  readSessionToken,
   type SessionInfo,
 } from '../auth/routes'
 import { buildMcpServer } from './server'
@@ -63,12 +64,12 @@ export async function authenticateMcpRequest(
   c: { req: { header(name: string): string | undefined }; env: Env }
 ): Promise<McpAuth | null> {
   const cookie = c.req.header('Cookie') || ''
-  const m = cookie.match(/myhub_session=([^;]+)/)
-  if (m) {
+  const found = readSessionToken(cookie)
+  if (found) {
     const allowed = getAuthEmail(c.env)
-    const session = await verifySessionForEnv(c.env, m[1], allowed || undefined)
+    const session = await verifySessionForEnv(c.env, found.token, allowed || undefined)
     if (session) {
-      return { email: session.email, method: 'session', credential: m[1] }
+      return { email: session.email, method: 'session', credential: found.token }
     }
   }
   const authz = c.req.header('Authorization') || ''
@@ -107,10 +108,10 @@ async function requireSession(
   c: { req: { header(name: string): string | undefined }; env: Env }
 ): Promise<SessionInfo | null> {
   const cookie = c.req.header('Cookie') || ''
-  const m = cookie.match(/myhub_session=([^;]+)/)
-  if (!m) return null
+  const found = readSessionToken(cookie)
+  if (!found) return null
   const allowed = getAuthEmail(c.env)
-  return verifySessionForEnv(c.env, m[1], allowed || undefined)
+  return verifySessionForEnv(c.env, found.token, allowed || undefined)
 }
 
 /**

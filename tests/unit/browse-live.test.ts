@@ -71,6 +71,22 @@ const upstreamOk = (data: unknown) => async () =>
     headers: { 'content-type': 'application/json' },
   })
 
+/** DoH 스텁: example.com은 공인 IP로 답한다 (A만, AAAA는 빈 응답).
+ *  /navigate의 validatePublicUrlAsync가 DoH로 해석 IP를 확인하므로,
+ *  유효한 호스트명 테스트는 이 응답이 필요하다. DoH URL이 아니면 null. */
+function dohResponse(url: string): Response | null {
+  if (!url.startsWith('https://cloudflare-dns.com/dns-query')) return null
+  const type = new URL(url).searchParams.get('type')
+  const answers =
+    type === '1'
+      ? [{ name: 'example.com.', type: 1, TTL: 300, data: '93.184.216.34' }]
+      : []
+  return new Response(JSON.stringify({ Status: 0, Answer: answers }), {
+    status: 200,
+    headers: { 'content-type': 'application/dns-json' },
+  })
+}
+
 describe('toDirectCdpWsUrl — 공개 URL을 직접 URL로', () => {
   test('wss 공개 URL의 경로를 유지하고 호스트·포트를 사이드카로 바꾼다', () => {
     expect(
@@ -221,14 +237,16 @@ describe('POST /navigate — 영구 탭 이동', () => {
   })
 
   test('/json/version 실패·ws 없음은 502 ORACLE_UPSTREAM', async () => {
-    stubFetch(async () => new Response('{}', { status: 500 }))
+    stubFetch(async (url) => dohResponse(url) ?? new Response('{}', { status: 500 }))
     let r = await postNavigate(ENV_AS_NEVER, { url: 'https://example.com' })
     expect(r.status).toBe(502)
     expect(r.json.error).toBe('ORACLE_UPSTREAM')
-    stubFetch(upstreamOk({ Browser: 'Chrome' }))
+    stubFetch(async (url) => dohResponse(url) ?? (await upstreamOk({ Browser: 'Chrome' })()))
     r = await postNavigate(ENV_AS_NEVER, { url: 'https://example.com' })
     expect(r.status).toBe(502)
-    stubFetch(async () => {
+    stubFetch(async (url) => {
+      const doh = dohResponse(url)
+      if (doh) return doh
       throw new Error('down')
     })
     r = await postNavigate(ENV_AS_NEVER, { url: 'https://example.com' })
@@ -239,6 +257,8 @@ describe('POST /navigate — 영구 탭 이동', () => {
     // /json/version은 공개 베이스 ws URL을 돌려주고, 그 뒤의 WS 업그레이드
     // fetch는 webSocket 없는 응답을 준다 → 기본 CDP 연결이 null이 된다.
     stubFetch(async (url) => {
+      const doh = dohResponse(url)
+      if (doh) return doh
       if (url.includes('/json/version')) {
         return new Response(
           JSON.stringify({

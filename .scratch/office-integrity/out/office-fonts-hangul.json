@@ -1,0 +1,51 @@
+{
+ "app": "hangul",
+ "errors": {
+  "pageErrors": [],
+  "consoleErrors": [
+   "Failed to load resource: the server responded with a status of 404 (Not Found)",
+   "Failed to load resource: the server responded with a status of 404 (Not Found)",
+   "Failed to load resource: the server responded with a status of 404 (Not Found)",
+   "Failed to load resource: the server responded with a status of 404 (Not Found)"
+  ],
+  "failedRequests": [
+   "404 http://127.0.0.1:44169/theme-init.js",
+   "404 http://127.0.0.1:44169/rhwp-studio/assets/rhwp_bg.js",
+   "404 http://127.0.0.1:44169/theme-init.js",
+   "404 http://127.0.0.1:44169/rhwp-studio/assets/rhwp_bg.js"
+  ]
+ },
+ "readyMs": 5827,
+ "fontFaces": [
+  {
+   "url": "http://127.0.0.1:44169/office.html",
+   "faces": [],
+   "myhubFonts": {
+    "families": [],
+    "faces": []
+   }
+  },
+  {
+   "url": "//127.0.0.1:44169/rhwp-studio/index.html",
+   "faces": [
+    "맑은 고딕:normal:loaded",
+    "NanumGothic:normal:loaded",
+    "NanumGothic:normal:loaded",
+    "\"맑은 고딕\":normal:loaded"
+   ],
+   "myhubFonts": null
+  }
+ ],
+ "shot": "/home/hatch/workspace/myhub/.scratch/office-integrity/shots/office-font-hangul.png",
+ "totalMs": 17507,
+ "messages": [
+  {
+   "type": "myhub-hwp:menus",
+   "t": 1794728462233
+  },
+  {
+   "type": "rhwp-connect",
+   "t": 1794728457748
+  }
+ ]
+}

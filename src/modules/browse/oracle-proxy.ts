@@ -28,7 +28,9 @@
  */
 import { Hono } from 'hono'
 import type { Env } from '../../types'
+import { validatePublicUrlAsync } from './assistant-read'
 import { defaultCdpConnect, navigateSession, toDirectCdpWsUrl, type ViewportSize } from './cdp'
+import { isBrowserLocked } from './unlock'
 
 export const ORACLE_VIEW_PORT = 8080
 export const ORACLE_CDP_PORT = 8081
@@ -162,19 +164,24 @@ export function registerOracleProxyRoutes(app: Hono<{ Bindings: Env }>): void {
     } catch {
       return c.json({ ok: false, error: 'INVALID_URL' }, 400)
     }
-    const rawUrl = body.url
-    if (typeof rawUrl !== 'string' || rawUrl.length > 2048) {
-      return c.json({ ok: false, error: 'INVALID_URL' }, 400)
-    }
-    let targetUrl: string
-    try {
-      const parsed = new URL(rawUrl)
-      if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-        return c.json({ ok: false, error: 'INVALID_URL' }, 400)
+    // 내부 URL 차단 (2026-11-15 보안 분석 지적): 프로토콜만 보던 기존
+    // 검사는 169.254.169.254·localhost:9222 같은 내부 이동을 막지 못했다.
+    // validatePublicUrlAsync는 문자열 검사에 더해 DoH로 해석 IP까지
+    // 확인해 사설 IP로 해석되는 호스트명(DNS 리바인딩)도 차단한다.
+    // 잔존 한계(TOCTOU): Worker 시점 해석 결과이며, 원격 Chromium이
+    // 자기 리졸버로 다시 해석해 이동하므로 표적 리바인딩까지 막지는
+    // 못한다 (assistant-read.ts의 주석 참조).
+    const validated = await validatePublicUrlAsync(body.url)
+    if (!validated.ok) return c.json({ ok: false, error: 'INVALID_URL' }, 400)
+    const targetUrl = validated.url
+    // LUKS 잠금 차단 (2026-11-15): 볼륨이 잠기면 chromium이 떠 있지
+    // 않으므로 네비게이션은 실패한다 — 모호한 502 대신 명확한 423을 준다.
+    // UNLOCK_SECRET 미설정(암호화 미구성)이면 검사를 건너뛴다.
+    const unlockSecret = c.env.UNLOCK_SECRET
+    if (unlockSecret && unlockSecret.length >= 16) {
+      if (await isBrowserLocked(cfg, unlockSecret)) {
+        return c.json({ ok: false, error: 'BROWSER_LOCKED' }, 423)
       }
-      targetUrl = parsed.toString()
-    } catch {
-      return c.json({ ok: false, error: 'INVALID_URL' }, 400)
     }
     const viewport = parseViewport(body.viewport)
     const secretHeaders = {
@@ -202,5 +209,74 @@ export function registerOracleProxyRoutes(app: Hono<{ Bindings: Env }>): void {
       viewport,
     })
     return c.json({ ok: nav.ok, nav: nav.ok ? 'ok' : 'fail', navStage: nav.stage })
+  })
+
+  // 화질 수동 전환 (2026-11-15): 사이드카 /control/quality로 중계한다.
+  // { bitrate: <kbps> }는 수동 고정(사이드카 자동 조절 중단),
+  // { mode: 'auto' }는 자동 조절로 되돌린다. 비트레이트 범위는
+  // 500~8000kbps (사이드카 BITRATE_FLOOR/CEILING과 동일). 세션 게이트
+  // 뒤에 있다 (전역 /api/* 미들웨어). 사이드카 응답(상태·본문)을
+  // 그대로 돌려준다.
+  app.post('/quality', async (c) => {
+    const cfg = oracleConfigOf(c.env)
+    if (!cfg) return c.json({ ok: false, error: 'ORACLE_NOT_CONFIGURED' }, 503)
+    let body: { bitrate?: unknown; mode?: unknown } = {}
+    try {
+      body = (await c.req.json()) as { bitrate?: unknown; mode?: unknown }
+    } catch {
+      return c.json({ ok: false, error: 'INVALID_QUALITY' }, 400)
+    }
+    let payload: { bitrate: number } | { mode: 'auto' }
+    if (body.mode === 'auto' && body.bitrate === undefined) {
+      payload = { mode: 'auto' }
+    } else if (
+      body.mode === undefined &&
+      typeof body.bitrate === 'number' &&
+      Number.isFinite(body.bitrate)
+    ) {
+      const kbps = Math.round(body.bitrate)
+      if (kbps < 500 || kbps > 8000) return c.json({ ok: false, error: 'INVALID_QUALITY' }, 400)
+      payload = { bitrate: kbps }
+    } else {
+      return c.json({ ok: false, error: 'INVALID_QUALITY' }, 400)
+    }
+    try {
+      const res = await fetch(`https://${cfg.host}:${ORACLE_VIEW_PORT}/control/quality`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'x-origin-secret': cfg.originSecret,
+        },
+        body: JSON.stringify(payload),
+      })
+      const text = await res.text()
+      return new Response(text, {
+        status: res.status,
+        headers: { 'content-type': 'application/json' },
+      })
+    } catch {
+      return c.json({ ok: false, error: 'ORACLE_UPSTREAM' }, 502)
+    }
+  })
+
+  // 지연 분해 통계 (2026-11-15): 사이드카 GET /control/stats를 중계한다.
+  // 연결별 _f/_l 보고·전달 처리 시간·버퍼·역압·keepalive RTT를 돌려줘
+  // 지연이 어느 구간에서 쌓이는지 가른다. 세션 게이트 뒤에 있다
+  // (전역 /api/* 미들웨어). 사이드카 응답(상태·본문)을 그대로 돌려준다.
+  app.get('/stats', async (c) => {
+    const cfg = oracleConfigOf(c.env)
+    if (!cfg) return c.json({ ok: false, error: 'ORACLE_NOT_CONFIGURED' }, 503)
+    try {
+      const res = await fetch(`https://${cfg.host}:${ORACLE_VIEW_PORT}/control/stats`, {
+        headers: { 'x-origin-secret': cfg.originSecret },
+      })
+      const text = await res.text()
+      return new Response(text, {
+        status: res.status,
+        headers: { 'content-type': 'application/json' },
+      })
+    } catch {
+      return c.json({ ok: false, error: 'ORACLE_UPSTREAM' }, 502)
+    }
   })
 }

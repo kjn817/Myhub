@@ -9,9 +9,10 @@
  * 있으면 POST /api/browse/navigate로 영구 탭을 이동시킨다. 세션이
  * 없어 만료·동시 사용 제한이 없다 — 켜져 있을 때의 enterLive는
  * iframe을 다시 띄우지 않고 이동만 지시한다.
- * 상태: 'off' | 'on' | 'notice'
- * (notice = 503 등 시작 실패 안내 카드를 띄운 상태).
- * 자기 소유 요소(#bwLiveFrame/#bwNoticeCard)를 표시와
+ * 상태: 'off' | 'on' | 'notice' | 'locked'
+ * (notice = 503 등 시작 실패 안내 카드를 띄운 상태,
+ *  locked = LUKS 볼륨이 잠겨 암호 입력 카드를 띄운 상태).
+ * 자기 소유 요소(#bwLiveFrame/#bwNoticeCard/#bwLockCard)를 표시와
  * syncChrome()로 맞추고, 상태 변경 직후에는 deps.onChange()로 주인에게
  * 알려 전체 너비를 다시 그리게 한다.
  * (2026-11-14: 하단 "원격 브라우저" 필(라벨·경과 시간·종료 버튼)
@@ -24,6 +25,104 @@
   'use strict';
 
   var VIEW_URL = '/api/browse/view/';
+
+  /* 화질 설정 저장 키 (localStorage). 값은 'auto' 또는 kbps 숫자 문자열.
+     수동 값이면 iframe 시작 시 ?vb=<kbps>로 초기 비트레이트를 정하고,
+     자동이면 사이드카 적응 제어가 알아서 조절한다 (2026-11-15). */
+  var QUALITY_KEY = 'myhub-bw-quality';
+  var QUALITY_MIN_KBPS = 500;
+  var QUALITY_MAX_KBPS = 8000;
+
+  function readQualityPreference() {
+    try {
+      if (typeof localStorage === 'undefined' || !localStorage) return { mode: 'auto' };
+      var raw = localStorage.getItem(QUALITY_KEY);
+      if (raw === null || raw === '' || raw === 'auto') return { mode: 'auto' };
+      var n = parseInt(raw, 10);
+      if (!isFinite(n) || n < QUALITY_MIN_KBPS || n > QUALITY_MAX_KBPS) return { mode: 'auto' };
+      return { mode: 'manual', bitrate: n };
+    } catch (err) {
+      return { mode: 'auto' };
+    }
+  }
+
+  function writeQualityPreference(pref) {
+    try {
+      if (typeof localStorage === 'undefined' || !localStorage) return;
+      if (pref && pref.mode === 'manual') localStorage.setItem(QUALITY_KEY, String(pref.bitrate));
+      else localStorage.setItem(QUALITY_KEY, 'auto');
+    } catch (err) {
+      // 저장 실패는 무시한다 (다음 시작은 자동 모드로 간다) — 단 조용히는
+      // 넘기지 않고 경고를 남긴다 (gate-23: 빈 catch 금지).
+      if (typeof console !== 'undefined' && console.warn) console.warn('[browser-live] 화질 설정 저장 실패 (무시):', err);
+    }
+  }
+
+  /* 화질 전환: Promise<{ status, body }> (테스트 주입 지난과 같은 모양) */
+  function defaultSetQuality(payload) {
+    if (typeof fetch !== 'function') return Promise.resolve({ status: 0, body: null });
+    return fetch('/api/browse/quality', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+      .then(function (r) {
+        return r
+          .json()
+          .catch(function () {
+            return null;
+          })
+          .then(function (body) {
+            return { status: r.status, body: body };
+          });
+      })
+      .catch(function () {
+        return { status: 0, body: null };
+      });
+  }
+
+  /* 언록 상태 조회: Promise<{ status, body }> (navigate와 같은 모양) */
+  function defaultCheckUnlock() {
+    if (typeof fetch !== 'function') return Promise.resolve({ status: 0, body: null });
+    return fetch('/api/browse/unlock/status')
+      .then(function (r) {
+        return r
+          .json()
+          .catch(function () {
+            return null;
+          })
+          .then(function (body) {
+            return { status: r.status, body: body };
+          });
+      })
+      .catch(function () {
+        return { status: 0, body: null };
+      });
+  }
+
+  /* 언록/셋업 제출: mode 'unlock' | 'setup'.
+     Promise<{ status, body }> — 암호는 본문으로만 보내고 로그에 남기지 않는다. */
+  function defaultSubmitUnlock(mode, password) {
+    if (typeof fetch !== 'function') return Promise.resolve({ status: 0, body: null });
+    return fetch('/api/browse/unlock/' + mode, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: password }),
+    })
+      .then(function (r) {
+        return r
+          .json()
+          .catch(function () {
+            return null;
+          })
+          .then(function (body) {
+            return { status: r.status, body: body };
+          });
+      })
+      .catch(function () {
+        return { status: 0, body: null };
+      });
+  }
 
   /* 영구 탭 이동: Promise<{ status, body }> (테스트 주입 지난과 같은 모양) */
   function defaultNavigate(url, viewport) {
@@ -53,17 +152,27 @@
   }
 
   /**
-   * deps = { doc, navigate, onChange }
-   * doc에서 #bwLiveFrame/#bwNoticeCard/#bwNoticeMsg/#bwNoticeClose를
-   * 찾는다 (없으면 해당 요소만 비활성). navigate(url, viewport)는
-   * Promise<{status, body}> 테스트 주입 지난. onChange()는 상태 변경 등
-   * 주인의 너비를 다시 그리며 알림 콜백.
+   * deps = { doc, navigate, onChange, checkUnlock, submitUnlock, setQuality, pollDelayMs }
+   * doc에서 #bwLiveFrame/#bwNoticeCard/#bwNoticeMsg/#bwNoticeClose와
+   * #bwLockCard/#bwLockForm/#bwLockPassword/#bwLockConfirm/#bwLockMsg/
+   * #bwLockSubmit/#bwLockClose/#bwLockTitle/#bwLockDesc를 찾는다 (없으면
+   * 해당 요소만 비활성). navigate(url, viewport)는 Promise<{status, body}>
+   * 테스트 주입 지난. checkUnlock()·submitUnlock(mode, password)·
+   * setQuality(payload)도 같은 모양의 테스트 주입 지난. pollDelayMs는 제출 후 상태 폴링 간격(기본 5초).
+   * onChange()는 상태 변경 등 주인의 너비를 다시 그리며 알림 콜백.
    */
   function createLive(deps) {
     deps = deps || {};
     var doc = deps.doc || document;
     var navigate =
       typeof deps.navigate === 'function' ? deps.navigate : defaultNavigate;
+    var checkUnlock =
+      typeof deps.checkUnlock === 'function' ? deps.checkUnlock : defaultCheckUnlock;
+    var submitUnlock =
+      typeof deps.submitUnlock === 'function' ? deps.submitUnlock : defaultSubmitUnlock;
+    var setQualityFetch =
+      typeof deps.setQuality === 'function' ? deps.setQuality : defaultSetQuality;
+    var pollDelayMs = typeof deps.pollDelayMs === 'number' ? deps.pollDelayMs : 5000;
     var onChange =
       typeof deps.onChange === 'function'
         ? deps.onChange
@@ -74,12 +183,51 @@
     var noticeCard = doc.getElementById('bwNoticeCard');
     var noticeMsg = doc.getElementById('bwNoticeMsg');
     var noticeClose = doc.getElementById('bwNoticeClose');
-    /* 원격 상태: 'off' | 'on' | 'notice' */
+    var lockCard = doc.getElementById('bwLockCard');
+    var lockTitle = doc.getElementById('bwLockTitle');
+    var lockDesc = doc.getElementById('bwLockDesc');
+    var lockForm = doc.getElementById('bwLockForm');
+    var lockPassword = doc.getElementById('bwLockPassword');
+    var lockConfirm = doc.getElementById('bwLockConfirm');
+    var lockMsg = doc.getElementById('bwLockMsg');
+    var lockSubmit = doc.getElementById('bwLockSubmit');
+    var lockClose = doc.getElementById('bwLockClose');
+    /* 원격 상태: 'off' | 'on' | 'notice' | 'locked' */
     var liveState = 'off';
     var liveGen = 0; // 이동 응답이 늦게 도착해 종료 후에 상태를 건드리지 않기 위한 지난 번호
+    var lockMode = 'unlock'; // 'unlock' | 'setup' — 카드가 보여주는 모드
+    var pendingUrl = null; // 잠금 때문에 못 간 주소 (풀리면 이동한다)
+    var lockBusy = false; // 제출 진행 중 (중복 제출 방지)
 
     function setNotice(text) {
       if (noticeMsg) noticeMsg.textContent = text;
+    }
+
+    function setLockMsg(text) {
+      if (!lockMsg) return;
+      if (text) {
+        lockMsg.textContent = text;
+        lockMsg.hidden = false;
+      } else {
+        lockMsg.textContent = '';
+        lockMsg.hidden = true;
+      }
+    }
+
+    function setLockBusy(busy, label) {
+      lockBusy = busy;
+      if (lockSubmit) {
+        lockSubmit.disabled = busy;
+        if (label) lockSubmit.textContent = label;
+        else lockSubmit.textContent = lockMode === 'setup' ? '설정하기' : '풀기';
+      }
+      if (lockPassword) lockPassword.disabled = busy;
+      if (lockConfirm) lockConfirm.disabled = busy;
+    }
+
+    function clearLockInputs() {
+      if (lockPassword) lockPassword.value = '';
+      if (lockConfirm) lockConfirm.value = '';
     }
 
     /* 자기 소유 요소만 갱신한다 등 나머지 너비 주인과 syncChrome 모양 */
@@ -87,6 +235,7 @@
       var liveOn = liveState === 'on';
       if (liveFrame) liveFrame.hidden = !liveOn;
       if (noticeCard) noticeCard.hidden = liveState !== 'notice';
+      if (lockCard) lockCard.hidden = liveState !== 'locked';
     }
 
     // 뷰포트 측정: iframe은 시작 중 hidden(display:none)이라 자기
@@ -110,49 +259,246 @@
       return null;
     }
 
+    function lockoutText(remaining) {
+      var secs = typeof remaining === 'number' && remaining > 0 ? remaining : 0;
+      var mins = Math.max(1, Math.ceil(secs / 60));
+      return '암호를 여러 번 틀려 ' + mins + '분간 잠겼어요. 잠시 후에 다시 시도해주세요.';
+    }
+
+    /* 잠금 카드를 띄운다. mode 'unlock' | 'setup'. */
+    function showLock(mode, statusBody) {
+      lockMode = mode;
+      if (lockTitle) {
+        lockTitle.textContent =
+          mode === 'setup' ? '보관함 암호를 정해주세요' : '브라우저가 잠겨 있어요';
+      }
+      if (lockDesc) {
+        lockDesc.textContent =
+          mode === 'setup'
+            ? '프로필 보관함을 처음 암호화합니다. 이 암호가 열쇠예요 — 잊으면 프로필을 복구할 수 없으니 꼭 기억해두세요.'
+            : '서버가 다시 시작돼 프로필 보관함이 잠겼어요. 암호를 입력하면 열립니다.';
+      }
+      if (lockConfirm) lockConfirm.hidden = mode !== 'setup';
+      if (lockSubmit) lockSubmit.textContent = mode === 'setup' ? '설정하기' : '풀기';
+      setLockMsg(
+        statusBody && statusBody.locked_out ? lockoutText(statusBody.lockout_remaining) : '',
+      );
+      clearLockInputs();
+      setLockBusy(false);
+      liveState = 'locked';
+      onChange();
+    }
+
+    /* 제출 후 네트워크가 끊겼을 때: 서버 쪽에서 진행 중일 수 있으니
+       상태를 폴링한다 (셋업의 rsync 마이그레이션은 오래 걸린다).
+       최대 60회(약 5분)까지 보고, 풀리면 다시 시작한다. */
+    function pollUnlocked(gen, tries) {
+      if (gen !== liveGen || liveState !== 'locked') return;
+      if (tries >= 60) {
+        setLockBusy(false);
+        setLockMsg('아직 열리지 않았어요. 잠시 후에 다시 시도해주세요.');
+        return;
+      }
+      setTimeout(function () {
+        if (gen !== liveGen || liveState !== 'locked') return;
+        checkUnlock().then(function (res) {
+          if (gen !== liveGen || liveState !== 'locked') return;
+          var body = res && res.body;
+          if (res && res.status === 200 && body && body.configured && body.unlocked) {
+            setLockBusy(false);
+            var url = pendingUrl;
+            pendingUrl = null;
+            enterLive(url);
+            return;
+          }
+          pollUnlocked(gen, tries + 1);
+        });
+      }, pollDelayMs);
+    }
+
+    function onLockSubmit(ev) {
+      if (ev && typeof ev.preventDefault === 'function') ev.preventDefault();
+      if (lockBusy || liveState !== 'locked') return;
+      var password = lockPassword ? lockPassword.value : '';
+      if (!password || password.length < 8) {
+        setLockMsg('암호는 8자 이상 입력해주세요.');
+        return;
+      }
+      if (lockMode === 'setup') {
+        var confirm = lockConfirm ? lockConfirm.value : '';
+        if (password !== confirm) {
+          setLockMsg('두 암호가 달라요. 다시 입력해주세요.');
+          return;
+        }
+      }
+      var gen = liveGen;
+      setLockMsg('');
+      setLockBusy(true, lockMode === 'setup' ? '설정 중…' : '푸는 중…');
+      submitUnlock(lockMode, password).then(function (res) {
+        if (gen !== liveGen) return;
+        clearLockInputs();
+        var body = res && res.body;
+        if (res && res.status === 200 && body && body.ok) {
+          // 풀렸다 — 다시 시작한다 (상태 조회가 언록됨을 확인하고
+          // iframe을 킨다).
+          setLockBusy(false);
+          var url = pendingUrl;
+          pendingUrl = null;
+          enterLive(url);
+          return;
+        }
+        if (res && res.status === 423) {
+          setLockBusy(false);
+          setLockMsg(lockoutText(body && body.lockout_remaining));
+          return;
+        }
+        if (res && res.status === 401) {
+          setLockBusy(false);
+          var attempts =
+            body && typeof body.failed_attempts === 'number' ? body.failed_attempts : null;
+          setLockMsg('암호가 맞지 않습니다.' + (attempts !== null ? ' (' + attempts + '/5)' : ''));
+          return;
+        }
+        if (res && res.status === 0) {
+          pollUnlocked(gen, 0);
+          return;
+        }
+        setLockBusy(false);
+        setLockMsg('풀지 못했어요. 잠시 후에 다시 시도해주세요.');
+      });
+    }
+
+    /* 잠금 카드를 닫는다 (시작 화면으로 돌아간다) */
+    function dismissLock() {
+      if (liveState !== 'locked') return;
+      liveGen += 1; // 진행 중인 폴링·제출 응답을 무효화한다
+      liveState = 'off';
+      pendingUrl = null;
+      clearLockInputs();
+      setLockBusy(false);
+      onChange();
+    }
+
     /* 시작 결과를 Promise<boolean>로 알려주는 등 원격 뷰가 실제로 켜졌다
        (url이 있으면 이동까지 성공했다) 때만 true. 주인(browser.js)의
        최근 방문 기록처럼 "성공한 이동"만 붙는 위젯인 등 값으로
        (가른다 실패한 주소를 방문 기록에 않기 위해서다). */
     function enterLive(url) {
       var alreadyOn = liveState === 'on';
-      var gen = ++liveGen;
-      var viewport = measureViewport();
-      if (!alreadyOn) {
-        liveState = 'on';
-        if (liveFrame) liveFrame.src = VIEW_URL;
-        onChange();
+      if (alreadyOn) {
+        if (!url) return Promise.resolve(true);
+        var viewport = measureViewport();
+        var gen = liveGen;
+        return navigate(url, viewport).then(function (res) {
+          if (gen !== liveGen) return false;
+          return handleNavigateResult(res, viewport, gen);
+        });
       }
+      pendingUrl = url || null;
+      var startGen = ++liveGen;
+      // LUKS 잠금 확인 (2026-11-15): 볼륨이 잠겨 있으면 iframe을 켜지
+      // 않고 암호 카드를 띄운다. 언록됨·미구성(503)·조회 실패는 기존
+      // 흐름으로 진행한다 (fail-open: 서비스가 죽었는데 chromium이 떠
+      // 있으면 브라우저는 쓸 수 있다).
+      return checkUnlock().then(function (res) {
+        if (startGen !== liveGen) return false;
+        var body = res && res.body;
+        if (res && res.status === 200 && body && typeof body.configured === 'boolean') {
+          if (!body.configured) {
+            showLock('setup', body);
+            return false;
+          }
+          if (!body.unlocked) {
+            showLock('unlock', body);
+            return false;
+          }
+        }
+        return startLive(url, startGen);
+      });
+    }
+
+    /* 화질 설정에 맞는 뷰 URL: 수동 값이면 초기 비트레이트를 쿼리로
+       실어 사이드카가 연결 직후 주입하게 하고, 자동이면 쿼리 없이
+       사이드카 적응 제어에 맡긴다. */
+    function viewUrlForQuality() {
+      var pref = readQualityPreference();
+      if (pref.mode === 'manual') return VIEW_URL + '?vb=' + pref.bitrate;
+      return VIEW_URL;
+    }
+
+    /* 화질 전환: mode 'auto' 또는 kbps 숫자. 성공하면 설정을 저장해
+       다음 시작부터 적용하고 true를, 실패·무효 입력이면 false를
+       돌려준다 (무효 입력은 요청을 보내지 않는다). */
+    function setQuality(mode) {
+      var payload = null;
+      var pref = null;
+      if (mode === 'auto') {
+        payload = { mode: 'auto' };
+        pref = { mode: 'auto' };
+      } else if (typeof mode === 'number' && isFinite(mode)) {
+        var kbps = Math.round(mode);
+        if (kbps < QUALITY_MIN_KBPS || kbps > QUALITY_MAX_KBPS) return Promise.resolve(false);
+        payload = { bitrate: kbps };
+        pref = { mode: 'manual', bitrate: kbps };
+      } else {
+        return Promise.resolve(false);
+      }
+      return setQualityFetch(payload).then(function (res) {
+        var body = res && res.body;
+        if (res && res.status === 200 && body && body.ok) {
+          writeQualityPreference(pref);
+          return true;
+        }
+        return false;
+      });
+    }
+
+    /* iframe을 켜고 url이 있으면 이동한다. enterLive의 잠금 검사 통과 후. */
+    function startLive(url, gen) {
+      var viewport = measureViewport();
+      liveState = 'on';
+      if (liveFrame) liveFrame.src = viewUrlForQuality();
+      onChange();
       if (!url) return Promise.resolve(true);
       return navigate(url, viewport).then(function (res) {
         if (gen !== liveGen) return false;
-        var body = res && res.body;
-        if (res && res.status === 200 && body && body.ok) {
-          // 진단: 보낸 뷰포트와 서버의 CDP 이동 결과(nav/navStage)를
-          // 남겨 원격 뷰포트 적용 여부를 콘솔에서 확인할 수 있게 한다.
-          if (typeof console !== 'undefined' && typeof console.info === 'function') {
-            console.info(
-              '[browser-live] navigate viewport=',
-              viewport,
-              'nav=',
-              body.nav,
-              body.navStage,
-            );
-          }
-          return true;
-        }
-        if (res && res.status === 503) {
-          // 시크릿 미설정 — 화면 프록시도 못 뜨므로 뷰를 끄고 안내한다.
-          liveState = 'notice';
-          if (liveFrame) liveFrame.removeAttribute('src');
-          setNotice('원격 브라우저가 아직 설정되지 않았어요.');
-          onChange();
-        }
-        // 400·502 등 이동 실패는 뷰를 건드리지 않는다 (이미 켜진 화면은
-        // 그대로 두고, 시작 직후면 Selkies 바탕 화면이 보인다). 방문
-        // 기록에만 남기지 않기 위해 false를 돌려준다.
-        return false;
+        return handleNavigateResult(res, viewport, gen);
       });
+    }
+
+    /* navigate 응답을 상태에 반영하고 성공 여부를 돌려준다. */
+    function handleNavigateResult(res, viewport, gen) {
+      var body = res && res.body;
+      if (res && res.status === 200 && body && body.ok) {
+        // 진단: 보낸 뷰포트와 서버의 CDP 이동 결과(nav/navStage)를
+        // 남겨 원격 뷰포트 적용 여부를 콘솔에서 확인할 수 있게 한다.
+        if (typeof console !== 'undefined' && typeof console.info === 'function') {
+          console.info(
+            '[browser-live] navigate viewport=',
+            viewport,
+            'nav=',
+            body.nav,
+            body.navStage,
+          );
+        }
+        return true;
+      }
+      if (res && res.status === 503) {
+        // 시크릿 미설정 — 화면 프록시도 못 뜨므로 뷰를 끄고 안내한다.
+        liveState = 'notice';
+        if (liveFrame) liveFrame.removeAttribute('src');
+        setNotice('원격 브라우저가 아직 설정되지 않았어요.');
+        onChange();
+      }
+      if (res && res.status === 423) {
+        // 잠금 검사와 이동 사이에 서버가 재시작돼 잠긴 경우 — 카드를 띄운다.
+        if (liveFrame) liveFrame.removeAttribute('src');
+        showLock('unlock', null);
+      }
+      // 400·502 등 이동 실패는 뷰를 건드리지 않는다 (이미 켜진 화면은
+      // 그대로 두고, 시작 직후면 Selkies 바탕 화면이 보인다). 방문
+      // 기록에만 남기지 않기 위해 false를 돌려준다.
+      return false;
     }
 
     function endLive() {
@@ -175,6 +521,27 @@
         dismissNotice();
       });
     }
+    if (lockForm) {
+      // 폼 태그를 쓰지 않는다: CSP 인벤토리가 public 전체의 폼 태그
+      // 부재를 단언하므로, 폼 없이 Enter 키로 제출한다.
+      if (lockSubmit) {
+        lockSubmit.addEventListener('click', onLockSubmit);
+      }
+      var lockInputs = [lockPassword, lockConfirm];
+      for (var li = 0; li < lockInputs.length; li++) {
+        (function (input) {
+          if (!input) return;
+          input.addEventListener('keydown', function (ev) {
+            if (ev && ev.key === 'Enter') onLockSubmit(ev);
+          });
+        })(lockInputs[li]);
+      }
+    }
+    if (lockClose) {
+      lockClose.addEventListener('click', function () {
+        dismissLock();
+      });
+    }
 
     return {
       state: function () {
@@ -186,6 +553,8 @@
       enterLive: enterLive,
       endLive: endLive,
       dismissNotice: dismissNotice,
+      dismissLock: dismissLock,
+      setQuality: setQuality,
       syncChrome: syncChrome,
     };
   }

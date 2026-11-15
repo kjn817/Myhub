@@ -65,6 +65,301 @@
     });
   }
 
+  // 진행 추적 fetch (2026-11-15 부팅 강건화): 바이트가 계속 들어오면
+  // 기다리고, 멈추면 중단·재시도한다. 고정 벽시계 타임아웃은 느린
+  // 네트워크의 정상 부팅을 죽이므로 쓰지 않는다 — 카페 실측 55KB/s에서
+  // 33MB는 10분이 걸리는데 30초·60초 타임아웃은 절대 안 끝난다.
+  // opts = { stallTimeoutMs(기본 30000), maxAttempts(기본 3),
+  //          retryDelayMs(기본 1000), collectBody, onProgress,
+  //          setTimeoutFn, clearTimeoutFn }.
+  // onProgress({ url, receivedBytes, totalBytes, attempt }).
+  // HTTP 오류(404 등)는 재시도하지 않고 즉시 reject한다.
+  // @returns {Promise<{url, receivedBytes, totalBytes, body?}>}
+  function fetchWithProgress(fetchFn, url, opts) {
+    opts = opts || {};
+    var stallTimeoutMs =
+      typeof opts.stallTimeoutMs === 'number' ? opts.stallTimeoutMs : 30000;
+    var maxAttempts = typeof opts.maxAttempts === 'number' ? opts.maxAttempts : 3;
+    var retryDelayMs = typeof opts.retryDelayMs === 'number' ? opts.retryDelayMs : 1000;
+    var collectBody = !!opts.collectBody;
+    var onProgress = typeof opts.onProgress === 'function' ? opts.onProgress : null;
+    var setTimeoutFn = opts.setTimeoutFn || setTimeout;
+    var clearTimeoutFn = opts.clearTimeoutFn || clearTimeout;
+
+    function report(received, total, attempt) {
+      if (!onProgress) return;
+      try {
+        onProgress({
+          url: url,
+          receivedBytes: received,
+          totalBytes: total,
+          attempt: attempt,
+        });
+      } catch (e) {
+        if (typeof console !== 'undefined' && console.warn) {
+          console.warn('[prefetch] onProgress 실패', e);
+        }
+      }
+    }
+
+    function attemptOnce(attempt) {
+      return new Promise(function (resolve, reject) {
+        var controller = null;
+        if (typeof AbortController !== 'undefined') {
+          try {
+            controller = new AbortController();
+          } catch (e) {
+            controller = null;
+          }
+        }
+        var received = 0;
+        var total = null;
+        var chunks = collectBody ? [] : null;
+        var settled = false;
+        var stallTimer = null;
+        var clearStall = function () {
+          if (stallTimer) {
+            clearTimeoutFn(stallTimer);
+            stallTimer = null;
+          }
+        };
+        var finish = function (err, result) {
+          if (settled) return;
+          settled = true;
+          clearStall();
+          if (err) reject(err);
+          else resolve(result);
+        };
+        var armStall = function () {
+          clearStall();
+          stallTimer = setTimeoutFn(function () {
+            if (settled) return;
+            if (controller) {
+              try {
+                controller.abort();
+              } catch (e) {
+                // 중단 실패는 무시 — 아래 finish가 거절을 맡는다.
+                if (typeof console !== 'undefined' && console.warn) {
+                  console.warn('[prefetch] 중단 실패', e);
+                }
+              }
+            }
+            finish(new Error('stall timeout: ' + url));
+          }, stallTimeoutMs);
+        };
+        var fetchPromise;
+        try {
+          fetchPromise =
+            controller && controller.signal !== undefined
+              ? fetchFn(url, { signal: controller.signal })
+              : fetchFn(url);
+        } catch (e) {
+          finish(e);
+          return;
+        }
+        Promise.resolve(fetchPromise)
+          .then(function (res) {
+            if (settled) return;
+            if (!res || !res.ok) {
+              finish(new Error('http ' + (res && res.status) + ': ' + url));
+              return;
+            }
+            var len =
+              res.headers && typeof res.headers.get === 'function'
+                ? res.headers.get('content-length')
+                : null;
+            total = len !== null && len !== undefined ? parseInt(len, 10) : null;
+            if (typeof total !== 'number' || isNaN(total)) total = null;
+            report(0, total, attempt);
+            if (!res.body || typeof res.body.getReader !== 'function') {
+              armStall();
+              Promise.resolve(
+                res.arrayBuffer ? res.arrayBuffer() : Promise.resolve(null),
+              )
+                .then(function (buf) {
+                  if (settled) return;
+                  received = buf ? buf.byteLength : 0;
+                  report(received, total, attempt);
+                  finish(null, {
+                    url: url,
+                    receivedBytes: received,
+                    totalBytes: total,
+                    body: collectBody && buf ? new Uint8Array(buf) : undefined,
+                  });
+                })
+                .catch(function (e) {
+                  finish(e);
+                });
+              return;
+            }
+            var reader = res.body.getReader();
+            armStall();
+            var pump = function () {
+              if (settled) return;
+              reader
+                .read()
+                .then(function (step) {
+                  if (settled) return;
+                  if (step.done) {
+                    var body = undefined;
+                    if (collectBody) {
+                      var size = 0;
+                      chunks.forEach(function (c) {
+                        size += c.byteLength || c.length || 0;
+                      });
+                      body = new Uint8Array(size);
+                      var off = 0;
+                      chunks.forEach(function (c) {
+                        var u8 = c instanceof Uint8Array ? c : new Uint8Array(c);
+                        body.set(u8, off);
+                        off += u8.byteLength;
+                      });
+                    }
+                    finish(null, {
+                      url: url,
+                      receivedBytes: received,
+                      totalBytes: total,
+                      body: body,
+                    });
+                    return;
+                  }
+                  var chunk = step.value;
+                  var n = chunk ? chunk.byteLength || chunk.length || 0 : 0;
+                  received += n;
+                  if (collectBody && chunk) chunks.push(chunk);
+                  report(received, total, attempt);
+                  armStall();
+                  pump();
+                })
+                .catch(function (e) {
+                  finish(e);
+                });
+            };
+            pump();
+          })
+          .catch(function (e) {
+            finish(e);
+          });
+      });
+    }
+
+    function run(attempt) {
+      return attemptOnce(attempt).catch(function (err) {
+        var isHttp =
+          err && typeof err.message === 'string' && err.message.indexOf('http ') === 0;
+        if (isHttp || attempt >= maxAttempts) throw err;
+        return new Promise(function (resolve) {
+          setTimeoutFn(resolve, retryDelayMs);
+        }).then(function () {
+          return run(attempt + 1);
+        });
+      });
+    }
+    return run(1);
+  }
+
+  // 진행 추적 순차 fetch: URL을 순서대로 받으며 바이트 진행을 보고한다.
+  // HTTP 오류는 failed에, 재시도 후에도 멈춘 것은 stalled에 담고 나머지를
+  // 계속 받는다. 부팅 게이트는 stalled가 비었을 때만 진행한다.
+  // onProgress({ url, receivedBytes, filesDone, filesTotal, currentUrl, attempt }).
+  // @returns {Promise<{done, failed, stalled, receivedBytes}>}
+  function fetchSequentialTracked(fetchFn, urls, opts) {
+    opts = opts || {};
+    var onProgress = typeof opts.onProgress === 'function' ? opts.onProgress : null;
+    var list = urls || [];
+    var done = [];
+    var failed = [];
+    var stalled = [];
+    var receivedTotal = 0;
+    var chain = Promise.resolve();
+    list.forEach(function (u, idx) {
+      chain = chain.then(function () {
+        return fetchWithProgress(fetchFn, u, {
+          stallTimeoutMs: opts.stallTimeoutMs,
+          maxAttempts: opts.maxAttempts,
+          retryDelayMs: opts.retryDelayMs,
+          setTimeoutFn: opts.setTimeoutFn,
+          clearTimeoutFn: opts.clearTimeoutFn,
+          onProgress: function (p) {
+            if (onProgress) {
+              onProgress({
+                url: u,
+                receivedBytes: receivedTotal + p.receivedBytes,
+                filesDone: idx,
+                filesTotal: list.length,
+                currentUrl: u,
+                attempt: p.attempt,
+              });
+            }
+          },
+        })
+          .then(function (r) {
+            done.push(u);
+            receivedTotal += r.receivedBytes;
+          })
+          .catch(function (err) {
+            var isHttp =
+              err && typeof err.message === 'string' && err.message.indexOf('http ') === 0;
+            if (isHttp) failed.push(u);
+            else stalled.push(u);
+          });
+      });
+    });
+    return chain.then(function () {
+      return {
+        done: done,
+        failed: failed,
+        stalled: stalled,
+        receivedBytes: receivedTotal,
+      };
+    });
+  }
+
+  // 텍스트에서 같은 출처의 .js/.wasm/.css 자산 URL을 뽑는다.
+  // HTML의 src/href 절대 경로와 JS 안의 상대 경로 문자열(`./x.js`,
+  // `assets/x.wasm`)을 모두 잡는다. 해시 파일명이 바뀌어도 따라간다.
+  // 쿼리·해시는 떼고(캐시 키는 경로 기준), 중복을 제거한다.
+  function extractAssetRefs(text, baseUrl) {
+    var out = [];
+    var seen = {};
+    var src = String(text || '');
+    var base = null;
+    try {
+      base = new URL(baseUrl);
+    } catch (e) {
+      base = null;
+    }
+    var push = function (rel) {
+      if (!rel) return;
+      var abs = null;
+      try {
+        abs = base ? new URL(rel, base).href : rel;
+      } catch (e) {
+        return;
+      }
+      if (base) {
+        try {
+          if (new URL(abs).origin !== base.origin) return;
+        } catch (e) {
+          return;
+        }
+      }
+      var clean = abs.split('#')[0].split('?')[0];
+      if (!/\.(js|wasm|css)$/.test(clean)) return;
+      if (seen[clean]) return;
+      seen[clean] = true;
+      out.push(clean);
+    };
+    var reAttr = /(?:src|href)\s*=\s*["']([^"']+)["']/g;
+    var m;
+    while ((m = reAttr.exec(src))) push(m[1]);
+    // JS 문자열 리터럴 안의 경로: 슬래시를 포함하고 .js/.wasm으로 끝나며
+    // (쿼리·해시 접미사 허용), 백틱 템플릿 리터럴도 잡는다.
+    var reStr = /["'`]([^"'`\s]*\/[^"'`\s]*?\.(?:js|wasm)(?:[?#][^"'`\s]*)?)["'`]/g;
+    while ((m = reStr.exec(src))) push(m[1]);
+    return out;
+  }
+
   /**
    * 벤더 index.html에서 preload/modulepreload로 선언한 자산 상대
    * 경로를 뽑는다. .js/.wasm만, 선언 순서 유지, 중복 제거.
@@ -187,7 +482,10 @@
   var api = {
     drain: drain,
     fetchSequential: fetchSequential,
+    fetchWithProgress: fetchWithProgress,
+    fetchSequentialTracked: fetchSequentialTracked,
     extractAssetPaths: extractAssetPaths,
+    extractAssetRefs: extractAssetRefs,
     manifestAssetUrls: manifestAssetUrls,
     createPrefetch: createPrefetch,
     isOfficeSurface: isOfficeSurface,

@@ -274,6 +274,17 @@
     });
   }
 
+  /**
+   * load()가 실제로 끝날 때까지 기다린다 (타임아웃 없음).
+   * whenReady가 타임아웃으로 먼저 resolve한 뒤에도, 로딩 완료 시점에
+   * 다시 알림을 받아야 할 때 쓴다 (P1 폰트 재푸시, 2026-11-15).
+   * load()는 진행 중 Promise를 캐시하므로 여러 번 불러도 한 번만 돈다.
+   * load()는 reject하지 않으므로 이 Promise도 reject하지 않는다.
+   */
+  function whenLoaded(deps) {
+    return load(deps);
+  }
+
   function runLoad(deps) {
     var fetchFn =
       typeof deps.fetchFn === 'function'
@@ -502,6 +513,7 @@
     load: load,
     reload: reload,
     whenReady: whenReady,
+    whenLoaded: whenLoaded,
     families: families,
     faces: faces,
     POOL_FACES: POOL_FACES,

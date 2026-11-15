@@ -109,6 +109,102 @@ export function validatePublicUrl(raw: unknown): { ok: true; url: string } | { o
   return { ok: true, url: parsed.toString() }
 }
 
+// ---------------- DNS 리바인딩 방어 (DoH) ----------------
+// 동기 validatePublicUrl은 호스트명 문자열만 보므로, 사설 IP로 해석되는
+// 호스트명(공격자 도메인·리바인딩)을 못 막는다. Workers에는 DNS API가
+// 없어 Cloudflare DoH JSON API로 해석 IP를 확인한다 (실측 확인됨).
+// 잔존 한계(TOCTOU): 이 검사는 Worker 시점의 해석 결과이고, 실제 이동은
+// 원격 Chromium이 자기 리졸버로 다시 해석해서 일어난다. 리졸버별로 다른
+// 답을 주는 표적 리바인딩까지 막으려면 사용 시점 해석(Chromium 측·
+// 이그레스 프록시)이 필요하며, 이 검사는 정적 사설 기록·일반 리바인딩을
+// 막는 방어선이다.
+const DOH_ENDPOINT = 'https://cloudflare-dns.com/dns-query'
+const DOH_TIMEOUT_MS = 5000
+const DOH_CNAME_MAX_DEPTH = 3
+
+interface DohAnswer { name?: string; type?: number; data?: string }
+interface DohResponse { Status?: number; Answer?: DohAnswer[] }
+
+async function dohLookup(
+  host: string,
+  type: 1 | 28,
+  fetchFn: typeof fetch,
+  timeoutMs: number,
+): Promise<DohAnswer[]> {
+  const url = `${DOH_ENDPOINT}?name=${encodeURIComponent(host)}&type=${type}`
+  const res = await fetchFn(url, {
+    headers: { Accept: 'application/dns-json' },
+    signal: AbortSignal.timeout(timeoutMs),
+  })
+  if (!res.ok) throw new Error(`DoH ${res.status}`)
+  const data = (await res.json()) as DohResponse
+  return Array.isArray(data?.Answer) ? data.Answer : []
+}
+
+/** 호스트명의 A/AAAA 해석 IP 목록. 조회 실패 시 null (fail-closed는 호출자 판정).
+ *  A/AAAA 없이 CNAME만 오면 타깃을 따라간다 (깊이 상한·방문 집합으로 루프 차단). */
+async function resolveHostIps(
+  host: string,
+  fetchFn: typeof fetch,
+  timeoutMs: number,
+  depth = 0,
+  seen = new Set<string>(),
+): Promise<string[] | null> {
+  if (depth > DOH_CNAME_MAX_DEPTH || seen.has(host)) return []
+  seen.add(host)
+  let answers: DohAnswer[]
+  try {
+    const [a, aaaa] = await Promise.all([
+      dohLookup(host, 1, fetchFn, timeoutMs),
+      dohLookup(host, 28, fetchFn, timeoutMs),
+    ])
+    answers = [...a, ...aaaa]
+  } catch {
+    return null
+  }
+  const ips: string[] = []
+  for (const ans of answers) {
+    if ((ans.type === 1 || ans.type === 28) && typeof ans.data === 'string') ips.push(ans.data)
+  }
+  if (ips.length > 0) return ips
+  for (const ans of answers) {
+    if (ans.type === 5 && typeof ans.data === 'string') {
+      const target = ans.data.replace(/\.$/, '')
+      const followed = await resolveHostIps(target, fetchFn, timeoutMs, depth + 1, seen)
+      if (followed === null) return null
+      ips.push(...followed)
+    }
+  }
+  return ips
+}
+
+function ipBlocked(ip: string): boolean {
+  const v4 = ip.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/)
+  if (v4) return ipv4Blocked(Number(v4[1]), Number(v4[2]), Number(v4[3]))
+  return ipv6Blocked(ip)
+}
+
+/** 동기 검사 + DoH 해석 IP 검사. 리터럴 IP 호스트는 동기 검사로 충분해
+ *  DNS 조회를 건너뛴다. 조회 실패·미해결(NXDOMAIN·빈 응답)은 fail-closed로
+ *  차단한다. /navigate 경로(oracle-proxy.ts)도 이 함수를 쓰도록 이관해야
+ *  한다 — 해당 파일은 별도 작업 범위로, 여기서는 내보내기만 한다. */
+export async function validatePublicUrlAsync(
+  raw: unknown,
+  fetchFn: typeof fetch = fetch,
+  opts: { timeoutMs?: number } = {},
+): Promise<{ ok: true; url: string } | { ok: false; error: PageReadError }> {
+  const base = validatePublicUrl(raw)
+  if (!base.ok) return base
+  const host = new URL(base.url).hostname.toLowerCase()
+  if (/^(\d{1,3}\.){3}\d{1,3}$/.test(host) || host.includes(':')) return base
+  const ips = await resolveHostIps(host, fetchFn, opts.timeoutMs ?? DOH_TIMEOUT_MS)
+  if (ips === null || ips.length === 0) return { ok: false, error: 'blocked_host' }
+  for (const ip of ips) {
+    if (ipBlocked(ip)) return { ok: false, error: 'blocked_host' }
+  }
+  return base
+}
+
 interface CdpReply {
   result?: any
   error?: any
@@ -247,10 +343,13 @@ export async function readPage(
 ): Promise<PageReadResult> {
   const validated = validatePublicUrl(rawUrl)
   if (!validated.ok) return { ok: false, error: validated.error }
-  const targetUrl = validated.url
   const cfg = oracleConfigOf(env)
   if (!cfg) return { ok: false, error: 'not_configured' }
   const fetchFn = deps.fetchFn ?? fetch
+  // DNS 리바인딩 방어: 호스트명의 실제 해석 IP까지 확인한다 (fail-closed).
+  const dnsChecked = await validatePublicUrlAsync(rawUrl, fetchFn)
+  if (!dnsChecked.ok) return { ok: false, error: dnsChecked.error }
+  const targetUrl = dnsChecked.url
   const connect = deps.connect ?? defaultCdpConnect
   const secretHeaders = {
     'x-origin-secret': cfg.originSecret,

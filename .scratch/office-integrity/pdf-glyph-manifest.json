@@ -1,0 +1,74 @@
+[
+  {
+    "file": "pdf-nanum-p1-z1-dsf1-p1.png",
+    "pdf": "font-pdf.pdf",
+    "page": 1,
+    "zoom": 1,
+    "dsf": 1,
+    "errors": []
+  },
+  {
+    "file": "pdf-nanum-p1-z2-dsf1-p1.png",
+    "pdf": "font-pdf.pdf",
+    "page": 1,
+    "zoom": 2,
+    "dsf": 1,
+    "errors": []
+  },
+  {
+    "file": "pdf-nanum-p1-z2-dsf2-p1.png",
+    "pdf": "font-pdf.pdf",
+    "page": 1,
+    "zoom": 2,
+    "dsf": 2,
+    "errors": []
+  },
+  {
+    "file": "pdf-nanum-p1-z3-dsf2-p1.png",
+    "pdf": "font-pdf.pdf",
+    "page": 1,
+    "zoom": 3,
+    "dsf": 2,
+    "errors": []
+  },
+  {
+    "file": "pdf-malgun-fallback-p2-z2-dsf1-p2.png",
+    "pdf": "font-pdf.pdf",
+    "page": 2,
+    "zoom": 2,
+    "dsf": 1,
+    "errors": []
+  },
+  {
+    "file": "pdf-malgun-fallback-p2-z2-dsf2-p2.png",
+    "pdf": "font-pdf.pdf",
+    "page": 2,
+    "zoom": 2,
+    "dsf": 2,
+    "errors": []
+  },
+  {
+    "file": "pdf-noto-cff-p1-z2-dsf1-p1.png",
+    "pdf": "noto-pdf.pdf",
+    "page": 1,
+    "zoom": 2,
+    "dsf": 1,
+    "errors": []
+  },
+  {
+    "file": "pdf-noto-cff-p1-z2-dsf2-p1.png",
+    "pdf": "noto-pdf.pdf",
+    "page": 1,
+    "zoom": 2,
+    "dsf": 2,
+    "errors": []
+  },
+  {
+    "file": "pdf-noto-cff-p1-z3-dsf2-p1.png",
+    "pdf": "noto-pdf.pdf",
+    "page": 1,
+    "zoom": 3,
+    "dsf": 2,
+    "errors": []
+  }
+]

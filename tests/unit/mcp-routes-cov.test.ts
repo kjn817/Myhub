@@ -26,13 +26,19 @@ import {
   MAX_ACTIVE_MCP_TOKENS,
 } from '../../src/modules/mcp/tokens'
 
-jest.mock('../../src/modules/auth/routes', () => ({
-  getAuthEmail: jest.fn(() => 'user@example.com'),
-  verifySessionForEnv: jest.fn(),
-  checkRateLimit: jest.fn(),
-  checkRateLimitForIp: jest.fn(),
-  getClientIp: jest.fn(() => '1.2.3.4'),
-}))
+jest.mock('../../src/modules/auth/routes', () => {
+  // readSessionToken은 순수 함수라 실물을 쓴다 — mock이 빠뜨리면
+  // 세션 쿠키를 읽지 못해 MCP 세션 인증이 전부 401이 된다.
+  const actual = jest.requireActual('../../src/modules/auth/primitives')
+  return {
+    getAuthEmail: jest.fn(() => 'user@example.com'),
+    verifySessionForEnv: jest.fn(),
+    checkRateLimit: jest.fn(),
+    checkRateLimitForIp: jest.fn(),
+    getClientIp: jest.fn(() => '1.2.3.4'),
+    readSessionToken: actual.readSessionToken,
+  }
+})
 
 jest.mock('../../src/modules/mcp/tokens', () => ({
   issueMcpToken: jest.fn(),

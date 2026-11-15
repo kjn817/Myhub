@@ -2859,8 +2859,8 @@
     var FORMAT_MODULE_URLS = {
       text: ['/js/finder-format-text.js'],
       csv: ['/js/finder-format-text.js'],
-      hwp: ['/js/finder-format-hwp.js'],
-      hwpx: ['/js/finder-format-hwp.js'],
+      hwp: ['/js/craft-prefetch-core.js', '/js/rhwp-prefetch.js', '/js/finder-format-hwp.js'],
+      hwpx: ['/js/craft-prefetch-core.js', '/js/rhwp-prefetch.js', '/js/finder-format-hwp.js'],
       xlsx: ['/js/craft-clipboard.js', '/js/finder-format-sheet.js'],
       xls: ['/js/craft-clipboard.js', '/js/finder-format-sheet.js'],
       pptx: ['/js/craft-prefetch-core.js', '/js/craft-clipboard.js', '/js/finder-deckcraft.js', '/js/finder-format-slide.js'],

@@ -1,0 +1,103 @@
+{
+ "app": "ppt",
+ "errors": {
+  "pageErrors": [],
+  "consoleErrors": [],
+  "failedRequests": []
+ },
+ "readyMs": 15597,
+ "fontsPushed": [
+  "BIZ UDPGothic:400",
+  "Dancing Script:400",
+  "Inter:400",
+  "Inter:400",
+  "Inter:500",
+  "Inter:600",
+  "Inter:700",
+  "JetBrains Mono:400",
+  "NanumGothic:400",
+  "NanumGothic:700"
+ ],
+ "fontFaces": [
+  {
+   "url": "http://127.0.0.1:46693/office.html",
+   "faces": [
+    "TestUserFont:400:loaded"
+   ],
+   "myhubFonts": {
+    "families": [
+     "TestUserFont"
+    ],
+    "faces": [
+     {
+      "family": "TestUserFont",
+      "weight": 400,
+      "style": "normal",
+      "filename": "TestUserFont.otf",
+      "fileId": 98
+     }
+    ]
+   }
+  }
+ ],
+ "shot": "/home/hatch/workspace/myhub/.scratch/office-integrity/shots/office-font-ppt.png",
+ "totalMs": 39910,
+ "messages": [
+  {
+   "type": "deckcraft:ready",
+   "t": 1794728401341
+  },
+  {
+   "type": "deckcraft:dirty",
+   "t": 1794728401344
+  },
+  {
+   "type": "deckcraft:ribbon-state",
+   "t": 1794728401344
+  },
+  {
+   "type": "deckcraft:ribbon-state",
+   "t": 1794728401344
+  },
+  {
+   "type": "deckcraft:fonts-applied",
+   "t": 1794728416631
+  },
+  {
+   "type": "deckcraft:exec-result",
+   "t": 1794728422386
+  },
+  {
+   "type": "deckcraft:exec-result",
+   "t": 1794728428770
+  },
+  {
+   "type": "deckcraft:open",
+   "t": 1794728401442
+  },
+  {
+   "type": "deckcraft:fonts",
+   "t": 1794728414359,
+   "families": [
+    "BIZ UDPGothic:400",
+    "Dancing Script:400",
+    "Inter:400",
+    "Inter:400",
+    "Inter:500",
+    "Inter:600",
+    "Inter:700",
+    "JetBrains Mono:400",
+    "NanumGothic:400",
+    "NanumGothic:700"
+   ]
+  },
+  {
+   "type": "deckcraft:exec",
+   "t": 1794728419748
+  },
+  {
+   "type": "deckcraft:exec",
+   "t": 1794728426838
+  }
+ ]
+}

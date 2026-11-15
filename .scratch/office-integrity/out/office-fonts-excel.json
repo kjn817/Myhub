@@ -1,0 +1,137 @@
+{
+ "app": "excel",
+ "errors": {
+  "pageErrors": [],
+  "consoleErrors": [
+   "Failed to load resource: the server responded with a status of 404 (Not Found)",
+   "Failed to load resource: the server responded with a status of 404 (Not Found)",
+   "Failed to load resource: the server responded with a status of 404 (Not Found)"
+  ],
+  "failedRequests": [
+   "404 http://127.0.0.1:36509/gridcraft-web-aebe184e24793596.js",
+   "404 http://127.0.0.1:36509/snippets/eframe-d31a8450ea12dfc1/inline0.js",
+   "404 http://127.0.0.1:36509/gridcraft-web-aebe184e24793596_bg.wasm"
+  ]
+ },
+ "readyMs": 7299,
+ "snapshot": {
+  "type": "myhub-sheet:snapshot",
+  "t": 1794728263456,
+  "cellRows": 5,
+  "firstRow": "[{\"v\":\"나눔고딕 한글 테스트\"},{\"v\":\"English ABC 123\"}]"
+ },
+ "fontsPushed": [
+  "BIZ UDPGothic:400",
+  "Dancing Script:400",
+  "Inter:400",
+  "Inter:400",
+  "Inter:500",
+  "Inter:600",
+  "Inter:700",
+  "JetBrains Mono:400",
+  "NanumGothic:400",
+  "NanumGothic:700"
+ ],
+ "fontFaces": [
+  {
+   "url": "http://127.0.0.1:36509/office.html",
+   "faces": [],
+   "myhubFonts": {
+    "families": [],
+    "faces": []
+   }
+  },
+  {
+   "url": "http://127.0.0.1:36509/sheet.html",
+   "faces": [
+    "TestUserFont:400:loaded"
+   ],
+   "myhubFonts": {
+    "families": [
+     "TestUserFont"
+    ],
+    "faces": [
+     {
+      "family": "TestUserFont",
+      "weight": 400,
+      "style": "normal",
+      "filename": "TestUserFont.ttf",
+      "fileId": 98
+     }
+    ]
+   }
+  }
+ ],
+ "shot": "/home/hatch/workspace/myhub/.scratch/office-integrity/shots/office-font-excel.png",
+ "totalMs": 15903,
+ "messages": [
+  {
+   "type": "myhub-sheet:ready",
+   "t": 1794728252782
+  },
+  {
+   "type": "myhub-sheet:snapshot",
+   "t": 1794728263456,
+   "cellRows": 5,
+   "firstRow": "[{\"v\":\"나눔고딕 한글 테스트\"},{\"v\":\"English ABC 123\"}]"
+  },
+  {
+   "type": "myhub-sheet:chrome",
+   "t": 1794728252786
+  },
+  {
+   "type": "myhub-sheet:open",
+   "t": 1794728252787
+  },
+  {
+   "type": "gridcraft:ready",
+   "t": 1794728254256
+  },
+  {
+   "type": "gridcraft:dirty",
+   "t": 1794728254260
+  },
+  {
+   "type": "gridcraft:ribbon-state",
+   "t": 1794728254260
+  },
+  {
+   "type": "myhub-sheet:request-snapshot",
+   "t": 1794728260168
+  },
+  {
+   "type": "gridcraft:fonts-applied",
+   "t": 1794728260169
+  },
+  {
+   "type": "gridcraft:snapshot-result",
+   "t": 1794728262533,
+   "cellRows": 5,
+   "firstRow": "[{\"v\":\"나눔고딕 한글 테스트\"},{\"v\":\"English ABC 123\"}]"
+  },
+  {
+   "type": "gridcraft:open",
+   "t": 1794728256558
+  },
+  {
+   "type": "gridcraft:fonts",
+   "t": 1794728259938,
+   "families": [
+    "BIZ UDPGothic:400",
+    "Dancing Script:400",
+    "Inter:400",
+    "Inter:400",
+    "Inter:500",
+    "Inter:600",
+    "Inter:700",
+    "JetBrains Mono:400",
+    "NanumGothic:400",
+    "NanumGothic:700"
+   ]
+  },
+  {
+   "type": "gridcraft:snapshot",
+   "t": 1794728261353
+  }
+ ]
+}

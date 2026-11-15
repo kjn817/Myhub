@@ -2,7 +2,7 @@ import { Hono } from 'hono'
 import type { Env } from '../../types'
 import {
   getAuthEmail, genCode, sendOtpEmail, createSession, getSessionVersion,
-  getClientIp, checkRateLimit, checkRateLimitForIp, OTP_TTL_MS, SESSION_COOKIE_MAX_AGE,
+  getClientIp, checkRateLimit, checkRateLimitForIp, OTP_TTL_MS, setSessionCookie,
 } from './primitives'
 
 export function maskAuthEmail(email: string): string {
@@ -151,8 +151,7 @@ authApp.post('/verify', async (c) => {
     const token = await createSession(normEmail, c.env.SESSION_SECRET, 'otp', await getSessionVersion(c.env, normEmail), { otpAt: Date.now() })
 
     // httpOnly 쿠키로 세션 설정 (30일)
-    const cookie = `myhub_session=${token}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${SESSION_COOKIE_MAX_AGE}`
-    c.header('Set-Cookie', cookie)
+    setSessionCookie(c, token)
     return c.json({ ok: true })
   }
 
