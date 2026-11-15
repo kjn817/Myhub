@@ -12,6 +12,11 @@
  * 뷰포트를 POST /api/browse/viewport로 맞추고 (2026-11-15: 세션 복원
  * 뒤 navigate가 없으면 override가 적용되지 않아 화면이 절반 크기로
  * 보였던 구멍), stage 크기 변화는 ResizeObserver로 다시 맞춘다.
+ * 켜져 있는 동안은 GET /api/browse/state를 2초마다 폴링해 원격의
+ * 실제 URL·뒤로/앞으로 가능 여부를 onState로 주인에게 알린다
+ * (2026-11-15: 셸 로컬 기록만 보던 주소창·뒤로가기는 원격 내 링크
+ * 이동을 몰랐다). 뒤로/앞으로 이동은 goBack()/goForward()가
+ * POST /api/browse/back|forward로 원격 기록에 지시한다.
  * 상태: 'off' | 'on' | 'notice' | 'locked'
  * (notice = 503 등 시작 실패 안내 카드를 띄운 상태,
  *  locked = LUKS 볼륨이 잠겨 암호 입력 카드를 띄운 상태).
@@ -35,6 +40,38 @@
   var QUALITY_KEY = 'myhub-bw-quality';
   var QUALITY_MIN_KBPS = 500;
   var QUALITY_MAX_KBPS = 8000;
+
+  /* 상태 폴링·뒤로/앞으로·뷰포트 적용 fetch의 타임아웃 (ms). 서버가
+     응답 없이 걸리면 이 시간 뒤에 중단해 호출자가 {status: 0}으로
+     정리하게 한다 (2026-11-16 QA 1차: 폴링 fetch가 영원히 걸리면
+     statePolling이 안 풀려 주소가 안 바뀌었다. QA 4차: 뷰포트 fetch도
+     마찬가지 — 타임아웃이 없으면 한 번의 정체로 주기 재적용의
+     viewportReapplying이 영원히 걸려 새 탭·이동 후 크기가 안 맞는다). */
+  var FETCH_TIMEOUT_MS = 10000;
+
+  /* fetch에 AbortController 타임아웃을 건다. 요청이 끝나면 타이머를
+     지우고, 제한 안에 안 끝나면 abort해 fetch가 reject되게 한다
+     (호출자의 catch가 {status: 0, body: null}으로 정리한다).
+     AbortController가 없는 환경이면 타임아웃 없이 그대로 보낸다. */
+  function fetchWithTimeout(url, init, timeoutMs) {
+    if (typeof AbortController !== 'function') return fetch(url, init);
+    var controller = new AbortController();
+    var timer = setTimeout(function () {
+      controller.abort();
+    }, timeoutMs);
+    var timedInit = init || {};
+    timedInit.signal = controller.signal;
+    return fetch(url, timedInit).then(
+      function (r) {
+        clearTimeout(timer);
+        return r;
+      },
+      function (err) {
+        clearTimeout(timer);
+        throw err;
+      },
+    );
+  }
 
   function readQualityPreference() {
     try {
@@ -155,19 +192,68 @@
   }
 
   /* 이동 없이 원격 뷰포트만 맞춘다 (2026-11-15): 라이브 진입·리사이즈
-     때 호출한다. Promise<{ status, body }> — navigate와 같은 모양. */
+     때 호출한다. Promise<{ status, body }> — navigate와 같은 모양.
+     10초 타임아웃 (2026-11-16 QA 4차): 안 끝나면 {status: 0}으로 돌려
+     주기 재적용의 viewportReapplying이 풀리게 한다 — 타임아웃이 없으면
+     한 번의 정체로 재적용이 영원히 멈춘다 (plain fetch 시절의 결함). */
   function defaultApplyViewport(viewport) {
     if (typeof fetch !== 'function') return Promise.resolve({ status: 0, body: null });
     if (!viewport || viewport.width <= 0 || viewport.height <= 0) {
       return Promise.resolve({ status: 0, body: null });
     }
-    return fetch('/api/browse/viewport', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        viewport: { width: Math.round(viewport.width), height: Math.round(viewport.height) },
-      }),
-    })
+    return fetchWithTimeout(
+      '/api/browse/viewport',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          viewport: { width: Math.round(viewport.width), height: Math.round(viewport.height) },
+        }),
+      },
+      FETCH_TIMEOUT_MS,
+    )
+      .then(function (r) {
+        return r
+          .json()
+          .catch(function () {
+            return null;
+          })
+          .then(function (body) {
+            return { status: r.status, body: body };
+          });
+      })
+      .catch(function () {
+        return { status: 0, body: null };
+      });
+  }
+
+  /* 원격 현재 상태 조회: Promise<{ status, body }> (navigate와 같은 모양).
+     body는 { ok, url, title, canGoBack, canGoForward }. 10초 타임아웃 —
+     안 끝나면 {status: 0}으로 돌려 statePolling이 풀리게 한다. */
+  function defaultFetchState() {
+    if (typeof fetch !== 'function') return Promise.resolve({ status: 0, body: null });
+    return fetchWithTimeout('/api/browse/state', null, FETCH_TIMEOUT_MS)
+      .then(function (r) {
+        return r
+          .json()
+          .catch(function () {
+            return null;
+          })
+          .then(function (body) {
+            return { status: r.status, body: body };
+          });
+      })
+      .catch(function () {
+        return { status: 0, body: null };
+      });
+  }
+
+  /* 원격 뒤로/앞으로 이동: direction 'back' | 'forward'.
+     Promise<{ status, body }> — navigate와 같은 모양. 10초 타임아웃. */
+  function defaultHistory(direction) {
+    if (typeof fetch !== 'function') return Promise.resolve({ status: 0, body: null });
+    var path = direction === 'forward' ? '/api/browse/forward' : '/api/browse/back';
+    return fetchWithTimeout(path, { method: 'POST' }, FETCH_TIMEOUT_MS)
       .then(function (r) {
         return r
           .json()
@@ -184,7 +270,7 @@
   }
 
   /**
-   * deps = { doc, navigate, applyViewport, onChange, checkUnlock, submitUnlock, setQuality, pollDelayMs }
+   * deps = { doc, navigate, applyViewport, onChange, checkUnlock, submitUnlock, setQuality, pollDelayMs, fetchState, history, onState, statePollMs, viewportReapplyMs }
    * doc에서 #bwLiveFrame/#bwNoticeCard/#bwNoticeMsg/#bwNoticeClose와
    * #bwLockCard/#bwLockForm/#bwLockPassword/#bwLockConfirm/#bwLockMsg/
    * #bwLockSubmit/#bwLockClose/#bwLockTitle/#bwLockDesc를 찾는다 (없으면
@@ -193,7 +279,12 @@
    * (2026-11-15, 같은 모양의 테스트 주입 지난). checkUnlock()·
    * submitUnlock(mode, password)·setQuality(payload)도 같은 모양의
    * 테스트 주입 지난. pollDelayMs는 제출 후 상태 폴링 간격(기본 5초).
-   * onChange()는 상태 변경 등 주인의 너비를 다시 그리며 알림 콜백.
+   * fetchState()·history(direction)도 같은 모양의 테스트 주입 지난
+   * (2026-11-15 원격 상태 폴링·뒤로/앞으로). onState(body)는 폴링이
+   * 받은 원격 상태를 주인에게 알리는 콜백, statePollMs는 폴링 간격
+   * (기본 2000ms). viewportReapplyMs는 뷰포트 주기 재적용 간격
+   * (기본 10000ms, 2026-11-16 QA 2차: 새 탭 적용용). onChange()는
+   * 상태 변경 등 주인의 너비를 다시 그리며 알림 콜백.
    */
   function createLive(deps) {
     deps = deps || {};
@@ -208,10 +299,23 @@
       typeof deps.submitUnlock === 'function' ? deps.submitUnlock : defaultSubmitUnlock;
     var setQualityFetch =
       typeof deps.setQuality === 'function' ? deps.setQuality : defaultSetQuality;
+    var fetchState =
+      typeof deps.fetchState === 'function' ? deps.fetchState : defaultFetchState;
+    var historyFetch =
+      typeof deps.history === 'function' ? deps.history : defaultHistory;
     var pollDelayMs = typeof deps.pollDelayMs === 'number' ? deps.pollDelayMs : 5000;
+    var statePollMs = typeof deps.statePollMs === 'number' ? deps.statePollMs : 2000;
+    var viewportReapplyMs =
+      typeof deps.viewportReapplyMs === 'number' ? deps.viewportReapplyMs : 10000;
     var onChange =
       typeof deps.onChange === 'function'
         ? deps.onChange
+        : function () {
+            return undefined;
+          };
+    var onState =
+      typeof deps.onState === 'function'
+        ? deps.onState
         : function () {
             return undefined;
           };
@@ -242,6 +346,12 @@
     var viewportRetryUsed = false;
     var lastFailedViewport = null;
     var stageObserver = null;
+    /* 원격 상태 폴링 상태 (2026-11-15): 주기 타이머·진행 중 플래그. */
+    var statePollTimer = null;
+    var statePolling = false;
+    /* 뷰포트 주기 재적용 상태 (2026-11-16 QA 2차): 주기 타이머·진행 중 플래그. */
+    var viewportReapplyTimer = null;
+    var viewportReapplying = false;
 
     function sameViewport(a, b) {
       if (!a || !b) return false;
@@ -251,12 +361,19 @@
     /* 뷰포트를 서버에 적용하고 성공하면 기록한다. 실패하면 기록하지
        않고 2초 뒤 한 번만 다시 시도한다 (서버 일시 장애 대비 — 같은
        크기에 대한 재시도는 한 번으로 끝내고, 새 크기가 오면 다시
-       한 번의 재시도를 얻는다). */
-    function applyViewportNow(viewport) {
+       한 번의 재시도를 얻는다). force가 참이면 같은 크기라도 서버에
+       다시 보낸다 (주기 재적용: 목적이 크기 변경이 아니라 새 탭
+       적용이다). 늦게 도착한 응답은 liveGen으로 버린다 — endLive
+       뒤에 lastAppliedViewport를 채우면 다음 시작 때 같은 크기의
+       적용을 건너뛰어 버린다 (주기 재적용은 요청이 떠 있는 시간이
+       길어 이 경합이 잦다). */
+    function applyViewportNow(viewport, force) {
       if (!viewport || viewport.width <= 0 || viewport.height <= 0) return Promise.resolve(false);
-      if (sameViewport(viewport, lastAppliedViewport)) return Promise.resolve(true);
+      if (!force && sameViewport(viewport, lastAppliedViewport)) return Promise.resolve(true);
       if (!sameViewport(viewport, lastFailedViewport)) viewportRetryUsed = false;
+      var gen = liveGen;
       return applyViewport(viewport).then(function (res) {
+        if (gen !== liveGen || liveState !== 'on') return false;
         if (res && res.status === 200 && res.body && res.body.ok) {
           lastAppliedViewport = { width: Math.round(viewport.width), height: Math.round(viewport.height) };
           lastFailedViewport = null;
@@ -324,6 +441,96 @@
         clearTimeout(viewportRetryTimer);
         viewportRetryTimer = null;
       }
+    }
+
+    /* 원격 상태를 한 번 묻고 받으면 onState로 주인에게 알린다.
+       탭이 hidden이면 쉬고 (백그라운드 폴링 낭비 방지), 요청이
+       진행 중이면 겹치지 않는다. 늦게 도착한 응답은 liveGen으로
+       걸러 종료 뒤에 상태를 건드리지 않는다. */
+    function pollStateOnce() {
+      if (liveState !== 'on') return;
+      if (doc.hidden) return;
+      if (statePolling) return;
+      var gen = liveGen;
+      statePolling = true;
+      fetchState().then(
+        function (res) {
+          statePolling = false;
+          if (gen !== liveGen || liveState !== 'on') return;
+          var body = res && res.body;
+          if (res && res.status === 200 && body && body.ok) {
+            onState(body);
+          }
+        },
+        function () {
+          statePolling = false;
+        },
+      );
+    }
+
+    /* 상태 폴링 시작: 즉시 한 번 묻고 이후 주기적으로 묻는다 (주소창이
+       간격만큼 늦게 바뀌지 않게 한다). */
+    function startStatePolling() {
+      stopStatePolling();
+      pollStateOnce();
+      statePollTimer = setInterval(pollStateOnce, statePollMs);
+    }
+
+    function stopStatePolling() {
+      if (statePollTimer !== null) {
+        clearInterval(statePollTimer);
+        statePollTimer = null;
+      }
+    }
+
+    /* 뷰포트 주기 재적용 (2026-11-16 QA 2차): 새 탭(Ctrl+T)은
+       /viewport 이후에 생겨 override를 상속받지 않아 자연 DSF로 남는다
+       (실측 1096×500). 라이브가 켜져 있는 동안 10초마다 현재 스테이지
+       크기를 다시 적용해 새 탭을 바로잡는다. 서버는 이미 일치하는 탭을
+       건드리지 않으므로(읽기 우선) 올바른 탭은 깜빡이지 않는다.
+       요청이 진행 중이면 틱을 건너뛴다 (상태 폴링과 같은 겹침 방지). */
+    function reapplyViewportOnce() {
+      if (liveState !== 'on') return;
+      if (viewportReapplying) return;
+      var viewport = measureViewport();
+      if (!viewport) return;
+      viewportReapplying = true;
+      applyViewportNow(viewport, true).then(
+        function () {
+          viewportReapplying = false;
+        },
+        function () {
+          viewportReapplying = false;
+        },
+      );
+    }
+
+    function startViewportReapply() {
+      stopViewportReapply();
+      viewportReapplyTimer = setInterval(reapplyViewportOnce, viewportReapplyMs);
+    }
+
+    function stopViewportReapply() {
+      if (viewportReapplyTimer !== null) {
+        clearInterval(viewportReapplyTimer);
+        viewportReapplyTimer = null;
+      }
+    }
+
+    /* 원격 뒤로/앞으로 이동: 성공 여부를 돌려준다. 꺼져 있으면 false
+       (주인은 라이브가 꺼져 있을 때만 로컬 기록으로 폴백한다 —
+       켜져 있을 때의 폴백은 낡은 기록으로 엉뚱한 곳에 간다, 2026-11-16). */
+    function goHistory(direction) {
+      if (liveState !== 'on') return Promise.resolve(false);
+      return historyFetch(direction).then(
+        function (res) {
+          var body = res && res.body;
+          return !!(res && res.status === 200 && body && body.ok);
+        },
+        function () {
+          return false;
+        },
+      );
     }
 
     function setNotice(text) {
@@ -413,6 +620,8 @@
       clearLockInputs();
       setLockBusy(false);
       liveState = 'locked';
+      stopStatePolling();
+      stopViewportReapply();
       onChange();
     }
 
@@ -589,6 +798,8 @@
       if (liveFrame) liveFrame.src = viewUrlForQuality();
       onChange();
       startStageObserver();
+      startStatePolling();
+      startViewportReapply();
       if (!url) {
         // 뷰포트 적용 실패는 시작을 막지 않는다 (화면은 뜨고, 다음
         // 진입·리사이즈 때 다시 시도한다).
@@ -626,6 +837,8 @@
       if (res && res.status === 503) {
         // 시크릿 미설정 — 화면 프록시도 못 뜨므로 뷰를 끄고 안내한다.
         liveState = 'notice';
+        stopStatePolling();
+        stopViewportReapply();
         if (liveFrame) liveFrame.removeAttribute('src');
         setNotice('원격 브라우저가 아직 설정되지 않았어요.');
         onChange();
@@ -645,6 +858,8 @@
       liveGen += 1;
       liveState = 'off';
       stopStageObserver();
+      stopStatePolling();
+      stopViewportReapply();
       lastAppliedViewport = null;
       lastFailedViewport = null;
       viewportRetryUsed = false;
@@ -700,6 +915,13 @@
       dismissLock: dismissLock,
       setQuality: setQuality,
       syncChrome: syncChrome,
+      goBack: function () {
+        return goHistory('back');
+      },
+      goForward: function () {
+        return goHistory('forward');
+      },
+      refreshState: pollStateOnce,
     };
   }
 

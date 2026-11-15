@@ -90,7 +90,8 @@ function loadLive(): any {
 
 function makeLive(
   navigateImpl?: (url: string, viewport: unknown) => Promise<unknown>,
-  applyViewportImpl?: (viewport: unknown) => Promise<unknown>
+  applyViewportImpl?: (viewport: unknown) => Promise<unknown>,
+  viewportReapplyMs?: number
 ) {
   const calls: Array<{ url: string; viewport: unknown }> = []
   const vpCalls: Array<{ viewport: unknown }> = []
@@ -108,6 +109,7 @@ function makeLive(
       return Promise.resolve({ status: 200, body: { ok: true, stage: 'ok' } })
     },
     onChange: () => undefined,
+    viewportReapplyMs: viewportReapplyMs ?? 10000,
   })
   return { live, calls, vpCalls }
 }
@@ -311,8 +313,12 @@ describe('browser-live viewport 적용 — 이동 없는 진입·리사이즈 (2
 
   test('계속 실패해도 재시도는 한 번뿐이다 (무한 재시도 없음)', async () => {
     setupFixture({ w: 1920, h: 1000 }, { w: 0, h: 0 })
-    const { live, vpCalls } = makeLive(undefined, () =>
-      Promise.resolve({ status: 502, body: null })
+    // 주기 재적용(10초)은 별개 메커니즘이라 끄고 단발 재시도만 본다 —
+    // 켜두면 10초 틱이 의도대로 다시 시도해 이 테스트의 2회 단언이 깨진다.
+    const { live, vpCalls } = makeLive(
+      undefined,
+      () => Promise.resolve({ status: 502, body: null }),
+      3600000
     )
     await live.enterLive()
     await flush()

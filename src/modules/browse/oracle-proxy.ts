@@ -29,7 +29,7 @@
 import { Hono } from 'hono'
 import type { Env } from '../../types'
 import { validatePublicUrlAsync } from './assistant-read'
-import { applyViewportToSession, defaultCdpConnect, navigateSession, toDirectCdpWsUrl, type ViewportSize } from './cdp'
+import { applyViewportToSession, defaultCdpConnect, getBrowserState, goBackSession, goForwardSession, navigateSession, toDirectCdpWsUrl, type ViewportSize } from './cdp'
 import { isBrowserLocked } from './unlock'
 
 export const ORACLE_VIEW_PORT = 8080
@@ -136,6 +136,34 @@ async function directCdpWsUrl(cfg: OracleConfig, secretHeaders: Record<string, s
   return typeof publicWs === 'string' ? toDirectCdpWsUrl(publicWs, cfg.host, ORACLE_CDP_PORT) : null
 }
 
+type CdpGate =
+  | { ok: true; directWs: string; secretHeaders: Record<string, string> }
+  | { ok: false; response: Response }
+
+/* CDP를 쓰는 라우트들의 공통 전처리 (2026-11-15: /navigate·/viewport·
+   /state·/back·/forward가 같은 전처리를 반복하던 것을 하나로 묶었다).
+   LUKS 잠금이면 423 BROWSER_LOCKED, 사이드카 CDP에 닿지 않으면 502
+   ORACLE_UPSTREAM을 돌려준다. UNLOCK_SECRET 미설정(암호화 미구성)이면
+   잠금 검사를 건너뛴다. */
+async function gateCdp(
+  c: { env: Env; json: (body: unknown, status?: number) => Response },
+  cfg: OracleConfig,
+): Promise<CdpGate> {
+  const unlockSecret = c.env.UNLOCK_SECRET
+  if (unlockSecret && unlockSecret.length >= 16) {
+    if (await isBrowserLocked(cfg, unlockSecret)) {
+      return { ok: false, response: c.json({ ok: false, error: 'BROWSER_LOCKED' }, 423) }
+    }
+  }
+  const secretHeaders = {
+    'x-origin-secret': cfg.originSecret,
+    'x-cdp-secret': cfg.cdpSecret,
+  }
+  const directWs = await directCdpWsUrl(cfg, secretHeaders)
+  if (!directWs) return { ok: false, response: c.json({ ok: false, error: 'ORACLE_UPSTREAM' }, 502) }
+  return { ok: true, directWs, secretHeaders }
+}
+
 export function registerOracleProxyRoutes(app: Hono<{ Bindings: Env }>): void {
   app.all('/view', (c) => {
     const cfg = oracleConfigOf(c.env)
@@ -191,24 +219,11 @@ export function registerOracleProxyRoutes(app: Hono<{ Bindings: Env }>): void {
     const validated = await validatePublicUrlAsync(body.url)
     if (!validated.ok) return c.json({ ok: false, error: 'INVALID_URL' }, 400)
     const targetUrl = validated.url
-    // LUKS 잠금 차단 (2026-11-15): 볼륨이 잠기면 chromium이 떠 있지
-    // 않으므로 네비게이션은 실패한다 — 모호한 502 대신 명확한 423을 준다.
-    // UNLOCK_SECRET 미설정(암호화 미구성)이면 검사를 건너뛴다.
-    const unlockSecret = c.env.UNLOCK_SECRET
-    if (unlockSecret && unlockSecret.length >= 16) {
-      if (await isBrowserLocked(cfg, unlockSecret)) {
-        return c.json({ ok: false, error: 'BROWSER_LOCKED' }, 423)
-      }
-    }
     const viewport = parseViewport(body.viewport)
-    const secretHeaders = {
-      'x-origin-secret': cfg.originSecret,
-      'x-cdp-secret': cfg.cdpSecret,
-    }
-    const directWs = await directCdpWsUrl(cfg, secretHeaders)
-    if (!directWs) return c.json({ ok: false, error: 'ORACLE_UPSTREAM' }, 502)
-    const nav = await navigateSession(directWs, targetUrl, defaultCdpConnect, {
-      headers: secretHeaders,
+    const gate = await gateCdp(c, cfg)
+    if (!gate.ok) return gate.response
+    const nav = await navigateSession(gate.directWs, targetUrl, defaultCdpConnect, {
+      headers: gate.secretHeaders,
       viewport,
     })
     return c.json({ ok: nav.ok, nav: nav.ok ? 'ok' : 'fail', navStage: nav.stage })
@@ -229,23 +244,60 @@ export function registerOracleProxyRoutes(app: Hono<{ Bindings: Env }>): void {
     }
     const viewport = parseViewport(body.viewport)
     if (!viewport) return c.json({ ok: false, error: 'INVALID_VIEWPORT' }, 400)
-    // LUKS 잠금 차단 (navigate와 동일 — 잠기면 chromium이 떠 있지 않다).
-    const unlockSecret = c.env.UNLOCK_SECRET
-    if (unlockSecret && unlockSecret.length >= 16) {
-      if (await isBrowserLocked(cfg, unlockSecret)) {
-        return c.json({ ok: false, error: 'BROWSER_LOCKED' }, 423)
-      }
-    }
-    const secretHeaders = {
-      'x-origin-secret': cfg.originSecret,
-      'x-cdp-secret': cfg.cdpSecret,
-    }
-    const directWs = await directCdpWsUrl(cfg, secretHeaders)
-    if (!directWs) return c.json({ ok: false, error: 'ORACLE_UPSTREAM' }, 502)
-    const applied = await applyViewportToSession(directWs, viewport, defaultCdpConnect, {
-      headers: secretHeaders,
+    const gate = await gateCdp(c, cfg)
+    if (!gate.ok) return gate.response
+    const applied = await applyViewportToSession(gate.directWs, viewport, defaultCdpConnect, {
+      headers: gate.secretHeaders,
     })
-    return c.json({ ok: applied.ok, stage: applied.stage })
+    return c.json({ ok: applied.ok, stage: applied.stage, applied: applied.applied, total: applied.total, verified: applied.verified })
+  })
+
+  // 원격 브라우저 현재 상태 (2026-11-15): 활성 탭의 실제 URL·
+  // 제목·뒤로/앞으로 가능 여부를 CDP로 읽는다. 셸 로컬 기록만 보던
+  // 기존 주소창·뒤로가기는 원격 내 링크 이동을 몰라 주소가 고정되고
+  // 뒤로가기가 안 됐다 — 프론트는 이 상태를 2초마다 폴링해 주소창·
+  // 버튼을 원격 기준으로 맞춘다. 상태 읽기 실패는 502 BROWSER_STATE
+  // (호출자는 기존 표시를 유지한다).
+  app.get('/state', async (c) => {
+    const cfg = oracleConfigOf(c.env)
+    if (!cfg) return c.json({ ok: false, error: 'ORACLE_NOT_CONFIGURED' }, 503)
+    const gate = await gateCdp(c, cfg)
+    if (!gate.ok) return gate.response
+    const state = await getBrowserState(gate.directWs, defaultCdpConnect, {
+      headers: gate.secretHeaders,
+    })
+    if (!state) return c.json({ ok: false, error: 'BROWSER_STATE' }, 502)
+    return c.json({ ok: true, url: state.url, title: state.title, canGoBack: state.canGoBack, canGoForward: state.canGoForward })
+  })
+
+  // 원격 뒤로/앞으로 가기 (2026-11-15): CDP getNavigationHistory로
+  // 엔트리 id를 읽어 Page.navigateToHistoryEntry로 활성 탭을 이동시킨다
+  // (2026-11-16 QA 2차: Page.goBack/goForward는 Chromium 156에 없어
+  // 'wasn't found' 에러만 돌려줬다). 원격 내 이동 기록 기준이라 셸
+  // 로컬 기록으로는 못 가던 곳도 간다. 실패해도 200 + ok:false로 보고한다
+  // (/navigate·/viewport와 같은 모양). 라이브가 켜져 있을 때는
+  // 호출자가 로컬 기록으로 폴백하지 않는다 (2026-11-16 QA 1차: 낡은
+  // 기록으로 엉뚱한 곳에 가고 navigate가 다른 탭을 닫아버린다).
+  app.post('/back', async (c) => {
+    const cfg = oracleConfigOf(c.env)
+    if (!cfg) return c.json({ ok: false, error: 'ORACLE_NOT_CONFIGURED' }, 503)
+    const gate = await gateCdp(c, cfg)
+    if (!gate.ok) return gate.response
+    const r = await goBackSession(gate.directWs, defaultCdpConnect, {
+      headers: gate.secretHeaders,
+    })
+    return c.json({ ok: r.ok, stage: r.stage })
+  })
+
+  app.post('/forward', async (c) => {
+    const cfg = oracleConfigOf(c.env)
+    if (!cfg) return c.json({ ok: false, error: 'ORACLE_NOT_CONFIGURED' }, 503)
+    const gate = await gateCdp(c, cfg)
+    if (!gate.ok) return gate.response
+    const r = await goForwardSession(gate.directWs, defaultCdpConnect, {
+      headers: gate.secretHeaders,
+    })
+    return c.json({ ok: r.ok, stage: r.stage })
   })
 
   // 화질 수동 전환 (2026-11-15): 사이드카 /control/quality로 중계한다.

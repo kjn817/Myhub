@@ -15,8 +15,12 @@
  * 원격 뷰는 한 번에 한 탭에만 보이므로 정확히 하나의 탭이 소유하고
  * (liveTabId), 다른 탭에서는 라이브 화면 대신 "다른 탭에서 실행 중"
  * 안내를 보여준다 — 소유하지 않은 탭이 실행 중인 것처럼 보이지 않게
- * 한다. 뒤로/앞으로는 탭의 방문 기록을 따른다. 원격 화면 안에서의
- * 이동은 라이브 화면 자체가 처리한다.
+ * 한다. 뒤로/앞으로는 원격 기록을 먼저 쓴다: 원격이 켜져 있으면
+ * CDP 상태 폴링이 본 실제 URL·뒤로/앞으로 가능 여부가 주소창·버튼의
+ * 기준이 되고, 뒤로/앞으로 버튼은 원격 기록에 먼저 지시한다
+ * (2026-11-15: 원격 내 링크 이동은 셸 로컬 기록에 없어 주소가
+ * 고정되고 뒤로가기가 안 됐다). 원격 이동이 실패하면 로컬 기록으로
+ * 폴백한다.
  * 탭 표면 (2026-11-06, image-147; 2026-11-14 타이틀바 한 줄 통일로
  * 변경): 탭 줄은 iframe 안의 #bwTabstrip이 창 모드·단독 모드 모두
  * 담당한다. 창 모드에서는 내비게이션을 셸 제목 바가 호스팅한다 —
@@ -169,6 +173,9 @@
         url: url || null,
         history: url ? [url] : [],
         hIndex: url ? 0 : -1,
+        // 원격 상태 폴링이 본 뒤로/앞으로 가능 여부 (null = 아직 모름).
+        // 원격이 켜져 있으면 이 값이 로컬 기록보다 우선한다 (2026-11-15).
+        remote: null,
       };
     }
     function activeTab() {
@@ -216,6 +223,7 @@
               return typeof u === 'string';
             }),
             hIndex: Math.max(-1, Math.min(t.hIndex, t.history.length - 1)),
+            remote: null, // 원격 상태는 런타임 값이라 복원하지 않는다
           };
         });
         activeTabId =
@@ -243,8 +251,65 @@
           if (live.state() === 'off') liveTabId = null;
           syncChrome();
         },
+        onState: function (state) {
+          applyRemoteState(state);
+        },
       }),
     );
+
+    /* 뒤로/앞으로 가능 여부: 라이브가 켜져 있고 이 탭이 뷰 소유 탭이면
+       원격 caps만 쓴다. 원격 내 링크 이동은 로컬 기록에 없으므로
+       로컬 기록만 보면 뒤로가기가 비활성으로 보인다 (2026-11-15).
+       원격 상태를 아직 모르면(remote null) 둘 다 false로 버튼을 끈다
+       — 상태를 모르면 버튼을 끄는 것이 낡은 기록으로 엉뚱한 곳에
+       가는 것보다 옳다 (2026-11-16 QA 1차). 라이브가 꺼져 있을
+       때만 로컬 기록 caps를 쓴다. */
+    function navCaps(tab) {
+      if (tab && tab.id === liveTabId && live.isActive()) {
+        return {
+          canBack: !!(tab.remote && tab.remote.canBack),
+          canFwd: !!(tab.remote && tab.remote.canFwd),
+        };
+      }
+      return {
+        canBack: !!(tab && tab.hIndex > 0),
+        canFwd: !!(tab && tab.hIndex < tab.history.length - 1),
+      };
+    }
+
+    /* 원격 상태 폴링 결과를 소유 탭에 반영한다 (2026-11-15). 원격 내
+       링크 이동은 로컬 기록에 없으므로, 폴링이 본 실제 URL이 주소창·
+       탭 제목의 기준이 된다. 로컬 기록은 건드리지 않는다 — 원격
+       이동을 로컬 기록에 섞으면 뒤로가기 폴백이 엉킨다. */
+    function applyRemoteState(state) {
+      if (!state || typeof state.url !== 'string') return;
+      var owner = null;
+      for (var i = 0; i < tabs.length; i++) {
+        if (tabs[i].id === liveTabId) owner = tabs[i];
+      }
+      if (!owner) return;
+      var changed = false;
+      if (owner.url !== state.url) {
+        owner.url = state.url;
+        changed = true;
+      }
+      var remote = {
+        canBack: !!state.canGoBack,
+        canFwd: !!state.canGoForward,
+      };
+      if (
+        !owner.remote ||
+        owner.remote.canBack !== remote.canBack ||
+        owner.remote.canFwd !== remote.canFwd
+      ) {
+        owner.remote = remote;
+        changed = true;
+      }
+      if (changed) {
+        saveTabs();
+        syncChrome();
+      }
+    }
 
     function renderRecents() {
       if (!recentsWrap || !recentsList) return;
@@ -302,12 +367,13 @@
     var lastNavSig; // undefined = 아직 게시 전 값
     function browserNavPayload() {
       var tab = activeTab();
+      var caps = navCaps(tab);
       return {
         url: tab && tab.url ? tab.url : '',
         title: tabTitle(tab),
         fav: tab && tab.url ? hostOf(tab.url).charAt(0).toUpperCase() : '',
-        canBack: !!(tab && tab.hIndex > 0),
-        canFwd: !!(tab && tab.hIndex < tab.history.length - 1),
+        canBack: caps.canBack,
+        canFwd: caps.canFwd,
         loading: navLoading,
       };
     }
@@ -407,9 +473,10 @@
 
     function syncNavButtons() {
       var tab = activeTab();
-      if (backBtn) backBtn.disabled = !(tab && tab.hIndex > 0);
+      var caps = navCaps(tab);
+      if (backBtn) backBtn.disabled = !caps.canBack;
       if (fwdBtn) {
-        fwdBtn.disabled = !(tab && tab.hIndex < tab.history.length - 1);
+        fwdBtn.disabled = !caps.canFwd;
       }
       if (reloadBtn) {
         reloadBtn.disabled = !(tab && tab.url);
@@ -544,7 +611,11 @@
       syncChrome();
     }
 
-    function goBack() {
+    /* 로컬 기록 뒤로/앞으로 (라이브가 꺼져 있을 때만 쓴다). 원격 내
+       이동은 이 기록에 없으므로, 라이브가 켜져 있을 때는 이 폴백을
+       쓰지 않는다 — 낡은 URL로 이동하고 go()→navigate가 다른 탭을
+       닫아버린다 (2026-11-16 QA 1차). */
+    function goBackLocal() {
       var tab = activeTab();
       if (!tab || tab.hIndex <= 0) return;
       tab.hIndex -= 1;
@@ -553,13 +624,48 @@
       go(tab.url, true);
     }
 
-    function goFwd() {
+    function goFwdLocal() {
       var tab = activeTab();
       if (!tab || tab.hIndex >= tab.history.length - 1) return;
       tab.hIndex += 1;
       tab.url = tab.history[tab.hIndex];
       saveTabs();
       go(tab.url, true);
+    }
+
+    /* 뒤로: 라이브가 켜져 있고 이 탭이 뷰 소유 탭이면 원격 이동만
+       시도한다 (원격 내 링크 이동은 로컬 기록에 없다). 원격 상태를
+       모르거나 뒤로 갈 수 없으면 아무것도 하지 않는다 — 로컬 폴백은
+       낡은 URL로 가고 go()→navigate가 다른 탭을 닫아버린다
+       (2026-11-16 QA 1차). 원격 이동이 성공하면 상태를 즉시 다시 물어
+       주소창을 빨리 맞춘다. 실패해도 폴백하지 않는다. 로컬 폴백은
+       라이브가 꺼져 있을 때만. */
+    function goBack() {
+      var tab = activeTab();
+      if (!tab) return;
+      if (tab.id === liveTabId && live.isActive()) {
+        if (tab.remote && tab.remote.canBack) {
+          live.goBack().then(function (ok) {
+            if (ok) live.refreshState();
+          });
+        }
+        return;
+      }
+      goBackLocal();
+    }
+
+    function goFwd() {
+      var tab = activeTab();
+      if (!tab) return;
+      if (tab.id === liveTabId && live.isActive()) {
+        if (tab.remote && tab.remote.canFwd) {
+          live.goForward().then(function (ok) {
+            if (ok) live.refreshState();
+          });
+        }
+        return;
+      }
+      goFwdLocal();
     }
 
     function startAndRecord(url) {
@@ -966,12 +1072,12 @@
             return [
               {
                 label: '뒤로',
-                disabled: !(tab && tab.hIndex > 0),
+                disabled: !navCaps(tab).canBack,
                 run: goBack,
               },
               {
                 label: '앞으로',
-                disabled: !(tab && tab.hIndex < tab.history.length - 1),
+                disabled: !navCaps(tab).canFwd,
                 run: goFwd,
               },
               {

@@ -28,6 +28,7 @@ node tests/e2e/<이름>.e2e.cjs  # 단독 실행
 | `studio-editor` | load 시 CodeMirror 요청 0건, 코드 탭 후 7개 자산 로딩·에디터 동작 | 9843c74 (CodeMirror 지연 로딩, import() 방식) |
 | `hangul-loading` | 한글 로딩 화면이 엔진 로드 전에 보임 (제목·상태·스피너) | 38d30c6 (로딩 화면 조기화) |
 | `browser-viewport` | 보이는 `.bw-stage` 크기가 navigate 뷰포트로 전송됨 + iframe src가 `/api/browse/view/` | 04cd131 (뷰포트 소스 교정) · 2026-11-14 Oracle 프록시 전환 |
+| `browser-remote-state` | 상태 폴링이 원격 URL을 주소창에 반영 + 뒤로 버튼이 POST /api/browse/back으로 원격 이동 (로컬 navigate 없음) | 2026-11-15 밤 (주소·뒤로가기 CDP화) |
 | `browser-tab-switch` | 탭 전환 시 라이브 iframe이 display:none이 아니라 visibility:hidden 주차 (문서 visible 유지·복귀 즉시) | 2026-11-14 전환 시 끊김 보고 (bw-frame-parked) |
 | `browser-safari-chrome` | 사파리 26 크롬: 툴바가 탭 줄 위·탭 카드 네 모서리 10px·가운데 정렬·파비콘·새로고침은 주소 캡슐 안·뒤로/앞으로 알약·툴바 순서 사이드바→알약→캡슐→공유·새 탭·개요, 홈 없음 | 2026-11-14 실제 맥 사파리 캡처 대조 (image-45) · 타이틀바 한 줄 통일 (image-48) |
 | `browser-single-tab` | 탭 1개면 탭 줄 사라짐 (단독: 줄 hidden·+는 툴바에, 창: 제목 바 내비만·iframe 탭 줄 hidden), 2개면 다시 나타남 | 2026-11-14 실제 맥 사파리 캡처 대조 (image-46) · 타이틀바 한 줄 통일 |
