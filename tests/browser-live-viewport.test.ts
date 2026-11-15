@@ -30,6 +30,15 @@
  * 없는 UI다. 필·경과 시간·종료 버튼은 browser.html·browser-live.js·
  * browser.js·browser.css 어디에도 없어야 한다 — 아래 '필 부재' 테스트가
  * 실제 소스를 읽어 단언한다. 카나리아: 필을 다시 넣으면 실패한다.)
+ *
+ * (2026-11-15: 세션 복원 뒤 절반 크기 — Chromium 재시작 후 세션 복원으로
+ * 네이버가 떠 있으면 navigate가 한 번도 나가지 않아 override가 적용되지
+ * 않고, 원격이 X 디스플레이 전체(레티나 기기 픽셀 2940) 크기로 렌더링돼
+ * 맥 브라우저(1470)의 절반 크기로 보였다. 수정: url 없는 진입 때도
+ * POST /api/browse/viewport로 뷰포트를 맞추고, stage 리사이즈는
+ * ResizeObserver로 다시 맞춘다. 실패 시 2초 뒤 한 번만 재시도한다.
+ * 카나리아: 진입 적용·관찰자 연결·재시도 상한을 빼면 해당 테스트가
+ * 실패한다.)
  */
 import * as fs from 'fs'
 import * as path from 'path'
@@ -79,8 +88,12 @@ function loadLive(): any {
   return win.MyHubBrowserLive
 }
 
-function makeLive(navigateImpl?: (url: string, viewport: unknown) => Promise<unknown>) {
+function makeLive(
+  navigateImpl?: (url: string, viewport: unknown) => Promise<unknown>,
+  applyViewportImpl?: (viewport: unknown) => Promise<unknown>
+) {
   const calls: Array<{ url: string; viewport: unknown }> = []
+  const vpCalls: Array<{ viewport: unknown }> = []
   const api = loadLive()
   const live = api.createLive({
     doc: getDoc(),
@@ -89,9 +102,40 @@ function makeLive(navigateImpl?: (url: string, viewport: unknown) => Promise<unk
       if (navigateImpl) return navigateImpl(url, viewport)
       return Promise.resolve({ status: 200, body: { ok: true, nav: 'ok', navStage: 'ok' } })
     },
+    applyViewport: (viewport: unknown) => {
+      vpCalls.push({ viewport })
+      if (applyViewportImpl) return applyViewportImpl(viewport)
+      return Promise.resolve({ status: 200, body: { ok: true, stage: 'ok' } })
+    },
     onChange: () => undefined,
   })
-  return { live, calls }
+  return { live, calls, vpCalls }
+}
+
+/* 가짜 ResizeObserver: triggerAll()로 관찰 콜백을 손수 불린다.
+   disconnect하면 인스턴스 목록에서 빠져 이후 트리거가 닿지 않는다. */
+class FakeResizeObserver {
+  static instances: FakeResizeObserver[] = []
+  static triggerAll(): void {
+    for (const inst of [...FakeResizeObserver.instances]) inst.cb()
+  }
+  private cb: () => void
+  observed: unknown = null
+  constructor(cb: () => void) {
+    this.cb = cb
+    FakeResizeObserver.instances.push(this)
+  }
+  observe(el: unknown): void {
+    this.observed = el
+  }
+  disconnect(): void {
+    const i = FakeResizeObserver.instances.indexOf(this)
+    if (i >= 0) FakeResizeObserver.instances.splice(i, 1)
+  }
+}
+
+async function flush(): Promise<void> {
+  for (let i = 0; i < 10; i++) await Promise.resolve()
 }
 
 describe('browser-live viewport 측정', () => {
@@ -181,6 +225,104 @@ describe('browser-live enterLive 상태', () => {
     live.endLive()
     expect(live.state()).toBe('off')
     expect(getDoc().getElementById('bwLiveFrame').getAttribute('src')).toBeNull()
+  })
+})
+
+describe('browser-live viewport 적용 — 이동 없는 진입·리사이즈 (2026-11-15 절반 크기 수정)', () => {
+  beforeEach(() => {
+    jest.useFakeTimers()
+    FakeResizeObserver.instances = []
+    ;(getWin() as any).ResizeObserver = FakeResizeObserver
+  })
+  afterEach(() => {
+    jest.useRealTimers()
+    FakeResizeObserver.instances = []
+    delete (getWin() as any).ResizeObserver
+  })
+
+  test('url 없이 enterLive하면 navigate 대신 applyViewport에 stage 크기를 보낸다', async () => {
+    setupFixture({ w: 1920, h: 1000 }, { w: 0, h: 0 })
+    const { live, calls, vpCalls } = makeLive()
+    await live.enterLive()
+    await flush()
+    expect(calls).toEqual([])
+    expect(vpCalls).toEqual([{ viewport: { width: 1920, height: 1000 } }])
+  })
+
+  test('리사이즈하면 새 크기로 뷰포트를 다시 맞춘다', async () => {
+    setupFixture({ w: 1920, h: 1000 }, { w: 0, h: 0 })
+    const { live, vpCalls } = makeLive()
+    await live.enterLive()
+    await flush()
+    expect(vpCalls).toHaveLength(1)
+    stubRect(getDoc().getElementById('bwStage'), 1470, 850)
+    FakeResizeObserver.triggerAll()
+    jest.advanceTimersByTime(300)
+    await flush()
+    expect(vpCalls).toHaveLength(2)
+    expect(vpCalls[1]).toEqual({ viewport: { width: 1470, height: 850 } })
+  })
+
+  test('같은 크기로 다시 불려도 뷰포트를 다시 보내지 않는다', async () => {
+    setupFixture({ w: 1920, h: 1000 }, { w: 0, h: 0 })
+    const { live, vpCalls } = makeLive()
+    await live.enterLive()
+    await flush()
+    expect(vpCalls).toHaveLength(1)
+    FakeResizeObserver.triggerAll()
+    jest.advanceTimersByTime(300)
+    await flush()
+    expect(vpCalls).toHaveLength(1)
+  })
+
+  test('endLive 뒤에는 리사이즈가 와도 뷰포트를 보내지 않는다', async () => {
+    setupFixture({ w: 1920, h: 1000 }, { w: 0, h: 0 })
+    const { live, vpCalls } = makeLive()
+    await live.enterLive()
+    await flush()
+    expect(vpCalls).toHaveLength(1)
+    await live.endLive()
+    stubRect(getDoc().getElementById('bwStage'), 1470, 850)
+    FakeResizeObserver.triggerAll()
+    jest.advanceTimersByTime(300)
+    await flush()
+    expect(vpCalls).toHaveLength(1)
+  })
+
+  test('뷰포트 적용이 실패하면 2초 뒤 한 번 다시 시도하고 성공하면 그만둔다', async () => {
+    setupFixture({ w: 1920, h: 1000 }, { w: 0, h: 0 })
+    let n = 0
+    const { live, vpCalls } = makeLive(undefined, () => {
+      n += 1
+      return Promise.resolve(
+        n === 1 ? { status: 502, body: null } : { status: 200, body: { ok: true, stage: 'ok' } }
+      )
+    })
+    await live.enterLive()
+    await flush()
+    expect(vpCalls).toHaveLength(1)
+    jest.advanceTimersByTime(2000)
+    await flush()
+    expect(vpCalls).toHaveLength(2)
+    jest.advanceTimersByTime(5000)
+    await flush()
+    expect(vpCalls).toHaveLength(2)
+  })
+
+  test('계속 실패해도 재시도는 한 번뿐이다 (무한 재시도 없음)', async () => {
+    setupFixture({ w: 1920, h: 1000 }, { w: 0, h: 0 })
+    const { live, vpCalls } = makeLive(undefined, () =>
+      Promise.resolve({ status: 502, body: null })
+    )
+    await live.enterLive()
+    await flush()
+    expect(vpCalls).toHaveLength(1)
+    jest.advanceTimersByTime(2000)
+    await flush()
+    expect(vpCalls).toHaveLength(2)
+    jest.advanceTimersByTime(10000)
+    await flush()
+    expect(vpCalls).toHaveLength(2)
   })
 })
 

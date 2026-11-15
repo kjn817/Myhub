@@ -45,7 +45,10 @@ function textRes(text: string): any {
   return { ok: true, status: 200, text: async () => text, body: null, arrayBuffer: async () => new ArrayBuffer(0) }
 }
 function jsonRes(obj: any): any {
-  return { ok: true, status: 200, json: async () => obj, body: null, arrayBuffer: async () => new ArrayBuffer(0) }
+  // json()과 arrayBuffer()가 같은 본문을 내야 한다 — 실제 Response와
+  // 같이. (pdfcraft 게이트는 매니페스트를 arrayBuffer로 읽는다.)
+  const bytes = new TextEncoder().encode(JSON.stringify(obj))
+  return { ok: true, status: 200, json: async () => obj, body: null, arrayBuffer: async () => bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) }
 }
 
 /**

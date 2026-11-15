@@ -8,7 +8,10 @@
  * enterLive(url?)는 #bwLiveFrame에 /api/browse/view/를 걸고, url이
  * 있으면 POST /api/browse/navigate로 영구 탭을 이동시킨다. 세션이
  * 없어 만료·동시 사용 제한이 없다 — 켜져 있을 때의 enterLive는
- * iframe을 다시 띄우지 않고 이동만 지시한다.
+ * iframe을 다시 띄우지 않고 이동만 지시한다. url이 없을 때도 측정
+ * 뷰포트를 POST /api/browse/viewport로 맞추고 (2026-11-15: 세션 복원
+ * 뒤 navigate가 없으면 override가 적용되지 않아 화면이 절반 크기로
+ * 보였던 구멍), stage 크기 변화는 ResizeObserver로 다시 맞춘다.
  * 상태: 'off' | 'on' | 'notice' | 'locked'
  * (notice = 503 등 시작 실패 안내 카드를 띄운 상태,
  *  locked = LUKS 볼륨이 잠겨 암호 입력 카드를 띄운 상태).
@@ -151,14 +154,45 @@
       });
   }
 
+  /* 이동 없이 원격 뷰포트만 맞춘다 (2026-11-15): 라이브 진입·리사이즈
+     때 호출한다. Promise<{ status, body }> — navigate와 같은 모양. */
+  function defaultApplyViewport(viewport) {
+    if (typeof fetch !== 'function') return Promise.resolve({ status: 0, body: null });
+    if (!viewport || viewport.width <= 0 || viewport.height <= 0) {
+      return Promise.resolve({ status: 0, body: null });
+    }
+    return fetch('/api/browse/viewport', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        viewport: { width: Math.round(viewport.width), height: Math.round(viewport.height) },
+      }),
+    })
+      .then(function (r) {
+        return r
+          .json()
+          .catch(function () {
+            return null;
+          })
+          .then(function (body) {
+            return { status: r.status, body: body };
+          });
+      })
+      .catch(function () {
+        return { status: 0, body: null };
+      });
+  }
+
   /**
-   * deps = { doc, navigate, onChange, checkUnlock, submitUnlock, setQuality, pollDelayMs }
+   * deps = { doc, navigate, applyViewport, onChange, checkUnlock, submitUnlock, setQuality, pollDelayMs }
    * doc에서 #bwLiveFrame/#bwNoticeCard/#bwNoticeMsg/#bwNoticeClose와
    * #bwLockCard/#bwLockForm/#bwLockPassword/#bwLockConfirm/#bwLockMsg/
    * #bwLockSubmit/#bwLockClose/#bwLockTitle/#bwLockDesc를 찾는다 (없으면
    * 해당 요소만 비활성). navigate(url, viewport)는 Promise<{status, body}>
-   * 테스트 주입 지난. checkUnlock()·submitUnlock(mode, password)·
-   * setQuality(payload)도 같은 모양의 테스트 주입 지난. pollDelayMs는 제출 후 상태 폴링 간격(기본 5초).
+   * 테스트 주입 지난. applyViewport(viewport)는 이동 없는 뷰포트 적용
+   * (2026-11-15, 같은 모양의 테스트 주입 지난). checkUnlock()·
+   * submitUnlock(mode, password)·setQuality(payload)도 같은 모양의
+   * 테스트 주입 지난. pollDelayMs는 제출 후 상태 폴링 간격(기본 5초).
    * onChange()는 상태 변경 등 주인의 너비를 다시 그리며 알림 콜백.
    */
   function createLive(deps) {
@@ -166,6 +200,8 @@
     var doc = deps.doc || document;
     var navigate =
       typeof deps.navigate === 'function' ? deps.navigate : defaultNavigate;
+    var applyViewport =
+      typeof deps.applyViewport === 'function' ? deps.applyViewport : defaultApplyViewport;
     var checkUnlock =
       typeof deps.checkUnlock === 'function' ? deps.checkUnlock : defaultCheckUnlock;
     var submitUnlock =
@@ -198,6 +234,97 @@
     var lockMode = 'unlock'; // 'unlock' | 'setup' — 카드가 보여주는 모드
     var pendingUrl = null; // 잠금 때문에 못 간 주소 (풀리면 이동한다)
     var lockBusy = false; // 제출 진행 중 (중복 제출 방지)
+    /* 뷰포트 적용 상태 (2026-11-15): 마지막으로 적용된 크기·리사이즈
+       디바운스 타이머·단발 재시도 타이머·stage 관찰자. */
+    var lastAppliedViewport = null;
+    var viewportTimer = null;
+    var viewportRetryTimer = null;
+    var viewportRetryUsed = false;
+    var lastFailedViewport = null;
+    var stageObserver = null;
+
+    function sameViewport(a, b) {
+      if (!a || !b) return false;
+      return Math.round(a.width) === Math.round(b.width) && Math.round(a.height) === Math.round(b.height);
+    }
+
+    /* 뷰포트를 서버에 적용하고 성공하면 기록한다. 실패하면 기록하지
+       않고 2초 뒤 한 번만 다시 시도한다 (서버 일시 장애 대비 — 같은
+       크기에 대한 재시도는 한 번으로 끝내고, 새 크기가 오면 다시
+       한 번의 재시도를 얻는다). */
+    function applyViewportNow(viewport) {
+      if (!viewport || viewport.width <= 0 || viewport.height <= 0) return Promise.resolve(false);
+      if (sameViewport(viewport, lastAppliedViewport)) return Promise.resolve(true);
+      if (!sameViewport(viewport, lastFailedViewport)) viewportRetryUsed = false;
+      return applyViewport(viewport).then(function (res) {
+        if (res && res.status === 200 && res.body && res.body.ok) {
+          lastAppliedViewport = { width: Math.round(viewport.width), height: Math.round(viewport.height) };
+          lastFailedViewport = null;
+          viewportRetryUsed = false;
+          return true;
+        }
+        lastFailedViewport = { width: Math.round(viewport.width), height: Math.round(viewport.height) };
+        if (!viewportRetryUsed && viewportRetryTimer === null && liveState === 'on') {
+          viewportRetryUsed = true;
+          viewportRetryTimer = setTimeout(function () {
+            viewportRetryTimer = null;
+            if (liveState !== 'on') return;
+            var current = measureViewport();
+            if (current && !sameViewport(current, lastAppliedViewport)) applyViewportNow(current);
+          }, 2000);
+        }
+        return false;
+      });
+    }
+
+    /* stage 크기 변화를 감지해 뷰포트를 다시 맞춘다. 창을 최대화·복원
+       하거나 크기를 바꾸면 override가 옛 크기에 머물러 화면이 다시
+       절반·두 배로 보이기 때문이다. 관찰자는 라이브가 켜질 때만 건다. */
+    function resizeObserverCtor() {
+      var view = doc.defaultView;
+      if (view && typeof view.ResizeObserver === 'function') return view.ResizeObserver;
+      if (typeof ResizeObserver === 'function') return ResizeObserver;
+      return null;
+    }
+
+    function startStageObserver() {
+      stopStageObserver();
+      var Ctor = resizeObserverCtor();
+      var stage = liveFrame && liveFrame.parentElement;
+      if (!Ctor || !stage) return;
+      stageObserver = new Ctor(function () {
+        if (liveState !== 'on') return;
+        if (viewportTimer !== null) clearTimeout(viewportTimer);
+        viewportTimer = setTimeout(function () {
+          viewportTimer = null;
+          if (liveState !== 'on') return;
+          var current = measureViewport();
+          if (current) applyViewportNow(current);
+        }, 300);
+      });
+      stageObserver.observe(stage);
+    }
+
+    function stopStageObserver() {
+      if (stageObserver) {
+        try {
+          stageObserver.disconnect();
+        } catch (err) {
+          // 관찰자 해제는 실패해도 무시한다 (이미 끊긴 경우) — 단 조용히는
+          // 넘기지 않고 경고를 남긴다 (gate-23: 빈 catch 금지).
+          if (typeof console !== 'undefined' && console.warn) console.warn('[browser-live] stage 관찰자 해제 실패 (무시):', err);
+        }
+        stageObserver = null;
+      }
+      if (viewportTimer !== null) {
+        clearTimeout(viewportTimer);
+        viewportTimer = null;
+      }
+      if (viewportRetryTimer !== null) {
+        clearTimeout(viewportRetryTimer);
+        viewportRetryTimer = null;
+      }
+    }
 
     function setNotice(text) {
       if (noticeMsg) noticeMsg.textContent = text;
@@ -453,13 +580,21 @@
       });
     }
 
-    /* iframe을 켜고 url이 있으면 이동한다. enterLive의 잠금 검사 통과 후. */
+    /* iframe을 켜고 url이 있으면 이동한다. enterLive의 잠금 검사 통과 후.
+       url이 없어도 뷰포트는 맞춘다 (2026-11-15: 세션 복원 뒤 navigate가
+       없으면 override가 적용되지 않아 원격이 절반 크기로 보였다). */
     function startLive(url, gen) {
       var viewport = measureViewport();
       liveState = 'on';
       if (liveFrame) liveFrame.src = viewUrlForQuality();
       onChange();
-      if (!url) return Promise.resolve(true);
+      startStageObserver();
+      if (!url) {
+        // 뷰포트 적용 실패는 시작을 막지 않는다 (화면은 뜨고, 다음
+        // 진입·리사이즈 때 다시 시도한다).
+        if (viewport) applyViewportNow(viewport);
+        return Promise.resolve(true);
+      }
       return navigate(url, viewport).then(function (res) {
         if (gen !== liveGen) return false;
         return handleNavigateResult(res, viewport, gen);
@@ -470,6 +605,11 @@
     function handleNavigateResult(res, viewport, gen) {
       var body = res && res.body;
       if (res && res.status === 200 && body && body.ok) {
+        // navigate도 뷰포트를 적용했으므로 기록해 둔다 (리사이즈 관찰자가
+        // 같은 크기를 다시 보내지 않게 한다).
+        if (viewport && viewport.width > 0 && viewport.height > 0) {
+          lastAppliedViewport = { width: Math.round(viewport.width), height: Math.round(viewport.height) };
+        }
         // 진단: 보낸 뷰포트와 서버의 CDP 이동 결과(nav/navStage)를
         // 남겨 원격 뷰포트 적용 여부를 콘솔에서 확인할 수 있게 한다.
         if (typeof console !== 'undefined' && typeof console.info === 'function') {
@@ -504,6 +644,10 @@
     function endLive() {
       liveGen += 1;
       liveState = 'off';
+      stopStageObserver();
+      lastAppliedViewport = null;
+      lastFailedViewport = null;
+      viewportRetryUsed = false;
       if (liveFrame) liveFrame.removeAttribute('src');
       onChange();
       return Promise.resolve();

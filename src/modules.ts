@@ -20,6 +20,7 @@ import { mcpApp } from './modules/mcp/routes'
 import { desktopApp } from './modules/desktop/routes'
 import { driveApp } from './modules/drive/routes'
 import { browseApp } from './modules/browse/routes'
+import { craftApp } from './modules/craft/routes'
 import { callSingleAssistant } from './modules/ai/routes'
 import { setAssistantHandler } from './services/channel-gateway'
 
@@ -69,4 +70,5 @@ export const modules: ModuleDef[] = [
   { id: 'mcp', name: 'MCP 서버', desc: '표준 MCP(Streamable HTTP) 읽기 도구', path: '', app: mcpApp, hidden: true },
   { id: 'desktop', name: '데스크톱', desc: '웹OS 데스크톱 배경화면(오늘의 사진)', path: '/desktop.html', app: desktopApp, hidden: true },
   { id: 'browse', name: '브라우저', desc: '원격 실제 브라우저(Oracle) 프록시', path: '', app: browseApp, hidden: true },
+  { id: 'craft', name: 'Craft 릴레이', desc: 'AI Studio 빌더 백엔드 릴레이 (Gemini·Groq·NVIDIA·Workers AI)', path: '', app: craftApp, hidden: true },
 ]

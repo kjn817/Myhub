@@ -14,7 +14,7 @@
  *   닫아 MyHub 주소창을 탈출구로 만든다. 영구 탭은 닫지 않는다.
  * 카나리아: 단계 보고(stage)나 폴백 조건을 깨면 해당 테스트가 실패한다.
  */
-import { navigateSession, wsToHttpUrl, type CdpSocket } from '../../src/modules/browse/cdp'
+import { applyViewportToSession, navigateSession, wsToHttpUrl, type CdpSocket } from '../../src/modules/browse/cdp'
 
 type Listener = (ev: { data: unknown }) => void
 
@@ -221,6 +221,95 @@ describe('navigateSession — 뷰포트 (2026-11-12 원격 화면 짤림 수정)
   })
 })
 
+describe('applyViewportToSession — 이동 없는 뷰포트 적용 (2026-11-15 세션 복원 뒤 절반 크기 수정)', () => {
+  function viewportOnlyHandler(msg: Record<string, any>, emit: (m: unknown) => void): void {
+    if (msg.method === 'Target.getTargets') {
+      emit({ id: msg.id, result: { targetInfos: [{ type: 'page', targetId: 'page-1' }] } })
+    } else if (msg.method === 'Target.attachToTarget') {
+      emit({ id: msg.id, result: { sessionId: 'sess-1' } })
+    } else if (msg.method === 'Emulation.setDeviceMetricsOverride') {
+      emit({ id: msg.id, result: {} })
+    }
+  }
+
+  test('getTargets→attach→뷰포트 순서로 가고 이동은 보내지 않으며 소켓이 닫힌다', async () => {
+    const sock = new FakeSocket(viewportOnlyHandler)
+    const r = await applyViewportToSession(WS_URL, { width: 1470, height: 850 }, async () => sock as CdpSocket)
+    expect(r).toEqual({ ok: true, stage: 'ok' })
+    expect(sock.sent.map((m) => m.method)).toEqual([
+      'Target.getTargets',
+      'Target.attachToTarget',
+      'Emulation.setDeviceMetricsOverride',
+    ])
+    const vp = sock.sent.find((m) => m.method === 'Emulation.setDeviceMetricsOverride')
+    expect(vp.params).toEqual({ width: 1470, height: 850, deviceScaleFactor: 1, mobile: false })
+    expect(vp.sessionId).toBe('sess-1')
+    expect(sock.closed).toBe(true)
+  })
+
+  test('connect가 null을 돌려주거나 던지면 stage=connect', async () => {
+    const r1 = await applyViewportToSession(WS_URL, { width: 100, height: 100 }, async () => null)
+    expect(r1).toEqual({ ok: false, stage: 'connect' })
+    const r2 = await applyViewportToSession(WS_URL, { width: 100, height: 100 }, async () => {
+      throw new Error('boom')
+    })
+    expect(r2).toEqual({ ok: false, stage: 'connect' })
+  })
+
+  test('리스너 등록이 던지면 stage=connect이고 타이머가 남지 않는다', async () => {
+    // navigateSession과 같은 고아 타이머 구멍 — executor throw 전에
+    // 타이머가 만들어지면 5초간 워커를 붙잡는다 (2026-11-15).
+    jest.useFakeTimers()
+    try {
+      const before = jest.getTimerCount()
+      const sock = new FakeSocket(viewportOnlyHandler)
+      sock.addEventListener = () => { throw new Error('no listeners') }
+      const r = await applyViewportToSession(WS_URL, { width: 100, height: 100 }, async () => sock as CdpSocket)
+      expect(r).toEqual({ ok: false, stage: 'connect' })
+      expect(jest.getTimerCount()).toBe(before)
+    } finally {
+      jest.useRealTimers()
+    }
+  })
+
+  test('페이지 타깃이 없으면 stage=targets로 보고하고 attach를 보내지 않는다', async () => {
+    const sock = new FakeSocket((msg, emit) => {
+      if (msg.method === 'Target.getTargets') {
+        emit({ id: msg.id, result: { targetInfos: [{ type: 'browser' }] } })
+      }
+    })
+    const r = await applyViewportToSession(WS_URL, { width: 100, height: 100 }, async () => sock as CdpSocket)
+    expect(r).toEqual({ ok: false, stage: 'targets' })
+    expect(sock.sent.map((m) => m.method)).toEqual(['Target.getTargets'])
+  })
+
+  test('attach가 실패하면 stage=attach로 보고한다', async () => {
+    const sock = new FakeSocket((msg, emit) => {
+      if (msg.method === 'Target.getTargets') {
+        emit({ id: msg.id, result: { targetInfos: [{ type: 'page', targetId: 'page-1' }] } })
+      } else if (msg.method === 'Target.attachToTarget') {
+        emit({ id: msg.id, error: { message: 'nope' } })
+      }
+    })
+    const r = await applyViewportToSession(WS_URL, { width: 100, height: 100 }, async () => sock as CdpSocket)
+    expect(r).toEqual({ ok: false, stage: 'attach' })
+  })
+
+  test('뷰포트 명령이 실패하면 stage=viewport로 보고한다', async () => {
+    const sock = new FakeSocket((msg, emit) => {
+      if (msg.method === 'Target.getTargets') {
+        emit({ id: msg.id, result: { targetInfos: [{ type: 'page', targetId: 'page-1' }] } })
+      } else if (msg.method === 'Target.attachToTarget') {
+        emit({ id: msg.id, result: { sessionId: 'sess-1' } })
+      } else if (msg.method === 'Emulation.setDeviceMetricsOverride') {
+        emit({ id: msg.id, error: { message: 'nope' } })
+      }
+    })
+    const r = await applyViewportToSession(WS_URL, { width: 100, height: 100 }, async () => sock as CdpSocket)
+    expect(r).toEqual({ ok: false, stage: 'viewport' })
+  })
+})
+
 describe('navigateSession — 연결·단계 실패', () => {
   test('connect가 null을 돌려주거나 던지면 stage=connect', async () => {
     await expect(navigateSession(WS_URL, TARGET, async () => null)).resolves.toEqual({ ok: false, stage: 'connect' })
@@ -271,6 +360,21 @@ describe('navigateSession — 연결·단계 실패', () => {
     expect(sock.sent.filter((m) => m.method === 'Target.getTargets').length).toBe(4)
   }, 15000)
 
+  test('타임아웃으로 끝난 뒤에는 예약된 재시도가 나가지 않는다 (재시도 타이머 누수 없음)', async () => {
+    // 첫 getTargets가 빈 목록을 돌려줘 재시도(300ms)가 예약된 뒤,
+    // 타임아웃(100ms)으로 끝나면 그 재시도는 취소돼야 한다 — 안 그러면
+    // 끝난 뒤에도 getTargets가 계속 나가고 타이머가 이벤트 루프를 붙잡는다.
+    const sock = new FakeSocket((msg, emit) => {
+      if (msg.method === 'Target.getTargets') emit({ id: msg.id, result: { targetInfos: [] } })
+    })
+    const r = await navigateSession(WS_URL, TARGET, async () => sock as CdpSocket, { timeoutMs: 100 })
+    expect(r).toEqual({ ok: false, stage: 'targets' })
+    const countTargets = (): number => sock.sent.filter((m) => m.method === 'Target.getTargets').length
+    expect(countTargets()).toBe(1)
+    await new Promise((resolve) => setTimeout(resolve, 400))
+    expect(countTargets()).toBe(1)
+  })
+
   test('응답이 없으면 timeoutMs 뒤 현재 단계(targets)로 종료하고 소켓을 닫는다', async () => {
     const sock = new FakeSocket(() => { /* 무응답 */ })
     const started = Date.now()
@@ -292,6 +396,23 @@ describe('navigateSession — 연결·단계 실패', () => {
     sock.addEventListener = () => { throw new Error('no listeners') }
     const r = await navigateSession(WS_URL, TARGET, async () => sock as CdpSocket)
     expect(r).toEqual({ ok: false, stage: 'connect' })
+  })
+
+  test('리스너 등록이 던져도 타이머가 남지 않는다 (고아 타이머 없음)', async () => {
+    // executor가 동기 throw하면 Promise가 reject돼 finish가 안 불리는데,
+    // 타임아웃 타이머가 그 전에 만들어지면 5초짜리 고아가 돼 jest 워커가
+    // 1초 안에 안 죽고 'did not exit' 경고를 낸다 (2026-11-15 실측).
+    jest.useFakeTimers()
+    try {
+      const before = jest.getTimerCount()
+      const sock = new FakeSocket(happyHandler)
+      sock.addEventListener = () => { throw new Error('no listeners') }
+      const r = await navigateSession(WS_URL, TARGET, async () => sock as CdpSocket)
+      expect(r).toEqual({ ok: false, stage: 'connect' })
+      expect(jest.getTimerCount()).toBe(before)
+    } finally {
+      jest.useRealTimers()
+    }
   })
 })
 

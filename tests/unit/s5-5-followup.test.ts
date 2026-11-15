@@ -52,11 +52,15 @@ describe('S5-5 후속 — 복원 문장 핀 (모지바케 역변환 확정)', ()
     ['public/js/finder-pdfcraft.js', '자체 열기는 호스트 위임(pdfcraft:request-open)이 다운스트림 패치로'],
     ['public/js/finder-pdfcraft.js', '이 모듈은 그 지(호스트 층)만 맡는다 — iframe 생성·출처 검증·ready'],
     ['public/js/finder-pdfcraft.js', '워치독·메시지 정규화. 표면 전환(접기/펼치기·폴백)과 저장은'],
-    ['public/js/finder-pdfcraft.js', '무게 대책: WASM은 raw 36MB라 Finder를 열 때 유휴 시간은 매니페스트의'],
+    // 2026-11-15 갱신: PDF 부팅 강건화(Blob URL 핸드오프·CacheStorage)로
+    // 헤더 문장이 바뀌었다 — 36MB는 v0.18.0 수치라 v0.21.1(47MB)에 맞게
+    // 고쳤고, '프리페치'는 모지바케 잔여라 '프리패치'로 바로잡았다.
+    // 핀의 성질(복원된 한국어 문장이 파일에 존재한다)은 그대로 유지된다.
+    ['public/js/finder-pdfcraft.js', '무게 대책: WASM은 raw 47MB라 Finder를 열 때 유휴 시간은 매니페스트의'],
     ['public/js/finder-pdfcraft.js', '진입 에셋을 미리 받아 둔다 (아래 prefetch). WASM은 에셋 상한(25MB)을'],
-    ['public/js/finder-pdfcraft.js', '받아 이어 붙인다 — 프리페치 대상도 그 조각들과 로더다.'],
+    ['public/js/finder-pdfcraft.js', '받아 이어 붙인다 — 프리패치 대상도 그 조각들과 로더다.'],
     ['public/js/finder-pdfcraft.js', '다운스트림 패치가 제공하는 표면이다.'],
-    ['public/js/finder-pdfcraft.js', 'ready 워치독: 콜드 기동(전송+36MB 컴파일)에 느린 기기까지 기다린다.'],
+    ['public/js/finder-pdfcraft.js', 'ready 워치독: 콜드 기동(Blob URL에서 이어 붙인 47MB 컴파일)에'],
     ['public/js/finder-pdfcraft.js', '이 안에 ready가 없으면 호스트가 pdf.js 표면으로 남는다.'],
     ['public/js/finder-pdfcraft.js', 'onRequestOpen은 엔진이 자체 열기가 호스트로 위임한 것이다'],
     ['public/js/finder-pdfcraft.js', 'onFallback은 ready 워치독 초과'],

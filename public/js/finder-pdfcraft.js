@@ -8,10 +8,17 @@
 // 워치독·메시지 정규화. 표면 전환(접기/펼치기·폴백)과 저장은
 // finder-format-pdf.js가 ctx 계약(putContent/saveAsContent)으로 맡는다.
 //
-// 무게 대책: WASM은 raw 36MB라 Finder를 열 때 유휴 시간은 매니페스트의
+// 무게 대책: WASM은 raw 47MB라 Finder를 열 때 유휴 시간은 매니페스트의
 // 진입 에셋을 미리 받아 둔다 (아래 prefetch). WASM은 에셋 상한(25MB)을
 // 넘어 raw 조각 둘(.part0/.part1)로 올라가 있고 벤더 편의 loader.js가
-// 받아 이어 붙인다 — 프리페치 대상도 그 조각들과 로더다.
+// 받아 이어 붙인다 — 프리패치 대상도 그 조각들과 로더다.
+// HTTP 캐시는 23MB 조각을 안 잡는다 (2026-11-15 실측: 동일 문서에서
+// 즉시 다시 받아도 transferSize가 전문 크기 — 캐시 미적용). 그래서
+// 부팅 게이트는 조각 바이트를 직접 모아 Blob URL로 엔진 iframe에
+// 넘기고(쿼리 wasmPart0/wasmPart1, 로더가 네트워크 대신 받는다),
+// CacheStorage에도 저장해 다음 부팅은 네트워크를 안 탄다.
+// 파트 파일명이 콘텐츠 해시를 포함하므로 엔진 버전이 바뀌면 캐시
+// 키도 바뀌어 오래된 조각은 자동 무효화된다 (고아는 prune이 치운다).
 (function () {
   'use strict';
 
@@ -46,9 +53,18 @@
 
   // 테스트가 주입할 수 있는 다음만 (스탠다론 경로는 기본값 그대로)
   var internals = {
-    // ready 워치독: 콜드 기동(전송+36MB 컴파일)에 느린 기기까지 기다린다.
+    // ready 워치독: 콜드 기동(Blob URL에서 이어 붙인 47MB 컴파일)에
+    // 느린 기기까지 기다린다.
     // 이 안에 ready가 없으면 호스트가 pdf.js 표면으로 남는다.
+    // 워치독은 iframe src를 붙인 시점부터 돈다 (부팅 프리패치 시간은
+    // 안 잡힌다 — Blob URL은 메모리에서 바로 읽히므로 ready가 수 초
+    // 안에 온다).
     readyTimeoutMs: 45000,
+    // 부팅 게이트 프리패치 재시도: 한 번의 시도가 멈춰도 두 번 더
+    // 시도한다. 파일별 재시도(코어 maxAttempts)와 별개로, 전체
+    // 프리패치 자체를 다시 돌리는 횟수다.
+    bootMaxAttempts: 3,
+    bootRetryDelayMs: 1000,
   };
 
   // save/open 메시지는 bytes가 ArrayBuffer가 내도, 뷰(Uint8Array 등)가
@@ -70,9 +86,25 @@
   /**
    * PdfCraft iframe 세션을 만든다.
    * deps = { doc, win, parentEl, name?, url?, readyTimeoutMs?,
+   *          fetchFn?, caches?, prefetchForBoot?, bootMaxAttempts?,
+   *          bootRetryDelayMs?, stallTimeoutMs?, prefetchMaxAttempts?,
+   *          prefetchRetryDelayMs?, createObjectURL?, revokeObjectURL?,
+   *          Blob?, onBootProgress(p),
    *          onReady(version), onDirty(dirty),
    *          onSave({ name, saveAs, bytes }), onRequestOpen(),
    *          onModeState(mode), onMenusState(menus), onFallback(reason) }
+   * 부팅 게이트 (2026-11-15): iframe src는 엔진 자산 프리패치가 끝난
+   * 뒤에 붙이고, ready 워치독은 그 시점부터 돈다. 프리패치가 실패하면
+   * bootMaxAttempts까지 재시도하고 전부 실패하면 onFallback에
+   * 'prefetch-failed'로 간다. onBootProgress는 { receivedBytes,
+   * filesDone, filesTotal, currentUrl, attempt, maxAttempts }를 받는다.
+   * prefetchForBoot는 테스트 주입용 (없으면 모듈 prefetchForBoot).
+   * 게이트가 모은 WASM 조각 바이트는 Blob URL로 바꿔 src 쿼리
+   * (wasmPart0/wasmPart1)로 넘긴다 — 23MB 조각은 HTTP 캐시에 안
+   * 남아 로더가 다시 받는 것을 막기 위함이다. Blob URL은 ready가
+   * 오면(엔진이 init을 마쳤으므로) 해제하고, 폴백·destroy 때도
+   * 해제한다. Blob URL을 못 만들면 쿼리 없이 부팅한다 (로더가
+   * 네트워크에서 받으므로 느리지만 동작한다).
    * onRequestOpen은 엔진이 자체 열기가 호스트로 위임한 것이다
    * (pdfcraft:request-open 앱 엔진 host_open 패치). 표면은 호스트
    * 열기 경로로 고른 파일을 open()으로 다시 내려보내면 하고,
@@ -135,6 +167,26 @@
       return true;
     }
 
+    var fetchFn =
+      deps.fetchFn ||
+      (typeof win.fetch === 'function' ? win.fetch.bind(win) : null);
+
+    // Blob URL 핸드오프용 API (테스트 주입 가능 — 없으면 win에서 해결).
+    var createObjectURL =
+      typeof deps.createObjectURL === 'function'
+        ? deps.createObjectURL
+        : win.URL && typeof win.URL.createObjectURL === 'function'
+          ? win.URL.createObjectURL.bind(win.URL)
+          : null;
+    var revokeObjectURL =
+      typeof deps.revokeObjectURL === 'function'
+        ? deps.revokeObjectURL
+        : win.URL && typeof win.URL.revokeObjectURL === 'function'
+          ? win.URL.revokeObjectURL.bind(win.URL)
+          : null;
+    var BlobCtor =
+      deps.Blob || win.Blob || (typeof Blob !== 'undefined' ? Blob : null);
+
     var frame = doc.createElement('iframe');
     frame.className = 'fv-frame fv-pdfcraft-frame';
     if (deps.name) frame.title = deps.name;
@@ -145,21 +197,126 @@
     // 없으면 브라우저가 그 노출을 조용히 무시한다("Ignored call to
     // 'print()'. The document is sandboxed앱" 두 프로브 실측 2026-11-06).
     frame.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-modals');
-    frame.src = deps.url || APP_URL;
+    // src는 부팅 프리패치가 끝난 뒤에 붙인다 (아래 runBootPrefetch) —
+    // iframe이 47MB를 직접 받으면 45초 워치독이 먼저 터진다. 요소는
+    // 동기 생성해야 호출부가 host.frame을 즉시 쓸 수 있다.
     deps.parentEl.appendChild(frame);
 
     var ready = false;
     var dead = false;
     var fallbackFired = false;
 
-    var timer = setTimeout(function () {
-      if (!ready) fireFallback('timeout');
-    }, readyTimeoutMs);
+    // 게이트가 모은 조각 바이트로 만든 Blob URL — ready·폴백·destroy
+    // 때 해제한다 (엔진이 init을 마치면 로더의 fetch는 끝났으므로
+    // ready 이후에는 메모리를 잡고 있을 이유가 없다).
+    var partBlobUrls = [];
+    function revokePartBlobs() {
+      if (!partBlobUrls.length) return;
+      var urls = partBlobUrls;
+      partBlobUrls = [];
+      if (!revokeObjectURL) return;
+      urls.forEach(function (u) {
+        try {
+          revokeObjectURL(u);
+        } catch (e) {
+          // 해제 실패는 생명주기 버그의 신호이므로 기록한다
+          // (관문 23: 빈 catch 금지).
+          if (typeof console !== 'undefined' && console.warn) {
+            console.warn('[finder-pdfcraft] Blob URL 해제 실패', e);
+          }
+        }
+      });
+    }
+
+    // ready 워치독은 iframe src를 붙인 시점부터 돈다 — 프리패치
+    // 시간은 워치독에 안 잡힌다 (Blob URL은 메모리에서 바로 읽히므로
+    // ready가 수 초 안에 온다).
+    var timer = null;
+    function startWatchdog() {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(function () {
+        if (!ready) fireFallback('timeout');
+      }, readyTimeoutMs);
+    }
+
+    // 부팅 게이트 프리패치 (2026-11-15): 엔진 자산을 먼저 받아
+    // CacheStorage를 데우고 조각 바이트를 모은 뒤 iframe을 띄운다.
+    // 실패하면 재시도하고, 전부 실패하면 폴백('prefetch-failed')으로
+    // 간다 — 단발 폴백 대신 재시도 후 최종 실패 시에만 폴백하는 것이
+    // 계약이다. 게이트가 모은 조각 바이트는 Blob URL로 바꿔 src 쿼리로
+    // 넘긴다 (HTTP 캐시는 23MB 조각을 안 잡는다 — 로더가 네트워크에서
+    // 다시 받는 것을 막기 위함).
+    var bootAttempts = 0;
+    var bootMaxAttempts =
+      typeof deps.bootMaxAttempts === 'number' ? deps.bootMaxAttempts : internals.bootMaxAttempts;
+    var bootRetryDelayMs =
+      typeof deps.bootRetryDelayMs === 'number' ? deps.bootRetryDelayMs : internals.bootRetryDelayMs;
+    function runBootPrefetch() {
+      if (dead) return;
+      bootAttempts += 1;
+      var bootFn =
+        typeof deps.prefetchForBoot === 'function' ? deps.prefetchForBoot : prefetchForBoot;
+      bootFn({
+        fetchFn: fetchFn,
+        win: win,
+        caches: deps.caches,
+        stallTimeoutMs: deps.stallTimeoutMs,
+        maxAttempts: deps.prefetchMaxAttempts,
+        retryDelayMs: deps.prefetchRetryDelayMs,
+        onProgress: function (p) {
+          if (typeof deps.onBootProgress === 'function') {
+            deps.onBootProgress({
+              receivedBytes: p.receivedBytes,
+              filesDone: p.filesDone,
+              filesTotal: p.filesTotal,
+              currentUrl: p.currentUrl,
+              attempt: bootAttempts,
+              maxAttempts: bootMaxAttempts,
+            });
+          }
+        },
+      })
+        .then(function (r) {
+          if (dead) return;
+          var src = deps.url || APP_URL;
+          if (r && Array.isArray(r.partBytes) && r.partBytes.length && createObjectURL && BlobCtor) {
+            try {
+              partBlobUrls = r.partBytes.map(function (b) {
+                return createObjectURL(new BlobCtor([b], { type: 'application/wasm' }));
+              });
+              var sep = src.indexOf('?') === -1 ? '?' : '&';
+              src +=
+                sep +
+                partBlobUrls
+                  .map(function (u, i) {
+                    return 'wasmPart' + i + '=' + encodeURIComponent(u);
+                  })
+                  .join('&');
+            } catch (e) {
+              // Blob URL 생성 실패 시 쿼리 없이 기존 경로로 부팅한다 —
+              // 로더가 네트워크에서 받으므로 느리지만 동작한다.
+              revokePartBlobs();
+            }
+          }
+          frame.src = src;
+          startWatchdog();
+        })
+        .catch(function () {
+          if (dead) return;
+          if (bootAttempts < bootMaxAttempts) {
+            setTimeout(runBootPrefetch, bootRetryDelayMs);
+          } else {
+            fireFallback('prefetch-failed');
+          }
+        });
+    }
+    runBootPrefetch();
 
     function fireFallback(reason) {
       if (dead || fallbackFired) return;
       fallbackFired = true;
       clearTimeout(timer);
+      revokePartBlobs();
       if (typeof deps.onFallback === 'function') deps.onFallback(reason);
     }
 
@@ -171,6 +328,9 @@
       if (d.type === 'pdfcraft:ready') {
         ready = true;
         clearTimeout(timer);
+        // 엔진이 init을 마쳤으므로 로더의 Blob fetch는 끝났다 —
+        // 47MB Blob을 여기서 해제한다.
+        revokePartBlobs();
         if (typeof deps.onReady === 'function') deps.onReady(d.version);
       } else if (d.type === 'pdfcraft:dirty') {
         if (typeof deps.onDirty === 'function') deps.onDirty(!!d.dirty);
@@ -244,6 +404,7 @@
         if (dead) return;
         dead = true;
         clearTimeout(timer);
+        revokePartBlobs();
         win.removeEventListener('message', onMessage);
         if (frame.parentNode) frame.parentNode.removeChild(frame);
       },
@@ -269,45 +430,365 @@
     return core;
   }
 
-  var prefetchImpl = null;
+  // WASM 조각 CacheStorage 이름 — HTTP 캐시는 23MB 조각을 안 잡지만
+  // CacheStorage는 큰 엔트리에도 제한이 없다 (2026-11-15 실측 근거).
+  var PART_CACHE_NAME = 'myhub-pdfcraft-parts';
+  // 백그라운드 프리패치 once 플래그 (코어 createPrefetch와 같은 이름 —
+  // 래퍼 테스트가 고정한다).
+  var BG_PREFETCH_FLAG = '__myhubPdfcraftPrefetched';
+
+  function getCaches(deps) {
+    deps = deps || {};
+    if (deps.caches) return deps.caches;
+    var win = deps.win || (typeof window !== 'undefined' ? window : null);
+    return win && win.caches ? win.caches : null;
+  }
+
+  // CacheStorage 키는 절대 URL로 통일한다 (상대 URL은 환경마다 해석이
+  // 달라 match/put이 어긋날 수 있다).
+  function absUrl(url, win) {
+    try {
+      var base = win && win.location && win.location.href;
+      if (base && typeof URL !== 'undefined') return new URL(url, base).href;
+    } catch (e) {
+      // 해석 실패 시 원본 URL을 키로 쓴다 (폴백 값 반환).
+      return url;
+    }
+    return url;
+  }
+
+  // 조각 바이트를 CacheStorage에 저장한다. 저장 실패(용량·차단)는
+  // 부팅과 무관하므로 조용히 무시한다 — 다음 부팅은 네트워크로 간다.
+  // 저장 완료를 기다리는 Promise를 돌려준다 (절대 거절하지 않는다) —
+  // 게이트가 끝날 때 저장이 끝나 있어야 다음 부팅이 캐시를 탄다.
+  function storePart(cachesObj, absolute, bytes) {
+    try {
+      var ResponseCtor = typeof Response !== 'undefined' ? Response : null;
+      if (!ResponseCtor) return Promise.resolve();
+      return cachesObj
+        .open(PART_CACHE_NAME)
+        .then(function (cache) {
+          return cache.put(absolute, new ResponseCtor(bytes));
+        })
+        .catch(function () {
+          // 저장 실패는 무시한다 (다음 부팅은 네트워크로 간다).
+          return undefined;
+        });
+    } catch (e) {
+      // 동기 실패(생성자 없음 등)도 무시한다.
+      return Promise.resolve();
+    }
+  }
+
+  // 현재 버전의 조각이 아닌 캐시 항목(오래된 버전의 고아)을 치운다.
+  // 실패해도 게이트는 계속된다.
+  function prunePartCache(cachesObj, keepAbsolutes) {
+    return Promise.resolve()
+      .then(function () {
+        return cachesObj.open(PART_CACHE_NAME);
+      })
+      .then(function (cache) {
+        return cache.keys().then(function (keys) {
+          var dels = [];
+          keys.forEach(function (req) {
+            var u = typeof req === 'string' ? req : req && req.url;
+            if (u && keepAbsolutes.indexOf(u) === -1) dels.push(cache.delete(req));
+          });
+          return Promise.all(dels);
+        });
+      })
+      .catch(function () {
+        // 정리 실패는 무시한다 (고아가 남는 것이 부팅을 막지는 않는다).
+        return undefined;
+      });
+  }
+
+  // 같은 조각을 동시에 받는 호출이 47MB를 두 번 받지 않게, 진행 중인
+  // 로드를 URL별로 공유한다 (백그라운드 프리패치와 부팅 게이트가 같은
+  // 문서에서 겹치는 경우). 완료·실패 후에는 항목을 지운다.
+  var partInFlight = {};
+  function loadPartBytes(core, fetchFn, cachesObj, url, win, opts, onFileProgress) {
+    var absolute = absUrl(url, win);
+    if (partInFlight[absolute]) {
+      return partInFlight[absolute].then(function (bytes) {
+        // 공유된 로드 — 완료 시 전체 크기로 한 번 보고한다 (호출부
+        // 누적과 일치; 스트리밍 보고는 원본 로드가 맡았다).
+        onFileProgress(bytes.byteLength);
+        return bytes;
+      });
+    }
+    var p = loadPartBytesOnce(core, fetchFn, cachesObj, url, absolute, opts, onFileProgress);
+    partInFlight[absolute] = p;
+    var cleanup = function () {
+      if (partInFlight[absolute] === p) delete partInFlight[absolute];
+    };
+    p.then(cleanup, cleanup);
+    return p;
+  }
+
+  function loadPartBytesOnce(core, fetchFn, cachesObj, url, absolute, opts, onFileProgress) {
+    function fromNetwork() {
+      return core
+        .fetchWithProgress(fetchFn, url, {
+          stallTimeoutMs: opts.stallTimeoutMs,
+          maxAttempts: opts.maxAttempts,
+          retryDelayMs: opts.retryDelayMs,
+          setTimeoutFn: opts.setTimeoutFn,
+          clearTimeoutFn: opts.clearTimeoutFn,
+          collectBody: true,
+          onProgress: function (p) {
+            onFileProgress(p.receivedBytes);
+          },
+        })
+        .then(function (r) {
+          var bytes = r.body || new Uint8Array(0);
+          if (!cachesObj) return bytes;
+          // 저장이 끝나야 바이트를 넘긴다 — 그래야 게이트가 끝난
+          // 직후의 다음 부팅도 캐시를 탄다.
+          return storePart(cachesObj, absolute, bytes).then(function () {
+            return bytes;
+          });
+        });
+    }
+    function fromCache() {
+      // 캐시 조회 자체는 절대 거절하지 않는다 — 실패하면 null로
+      // 네트워크 폴백한다 (fromNetwork의 거절은 그대로 전파돼야 한다).
+      if (!cachesObj) return Promise.resolve(null);
+      return Promise.resolve()
+        .then(function () {
+          return cachesObj.open(PART_CACHE_NAME);
+        })
+        .then(function (cache) {
+          return cache.match(absolute);
+        })
+        .then(function (res) {
+          return res ? res.arrayBuffer() : null;
+        })
+        .catch(function () {
+          return null;
+        });
+    }
+    return fromCache().then(function (buf) {
+      if (buf) {
+        var bytes = new Uint8Array(buf);
+        onFileProgress(bytes.byteLength);
+        return bytes;
+      }
+      return fromNetwork();
+    });
+  }
 
   /**
-   * 매니페스트를 읽어 진입 에셋(JS 글루·ASM·온라인)을 미리 받는다.
-   * HTML은 Worker가 no-store로 주므로 데울 수 없이 상체에서는 제외.
-   * 실패는 조용히 무시한다 — 프리패치는 최적화일 뿐, 못 데우면 넣기가
-   * 두 두 그대로 넣으면 낸다. deps = { fetchFn, win } (테스트 주입용).
+   * 백그라운드 프리패치: 매니페스트를 읽어 진입 에셋을 미리 받는다.
+   * 부팅 게이트(prefetchForBoot)와 같은 경로로 받아 CacheStorage를
+   * 채우므로, 유휴 시간에 데워 두면 첫 PDF 열기도 네트워크를 안 탄다
+   * (구 경로는 HTTP 캐시를 데웠는데 23MB 조각은 거기 안 남아 47MB를
+   * 버리는 다운로드였다). 실패는 조용히 무시한다 — 프리패치는
+   * 최적화일 뿐이다. deps = { fetchFn, win, caches } (테스트 주입용).
    * 단일 wasm(47MB)은 받지 않고 wasmParts만 받는다 (로더가 파트를
    * 이어 붙인다 — 단일 wasm까지 받으면 47MB를 더 받는 회귀다).
-   * @returns {Promise<string[]>} 실제로 받은 URL 목록
+   * @returns {Promise<string[]>} 실제로 받은 URL 목록 (매니페스트 제외)
    */
   function prefetch(deps) {
     var core = getPrefetchCore();
     if (!core) return Promise.resolve([]);
-    if (!prefetchImpl) {
-      prefetchImpl = core.createPrefetch({
-        flag: '__myhubPdfcraftPrefetched',
-        discover: function (fetchFn) {
-          return fetchFn(versionedAssetUrl(MANIFEST_URL))
-            .then(function (res) {
-              if (!res || !res.ok) throw new Error('manifest http ' + (res && res.status));
-              return res.json();
-            })
-            .then(function (man) {
-              return core.manifestAssetUrls('/vendor/pdfcraft/', man, {
-                wasmParts: true,
-                snippets: true,
-                loader: true,
-              });
-            });
-        },
+    deps = deps || {};
+    var fetchFn = getFetchFn(deps);
+    if (!fetchFn) return Promise.resolve([]);
+    var win = deps.win || (typeof window !== 'undefined' ? window : null);
+    // once 플래그는 시작 전에 세운다 — 동시 호출이 이중 다운로드를
+    // 못 하게 한다 (코어 createPrefetch와 같은 계약).
+    if (win && win[BG_PREFETCH_FLAG]) return Promise.resolve([]);
+    if (win) win[BG_PREFETCH_FLAG] = true;
+    return prefetchForBoot(deps)
+      .then(function (r) {
+        return r.done;
+      })
+      .catch(function () {
+        return [];
       });
-    }
-    return prefetchImpl(deps);
+  }
+
+  function getFetchFn(deps) {
+    deps = deps || {};
+    if (typeof deps.fetchFn === 'function') return deps.fetchFn;
+    var win = deps.win || (typeof window !== 'undefined' ? window : null);
+    return win && typeof win.fetch === 'function' ? win.fetch.bind(win) : null;
+  }
+
+  // 부팅 게이트용 프리패치 (2026-11-15): 매니페스트를 읽어 진입 에셋을
+  // 매니페스트 순서대로 진행 보고와 함께 받는다. WASM 조각은 바이트를
+  // 모아 돌려준다 (createHost가 Blob URL로 바꿔 엔진에 넘긴다 — HTTP
+  // 캐시는 23MB 조각을 안 잡는다). 조각은 CacheStorage에서 먼저 찾고
+  // 없으면 네트워크로 받아 저장한다. 작은 파일(js·loader·snippets)은
+  // 본문을 버리고 받기만 한다 (작은 파일은 HTTP 캐시가 잡는다).
+  // 멈춘 파일이 남으면 reject한다. 백그라운드 프리패치와 달리 once
+  // 플래그를 타지 않는다 — 백그라운드가 중간에 실패했어도 부팅 때는
+  // 다시 받아야 한다.
+  // deps = { fetchFn, win, caches, onProgress, stallTimeoutMs,
+  //          maxAttempts, retryDelayMs, setTimeoutFn, clearTimeoutFn }.
+  // @returns {Promise<{done, failed, stalled, receivedBytes, partBytes}>}
+  //   done은 받은 URL 목록(매니페스트 순서), partBytes는 wasmParts
+  //   순서의 Uint8Array 배열이다.
+  function prefetchForBoot(deps) {
+    var core = getPrefetchCore();
+    var empty = { done: [], failed: [], stalled: [], receivedBytes: 0, partBytes: [] };
+    if (!core) return Promise.resolve(empty);
+    var fetchFn = getFetchFn(deps);
+    if (!fetchFn) return Promise.resolve(empty);
+    deps = deps || {};
+    var win = deps.win || (typeof window !== 'undefined' ? window : null);
+    var cachesObj = getCaches(deps);
+    var opts = {
+      stallTimeoutMs: deps.stallTimeoutMs,
+      maxAttempts: deps.maxAttempts,
+      retryDelayMs: deps.retryDelayMs,
+      setTimeoutFn: deps.setTimeoutFn,
+      clearTimeoutFn: deps.clearTimeoutFn,
+    };
+    return core
+      .fetchWithProgress(fetchFn, versionedAssetUrl(MANIFEST_URL), {
+        stallTimeoutMs: opts.stallTimeoutMs,
+        maxAttempts: opts.maxAttempts,
+        retryDelayMs: opts.retryDelayMs,
+        setTimeoutFn: opts.setTimeoutFn,
+        clearTimeoutFn: opts.clearTimeoutFn,
+        collectBody: true,
+      })
+      .then(function (r) {
+        var text = '';
+        if (r.body) {
+          try {
+            text = new TextDecoder().decode(r.body);
+          } catch (e) {
+            text = '';
+          }
+        }
+        var man = JSON.parse(text);
+        // 단일 wasm(47MB)은 받지 않고 wasmParts만 받는다 (로더가
+        // 파트를 이어 붙인다 — 단일 wasm까지 받으면 47MB를 더 받는
+        // 회귀이니 호출부 테스트가 고정한다).
+        var urls = core.manifestAssetUrls('/vendor/pdfcraft/', man, {
+          wasmParts: true,
+          snippets: true,
+          loader: true,
+        });
+        var partNames = Array.isArray(man.wasmParts) ? man.wasmParts : [];
+        var partUrls = partNames.map(function (n) {
+          return '/vendor/pdfcraft/' + n;
+        });
+        var partSet = {};
+        partUrls.forEach(function (u) {
+          partSet[u] = true;
+        });
+        var onProgress = deps.onProgress;
+        var filesTotal = urls.length;
+        var receivedTotal = 0;
+        var filesDone = 0;
+        var done = [];
+        var failed = [];
+        var stalled = [];
+        var partBytesByUrl = {};
+        function report(currentUrl, fileReceived) {
+          if (typeof onProgress !== 'function') return;
+          onProgress({
+            receivedBytes: receivedTotal + (fileReceived || 0),
+            filesDone: filesDone,
+            filesTotal: filesTotal,
+            currentUrl: currentUrl,
+          });
+        }
+        var chain = Promise.resolve();
+        urls.forEach(function (u) {
+          chain = chain.then(function () {
+            if (partSet[u]) {
+              return loadPartBytes(core, fetchFn, cachesObj, u, win, opts, function (fileReceived) {
+                report(u, fileReceived);
+              })
+                .then(function (bytes) {
+                  partBytesByUrl[u] = bytes;
+                  done.push(u);
+                  receivedTotal += bytes.byteLength;
+                  filesDone += 1;
+                  report(u, 0);
+                })
+                .catch(function (err) {
+                  // 파트는 엔진 부팅에 필수 — 실패하면 게이트 전체가
+                  // 실패한다 (재시도는 createHost의 부팅 루프가 맡는다).
+                  var msg = err && err.message ? String(err.message) : String(err);
+                  if (msg.indexOf('stall timeout') === 0) {
+                    throw new Error('PdfCraft 자산을 받지 못했습니다 (멈춤: ' + u + ')');
+                  }
+                  throw err;
+                });
+            }
+            return core
+              .fetchWithProgress(fetchFn, u, {
+                stallTimeoutMs: opts.stallTimeoutMs,
+                maxAttempts: opts.maxAttempts,
+                retryDelayMs: opts.retryDelayMs,
+                setTimeoutFn: opts.setTimeoutFn,
+                clearTimeoutFn: opts.clearTimeoutFn,
+                onProgress: function (p) {
+                  report(u, p.receivedBytes);
+                },
+              })
+              .then(function (r) {
+                done.push(u);
+                receivedTotal += r.receivedBytes;
+                filesDone += 1;
+                report(u, 0);
+              })
+              .catch(function (err) {
+                // 작은 파일은 실패해도 부팅을 막지 않는다 (기존 계약) —
+                // 단, 멈춘 파일이 남으면 게이트가 최종 실패한다.
+                var msg = err && err.message ? String(err.message) : String(err);
+                if (msg.indexOf('http ') === 0) failed.push(u);
+                else stalled.push(u);
+                filesDone += 1;
+                report(u, 0);
+              });
+          });
+        });
+        return chain.then(function () {
+          if (stalled.length) {
+            throw new Error('PdfCraft 자산을 받지 못했습니다 (멈춤: ' + stalled.join(', ') + ')');
+          }
+          var partBytes = partUrls
+            .map(function (u) {
+              return partBytesByUrl[u];
+            })
+            .filter(function (b) {
+              return !!b;
+            });
+          // 오래된 버전의 파트를 CacheStorage에서 치운다 (버전마다
+          // 47MB가 고아로 남지 않게). 정리 실패는 부팅과 무관하다.
+          var pruned =
+            cachesObj && partUrls.length
+              ? prunePartCache(
+                  cachesObj,
+                  partUrls.map(function (u) {
+                    return absUrl(u, win);
+                  }),
+                )
+              : Promise.resolve();
+          return pruned.then(function () {
+            return {
+              done: done,
+              failed: failed,
+              stalled: stalled,
+              receivedBytes: receivedTotal,
+              partBytes: partBytes,
+            };
+          });
+        });
+      });
   }
 
   var api = {
     createHost: createHost,
     prefetch: prefetch,
+    prefetchForBoot: prefetchForBoot,
     normalizeBytes: normalizeBytes,
     internals: internals,
     APP_URL: APP_URL,

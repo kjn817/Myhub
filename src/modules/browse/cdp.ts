@@ -103,10 +103,14 @@ export async function navigateSession(
       let directId = -1
       let targetTries = 0
       let fallbackStage: NavigateStage = 'targets'
+      let retryTimer: ReturnType<typeof setTimeout> | undefined
       const finish = (result: NavigateResult) => {
         if (done) return
         done = true
         clearTimeout(timer)
+        // 재시도 타이머도 함께 지운다 — 안 지우면 끝난 뒤에도
+        // getTargets가 나가고 타이머가 이벤트 루프를 붙잡는다.
+        if (retryTimer !== undefined) clearTimeout(retryTimer)
         try {
           socket.close()
         } catch {
@@ -114,7 +118,6 @@ export async function navigateSession(
         }
         resolve(result)
       }
-      const timer = setTimeout(() => finish({ ok: false, stage: phase }), timeoutMs)
       const send = (method: string, params?: Record<string, unknown>, withSession = false): number => {
         const id = ++nextId
         const msg: Record<string, unknown> = { id, method }
@@ -133,6 +136,7 @@ export async function navigateSession(
         directId = send('Page.navigate', { url: targetUrl })
       }
       const askTargets = () => {
+        if (done) return
         targetTries += 1
         targetsId = send('Target.getTargets')
       }
@@ -168,7 +172,7 @@ export async function navigateSession(
           const page = infos.find((t: any) => t.type === 'page') ?? infos[0]
           if (!page) {
             if (targetTries < 4) {
-              setTimeout(askTargets, 300)
+              retryTimer = setTimeout(askTargets, 300)
             } else {
               sendDirectNavigate('targets')
             }
@@ -203,7 +207,133 @@ export async function navigateSession(
           finish(msg.error ? { ok: false, stage: fallbackStage } : { ok: true, stage: 'ok' })
         }
       })
+      // 타임아웃 타이머는 리스너 등록 뒤에 만든다 — 등록이 동기 throw하면
+      // Promise가 reject돼 finish가 안 불리는데, 타이머가 먼저 만들어져
+      // 있으면 5초짜리 고아가 돼 프로세스 종료를 붙잡는다 (2026-11-15:
+      // jest 'did not exit' 경고의 원인). finish는 클로저로 timer를
+      // 참조하므로, 호출 시점(메시지·타이머·send 실패)에는 이미 존재한다.
+      const timer = setTimeout(() => finish({ ok: false, stage: phase }), timeoutMs)
       askTargets()
+    })
+  } catch {
+    return { ok: false, stage: 'connect' }
+  } finally {
+    try {
+      sock?.close()
+    } catch {
+      // 무시
+    }
+  }
+}
+
+export type ViewportStage = 'ok' | 'connect' | 'targets' | 'attach' | 'viewport'
+export interface ViewportResult {
+  ok: boolean
+  stage: ViewportStage
+}
+
+/**
+ * 이동 없이 원격 뷰포트만 맞춘다 (2026-11-15: 세션 복원·Chromium 재시작
+ * 뒤에는 navigate가 없어 override가 한 번도 적용되지 않고, 원격이
+ * X 디스플레이 전체(레티나 기기 픽셀) 크기로 렌더링돼 화면이 절반
+ * 크기로 보였다 — 실측 innerWidth 2940 vs 맥 브라우저 1470).
+ * navigateSession과 같은 attach 경로를 쓰되 이동은 하지 않는다.
+ * 페이지 타깃이 없으면 재시도 없이 stage='targets'로 보고한다
+ * (호출자는 다음 진입·리사이즈 때 다시 시도한다).
+ */
+export async function applyViewportToSession(
+  webSocketDebuggerUrl: string,
+  viewport: ViewportSize,
+  connect: CdpConnectFn = defaultCdpConnect,
+  opts: { headers?: Record<string, string>; timeoutMs?: number } = {}
+): Promise<ViewportResult> {
+  const timeoutMs = opts.timeoutMs ?? NAVIGATE_TIMEOUT_MS
+  let sock: CdpSocket | null = null
+  try {
+    sock = await connect(webSocketDebuggerUrl, opts.headers)
+  } catch {
+    return { ok: false, stage: 'connect' }
+  }
+  if (!sock) return { ok: false, stage: 'connect' }
+  const socket = sock
+  try {
+    return await new Promise<ViewportResult>((resolve) => {
+      let done = false
+      let nextId = 0
+      let sessionId: string | null = null
+      let phase: ViewportStage = 'targets'
+      let targetsId = -1
+      let attachId = -1
+      let viewportId = -1
+      const finish = (result: ViewportResult) => {
+        if (done) return
+        done = true
+        clearTimeout(timer)
+        try {
+          socket.close()
+        } catch {
+          // 무시
+        }
+        resolve(result)
+      }
+      const send = (method: string, params?: Record<string, unknown>, withSession = false): number => {
+        const id = ++nextId
+        const msg: Record<string, unknown> = { id, method }
+        if (params) msg.params = params
+        if (withSession && sessionId) msg.sessionId = sessionId
+        try {
+          socket.send(JSON.stringify(msg))
+        } catch {
+          finish({ ok: false, stage: phase })
+        }
+        return id
+      }
+      socket.addEventListener('message', (ev) => {
+        let msg: any
+        try {
+          msg = JSON.parse(String(ev.data))
+        } catch {
+          return
+        }
+        if (msg.id === targetsId) {
+          if (msg.error) {
+            finish({ ok: false, stage: 'targets' })
+            return
+          }
+          const infos = msg.result?.targetInfos ?? []
+          // navigateSession과 달리 첫 타깃으로 폴백하지 않는다:
+          // Emulation.setDeviceMetricsOverride는 페이지 세션에서만
+          // 동작하므로 browser 타깃에 attach해 봤자 실패할 뿐이다.
+          // 페이지 타깃이 없으면 targets로 보고하고, 호출자(진입·
+          // 리사이즈)가 다음 기회에 다시 시도한다.
+          const page = infos.find((t: any) => t.type === 'page')
+          if (!page) {
+            finish({ ok: false, stage: 'targets' })
+            return
+          }
+          phase = 'attach'
+          attachId = send('Target.attachToTarget', { targetId: page.targetId, flatten: true })
+        } else if (msg.id === attachId) {
+          const attached = !msg.error ? msg.result?.sessionId ?? null : null
+          if (!attached) {
+            finish({ ok: false, stage: 'attach' })
+            return
+          }
+          sessionId = attached
+          phase = 'viewport'
+          viewportId = send(
+            'Emulation.setDeviceMetricsOverride',
+            { width: Math.round(viewport.width), height: Math.round(viewport.height), deviceScaleFactor: 1, mobile: false },
+            true
+          )
+        } else if (viewportId !== -1 && msg.id === viewportId) {
+          finish(msg.error ? { ok: false, stage: 'viewport' } : { ok: true, stage: 'ok' })
+        }
+      })
+      // navigateSession과 같은 이유 — 타임아웃 타이머는 리스너 등록 뒤에
+      // 만든다 (등록이 동기 throw하면 고아 타이머가 프로세스 종료를 붙잡는다).
+      const timer = setTimeout(() => finish({ ok: false, stage: phase }), timeoutMs)
+      targetsId = send('Target.getTargets')
     })
   } catch {
     return { ok: false, stage: 'connect' }

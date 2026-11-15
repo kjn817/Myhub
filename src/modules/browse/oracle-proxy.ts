@@ -29,7 +29,7 @@
 import { Hono } from 'hono'
 import type { Env } from '../../types'
 import { validatePublicUrlAsync } from './assistant-read'
-import { defaultCdpConnect, navigateSession, toDirectCdpWsUrl, type ViewportSize } from './cdp'
+import { applyViewportToSession, defaultCdpConnect, navigateSession, toDirectCdpWsUrl, type ViewportSize } from './cdp'
 import { isBrowserLocked } from './unlock'
 
 export const ORACLE_VIEW_PORT = 8080
@@ -119,6 +119,23 @@ function parseViewport(raw: unknown): ViewportSize | undefined {
   return { width: Math.round(width), height: Math.round(height) }
 }
 
+/* CDP 브라우저 WS URL을 사이드카에서 받아 직접 연결용으로 바꾼다.
+   실패 시 null (호출자가 502 ORACLE_UPSTREAM으로 보고한다). */
+async function directCdpWsUrl(cfg: OracleConfig, secretHeaders: Record<string, string>): Promise<string | null> {
+  let version: unknown
+  try {
+    const res = await fetch(`https://${cfg.host}:${ORACLE_CDP_PORT}/json/version`, {
+      headers: secretHeaders,
+    })
+    if (!res.ok) return null
+    version = await res.json()
+  } catch {
+    return null
+  }
+  const publicWs = (version as { webSocketDebuggerUrl?: unknown })?.webSocketDebuggerUrl
+  return typeof publicWs === 'string' ? toDirectCdpWsUrl(publicWs, cfg.host, ORACLE_CDP_PORT) : null
+}
+
 export function registerOracleProxyRoutes(app: Hono<{ Bindings: Env }>): void {
   app.all('/view', (c) => {
     const cfg = oracleConfigOf(c.env)
@@ -188,27 +205,47 @@ export function registerOracleProxyRoutes(app: Hono<{ Bindings: Env }>): void {
       'x-origin-secret': cfg.originSecret,
       'x-cdp-secret': cfg.cdpSecret,
     }
-    let version: unknown
-    try {
-      const res = await fetch(`https://${cfg.host}:${ORACLE_CDP_PORT}/json/version`, {
-        headers: secretHeaders,
-      })
-      if (!res.ok) return c.json({ ok: false, error: 'ORACLE_UPSTREAM' }, 502)
-      version = await res.json()
-    } catch {
-      return c.json({ ok: false, error: 'ORACLE_UPSTREAM' }, 502)
-    }
-    const publicWs = (version as { webSocketDebuggerUrl?: unknown })?.webSocketDebuggerUrl
-    const directWs =
-      typeof publicWs === 'string'
-        ? toDirectCdpWsUrl(publicWs, cfg.host, ORACLE_CDP_PORT)
-        : null
+    const directWs = await directCdpWsUrl(cfg, secretHeaders)
     if (!directWs) return c.json({ ok: false, error: 'ORACLE_UPSTREAM' }, 502)
     const nav = await navigateSession(directWs, targetUrl, defaultCdpConnect, {
       headers: secretHeaders,
       viewport,
     })
     return c.json({ ok: nav.ok, nav: nav.ok ? 'ok' : 'fail', navStage: nav.stage })
+  })
+
+  // 이동 없이 원격 뷰포트만 맞춘다 (2026-11-15): 라이브 진입·리사이즈
+  // 때 호출한다. 세션 복원 뒤에는 navigate가 없어 override가 적용되지
+  // 않던 구멍을 메운다. 실패해도 화면은 뜨므로 클라이언트는 결과를
+  // 무시하고 다음 기회에 다시 시도한다.
+  app.post('/viewport', async (c) => {
+    const cfg = oracleConfigOf(c.env)
+    if (!cfg) return c.json({ ok: false, error: 'ORACLE_NOT_CONFIGURED' }, 503)
+    let body: { viewport?: unknown } = {}
+    try {
+      body = (await c.req.json()) as { viewport?: unknown }
+    } catch {
+      return c.json({ ok: false, error: 'INVALID_VIEWPORT' }, 400)
+    }
+    const viewport = parseViewport(body.viewport)
+    if (!viewport) return c.json({ ok: false, error: 'INVALID_VIEWPORT' }, 400)
+    // LUKS 잠금 차단 (navigate와 동일 — 잠기면 chromium이 떠 있지 않다).
+    const unlockSecret = c.env.UNLOCK_SECRET
+    if (unlockSecret && unlockSecret.length >= 16) {
+      if (await isBrowserLocked(cfg, unlockSecret)) {
+        return c.json({ ok: false, error: 'BROWSER_LOCKED' }, 423)
+      }
+    }
+    const secretHeaders = {
+      'x-origin-secret': cfg.originSecret,
+      'x-cdp-secret': cfg.cdpSecret,
+    }
+    const directWs = await directCdpWsUrl(cfg, secretHeaders)
+    if (!directWs) return c.json({ ok: false, error: 'ORACLE_UPSTREAM' }, 502)
+    const applied = await applyViewportToSession(directWs, viewport, defaultCdpConnect, {
+      headers: secretHeaders,
+    })
+    return c.json({ ok: applied.ok, stage: applied.stage })
   })
 
   // 화질 수동 전환 (2026-11-15): 사이드카 /control/quality로 중계한다.

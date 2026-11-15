@@ -36,6 +36,10 @@ app.use(async (c, next) => {
   //   시크릿으로 인증 (채널 라우트에서 검증, 미설정 시 503 비활성화)
   if (path === '/login.html' || path.startsWith('/api/auth/') || path === '/api/health' ||
       path.startsWith('/api/channel/webhook/') ||
+      // Craft 릴레이 (POST /api/craft/relay/:provider/...): CLI는 세션 쿠키를
+      // 못 보내므로 전역 미들웨어를 우회하고 모듈 안에서 인증한다
+      // (ORIGIN_SECRET Bearer — modules/craft/relay.ts의 relayAuth).
+      path.startsWith('/api/craft/relay/') ||
       // MCP 엔드포인트 (POST /api/mcp): MCP 클라이언트는 세션 쿠키를 못 보내므로
       // 전역 미들웨어를 우회하고 모듈 안에서 인증한다 (세션 쿠키 또는 Bearer
       // MCP 토큰 — routes.ts의 authenticateMcpRequest). 정확한 경로만 허용한다:

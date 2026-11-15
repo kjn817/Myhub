@@ -454,6 +454,30 @@
       if (state.ready) postToViewer('myhub-pdf:reload');
     }
 
+    // 편집기 부팅 실패 시 다시 시도 패널: 페이지 조작 확인 패널과
+    // 같은 fv-pdf-panel을 재사용한다. 다른 확인이 떠 있으면 덮지
+    // 않는다 (패널은 하나뿐이라 확인을 날리면 안 된다).
+    function showCraftRetry() {
+      if (!panel || !panel.hidden) return;
+      panel.innerHTML = '';
+      var msg = doc.createElement('span');
+      msg.className = 'fv-pdf-panel-msg';
+      msg.textContent = '전용 편집기를 불러오지 못했습니다';
+      panel.appendChild(msg);
+      panel.appendChild(
+        mkBtn('다시 시도', function () {
+          closePanel();
+          if (ctx.isCurrent()) startCraft();
+        }),
+      );
+      panel.appendChild(
+        mkBtn('닫기', function () {
+          closePanel();
+        }),
+      );
+      panel.hidden = false;
+    }
+
     function startCraft() {
       if (state.craft || !wantCraft()) return;
       // 편집기가 쓰는 폰트 풀은 여기서 받는다 (뷰어 로딩과 겹치지 않게).
@@ -484,12 +508,23 @@
           // 계약). 취소하면 조용히 생략한.
           if (ctx.isCurrent()) ctx.requestOpen();
         },
+        // 부팅 프리패치 진행 (2026-11-15): 엔진 47MB를 받는 동안
+        // 뷰어가 보이므로 상태 표시줄에 진행을 띄운다. ready가 오면
+        // onReady에서 지운다.
+        onBootProgress: function (p) {
+          if (!ctx.isCurrent()) return;
+          var mb = ((p.receivedBytes || 0) / 1048576).toFixed(1);
+          var msg = 'PDF 엔진 받는 중… ' + mb + 'MB';
+          if (p.attempt > 1) msg += ' (다시 시도 ' + p.attempt + '/' + p.maxAttempts + ')';
+          ctx.setStatus(msg);
+        },
         onReady: function () {
           if (!ctx.isCurrent()) {
             stopCraft();
             return;
           }
           state.craftReady = true;
+          ctx.setStatus('');
           ctx.fetchContent('buffer').then(function (buf) {
             if (!ctx.isCurrent() || !state.craft) return;
             if (state.craft.open(ctx.file.name, buf)) showCraft();
@@ -539,12 +574,14 @@
             fallback(true);
             return;
           }
-          if (wasCraft) {
-            showViewer();
-            ctx.setNote('전용 편집기를 불러오지 못해 기본 뷰어로 표시합니다');
-          }
-          // 뷰 어가 처음 부터 등(ready 앉은 경우)위치인 조용히
-          // 편집기만 답는다 등 보듯 화면을 방해하지 않는다.
+          if (wasCraft) showViewer();
+          // 부팅 전부 실패(프리패치 3회·ready 타임아웃·엔진 실패):
+          // 뷰어는 살아 있으니 화면을 갈지 않고, 실패를 알리고 다시
+          // 시도를 제공한다. 다시 시도는 startCraft부터 — 프리패치
+          // 게이트를 다시 돈다 (1dc37bf 한글 에러 카드의 PDF 대응:
+          // 뷰어가 이미 문서를 보여주므로 카드는 패널에 단다).
+          ctx.setNote('전용 편집기를 불러오지 못해 기본 뷰어로 표시합니다');
+          showCraftRetry();
         },
       });
       if (!host) return;

@@ -11,19 +11,20 @@
  *   이 테스트 갱신을 빠뜨려 3건이 실패했음을 테스트 트랙에서 수정)
  * - key-rotation 모듈 추가 (2026-10-31: 키 로테이션 관리 API, hidden — 트랙 4)
  * - drive(파일 보관함)·desktop(웹OS)·browse(원격 브라우저) 추가 (hidden)
+ * - craft 모듈 추가 (2026-11-15: craft-anything 빌더 릴레이, hidden)
  */
 import { modules } from '../../src/modules'
 
 describe('modules registry', () => {
-  test('20개 모듈이 등록되어 있다', () => {
-    expect(modules).toHaveLength(20)
+  test('21개 모듈이 등록되어 있다', () => {
+    expect(modules).toHaveLength(21)
   })
 
   test('예상 id가 모두 존재한다', () => {
     const ids = modules.map((m) => m.id)
     expect(ids).toEqual([
       'memo', 'drive', 'ai', 'schedule', 'todo', 'studio',
-      'artifact', 'briefing', 'pptx', 'push', 'memory', 'backup', 'key-rotation', 'channel', 'cron', 'google', 'voice', 'mcp', 'desktop', 'browse',
+      'artifact', 'briefing', 'pptx', 'push', 'memory', 'backup', 'key-rotation', 'channel', 'cron', 'google', 'voice', 'mcp', 'desktop', 'browse', 'craft',
     ])
   })
 
@@ -44,9 +45,9 @@ describe('modules registry', () => {
     }
   })
 
-  test('hidden 모듈 15개가 제외 목록과 일치한다', () => {
+  test('hidden 모듈 16개가 제외 목록과 일치한다', () => {
     const hidden = modules.filter((m) => m.hidden).map((m) => m.id).sort()
-    expect(hidden).toEqual(['artifact', 'backup', 'briefing', 'browse', 'channel', 'cron', 'desktop', 'drive', 'google', 'key-rotation', 'mcp', 'memory', 'pptx', 'push', 'voice'])
+    expect(hidden).toEqual(['artifact', 'backup', 'briefing', 'browse', 'channel', 'craft', 'cron', 'desktop', 'drive', 'google', 'key-rotation', 'mcp', 'memory', 'pptx', 'push', 'voice'])
   })
 
   test('공개 모듈 5개가 대시보드에 표시된다', () => {

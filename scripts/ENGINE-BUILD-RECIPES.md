@@ -43,6 +43,12 @@
   쪼개고, 커스텀 셸(index.html)+로더(loader.js)가 fetch로 이어 붙여 부팅한다.
   (Worker가 Content-Encoding을 직접 찍는 방식은 엣지 재인코딩 사고로 전면 제거됨 —
   AGENTS.md 교훈 참조.)
+- **게이트 핸드오프 (2026-11-15)**: 23MB 조각은 HTTP 캐시에 남지 않아(실측:
+  동일 문서 재-fetch도 전문 재다운로드) 호스트 부팅 게이트가 모은 조각 바이트를
+  Blob URL로 바꿔 iframe src 쿼리(`wasmPart0`/`wasmPart1`)로 넘기고, 로더는
+  쿼리가 있으면 그 URL을 fetch한다. 쿼리가 없으면 상대경로로 받는다(하위호환).
+  로더 템플릿은 패키징 스크립트 안에 있고 벤더본(`public/vendor/pdfcraft/loader.js`)
+  과 동일하게 유지한다 — 드리프트는 `tests/pdfcraft-loader-handoff.test.ts`가 잡는다.
 - 패키징 스크립트: `scripts/build-pdfcraft-package.mjs`
   (`node build-pdfcraft-package.mjs <outdir>`, 스크립트 옆에 `pdfcraft/dist/web/`가
   있는 레이아웃에서 실행). manifest.json에 wasmParts와 sourceCommit을 기록한다.
