@@ -39,7 +39,8 @@ export function toDirectCdpWsUrl(publicWsUrl: string, host: string, port: number
   if (idx < 0) return null
   const endpoint = parsed.pathname.slice(idx)
   if (endpoint.length <= '/devtools/'.length) return null
-  return `ws://${host}:${port}${endpoint}`
+  // 사이드카 리스너는 TLS다 (2026-11-14) — 직접 연결도 WSS로 해야 한다.
+  return `wss://${host}:${port}${endpoint}`
 }
 
 export const defaultCdpConnect: CdpConnectFn = async (wsUrl, headers) => {

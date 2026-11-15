@@ -79,9 +79,9 @@ describe('toDirectCdpWsUrl — 공개 URL을 직접 URL로', () => {
         HOST,
         8081,
       ),
-    ).toBe(`ws://${HOST}:8081/devtools/browser/abc123`)
+    ).toBe(`wss://${HOST}:8081/devtools/browser/abc123`)
     expect(toDirectCdpWsUrl('ws://example.com/devtools/page/p1', HOST, 8081)).toBe(
-      `ws://${HOST}:8081/devtools/page/p1`,
+      `wss://${HOST}:8081/devtools/page/p1`,
     )
   })
   test('/devtools/ 밖 경로나 비WS 스킴·파싱 불가면 null', () => {
@@ -123,7 +123,7 @@ describe('GET /view/* — 화면 프록시', () => {
     expect(res.status).toBe(200)
     expect(fetchCalls).toHaveLength(1)
     const call = fetchCalls[0]
-    expect(call.url).toBe(`http://${HOST}:8080/api/browse/view/selkies/index.html?foo=bar`)
+    expect(call.url).toBe(`https://${HOST}:8080/api/browse/view/selkies/index.html?foo=bar`)
     expect(call.headers['x-origin-secret']).toBe('origin-secret')
     expect(call.headers['authorization']).toBe(
       `Basic ${Buffer.from('myhub:selkies-pw').toString('base64')}`,
@@ -147,7 +147,7 @@ describe('GET /view/* — 화면 프록시', () => {
     )
     expect(fetchCalls).toHaveLength(1)
     const call = fetchCalls[0]
-    expect(call.url).toBe(`http://${HOST}:8080/api/browse/view`)
+    expect(call.url).toBe(`https://${HOST}:8080/api/browse/view`)
     expect(call.headers['cookie']).toBeUndefined()
     expect(call.headers['x-origin-secret']).toBe('origin-secret')
     expect(call.headers['authorization']).not.toBe('Bearer stolen')
@@ -173,7 +173,7 @@ describe('GET /cdp/* — CDP 프록시', () => {
     expect(res.status).toBe(200)
     expect(fetchCalls).toHaveLength(1)
     const call = fetchCalls[0]
-    expect(call.url).toBe(`http://${HOST}:8081/json/version`)
+    expect(call.url).toBe(`https://${HOST}:8081/json/version`)
     expect(call.headers['x-origin-secret']).toBe('origin-secret')
     expect(call.headers['x-cdp-secret']).toBe('cdp-secret')
     expect(call.headers['authorization']).toBeUndefined()
@@ -256,7 +256,7 @@ describe('POST /navigate — 영구 탭 이동', () => {
     // WS 연결 시도는 공개 URL이 아니라 사이드카 직접 URL로 가야 한다.
     const wsCall = fetchCalls.find((c) => c.url.includes('/devtools/browser/'))
     expect(wsCall).toBeDefined()
-    expect(wsCall!.url).toBe(`http://${HOST}:8081/devtools/browser/abc`)
+    expect(wsCall!.url).toBe(`https://${HOST}:8081/devtools/browser/abc`)
     expect(wsCall!.headers['x-origin-secret']).toBe('origin-secret')
     expect(wsCall!.headers['x-cdp-secret']).toBe('cdp-secret')
   })

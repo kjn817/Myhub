@@ -3,14 +3,19 @@
  * 화면·CDP를 중계한다 (2026-11-14 설계 변경: Cloudflare Browser Run
  * 세션 발급 폐기, 상시 기동 서버로 단일화).
  *
- * - GET /view/* → http://<호스트>:8080/api/browse/view/* (Selkies 화면, WS 포함)
+ * - GET /view/* → https://<호스트>:8080/api/browse/view/* (Selkies 화면, WS 포함)
  *   — 접두사를 떼지 않고 통째로 보낸다. 컨테이너의 kclient·nginx가
  *   SUBFOLDER=/api/browse/view/로 같은 접두사를 알기 때문이다. 접두사를
  *   떼면 kclient가 화면 WS를 루트 /websockify로 보내 Worker에 닿지 않아
  *   화면이 검은 채 "WebSocket disconnected"가 된다 (2026-11-14 라이브 실증).
- * - GET /cdp/*  → http://<호스트>:8081/* (CDP HTTP/WS, WS 포함)
+ * - GET /cdp/*  → https://<호스트>:8081/* (CDP HTTP/WS, WS 포함)
  *   — CDP는 접두사 개념이 없어 사이드카가 바라는 맨 경로로 떼서 보낸다.
  * - POST /navigate → 사이드카 CDP로 영구 탭을 이동시킨다
+ *
+ * TLS (2026-11-14): Worker→사이드카 구간은 HTTPS/WSS다 (사이드카에
+ * Let's Encrypt 인증서 — 평문 HTTP 시절은 카드결제·로그인 사용을 앞두고
+ * 폐기했다. 사이드카가 인증서 없이 뜨면 평문 폴백이지만 Worker는
+ * HTTPS로만 붙으므로, 인증서 없는 사이드카에는 닿지 않는다 (fail-closed).
  *
  * 세션 게이트는 전역 /api/* 미들웨어가 맡는다. 여기는 사이드카 시크릿
  * 주입 + WS 패스스루만 한다. 클라이언트가 보낸 시크릿 헤더·쿠키는
@@ -82,7 +87,7 @@ async function proxyToSidecar(
   // keepPrefix면 전체 경로를 그대로 보낸다 (view — 컨테이너 SUBFOLDER와 일치).
   // 아니면 마운트 접두사를 떼고 맨 경로만 보낸다 (CDP).
   const rest = keepPrefix ? url.pathname : url.pathname.slice(prefix.length) || '/'
-  const upstream = `http://${cfg.host}:${port}${rest}${url.search}`
+  const upstream = `https://${cfg.host}:${port}${rest}${url.search}`
   const req = c.req.raw
   const method = req.method.toUpperCase()
   const headers = buildUpstreamHeaders(req, {
@@ -178,7 +183,7 @@ export function registerOracleProxyRoutes(app: Hono<{ Bindings: Env }>): void {
     }
     let version: unknown
     try {
-      const res = await fetch(`http://${cfg.host}:${ORACLE_CDP_PORT}/json/version`, {
+      const res = await fetch(`https://${cfg.host}:${ORACLE_CDP_PORT}/json/version`, {
         headers: secretHeaders,
       })
       if (!res.ok) return c.json({ ok: false, error: 'ORACLE_UPSTREAM' }, 502)

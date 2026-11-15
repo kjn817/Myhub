@@ -258,7 +258,7 @@ export async function readPage(
   }
   let version: unknown = null
   try {
-    const res = await fetchFn(`http://${cfg.host}:${ORACLE_CDP_PORT}/json/version`, {
+    const res = await fetchFn(`https://${cfg.host}:${ORACLE_CDP_PORT}/json/version`, {
       headers: secretHeaders,
     })
     if (!res.ok) return { ok: false, error: 'upstream' }

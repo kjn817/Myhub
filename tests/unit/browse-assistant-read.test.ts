@@ -224,7 +224,7 @@ describe('readPage — 버전 조회·연결 단계 실패 구분', () => {
     const { fetchFn, calls } = versionFetch(VERSION_DATA)
     await readPage(ENV, PAGE_URL, deps(fetchFn, new ScriptSocket()))
     expect(calls).toHaveLength(1)
-    expect(calls[0].url).toBe('http://203.0.113.7:8081/json/version')
+    expect(calls[0].url).toBe('https://203.0.113.7:8081/json/version')
     expect(calls[0].headers['x-origin-secret']).toBe('origin-secret')
     expect(calls[0].headers['x-cdp-secret']).toBe('cdp-secret')
   })
@@ -246,7 +246,7 @@ describe('readPage — 읽기 결과', () => {
     const r = await readPage(ENV, PAGE_URL, deps(fetchFn, sock, connected))
     expect(r).toEqual({ ok: true, url: PAGE_URL, title: '제목', text: '본문 내용', truncated: false })
     // 공개 베이스가 아니라 사이드카 직접 URL로 연결해야 한다.
-    expect(connected.url).toBe('ws://203.0.113.7:8081/devtools/browser/abc')
+    expect(connected.url).toBe('wss://203.0.113.7:8081/devtools/browser/abc')
     expect(sock.closed).toBe(true)
     // 별도 탭 생성 → attach → navigate → 추출 → 탭 닫기 순서가 고정된다.
     expect(sock.sentMethods).toEqual(
