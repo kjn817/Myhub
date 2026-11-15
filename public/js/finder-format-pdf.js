@@ -65,11 +65,9 @@
   }
 
   function handlePdf(ctx) {
-    // 쓰기인 텍스트 래스(rasterizeText)터화화 의 문서를 캔버스로
-    // 그린 등 Drive '의' 폰트 등 록이 미리 시작해 본다.
-    // load()의 reject하지 않는 계약이라 기다려 않게 걸어만 본다.
-    var fonts = typeof window !== 'undefined' ? window.MyHubFonts : null;
-    if (fonts && typeof fonts.load === 'function') fonts.load();
+    // 폰트 풀(11MB)은 편집기(rasterizeText)가 쓸 때 startCraft에서
+    // 받는다. 여기서 미리 받으면 뷰어 로딩과 대역폭을 나눠 가져가
+    // 첫 페이지가 늦어진다 (2026-11-15 로딩 지연 원인).
     if (!ctx.file.fileId && !ctx.file.bytes) {
       ctx.showMessage('PDF 문서가 없습니다. 보관함에 있는 PDF를 여세요.');
       return Promise.resolve();
@@ -325,6 +323,10 @@
         clearTimeout(readyTimer);
         if (state.surface === 'viewer') ctx.setNote(NOTE);
         updateStateLabel();
+        // 뷰어가 뜬 뒤에야 편집기(WASM)를 백그라운드로 시작한다.
+        // 마운트 때 같이 시작하면 WASM이 뷰어와 대역폭·CPU를 나눠
+        // 가져가 첫 페이지가 늦어진다 (2026-11-15 로딩 지연 원인).
+        startCraft();
       } else if (d.type === 'myhub-pdf:state') {
         state.page = d.page || state.page;
         state.pages = d.pages || state.pages;
@@ -366,8 +368,15 @@
       });
       var native = doc.createElement('iframe');
       native.className = 'fv-frame';
-      // 사이버로 미리보기 스크립트 없이 표시만 (감사 D14과 동일)
-      native.setAttribute('sandbox', '');
+      // 대체 화면은 샌드박스를 걸지 않는다. 크롬의 PDF 뷰어(플러그인)는
+      // 샌드박스가 걸린 iframe에서는 어떤 토큰으로도 렌더링되지 않는다 —
+      // sandbox=""·allow-same-origin·allow-scripts+allow-same-origin
+      // 세 가지를 실브라우저(헤드풀)로 확인했고 전부 "차단한 페이지"가
+      // 떴다. 샌드박스 없는 iframe만 PDF를 보여준다 (2026-11-15 실측).
+      // 안전성: 띄우는 것은 사용자 본인 파일의 PDF 바이트이고, 콘텐츠
+      // 응답은 Content-Type: application/pdf + nosniff라 HTML로 둔갑해
+      // 같은 출처 스크립트로 실행될 수 없다. PDF 자체는 페이지
+      // 스크립트를 실행하지 않는다 (뷰어 격리 컨텍스트에서만 돈다).
       native.src = ctx.contentUrl();
       frame.replaceWith(native);
       frame = native;
@@ -447,6 +456,9 @@
 
     function startCraft() {
       if (state.craft || !wantCraft()) return;
+      // 편집기가 쓰는 폰트 풀은 여기서 받는다 (뷰어 로딩과 겹치지 않게).
+      var fonts = typeof window !== 'undefined' ? window.MyHubFonts : null;
+      if (fonts && typeof fonts.load === 'function') fonts.load();
       var host = pdfCraft.createHost({
         doc: doc,
         win: window,
@@ -616,9 +628,10 @@
       if (ctx.saveBtn) ctx.saveBtn.hidden = false;
       ctx.setSaveHandler(doSave);
     }
-    // 실행 실행(기본)에서는 전용 편집기를 백그라운드로 전용인 등
-    // ready가 오면 showCraft가 실행 교체한다.
-    startCraft();
+    // 전용 편집기는 뷰어 ready 뒤에 백그라운드로 시작한다
+    // ('myhub-pdf:ready' 핸들러 참조). 마운트 때 시작하면 WASM이
+    // 뷰어 로딩과 대역폭을 나눠 첫 페이지가 늦어진다 (2026-11-15).
+    // 펼치기(syncSurfaceToFold)도 startCraft를 부른다.
 
     // ---------- 페이지 조작 ----------
     function closePanel() {

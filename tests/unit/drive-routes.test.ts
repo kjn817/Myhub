@@ -371,6 +371,10 @@ describe('파일 업로드·조회·교체', () => {
     expect(r.headers.get('content-disposition')).toContain(encodeURIComponent('문서 파일.txt'))
     expect(r.headers.get('cache-control')).toBe('no-store')
     expect(r.headers.get('accept-ranges')).toBe('bytes')
+    // nosniff (2026-11-15): PDF 대체 화면이 샌드박스 없는 iframe으로
+    // 콘텐츠를 띄우므로, 바이트가 HTML로 둔갑해 같은 출처 스크립트로
+    // 실행되는 경로를 막는다.
+    expect(r.headers.get('x-content-type-options')).toBe('nosniff')
   })
 
   test('content Range 요청은 206과 구간 헤더를 그대로 중계하고, 위쪽 실패는 502', async () => {

@@ -16,6 +16,9 @@ const SHOTS_DIR = path.join(ROOT, '.scratch', 'e2e-shots');
 
 const MIME = {
   '.html': 'text/html', '.css': 'text/css', '.js': 'text/javascript',
+  // .mjs가 없으면 모듈 스크립트(pdf.mjs·viewer.mjs·myhub-glue.mjs)가
+  // octet-stream으로 나가 브라우저가 거절한다 (2026-11-15 진단).
+  '.mjs': 'text/javascript',
   '.json': 'application/json', '.png': 'image/png', '.svg': 'image/svg+xml',
   '.webp': 'image/webp', '.ico': 'image/x-icon', '.woff2': 'font/woff2',
   '.ttf': 'font/ttf', '.wasm': 'application/wasm',
@@ -121,7 +124,21 @@ function createServer(opts = {}) {
           sendJson(200, { ok: true, folders: [], files: driveFiles });
           return;
         }
-        if (/^\/api\/drive\/files\/\d+(\/content)?$/.test(p)) {
+        if (/^\/api\/drive\/files\/(\d+)(\/content)?$/.test(p)) {
+          // PDF 파일은 유효한 빈 PDF를 서빙한다 — 64바이트 제로 스텁은
+          // pdf.js가 InvalidPDFException을 던져 페이지 오류가 된다
+          // (.mjs MIME 수정 후 뷰어가 실제로 부팅하면서 드러남,
+          // 2026-11-15). 다른 형식은 열기 체인 검증용 제로 스텁 유지.
+          const fileId = Number(p.match(/^\/api\/drive\/files\/(\d+)/)[1]);
+          const file = driveFiles.find((f) => Number(f.id) === fileId);
+          if (file && file.mime === 'application/pdf') {
+            const blank = path.join(PUBLIC, 'templates', 'blank.pdf');
+            if (fs.existsSync(blank)) {
+              res.writeHead(200, { 'Content-Type': 'application/pdf' });
+              fs.createReadStream(blank).pipe(res);
+              return;
+            }
+          }
           // 64바이트 제로 스텁: 파싱은 실패하지만 열기 체인 검증에는 충분하다.
           res.writeHead(200, { 'Content-Type': 'application/octet-stream' });
           res.end(Buffer.alloc(64));

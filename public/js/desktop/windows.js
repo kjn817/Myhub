@@ -3307,6 +3307,7 @@
 
     return {
       openModule: openModule,
+      openFileInApp: openInApp,
       restoreWindows: restoreWindows,
       postToModule: postToModule,
       getActiveAssistant: getActiveAssistant,

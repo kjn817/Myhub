@@ -39,6 +39,11 @@ See https://github.com/adobe-type-tools/cmap-resources
     <link rel="stylesheet" href="viewer.css" />
 
   <script src="viewer.mjs" type="module"></script>
+  <!-- MyHub 글루: pdf.js 뷰어와 MyHub 호스트 사이의 postMessage 계약
+       (myhub-pdf:appready/ready/state/dirty/saved). upstream viewer.html로
+       다시 가져오면 이 줄을 다시 넣어야 한다 (없으면 호스트가 ready를
+       받지 못해 20초 뒤 대체 화면으로 바뀌고 크롬이 PDF를 차단한다). -->
+  <script src="myhub-glue.mjs" type="module"></script>
   </head>
 
   <body tabindex="0">

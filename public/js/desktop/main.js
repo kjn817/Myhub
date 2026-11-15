@@ -273,9 +273,35 @@
         mime: pendingFinderOpen.mime,
       });
     }
+    // 오피스 파일은 파인더를 거치지 않고 앱으로 직접 연다 (2026-11-15:
+    // 바탕화면 더블클릭이 무조건 파인더를 먼저 띄워 뒤에 남는 문제).
+    // finder.js의 OFFICE_APP_BY_EXT와 같은 매핑이다 (두 곳을 함께 고칠 것).
+    var OFFICE_APP_BY_EXT = {
+      xlsx: 'excel', xls: 'excel', csv: 'excel',
+      hwp: 'hangul', hwpx: 'hangul',
+      pptx: 'powerpoint', ppt: 'powerpoint',
+      pdf: 'pdf',
+    };
+    function officeAppForFile(name) {
+      var dot = String(name || '').lastIndexOf('.');
+      if (dot < 0) return null;
+      return OFFICE_APP_BY_EXT[String(name).slice(dot + 1).toLowerCase()] || null;
+    }
     function openFileIcon(id) {
       var item = fileItemsByKey[id];
       if (!item) return;
+      var app = officeAppForFile(item.label);
+      if (app && typeof manager.openFileInApp === 'function') {
+        manager.openFileInApp({
+          app: app,
+          fileId: item.fileId,
+          name: item.label,
+          mime: item.mime || '',
+          folderId: desktopFolderId,
+          folderName: '바탕화면',
+        });
+        return;
+      }
       pendingFinderOpen = {
         folderId: desktopFolderId,
         fileId: item.fileId,

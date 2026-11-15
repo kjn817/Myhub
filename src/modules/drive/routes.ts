@@ -262,6 +262,10 @@ driveApp.get('/files/:id/content', async (c) => {
   if (!up.ok) return c.json({ ok: false, error: 'upstream failed' }, 502)
   const headers = new Headers()
   headers.set('Content-Type', row.mime || 'application/octet-stream')
+  // MIME 스니핑 차단 (2026-11-15): PDF 대체 화면이 샌드박스 없는
+  // iframe으로 콘텐츠를 띄우므로, 바이트가 HTML로 둔갑해 같은 출처
+  // 스크립트로 실행되는 경로를 막는다.
+  headers.set('X-Content-Type-Options', 'nosniff')
   headers.set(
     'Content-Disposition',
     `inline; filename*=UTF-8''${encodeURIComponent(row.filename)}`
