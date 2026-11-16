@@ -1,22 +1,38 @@
 #!/usr/bin/env python3
 """MyHub 앱 아이콘 생성 (2026-11-16, 사용자 요청: Muse처럼 둥글게).
 
-디자인: 흰→연한 파스텔 블루 그라데이션 스쿼클 + 네이비 JN 모노그램.
+디자인: 흰→연한 파스텔 블루 그라데이션 스쿼클 + 기존 JN 마크.
+- JN 마크는 기존 아이콘(jn-mark-source.png, 구 icon-512.png)에서 픽셀 추출 —
+  J 아래쪽이 평평하게 꺾이는 독특한 형태라 폰트 재현이 안 된다.
+  사용자 2026-11-16: "jn 글씨자체는 기존께 더마음에드는데? 더마크같고".
 - icon-512.png / icon-192.png: 투명 모서리의 둥근 스쿼클 (RGBA).
-  윈도우 바탕화면·맥 독에서 네모 흰 판이 아니라 앱 아이콘처럼 보인다.
-- icon-512-maskable.png: 마스커블용 전체 채움 + JN은 80% 안전 영역 안.
+- icon-512-maskable.png: 마스커블용 전체 채움.
 - apple-touch-icon.png: iOS가 자체 라운드를 씌우므로 전체 채움 (불투명).
 
-폰트: public/fonts/Inter-Bold.ttf (자체 호스팅).
+마스터는 512 (마크 원본 해상도와 동일 — 업스케일 없이 픽셀 그대로).
 """
-from PIL import Image, ImageDraw, ImageFont, ImageFilter
+from PIL import Image, ImageDraw
 
-FONT = "public/fonts/Inter-Bold.ttf"
-NAVY = (20, 20, 58, 255)
+MARK_SRC = "scripts/jn-mark-source.png"
+# 구 아이콘 속 JN 바운딩 박스 (실측)
+MARK_BBOX = (84, 156, 428, 360)
+NAVY = (20, 18, 70, 255)
 TOP = (255, 255, 255)
 BOTTOM = (226, 236, 246)  # 연한 파스텔 블루
-SIZE = 1024
+SIZE = 512
 RADIUS = int(SIZE * 0.225)  # iOS 스타일 스쿼클 근사
+MARK_WIDTH = 344  # 구 아이콘과 동일 비율 (67%)
+
+
+def extract_mark():
+    """구 아이콘에서 JN을 알파 마스크로 추출해 네이비로 채색."""
+    src = Image.open(MARK_SRC).convert("L")
+    crop = src.crop(MARK_BBOX)
+    # 흰 배경 → 투명, 네이비 → 불투명 (안티앨리어싱은 회색값이 보존)
+    alpha = crop.point(lambda v: 255 - v)
+    mark = Image.new("RGBA", crop.size, NAVY)
+    mark.putalpha(alpha)
+    return mark
 
 
 def gradient(size):
@@ -34,45 +50,38 @@ def rounded_mask(size, radius):
     return m
 
 
-def draw_jn(draw, size, font, color):
-    text = "JN"
-    bbox = draw.textbbox((0, 0), text, font=font)
-    w, h = bbox[2] - bbox[0], bbox[3] - bbox[1]
-    draw.text(((size - w) / 2 - bbox[0], (size - h) / 2 - bbox[1]), text, font=font, fill=color)
-
-
-def build_squircle(size, radius_frac=0.225):
-    """투명 모서리 스쿼클 + 그라데이션 + JN."""
-    base = gradient(size).convert("RGBA")
-    mask = rounded_mask(size, int(size * radius_frac))
-    base.putalpha(mask)
-    # 가장자리에 아주 옅은 테두리 — 흰 배경에서도 형태가 보이게.
-    edge = Image.new("RGBA", (size, size), (0, 0, 0, 0))
-    d = ImageDraw.Draw(edge)
-    d.rounded_rectangle([1, 1, size - 2, size - 2], radius=int(size * radius_frac),
-                        outline=(120, 140, 170, 60), width=max(2, size // 512))
-    base = Image.alpha_composite(base, edge)
-    font = ImageFont.truetype(FONT, int(size * 0.52))
-    d = ImageDraw.Draw(base)
-    draw_jn(d, size, font, NAVY)
+def paste_mark(base, mark, width):
+    scale = width / mark.width
+    resized = mark.resize((width, int(mark.height * scale)), Image.LANCZOS)
+    x = (base.width - resized.width) // 2
+    y = (base.height - resized.height) // 2
+    base.alpha_composite(resized, (x, y))
     return base
 
 
-def build_filled(size):
-    """전체 채움 (마스커블·애플 터치용) — JN은 80% 안전 영역 안."""
+def build_squircle(mark):
+    base = gradient(SIZE).convert("RGBA")
+    base.putalpha(rounded_mask(SIZE, RADIUS))
+    edge = Image.new("RGBA", (SIZE, SIZE), (0, 0, 0, 0))
+    d = ImageDraw.Draw(edge)
+    d.rounded_rectangle([1, 1, SIZE - 2, SIZE - 2], radius=RADIUS,
+                        outline=(120, 140, 170, 60), width=2)
+    base = Image.alpha_composite(base, edge)
+    return paste_mark(base, mark, MARK_WIDTH)
+
+
+def build_filled(mark, size):
     base = gradient(size).convert("RGBA")
-    font = ImageFont.truetype(FONT, int(size * 0.42))
-    d = ImageDraw.Draw(base)
-    draw_jn(d, size, font, NAVY)
-    return base.convert("RGB")
+    return paste_mark(base, mark, int(size * MARK_WIDTH / SIZE)).convert("RGB")
 
 
 def main():
-    squircle = build_squircle(SIZE)
-    squircle.resize((512, 512), Image.LANCZOS).save("public/icon-512.png", optimize=True)
+    mark = extract_mark()
+    squircle = build_squircle(mark)
+    squircle.save("public/icon-512.png", optimize=True)
     squircle.resize((192, 192), Image.LANCZOS).save("public/icon-192.png", optimize=True)
-    build_filled(512).save("public/icon-512-maskable.png", optimize=True)
-    build_filled(180).save("public/apple-touch-icon.png", optimize=True)
+    build_filled(mark, 512).save("public/icon-512-maskable.png", optimize=True)
+    build_filled(mark, 180).save("public/apple-touch-icon.png", optimize=True)
     print("icon-512.png, icon-192.png, icon-512-maskable.png, apple-touch-icon.png written")
 
 
