@@ -186,8 +186,14 @@ function makeViewportHandler(): (msg: Record<string, any>, emit: (m: unknown) =>
     } else if (msg.method === 'Emulation.clearDeviceMetricsOverride') {
       emit({ id: msg.id, result: {} })
     } else if (msg.method === 'Runtime.evaluate') {
-      // innerWidth 읽기만 온다 — screen.width 측정은 QA 7차에 폐지됐다.
-      if (String(msg.params?.expression ?? '').includes('innerWidth')) {
+      // innerWidth 읽기(실측·검증)와 screen.width 읽기(토글 전
+      // 디스플레이 게이트, QA 10차)가 온다. 게이트는 마지막
+      // override 크기를 돌려준다(디스플레이가 이미 줄었다고 가정).
+      const expr = String(msg.params?.expression ?? '')
+      if (expr.includes('screen.width')) {
+        const ov = overrides[String(msg.sessionId ?? '')]
+        emit({ id: msg.id, result: { result: { type: 'string', value: JSON.stringify({ w: ov?.width ?? 0, h: ov?.height ?? 0 }) } } })
+      } else if (expr.includes('innerWidth')) {
         const ov = overrides[String(msg.sessionId ?? '')]
         emit({ id: msg.id, result: { result: { type: 'string', value: JSON.stringify({ w: ov?.width ?? 0, h: ov?.height ?? 0, d: ov?.deviceScaleFactor ?? 1 }) } } })
       } else {

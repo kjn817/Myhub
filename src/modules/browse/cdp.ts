@@ -273,6 +273,12 @@ async function attachActivePage(
 
 export const NAVIGATE_TIMEOUT_MS = 5000
 
+/** /viewport 전용 타임아웃 (2026-11-16 QA 10차). 뷰포트 적용은
+ *  attach·읽기·set·검증·디스플레이 대기(최대 3초)·토글까지 8~10회
+ *  CDP 왕복이라 5초 기본값에 잘릴 수 있다 — 토글이 잘리면 렌더러가
+ *  1918에 stuck된 채로 남는다. Worker 요청 제한(30초) 안에서 10초로. */
+export const VIEWPORT_TIMEOUT_MS = 10000
+
 export type NavigateStage = 'ok' | 'connect' | 'targets' | 'attach' | 'navigate' | 'viewport'
 export interface NavigateResult {
   ok: boolean
@@ -482,6 +488,63 @@ function viewportMatches(
   )
 }
 
+/** Selkies 디스플레이 크기 (screen.width·screen.height)를 읽는다.
+ *  렌더러 뷰포트(innerWidth)와 달리 디스플레이 자체의 크기라,
+ *  토글 전에 디스플레이가 이미 줄었는지 확인하는 게이트로 쓴다.
+ *  읽기 실패·깨진 값이면 null. */
+async function readDisplaySize(
+  call: CdpCall,
+  sessionId: string,
+): Promise<{ width: number; height: number } | null> {
+  let reply: CdpReply
+  try {
+    reply = await call(
+      'Runtime.evaluate',
+      { expression: 'JSON.stringify({w: screen.width, h: screen.height})', returnByValue: true },
+      sessionId,
+    )
+  } catch {
+    return null
+  }
+  if (reply.error) return null
+  const raw = evalString(reply.result)
+  if (raw === null) return null
+  let parsed: { w?: unknown; h?: unknown }
+  try {
+    parsed = JSON.parse(raw) as { w?: unknown; h?: unknown }
+  } catch {
+    return null
+  }
+  if (typeof parsed.w !== 'number' || typeof parsed.h !== 'number') return null
+  return { width: parsed.w, height: parsed.h }
+}
+
+/** 디스플레이가 의도 크기에 도달할 때까지 기다린다 (최대 maxWaitMs).
+ *  토글은 디스플레이가 이미 줄었을 때만 의미가 있다 — 디스플레이가
+ *  아직 1918인 상태에서 토글하면 렌더러를 1918로 다시 고정해버린다
+ *  (QA 10차 1·3차 사이클 경합). 도달하면 true, 시간 안에 안 되면
+ *  false를 돌려주고 호출자가 토글을 건너뛰어 다음 재적용에 맡긴다. */
+async function waitForDisplaySize(
+  call: CdpCall,
+  sessionId: string,
+  intended: { width: number; height: number },
+  maxWaitMs = 5000,
+): Promise<boolean> {
+  const deadline = Date.now() + maxWaitMs
+  for (;;) {
+    const size = await readDisplaySize(call, sessionId)
+    if (
+      size !== null &&
+      Math.abs(size.width - intended.width) <= 2 &&
+      Math.abs(size.height - intended.height) <= 2
+    ) {
+      return true
+    }
+    if (Date.now() >= deadline) return false
+    await new Promise((resolve) => setTimeout(resolve, 500))
+  }
+}
+
 type VerifyOutcome = 'ok' | 'mismatch' | 'unknown'
 
 /**
@@ -606,7 +669,10 @@ export async function applyViewportToSession(
   return runCdpScript(
     webSocketDebuggerUrl,
     connect,
-    opts,
+    // 뷰포트 적용은 attach·읽기·set·검증·디스플레이 게이트(최대
+    // 5초)·토글까지 길어 기본 5초로는 잘린다 — 전용 10초 기본값
+    // (QA 10차). 호출자가 명시한 타임아웃이 있으면 그걸 쓴다.
+    { ...opts, timeoutMs: opts.timeoutMs ?? VIEWPORT_TIMEOUT_MS },
     async (call) => {
       let mismatch = 0
       const targetsReply = await call('Target.getTargets')
@@ -707,17 +773,25 @@ export async function applyViewportToSession(
         }
       }
       // 3단계: 렌더러 재동기화 (2026-11-16 QA 8차 복원 결함의
-      // 근본 수정, QA 9차에서 토글로 강화). 디스플레이가 줄어도
-      // (복원) 렌더러는 옛 창 크기(1918)를 갖고 있어, override는
-      // 세션 안에서만 먹고 소켓을 닫으면 5초 안에 1918로 되돌아간다.
-      // clear도 소용없고, 풀스크린 재걸기도 no-op으로 무시돼 믿을
-      // 수 없다. 풀스크린→일반→풀스크린 실제 상태 전환을 해야
-      // 렌더러가 실제 창 크기를 다시 읽는다 (실측: 토글 후 별도
-      // 세션에서 652 확인).
+      // 근본 수정, QA 9차에서 토글로 강화, QA 10차에서 디스플레이
+      // 게이트 추가). 디스플레이가 줄어도(복원) 렌더러는 옛 창 크기
+      // (1918)를 갖고 있어, override는 세션 안에서만 먹고 소켓을
+      // 닫으면 5초 안에 1918로 되돌아간다. clear도 소용없고,
+      // 풀스크린 재걸기도 no-op으로 무시돼 믿을 수 없다.
+      // 풀스크린→일반→풀스크린 실제 상태 전환을 해야 렌더러가 실제
+      // 창 크기를 다시 읽는다 (실측: 토글 후 별도 세션에서 652 확인).
+      // **단, 토글은 디스플레이가 이미 줄었을 때만 한다.** 디스플레이가
+      // 아직 1918인 상태에서 토글하면 렌더러를 1918로 다시 고정해버려
+      // 결함을 굳힌다 (QA 10차 1·3차 사이클: 토글이 디스플레이
+      // 리사이즈보다 먼저 돌아 경합). 디스플레이가 5초 안에 안 줄면
+      // 토글을 건너뛰고 다음 주기 재적용(10초)에 맡긴다.
       // 불일치 탭이 있어 set을 건 경우에만 호출한다 (전 탭 일치
       // 조기 반환 경로는 렌더러도 이미 맞는 상태라 건드리지 않는다).
-      if (applied > 0 && mismatch === 0) {
-        await resyncRendererWindow(call, pages, viewport)
+      if (applied > 0 && mismatch === 0 && sessions.length > 0) {
+        const displayReady = await waitForDisplaySize(call, sessions[0].sessionId, viewport)
+        if (displayReady) {
+          await resyncRendererWindow(call, pages, viewport)
+        }
       }
       const ok = applied === total && mismatch === 0
       return { ok, stage: ok ? ('ok' as const) : (firstFailStage ?? 'viewport'), applied, total, verified }

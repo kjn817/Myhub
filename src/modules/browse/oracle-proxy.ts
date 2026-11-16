@@ -29,7 +29,7 @@
 import { Hono } from 'hono'
 import type { Env } from '../../types'
 import { validatePublicUrlAsync } from './assistant-read'
-import { applyViewportToSession, defaultCdpConnect, getBrowserState, goBackSession, goForwardSession, navigateSession, toDirectCdpWsUrl, type ViewportSize } from './cdp'
+import { applyViewportToSession, defaultCdpConnect, getBrowserState, goBackSession, goForwardSession, navigateSession, toDirectCdpWsUrl, VIEWPORT_TIMEOUT_MS, type ViewportSize } from './cdp'
 import { isBrowserLocked } from './unlock'
 
 export const ORACLE_VIEW_PORT = 8080
@@ -248,6 +248,7 @@ export function registerOracleProxyRoutes(app: Hono<{ Bindings: Env }>): void {
     if (!gate.ok) return gate.response
     const applied = await applyViewportToSession(gate.directWs, viewport, defaultCdpConnect, {
       headers: gate.secretHeaders,
+      timeoutMs: VIEWPORT_TIMEOUT_MS,
     })
     return c.json({ ok: applied.ok, stage: applied.stage, applied: applied.applied, total: applied.total, verified: applied.verified })
   })

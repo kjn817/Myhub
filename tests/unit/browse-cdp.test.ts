@@ -410,6 +410,8 @@ function makeViewportHandler(opts: {
   setFailSession?: string
   initialOverrides?: Record<string, { width: number; height: number; deviceScaleFactor: number }>
   natural?: { w: number; h: number; d: number }
+  /** 디스플레이 크기 고정값 (QA 10차 게이트 테스트용 — 낡은 디스플레이를 흉내낸다). 없으면 마지막 override 크기를 돌려준다. */
+  displaySize?: { width: number; height: number }
 } = {}): (msg: Record<string, any>, emit: (m: unknown) => void) => void {
   const pages = opts.pages ?? ['page-1']
   const verify = opts.verify ?? 'match'
@@ -431,9 +433,15 @@ function makeViewportHandler(opts: {
       emit({ id: msg.id, result: {} })
     } else if (msg.method === 'Runtime.evaluate') {
       const expr = String(msg.params?.expression ?? '')
-      // readAppliedViewport(innerWidth)만 온다 — screen.width 측정은
-      // QA 7차에 폐지됐다.
-      if (expr.includes('innerWidth')) {
+      // readDisplaySize(screen.width) — 토글 전 디스플레이 게이트
+      // (QA 10차). displaySize가 주어지면 그 값(게이트 테스트용 낡은
+      // 디스플레이)을, 없으면 해당 세션의 마지막 override 크기(의도
+      // 크기로 이미 줄었다고 시뮬레이션)를 돌려준다.
+      if (expr.includes('screen.width')) {
+        const sid = String(msg.sessionId ?? '')
+        const ds = opts.displaySize ?? overrides[sid] ?? opts.initialOverrides?.[sid] ?? { width: 0, height: 0 }
+        emit({ id: msg.id, result: { result: { type: 'string', value: JSON.stringify({ w: ds.width, h: ds.height }) } } })
+      } else if (expr.includes('innerWidth')) {
         // 검증 읽기: 세션별 마지막 override와 비교해 답한다.
         const sid = String(msg.sessionId ?? '')
         const behavior = opts.verifyBySession?.[sid] ?? verify
@@ -480,13 +488,17 @@ describe('applyViewportToSession — 이동 없는 뷰포트 적용 (2026-11-15 
     // 대체하고 DSF는 1.0 고정이다. 3단계 렌더러 재동기화는 QA 8차
     // 복원 결함 수정 — 풀스크린→일반→풀스크린 토글로 렌더러가
     // 실제 창 크기를 다시 읽게 한다 (QA 9차: 풀스크린 재걸기만으론
-    // no-op으로 무시돼 안 먹힘).
+    // no-op으로 무시돼 안 먹힘). QA 10차: 토글 전에 디스플레이가
+    // 이미 줄었는지 screen.width로 확인하는 게이트가 들어간다 —
+    // 디스플레이가 아직 1918인데 토글하면 렌더러를 1918로 다시
+    // 고정해버리는 경합이 있었다.
     expect(sock.sent.map((m) => m.method)).toEqual([
       'Target.getTargets',
       'Target.attachToTarget',
       'Runtime.evaluate', // 1단계 읽기 (현재 실측)
       'Emulation.setDeviceMetricsOverride',
       'Runtime.evaluate', // 검증 읽기
+      'Runtime.evaluate', // 디스플레이 게이트 (screen.width)
       'Browser.getWindowForTarget', // 3단계 렌더러 재동기화
       'Browser.setWindowBounds', // 풀스크린 해제 (일반 상태로)
       'Browser.setWindowBounds', // 풀스크린 복귀
@@ -495,11 +507,13 @@ describe('applyViewportToSession — 이동 없는 뷰포트 적용 (2026-11-15 
     // DSF는 REMOTE_DISPLAY_SCALE(1.0) 고정 (QA 7차).
     expect(vp.params).toEqual({ width: 1470, height: 850, deviceScaleFactor: 1, mobile: false })
     expect(vp.sessionId).toBe('sess-page-1')
-    // 첫 evaluate는 1단계 읽기, 마지막은 검증 읽기 (둘 다 innerWidth).
+    // 첫 evaluate는 1단계 읽기, 두 번째는 검증 읽기 (둘 다 innerWidth),
+    // 세 번째는 디스플레이 게이트 (screen.width).
     const evals = sock.sent.filter((m) => m.method === 'Runtime.evaluate')
-    expect(evals).toHaveLength(2)
+    expect(evals).toHaveLength(3)
     expect(evals[0].params.expression).toContain('innerWidth')
     expect(evals[1].params.expression).toContain('innerWidth')
+    expect(evals[2].params.expression).toContain('screen.width')
     expect(sock.closed).toBe(true)
   })
 
@@ -566,10 +580,11 @@ describe('applyViewportToSession — 전 탭 적용 (2026-11-15 밤, 탭마다 �
     }
     // service_worker 타깃에는 attach하지 않는다.
     expect(sock.sent.filter((m) => m.method === 'Target.attachToTarget')).toHaveLength(2)
-    // 1단계 읽기 탭마다 한 번 + 검증 읽기 탭마다 한 번 (측정 평가 없음).
+    // 1단계 읽기 탭마다 한 번 + 검증 읽기 탭마다 한 번 + 디스플레이
+    // 게이트(screen.width) 한 번 (QA 10차 — 첫 세션으로 한 번만 확인).
     const evals = sock.sent.filter((m) => m.method === 'Runtime.evaluate')
-    expect(evals).toHaveLength(4)
-    expect(evals.filter((m) => String(m.params.expression).includes('screen.width'))).toHaveLength(0)
+    expect(evals).toHaveLength(5)
+    expect(evals.filter((m) => String(m.params.expression).includes('screen.width'))).toHaveLength(1)
     expect(evals.filter((m) => String(m.params.expression).includes('innerWidth'))).toHaveLength(4)
     expect(sock.sent.filter((m) => m.method === 'Emulation.clearDeviceMetricsOverride')).toHaveLength(0)
   })
@@ -675,6 +690,24 @@ describe('applyViewportToSession — 읽기 우선·건드리지 않기 (2026-11
     expect(bounds[0].sessionId).toBeUndefined() // 브라우저 레벨 호출이라 세션 없음
     expect(bounds[1].sessionId).toBeUndefined()
   })
+
+  test('디스플레이가 아직 안 줄었으면 토글을 건너뛴다 (QA 10차 게이트)', async () => {
+    // 디스플레이가 아직 1918인데 토글하면 렌더러를 1918로 다시
+    // 고정해버린다 (QA 10차 1·3차 사이클 경합). 게이트가 토글을
+    // 막으면 setWindowBounds가 나가지 않고, 결과는 여전히 ok
+    // (override 적용·검증은 완료 — 다음 주기 재적용이 토글한다).
+    // 게이트가 5초를 기다리므로 타임아웃을 10초로 늘린다.
+    const sock = new FakeSocket(makeViewportHandler({ displaySize: { width: 1918, height: 922 } }))
+    const r = await applyViewportToSession(WS_URL, { width: 1470, height: 850 }, async () => sock as CdpSocket)
+    expect(r).toEqual({ ok: true, stage: 'ok', applied: 1, total: 1, verified: 1 })
+    expect(sock.sent.filter((m) => m.method === 'Browser.setWindowBounds')).toHaveLength(0)
+    expect(sock.sent.filter((m) => m.method === 'Browser.getWindowForTarget')).toHaveLength(0)
+    // 게이트 폴링으로 screen.width 평가가 여러 번 나간다.
+    const screenEvals = sock.sent.filter(
+      (m) => m.method === 'Runtime.evaluate' && String(m.params?.expression ?? '').includes('screen.width'),
+    )
+    expect(screenEvals.length).toBeGreaterThan(1)
+  }, 10000)
 
   test('자연 상태가 이미 의도와 일치해도 건드리지 않는다 (override가 필요 없다)', async () => {
     // 자연 상태가 이미 스테이지 크기 × DSF 1.0이면 override를 걸어도
