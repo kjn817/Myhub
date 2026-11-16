@@ -133,20 +133,11 @@
 <script src="/js/fonts.js"></script>
 <script src="/js/finder-codec.js"></script>
 <script src="/js/finder-viewer.js"></script>
-<script src="/js/finder-format-text.js"></script>
-<script src="/js/finder-format-hwp.js"></script>
-<script src="/js/craft-clipboard.js"></script>
-<script src="/js/finder-format-sheet.js"></script>
-<script src="/js/craft-prefetch-core.js"></script>
-<script src="/js/gridcraft-prefetch.js"></script>
-<script src="/js/deckcraft-prefetch.js"></script>
-<script src="/js/rhwp-prefetch.js"></script>
-<script src="/js/finder-deckcraft.js"></script>
-<script src="/js/finder-format-slide.js"></script>
-<script src="/js/finder-format-doc.js"></script>
-<script src="/js/finder-pdf-ops.js"></script>
-<script src="/js/finder-pdfcraft.js"></script>
-<script src="/js/finder-format-pdf.js"></script>
+<!-- 형식 모듈은 정적으로 넣지 않는다 (2026-11-16 성능 6라운드).
+     파일이 실제로 열 때 뷰어 코어의 ensureFormat 훅이 office.js의
+     로더로 해당 모듈만 동적 import한다 (Finder와 같은 패턴) —
+     앱 열기마다 14개 태그 321KB를 먼저 받는 낭비를 없앤다.
+     엔진 프리패치도 load 뒤에 자기 앱 엔진만 데운다. -->
 <script src="/js/desktop/menu.js"></script>
 <script src="/js/office-tabs.js"></script>
 <script src="/js/office-fetch.js"></script>

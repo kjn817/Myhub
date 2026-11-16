@@ -8,8 +8,10 @@
  * - 공개 API의 헬퍼가 코어 함수와 동일 참조다 (동작이 아니라 참조
  *   자체를 고정 — 위임이 빠지면 실패한다).
  * - slide/sheet의 인라인 32MB 리터럴이 코어 상한으로 바뀌었다.
- * - 로딩 순서: office.html·sheet.html 정적 태그와 finder.js 동적
- *   import 체인에서 코어가 소비처보다 먼저 온다.
+ * - 로딩 순서: sheet.html 정적 태그와 finder.js·office.js 동적
+ *   import 체인에서 코어가 소비처보다 먼저 온다 (office.html 정적
+ *   태그는 2026-11-16 성능 6라운드로 제거되고 office.js 체인으로
+ *   이관됐다 — 순서는 office.js FORMAT_MODULE_URLS가 보장한다).
  * - 코어 없이 소비처만 받아도 로드는 되고 붙여넣기는 조용히
  *   건너뛴다 (열화 경로).
  * 카나리아: 소비처가 로컬 정의를 되살리면 구조 테스트가, 코어
@@ -27,7 +29,7 @@ const SHEET_SRC = fs.readFileSync(path.join(ROOT, 'public', 'js', 'finder-format
 const GRID_SRC = fs.readFileSync(path.join(ROOT, 'public', 'js', 'sheet-gridcraft.js'), 'utf-8')
 const PDF_SRC = fs.readFileSync(path.join(ROOT, 'public', 'js', 'finder-pdfcraft.js'), 'utf-8')
 const FINDER_SRC = fs.readFileSync(path.join(ROOT, 'public', 'js', 'finder.js'), 'utf-8')
-const OFFICE_HTML = fs.readFileSync(path.join(ROOT, 'public', 'office.html'), 'utf-8')
+const OFFICE_SRC = fs.readFileSync(path.join(ROOT, 'public', 'js', 'office.js'), 'utf-8')
 const SHEET_HTML = fs.readFileSync(path.join(ROOT, 'public', 'sheet.html'), 'utf-8')
 const STATIC_ASSETS = JSON.parse(
   fs.readFileSync(path.join(ROOT, 'scripts', 'static-assets.json'), 'utf-8'),
@@ -141,18 +143,31 @@ describe('clipboard 소비처 동등성: 공개 API가 코어와 동일 참조',
 })
 
 describe('clipboard 코어 선행 로딩', () => {
-  test('office.html에서 코어 태그가 4개 소비처보다 먼저 온다', () => {
-    const coreIdx = OFFICE_HTML.indexOf('/js/craft-clipboard.js')
-    expect(coreIdx).toBeGreaterThan(-1)
-    for (const consumer of [
-      '/js/finder-format-sheet.js',
-      '/js/finder-deckcraft.js',
-      '/js/finder-format-slide.js',
-      '/js/finder-pdfcraft.js',
-    ]) {
-      const idx = OFFICE_HTML.indexOf(consumer)
-      expect(idx).toBeGreaterThan(-1)
-      expect(coreIdx).toBeLessThan(idx)
+  test('office.js FORMAT_MODULE_URLS에서 코어가 소비처보다 먼저 온다', () => {
+    // 2026-11-16 성능 6라운드: office.html 정적 태그를 제거하고
+    // office.js의 동적 체인으로 이관했다 — 순서 보장은 이 맵이 한다
+    // (finder.js 테스트와 같은 구조, office.js 맵 대상).
+    const table = OFFICE_SRC.match(/var FORMAT_MODULE_URLS = \{([\s\S]*?)\n    \};/)
+    expect(table).not.toBeNull()
+    const body = table![1]
+    const arrays: Record<string, string[]> = {}
+    for (const m of body.matchAll(/(\w+): \[([^\]]*)\]/g)) {
+      arrays[m[1]] = m[2].split(',').map((s) => s.trim().replace(/['"]/g, ''))
+    }
+    for (const kind of ['xlsx', 'xls', 'pptx', 'pdf']) {
+      const urls = arrays[kind]
+      expect(urls).toBeDefined()
+      const coreIdx = urls.indexOf('/js/craft-clipboard.js')
+      expect(coreIdx).toBeGreaterThan(-1)
+      for (const consumer of [
+        '/js/finder-format-sheet.js',
+        '/js/finder-deckcraft.js',
+        '/js/finder-format-slide.js',
+        '/js/finder-pdfcraft.js',
+      ]) {
+        const idx = urls.indexOf(consumer)
+        if (idx !== -1) expect(coreIdx).toBeLessThan(idx)
+      }
     }
   })
   test('sheet.html에서 코어 태그가 sheet-gridcraft보다 먼저 온다', () => {

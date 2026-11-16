@@ -237,6 +237,80 @@
       return fetchApi;
     }
 
+    // ---------- 형식 모듈 지연 로드 (성능 6라운드, 2026-11-16) ----------
+    // office.html은 형식 모듈을 정적으로 넣지 않는다 — 파일이 실제로
+    // 열 때 뷰어 코어의 ensureFormat 훅이 이 로더로 해당 모듈만
+    // import한다 (Finder finder.js와 같은 패턴). 정적 14개 태그
+    // 321KB가 앱 열기마다 먼저 받아지던 것을 없앤다 (스로틀링
+    // 오피스 열기 4.2초의 주범). 모듈은 평가하며 registerFormat으로
+    // 등록하는데, 로드 시점에 정제 전역를 캡처하는 모듈이 있어
+    // 순서가 계약이다: pptx는 deckcraft 호스트가 먼저, pdf는
+    // pdf-ops·pdfcraft 호스트가 먼저다.
+    var FORMAT_MODULE_URLS = {
+      text: ['/js/finder-format-text.js'],
+      csv: ['/js/finder-format-text.js'],
+      hwp: ['/js/craft-prefetch-core.js', '/js/rhwp-prefetch.js', '/js/finder-format-hwp.js'],
+      hwpx: ['/js/craft-prefetch-core.js', '/js/rhwp-prefetch.js', '/js/finder-format-hwp.js'],
+      xlsx: ['/js/craft-clipboard.js', '/js/finder-format-sheet.js'],
+      xls: ['/js/craft-clipboard.js', '/js/finder-format-sheet.js'],
+      pptx: ['/js/craft-prefetch-core.js', '/js/craft-clipboard.js', '/js/finder-deckcraft.js', '/js/finder-format-slide.js'],
+      docx: ['/js/finder-format-doc.js'],
+      pdf: ['/js/finder-pdf-ops.js', '/js/craft-prefetch-core.js', '/js/craft-clipboard.js', '/js/finder-pdfcraft.js', '/js/finder-format-pdf.js'],
+    };
+    // 동적 로딩 URL은 공용 헬퍼(asset-url.js)가 배포 버전을 붙인다
+    // (버전 없는 URL은 immutable 캐시가 고정할 수 있다).
+    function versionedAssetUrl(url) {
+      var h = typeof window !== 'undefined' ? window.MyHubAssetUrl : null;
+      return typeof h === 'function' ? h(url) : url;
+    }
+    // import 주입점: 실제는 동적 import(), 테스트는 deps.importModule
+    // 스텁으로 URL·순서·캐시를 검증한다.
+    var importModuleFn = deps.importModule || function (url) { return import(url); };
+    var formatModuleLoading = {};
+    function loadFormatModule(url) {
+      if (!formatModuleLoading[url]) formatModuleLoading[url] = importModuleFn(versionedAssetUrl(url));
+      return formatModuleLoading[url];
+    }
+    function ensureFormatModules(kind) {
+      var urls = FORMAT_MODULE_URLS[kind];
+      if (!urls) return Promise.resolve();
+      var chain = Promise.resolve();
+      urls.forEach(function (url) {
+        chain = chain.then(function () {
+          return loadFormatModule(url);
+        });
+      });
+      return chain;
+    }
+
+    // ---------- 앱 엔진 프리패치 (부팅 뒤, 해당 앱 엔진만) ----------
+    // 정적 태그 시절에는 3개 엔진 프리패치가 전부 먼저 떴다. 이제는
+    // 문서 load 뒤에 자기 앱 엔진만 데운다 (pdf는 프리패치 래퍼가
+    // 없어 핸들러와 함께 로드된다). 실패해도 열기 경로와 무관하다.
+    var ENGINE_PREFETCH_URLS = {
+      excel: '/js/gridcraft-prefetch.js',
+      powerpoint: '/js/deckcraft-prefetch.js',
+      hangul: '/js/rhwp-prefetch.js',
+    };
+    function prefetchAppEngine() {
+      var wrapper = ENGINE_PREFETCH_URLS[appKey];
+      if (!wrapper) return;
+      loadFormatModule('/js/craft-prefetch-core.js')
+        .then(function () {
+          return loadFormatModule(wrapper);
+        })
+        .catch(function () {
+          return null;
+        });
+    }
+    function scheduleAppEnginePrefetch() {
+      if (typeof document !== 'undefined' && document.readyState === 'complete') {
+        prefetchAppEngine();
+      } else if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+        window.addEventListener('load', prefetchAppEngine, { once: true });
+      }
+    }
+
     // ---------- 뷰어 (3B 코어 재사용) ----------
     function getViewer() {
       if (viewer) return viewer;
@@ -267,6 +341,7 @@
           if (current && current.fileId) getFetchApi().invalidate(current.fileId);
         },
         createSave: createSaveFlow,
+        ensureFormat: ensureFormatModules,
       });
       return viewer;
     }
@@ -717,6 +792,8 @@
       }
     }
     function init() {
+      // 자기 앱 엔진만 load 뒤에 데운다 (성능 6라운드).
+      scheduleAppEnginePrefetch();
       doc.title = app.title + ' · MyHub';
       var appName = el('officeAppName');
       if (appName) appName.textContent = app.title;
@@ -819,6 +896,7 @@
       openRecent: function (entry) { return getMemory().openRecent(entry); },
       closeCurrent: closeCurrent,
       getCurrent: function () { return current; },
+      ensureFormat: ensureFormatModules,
     };
   }
 
