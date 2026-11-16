@@ -510,6 +510,47 @@ async function verifyViewportApplied(
 }
 
 /**
+ * 렌더러 창 크기 재동기화 (2026-11-16 QA 8차·9차 복원 결함).
+ * 디스플레이가 줄어도(복원) 렌더러는 옛 창 크기(1918)를 갖고 있어
+ * override는 세션 안에서만 먹고 소켓을 닫으면 5초 안에 1918로
+ * 되돌아간다. clear도 소용없다 (override가 아니라 렌더러의 낡은
+ * 크기라서, 실측 확인). 이미 풀스크린인 창에 풀스크린을 다시 거는
+ * 것도 no-op으로 무시돼 믿을 수 없다 (11:05엔 먹혔으나 12:18엔
+ * 안 먹힘 — 반복 호출 시 Chromium이 무시하는 것으로 보임).
+ * **정본**: 풀스크린→일반→풀스크린 실제 상태 전환을 해야 렌더러가
+ * 창 크기를 다시 읽는다 (실측: 토글 후 별도 세션에서 652 확인).
+ * 일반 상태로 바꿀 때 크기는 Chromium이 무시하고 자체 기본 크기
+ * (1004×720)를 쓰므로, -1 크기는 토글 의도만 표시한다. 두 호출
+ * 사이에 짧게 쉬어야 상태 전환이 렌더러에 전달된다.
+ * 브라우저 레벨 호출이라 세션 없이 부른다. 실패해도 무시한다 —
+ * override 적용 자체는 이미 끝난 상태라 재동기화는 지속성 보강이다.
+ */
+async function resyncRendererWindow(
+  call: CdpCall,
+  pages: Array<{ type: 'page'; targetId: string }>,
+  viewport: ViewportSize,
+): Promise<void> {
+  if (pages.length === 0) return
+  try {
+    const winReply = await call('Browser.getWindowForTarget', { targetId: pages[0].targetId })
+    if (winReply.error) return
+    const windowId = (winReply.result as { windowId?: unknown } | undefined)?.windowId
+    if (typeof windowId !== 'number') return
+    // 1) 풀스크린을 풀어 일반 상태로 (크기는 무시되지만 상태 전환이 핵심).
+    const normalReply = await call('Browser.setWindowBounds', {
+      windowId,
+      bounds: { left: 0, top: 0, width: Math.max(1, Math.round(viewport.width) - 1), height: Math.max(1, Math.round(viewport.height) - 1) },
+    })
+    if (normalReply.error) return
+    await new Promise((resolve) => setTimeout(resolve, 200))
+    // 2) 다시 풀스크린으로 — 렌더러가 실제 창 크기를 다시 읽는다.
+    await call('Browser.setWindowBounds', { windowId, bounds: { windowState: 'fullscreen' } })
+  } catch {
+    // 무시 — 재동기화 실패가 viewport 적용 자체를 무효화하지 않는다.
+  }
+}
+
+/**
  * 이동 없이 원격 뷰포트만 맞춘다 (2026-11-15: 세션 복원·Chromium 재시작
  * 뒤에는 navigate가 없어 override가 한 번도 적용되지 않고, 원격이
  * X 디스플레이 전체(레티나 기기 픽셀) 크기로 렌더링돼 화면이 절반
@@ -546,6 +587,7 @@ async function verifyViewportApplied(
  * 2단계로 불일치 탭에만 의도 뷰포트를 적용한다 (set이 기존
  * override를 대체하므로 clear 불필요, 디스플레이 재측정 없음 —
  * 재측정은 리사이즈 경합으로 잘못된 DSF를 만들었다, QA 7차).
+ * 3단계로 렌더러 창 크기를 재동기화한다 (QA 8차 복원 결함).
  */
 export async function applyViewportToSession(
   webSocketDebuggerUrl: string,
@@ -632,7 +674,8 @@ export async function applyViewportToSession(
         return { ok, stage: ok ? ('ok' as const) : ('attach' as const), applied: n, total, verified: n }
       }
       // 2단계: 불일치 탭이 있다. 의도 뷰포트를 불일치 탭에만
-      // 적용한다 (set이 기존 override를 대체하므로 clear 불필요).
+      // 적용한다 (set이 기존 override를 대체하므로 clear 불필요 —
+      // clear는 낡은 렌더러 크기를 못 고친다, 아래 참조).
       // 디스플레이를 다시 재지 않는다 — 리사이즈 중에는
       // screen.width가 옛 값을 돌려줘 잘못된 DSF를 만든다.
       for (const s of sessions) {
@@ -662,6 +705,19 @@ export async function applyViewportToSession(
           mismatch += 1
           noteFail('viewport')
         }
+      }
+      // 3단계: 렌더러 재동기화 (2026-11-16 QA 8차 복원 결함의
+      // 근본 수정, QA 9차에서 토글로 강화). 디스플레이가 줄어도
+      // (복원) 렌더러는 옛 창 크기(1918)를 갖고 있어, override는
+      // 세션 안에서만 먹고 소켓을 닫으면 5초 안에 1918로 되돌아간다.
+      // clear도 소용없고, 풀스크린 재걸기도 no-op으로 무시돼 믿을
+      // 수 없다. 풀스크린→일반→풀스크린 실제 상태 전환을 해야
+      // 렌더러가 실제 창 크기를 다시 읽는다 (실측: 토글 후 별도
+      // 세션에서 652 확인).
+      // 불일치 탭이 있어 set을 건 경우에만 호출한다 (전 탭 일치
+      // 조기 반환 경로는 렌더러도 이미 맞는 상태라 건드리지 않는다).
+      if (applied > 0 && mismatch === 0) {
+        await resyncRendererWindow(call, pages, viewport)
       }
       const ok = applied === total && mismatch === 0
       return { ok, stage: ok ? ('ok' as const) : (firstFailStage ?? 'viewport'), applied, total, verified }

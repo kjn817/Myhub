@@ -196,6 +196,10 @@ function makeViewportHandler(): (msg: Record<string, any>, emit: (m: unknown) =>
     } else if (msg.method === 'Emulation.setDeviceMetricsOverride') {
       overrides[String(msg.sessionId ?? '')] = msg.params
       emit({ id: msg.id, result: {} })
+    } else if (msg.method === 'Browser.getWindowForTarget') {
+      emit({ id: msg.id, result: { windowId: 42, bounds: { windowState: 'fullscreen' } } })
+    } else if (msg.method === 'Browser.setWindowBounds') {
+      emit({ id: msg.id, result: {} })
     }
   }
 }

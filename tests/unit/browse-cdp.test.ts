@@ -463,6 +463,10 @@ function makeViewportHandler(opts: {
       } else {
         emit({ id: msg.id, result: {} })
       }
+    } else if (msg.method === 'Browser.getWindowForTarget') {
+      emit({ id: msg.id, result: { windowId: 42, bounds: { width: 1470, height: 850, windowState: 'fullscreen' } } })
+    } else if (msg.method === 'Browser.setWindowBounds') {
+      emit({ id: msg.id, result: {} })
     }
   }
 }
@@ -473,13 +477,19 @@ describe('applyViewportToSession — 이동 없는 뷰포트 적용 (2026-11-15 
     const r = await applyViewportToSession(WS_URL, { width: 1470, height: 850 }, async () => sock as CdpSocket)
     expect(r).toEqual({ ok: true, stage: 'ok', applied: 1, total: 1, verified: 1 })
     // 지우기·권위 측정은 QA 7차에 폐지 — set이 기존 override를
-    // 대체하고 DSF는 1.0 고정이다.
+    // 대체하고 DSF는 1.0 고정이다. 3단계 렌더러 재동기화는 QA 8차
+    // 복원 결함 수정 — 풀스크린→일반→풀스크린 토글로 렌더러가
+    // 실제 창 크기를 다시 읽게 한다 (QA 9차: 풀스크린 재걸기만으론
+    // no-op으로 무시돼 안 먹힘).
     expect(sock.sent.map((m) => m.method)).toEqual([
       'Target.getTargets',
       'Target.attachToTarget',
       'Runtime.evaluate', // 1단계 읽기 (현재 실측)
       'Emulation.setDeviceMetricsOverride',
       'Runtime.evaluate', // 검증 읽기
+      'Browser.getWindowForTarget', // 3단계 렌더러 재동기화
+      'Browser.setWindowBounds', // 풀스크린 해제 (일반 상태로)
+      'Browser.setWindowBounds', // 풀스크린 복귀
     ])
     const vp = sock.sent.find((m) => m.method === 'Emulation.setDeviceMetricsOverride')
     // DSF는 REMOTE_DISPLAY_SCALE(1.0) 고정 (QA 7차).
@@ -642,9 +652,28 @@ describe('applyViewportToSession — 읽기 우선·건드리지 않기 (2026-11
     const r = await applyViewportToSession(WS_URL, { width: 1680, height: 967 }, async () => sock as CdpSocket)
     expect(r).toEqual({ ok: true, stage: 'ok', applied: 2, total: 2, verified: 2 })
     // 올바른 탭은 건드리지 않는다 — set·clear 모두 0회, 읽기로만 끝난다.
+    // 렌더러 재동기화도 안 건다 (이미 맞는 상태라 재동기화할 것이 없다).
     expect(sock.sent.filter((m) => m.method === 'Emulation.setDeviceMetricsOverride')).toHaveLength(0)
     expect(sock.sent.filter((m) => m.method === 'Emulation.clearDeviceMetricsOverride')).toHaveLength(0)
+    expect(sock.sent.filter((m) => m.method === 'Browser.setWindowBounds')).toHaveLength(0)
     expect(sock.sent.filter((m) => m.method === 'Runtime.evaluate')).toHaveLength(2)
+  })
+
+  test('재동기화는 풀스크린→일반→풀스크린 토글이다 (QA 9차)', async () => {
+    // 풀스크린만 다시 거는 것은 이미 풀스크린이면 no-op으로 무시돼
+    // 안 먹힌다 (12:18 실측). 실제 상태 전환(일반 경유)이 필요하다.
+    // 1차 호출은 크기를 넣어 일반 상태로 풀고, 2차 호출은
+    // windowState만으로 풀스크린에 복귀한다 (크기+상태 동시 지정은
+    // CDP가 -32602로 거부한다).
+    const sock = new FakeSocket(makeViewportHandler())
+    const r = await applyViewportToSession(WS_URL, { width: 1470, height: 850 }, async () => sock as CdpSocket)
+    expect(r.ok).toBe(true)
+    const bounds = sock.sent.filter((m) => m.method === 'Browser.setWindowBounds')
+    expect(bounds).toHaveLength(2)
+    expect(bounds[0].params).toEqual({ windowId: 42, bounds: { left: 0, top: 0, width: 1469, height: 849 } })
+    expect(bounds[1].params).toEqual({ windowId: 42, bounds: { windowState: 'fullscreen' } })
+    expect(bounds[0].sessionId).toBeUndefined() // 브라우저 레벨 호출이라 세션 없음
+    expect(bounds[1].sessionId).toBeUndefined()
   })
 
   test('자연 상태가 이미 의도와 일치해도 건드리지 않는다 (override가 필요 없다)', async () => {

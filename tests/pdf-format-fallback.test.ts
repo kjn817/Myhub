@@ -33,19 +33,19 @@ require('../public/js/finder-pdf-ops.js')
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 require('../public/js/finder-viewer.js')
 
-const win: any = (globalThis as any).window
-const doc: any = (globalThis as any).document
+const fbWin: any = (globalThis as any).window
+const fbDoc: any = (globalThis as any).document
 
 // 가짜 PdfCraft 브리지 — 모듈 로드 전에 window에 올려야 한다
 // (finder-format-pdf.js가 로드 때 읽는다).
 const createHost = jest.fn(() => ({
-  frame: doc.createElement('div'),
+  frame: fbDoc.createElement('div'),
   destroy: jest.fn(),
   open: jest.fn(() => true),
 }))
-win.MyHubFinderPdfCraft = { createHost }
+fbWin.MyHubFinderPdfCraft = { createHost }
 const fontsLoad = jest.fn()
-win.MyHubFonts = { load: fontsLoad }
+fbWin.MyHubFonts = { load: fontsLoad }
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const pdfFormat = require('../public/js/finder-format-pdf.js')
@@ -59,15 +59,15 @@ describe('PDF 뷰어 대체 화면·지연 로딩', () => {
   const notes: string[] = []
 
   function makeCtx() {
-    bodyEl = doc.createElement('div')
-    doc.body.appendChild(bodyEl)
+    bodyEl = fbDoc.createElement('div')
+    fbDoc.body.appendChild(bodyEl)
     return {
-      doc,
+      doc: fbDoc,
       body: bodyEl,
       file: { fileId: 5, name: '문서.pdf' },
       minimalChrome: false,
       chromeFold: null,
-      saveBtn: doc.createElement('button'),
+      saveBtn: fbDoc.createElement('button'),
       clearBody: () => { bodyEl.innerHTML = '' },
       contentUrl: () => '/api/drive/files/5/content',
       fetchContent: jest.fn(() => Promise.resolve(new ArrayBuffer(0))),
@@ -87,7 +87,7 @@ describe('PDF 뷰어 대체 화면·지연 로딩', () => {
   }
 
   beforeEach(() => {
-    doc.body.innerHTML = ''
+    fbDoc.body.innerHTML = ''
     current = true
     folded = true
     notes.length = 0
@@ -104,10 +104,10 @@ describe('PDF 뷰어 대체 화면·지연 로딩', () => {
   }
 
   function sendReady(frame: any, pages = 3) {
-    win.dispatchEvent(
-      new win.MessageEvent('message', {
+    fbWin.dispatchEvent(
+      new fbWin.MessageEvent('message', {
         data: { type: 'myhub-pdf:ready', pages },
-        origin: win.location.origin,
+        origin: fbWin.location.origin,
         source: frame.contentWindow,
       }),
     )
