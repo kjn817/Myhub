@@ -17,6 +17,11 @@
  * (2026-11-15: 셸 로컬 기록만 보던 주소창·뒤로가기는 원격 내 링크
  * 이동을 몰랐다). 뒤로/앞으로 이동은 goBack()/goForward()가
  * POST /api/browse/back|forward로 원격 기록에 지시한다.
+ * 핀치 줌 차단 (2026-11-16): 트랙패드 핀치는 브라우저에서 Ctrl+휠로
+ * 들어오고, Selkies 클라이언트가 Ctrl 키 + 휠을 원격에 그대로 전달해
+ * Chromium이 페이지 줌을 바꾼다 (네이버 90% 사고). iframe이 동일
+ * 출처(/api/browse/view/)라 contentWindow에 캡처 단계 wheel 리스너를
+ * 걸어 Ctrl+휠만 막는다 — 일반 휠은 그대로 통과한다.
  * 상태: 'off' | 'on' | 'notice' | 'locked'
  * (notice = 503 등 시작 실패 안내 카드를 띄운 상태,
  *  locked = LUKS 볼륨이 잠겨 암호 입력 카드를 띄운 상태).
@@ -789,6 +794,35 @@
       });
     }
 
+    /* 핀치 줌 차단 핸들러: Ctrl+휠만 막는다. 캡처 단계라 Selkies
+       클라이언트의 버블 리스너보다 먼저 돌고, stopPropagation으로
+       클라이언트에 닿지 않게 한다. 일반 휠(ctrlKey 없음)은 손대지
+       않는다. */
+    function onFrameWheel(ev) {
+      if (ev && ev.ctrlKey) {
+        if (typeof ev.preventDefault === 'function') ev.preventDefault();
+        if (typeof ev.stopPropagation === 'function') ev.stopPropagation();
+      }
+    }
+
+    /* iframe 로드마다 contentWindow에 핀치 가드를 건다. src가 바뀔
+       때마다 contentWindow가 새 객체가 되므로 load 때마다 다시
+       걸어야 한다. 동일 출처 접근이 실패하면 가드 없이 진행한다
+       (화면은 그대로 뜬다 — 가드 실패가 브라우저를 막지 않는다). */
+    function attachPinchGuard() {
+      try {
+        var win = liveFrame && liveFrame.contentWindow;
+        if (!win || typeof win.addEventListener !== 'function') return;
+        win.addEventListener('wheel', onFrameWheel, { passive: false, capture: true });
+      } catch (e) {
+        // 접근 불가 — 가드 없이 진행한다 (화면은 그대로 뜬다).
+        // 실패 원인은 콘솔에 남긴다 (관문 23: 빈 catch 금지).
+        if (typeof console !== 'undefined' && typeof console.warn === 'function') {
+          console.warn('[browser-live] 핀치 가드 부착 실패', e);
+        }
+      }
+    }
+
     /* iframe을 켜고 url이 있으면 이동한다. enterLive의 잠금 검사 통과 후.
        url이 없어도 뷰포트는 맞춘다 (2026-11-15: 세션 복원 뒤 navigate가
        없으면 override가 적용되지 않아 원격이 절반 크기로 보였다). */
@@ -900,6 +934,9 @@
       lockClose.addEventListener('click', function () {
         dismissLock();
       });
+    }
+    if (liveFrame) {
+      liveFrame.addEventListener('load', attachPinchGuard);
     }
 
     return {
