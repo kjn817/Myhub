@@ -29,7 +29,7 @@
 import { Hono } from 'hono'
 import type { Env } from '../../types'
 import { validatePublicUrlAsync } from './assistant-read'
-import { applyViewportToSession, defaultCdpConnect, getBrowserState, goBackSession, goForwardSession, navigateSession, toDirectCdpWsUrl, VIEWPORT_TIMEOUT_MS, type ViewportSize } from './cdp'
+import { defaultCdpConnect, getBrowserState, goBackSession, goForwardSession, navigateSession, toDirectCdpWsUrl, type ViewportSize } from './cdp'
 import { isBrowserLocked } from './unlock'
 
 export const ORACLE_VIEW_PORT = 8080
@@ -140,6 +140,33 @@ type CdpGate =
   | { ok: true; directWs: string; secretHeaders: Record<string, string> }
   | { ok: false; response: Response }
 
+/* 사이드카 HTTP 제어 엔드포인트(/control/*)용 전처리 (2026-11-16 QA 12차:
+   /viewport가 직접 CDP에서 사이드카 영구 override 경유로 바뀌면서
+   /json/version 조회가 필요 없어졌다). LUKS 잠금이면 423, 아니면
+   시크릿 헤더만 돌려준다. */
+type SidecarGate =
+  | { ok: true; secretHeaders: Record<string, string> }
+  | { ok: false; response: Response }
+
+async function gateSidecar(
+  c: { env: Env; json: (body: unknown, status?: number) => Response },
+  cfg: OracleConfig,
+): Promise<SidecarGate> {
+  const unlockSecret = c.env.UNLOCK_SECRET
+  if (unlockSecret && unlockSecret.length >= 16) {
+    if (await isBrowserLocked(cfg, unlockSecret)) {
+      return { ok: false, response: c.json({ ok: false, error: 'BROWSER_LOCKED' }, 423) }
+    }
+  }
+  return {
+    ok: true,
+    secretHeaders: {
+      'x-origin-secret': cfg.originSecret,
+      'x-cdp-secret': cfg.cdpSecret,
+    },
+  }
+}
+
 /* CDP를 쓰는 라우트들의 공통 전처리 (2026-11-15: /navigate·/viewport·
    /state·/back·/forward가 같은 전처리를 반복하던 것을 하나로 묶었다).
    LUKS 잠금이면 423 BROWSER_LOCKED, 사이드카 CDP에 닿지 않으면 502
@@ -230,9 +257,13 @@ export function registerOracleProxyRoutes(app: Hono<{ Bindings: Env }>): void {
   })
 
   // 이동 없이 원격 뷰포트만 맞춘다 (2026-11-15): 라이브 진입·리사이즈
-  // 때 호출한다. 세션 복원 뒤에는 navigate가 없어 override가 적용되지
-  // 않던 구멍을 메운다. 실패해도 화면은 뜨므로 클라이언트는 결과를
-  // 무시하고 다음 기회에 다시 시도한다.
+  // 때 호출한다. 2026-11-16 QA 12차부터 직접 CDP가 아니라 사이드카
+  // 영구 override 매니저(/control/viewport) 경유다 — 직접 CDP는
+  // 세션을 닫으면 override가 풀려 렌더러가 1918로 되돌아가고,
+  // 풀스크린 토그 재동기화는 QA 9·10·11·12차에서 네 번 불합격했다.
+  // 사이드카는 CDP 세션을 영구 유지하므로 override가 풀리지 않고,
+  // 새 탭에도 현재 뷰포트를 즉시 적용한다. 실패해도 화면은 뜨므로
+  // 클라이언트는 결과를 무시하고 다음 기회에 다시 시도한다.
   app.post('/viewport', async (c) => {
     const cfg = oracleConfigOf(c.env)
     if (!cfg) return c.json({ ok: false, error: 'ORACLE_NOT_CONFIGURED' }, 503)
@@ -244,13 +275,35 @@ export function registerOracleProxyRoutes(app: Hono<{ Bindings: Env }>): void {
     }
     const viewport = parseViewport(body.viewport)
     if (!viewport) return c.json({ ok: false, error: 'INVALID_VIEWPORT' }, 400)
-    const gate = await gateCdp(c, cfg)
+    const gate = await gateSidecar(c, cfg)
     if (!gate.ok) return gate.response
-    const applied = await applyViewportToSession(gate.directWs, viewport, defaultCdpConnect, {
-      headers: gate.secretHeaders,
-      timeoutMs: VIEWPORT_TIMEOUT_MS,
+    let res: Response
+    try {
+      res = await fetch(`https://${cfg.host}:${ORACLE_CDP_PORT}/control/viewport`, {
+        method: 'POST',
+        headers: { ...gate.secretHeaders, 'content-type': 'application/json' },
+        body: JSON.stringify({ width: viewport.width, height: viewport.height }),
+      })
+    } catch {
+      return c.json({ ok: false, error: 'ORACLE_UPSTREAM' }, 502)
+    }
+    if (!res.ok) return c.json({ ok: false, error: 'ORACLE_UPSTREAM' }, 502)
+    let applied: { ok?: unknown; applied?: unknown; total?: unknown; connected?: unknown } = {}
+    try {
+      applied = (await res.json()) as typeof applied
+    } catch {
+      return c.json({ ok: false, error: 'ORACLE_UPSTREAM' }, 502)
+    }
+    // 사이드카가 CDP에 안 붙었으면(언록 전 등) 적용 0건 — ok:false로
+    // 보고해 클라이언트가 다음 재적용에서 다시 시도하게 한다.
+    const ok = applied.ok === true && typeof applied.applied === 'number' && applied.applied > 0
+    return c.json({
+      ok,
+      stage: ok ? 'ok' : 'viewport',
+      applied: typeof applied.applied === 'number' ? applied.applied : 0,
+      total: typeof applied.total === 'number' ? applied.total : 0,
+      verified: typeof applied.applied === 'number' ? applied.applied : 0,
     })
-    return c.json({ ok: applied.ok, stage: applied.stage, applied: applied.applied, total: applied.total, verified: applied.verified })
   })
 
   // 원격 브라우저 현재 상태 (2026-11-15): 활성 탭의 실제 URL·

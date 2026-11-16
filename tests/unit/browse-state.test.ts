@@ -15,9 +15,12 @@
  *   켜져 있을 때 호출자는 로컬 기록으로 폴백하지 않는다 (2026-11-16
  *   QA 1차). (2026-11-16 QA 2차: Page.goBack/goForward는 Chromium
  *   156에 없어 'wasn't found' 에러만 돌려줬다.)
- * - /viewport: 전 탭 적용 결과를 { ok, stage, applied, total,
- *   verified }로 보고한다 (2026-11-15 밤 전 탭 적용 반영, 2026-11-16
- *   적용 후 검증 반영).
+ * - /viewport: 사이드카 영구 override 매니저(/control/viewport)에
+ *   크기를 전달하고 적용 결과를 { ok, stage, applied, total,
+ *   verified }로 보고한다 (2026-11-16 QA 12차: 직접 CDP는 세션을
+ *   닫으면 override가 풀려 렌더러가 1918로 되돌아갔다). 사이드카
+ *   미연결(적용 0건)은 ok:false + stage=viewport, 닿지 않으면
+ *   502 ORACLE_UPSTREAM.
  * - 공통 게이트(gateCdp): 잠금 검사는 UNLOCK_SECRET이 있을 때만 하고,
  *   CDP 연결은 사이드카 직접 URL(https://호스트:8081/devtools/...)로 간다.
  * 네트워크 경계는 전역 fetch 목킹이다 (실 Oracle 연결은 하지 않는다).
@@ -170,46 +173,6 @@ function historyHandler(msg: Record<string, any>, emit: (m: unknown) => void): v
     emit({ id: msg.id, result: {} })
   }
 }
-
-/** 뷰포트 핸들러 팩토리 — 세션별 마지막 override를 기억해 검증
- * evaluate에 그 값을 돌려준다 (제대로 적용된 탭은 실측이 의도와 일치한다). */
-function makeViewportHandler(): (msg: Record<string, any>, emit: (m: unknown) => void) => void {
-  const overrides: Record<string, { width: number; height: number; deviceScaleFactor: number }> = {}
-  return (msg, emit) => {
-    if (msg.method === 'Target.getTargets') {
-      emit({ id: msg.id, result: { targetInfos: [
-        { type: 'page', targetId: 'page-1' },
-        { type: 'page', targetId: 'page-2' },
-      ] } })
-    } else if (msg.method === 'Target.attachToTarget') {
-      emit({ id: msg.id, result: { sessionId: `sess-${msg.params.targetId}` } })
-    } else if (msg.method === 'Emulation.clearDeviceMetricsOverride') {
-      emit({ id: msg.id, result: {} })
-    } else if (msg.method === 'Runtime.evaluate') {
-      // innerWidth 읽기(실측·검증)와 screen.width 읽기(토글 전
-      // 디스플레이 게이트, QA 10차)가 온다. 게이트는 마지막
-      // override 크기를 돌려준다(디스플레이가 이미 줄었다고 가정).
-      const expr = String(msg.params?.expression ?? '')
-      if (expr.includes('screen.width')) {
-        const ov = overrides[String(msg.sessionId ?? '')]
-        emit({ id: msg.id, result: { result: { type: 'string', value: JSON.stringify({ w: ov?.width ?? 0, h: ov?.height ?? 0 }) } } })
-      } else if (expr.includes('innerWidth')) {
-        const ov = overrides[String(msg.sessionId ?? '')]
-        emit({ id: msg.id, result: { result: { type: 'string', value: JSON.stringify({ w: ov?.width ?? 0, h: ov?.height ?? 0, d: ov?.deviceScaleFactor ?? 1 }) } } })
-      } else {
-        emit({ id: msg.id, error: { message: 'unexpected evaluate' } })
-      }
-    } else if (msg.method === 'Emulation.setDeviceMetricsOverride') {
-      overrides[String(msg.sessionId ?? '')] = msg.params
-      emit({ id: msg.id, result: {} })
-    } else if (msg.method === 'Browser.getWindowForTarget') {
-      emit({ id: msg.id, result: { windowId: 42, bounds: { windowState: 'fullscreen' } } })
-    } else if (msg.method === 'Browser.setWindowBounds') {
-      emit({ id: msg.id, result: {} })
-    }
-  }
-}
-
 describe('GET /state — 원격 현재 상태', () => {
   test('설정이 없으면 503 ORACLE_NOT_CONFIGURED이고 fetch를 부르지 않는다', async () => {
     stubFetch(async () => {
@@ -362,10 +325,15 @@ describe('POST /back · POST /forward — 원격 뒤로/앞으로', () => {
   })
 })
 
-describe('POST /viewport — 전 탭 적용 결과 보고', () => {
-  test('두 탭에 적용되면 applied=2, total=2, verified=2로 보고한다', async () => {
-    const sock = new FakeSocket(makeViewportHandler())
-    stubCdp(sock)
+describe('POST /viewport — 사이드카 영구 override 경유 (2026-11-16 QA 12차)', () => {
+  test('사이드카가 두 탭에 적용하면 applied=2, total=2, verified=2로 보고한다', async () => {
+    let postedBody: unknown = null
+    stubFetch(async (url, init) => {
+      expect(url).toBe(`https://${HOST}:8081/control/viewport`)
+      expect(init?.method).toBe('POST')
+      postedBody = JSON.parse(String(init?.body ?? '{}'))
+      return jsonResponse({ ok: true, applied: 2, total: 2, connected: true })
+    })
     const res = await app.request(
       '/api/browse/viewport',
       {
@@ -377,12 +345,43 @@ describe('POST /viewport — 전 탭 적용 결과 보고', () => {
     )
     expect(res.status).toBe(200)
     expect(await res.json()).toEqual({ ok: true, stage: 'ok', applied: 2, total: 2, verified: 2 })
-    const vps = sock.sent.filter((m) => m.method === 'Emulation.setDeviceMetricsOverride')
-    expect(vps).toHaveLength(2)
-    for (const vp of vps) {
-      // DSF는 REMOTE_DISPLAY_SCALE(1.0) 고정 (2026-11-16 QA 7차).
-      expect(vp.params.deviceScaleFactor).toBe(1)
-    }
+    expect(postedBody).toEqual({ width: 1680, height: 967 })
+    // 시크릿 헤더가 사이드카로 나간다 (이중 게이트).
+    expect(fetchCalls).toHaveLength(1)
+    expect(fetchCalls[0].headers['x-origin-secret']).toBe('origin-secret')
+    expect(fetchCalls[0].headers['x-cdp-secret']).toBe('cdp-secret')
+  })
+
+  test('사이드카가 CDP에 안 붙어 적용 0건이면 ok:false + stage=viewport', async () => {
+    stubFetch(async () => jsonResponse({ ok: true, applied: 0, total: 0, connected: false }))
+    const res = await app.request(
+      '/api/browse/viewport',
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ viewport: { width: 1680, height: 967 } }),
+      },
+      ENV as never,
+    )
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ ok: false, stage: 'viewport', applied: 0, total: 0, verified: 0 })
+  })
+
+  test('사이드카가 닿지 않으면 502 ORACLE_UPSTREAM', async () => {
+    stubFetch(async () => {
+      throw new Error('unreachable')
+    })
+    const res = await app.request(
+      '/api/browse/viewport',
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ viewport: { width: 1680, height: 967 } }),
+      },
+      ENV as never,
+    )
+    expect(res.status).toBe(502)
+    expect(await res.json()).toEqual({ ok: false, error: 'ORACLE_UPSTREAM' })
   })
 
   test('잘못된 뷰포트는 400 INVALID_VIEWPORT', async () => {
