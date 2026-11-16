@@ -1597,6 +1597,28 @@ describe('callSingleAssistant [SEARCH:] 2차 호출', () => {
     expect(r.text).toContain('최신 뉴스를 찾지 못했어요')
   })
 
+  test('2차 호출 실패 → 조용한 링크 덤프가 아니라 실패 로깅+고지', async () => {
+    ;(global as any).fetch = exaOk([
+      { title: '문서1', url: 'http://d1', highlights: ['핵심 내용'], publishedDate: new Date().toISOString() },
+    ])
+    mockAiChat
+      .mockResolvedValueOnce({ text: '설명 [SEARCH: 파이썬 문법]', provider: 'g', model: 'm1' })
+      .mockRejectedValueOnce(new Error('model down'))
+    const errSpy = jest.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      const r = await callSingleAssistant(envOf(new MockDb(), { EXA_API_KEY: 'k' }), 'concierge', [{ role: 'user', content: '파이썬 문법 알려줘' }])
+      // 실패가 로그에 남는다 (빈 catch가 아님)
+      expect(errSpy).toHaveBeenCalledWith(
+        'search_synthesis_failed',
+        expect.objectContaining({ persona: 'concierge', query: '파이썬 문법', error: 'model down' }),
+      )
+      // 사용자에게도 실패가 고지된다 (조용한 링크 덤프 금지)
+      expect(r.text).toContain('검색 결과를 정리하지 못했어요')
+    } finally {
+      errSpy.mockRestore()
+    }
+  })
+
   test('EXA_API_KEY 없음 + 뉴스 질의 → 체인 시도 후 결과 없음 안내 (2차 호출 없음)', async () => {
     ;(global as any).fetch = jest.fn(async (url: string) => {
       if (String(url).includes('news.google.com')) {
@@ -2114,6 +2136,18 @@ describe('웹검색 마커', () => {
     expect(r.text).toContain('[T1](http://t1)')
   })
 
+  test('Tavily content 스니펫이 Path B 출력에 함께 보인다', async () => {
+    ;(global as any).fetch = jest.fn(async (url: string) => {
+      if (String(url).includes('api.tavily.com')) {
+        return { ok: true, json: async () => ({ results: [{ title: 'T1', url: 'http://t1', content: '파이썬은 프로그래밍 언어이다.' }] }) }
+      }
+      throw new Error('unexpected ' + url)
+    })
+    const r = await chatWith('concierge', '[SEARCH: 파이썬]', { TAVILY_API_KEY: 'k' })
+    expect(r.text).toContain('[T1](http://t1)')
+    expect(r.text).toContain('파이썬은 프로그래밍 언어이다.')
+  })
+
   // callSingleAssistant의 Exa 2차 호출이 첫 번째 Exa fetch를 소비하므로,
   // externalWebSearch 폴백 테스트에서는 2번째 Exa 호출부터 결과를 반환
   const exaSecondOnly = (tavilyImpl: (url: string) => Promise<any>, exaResults: any[]) => {
@@ -2139,6 +2173,16 @@ describe('웹검색 마커', () => {
     )
     const r = await chatWith('concierge', '[SEARCH: q]', { TAVILY_API_KEY: 'k', EXA_API_KEY: 'k2' })
     expect(r.text).toContain('[E1](http://e1)')
+  })
+
+  test('Exa highlights 스니펫이 Path B 출력에 함께 보인다', async () => {
+    ;(global as any).fetch = exaSecondOnly(
+      async () => ({ ok: true, json: async () => ({ results: [] }) }),
+      [{ title: 'E1', url: 'http://e1', highlights: ['핵심 내용 첫 줄', '두 번째 하이라이트'] }]
+    )
+    const r = await chatWith('concierge', '[SEARCH: q]', { TAVILY_API_KEY: 'k', EXA_API_KEY: 'k2' })
+    expect(r.text).toContain('[E1](http://e1)')
+    expect(r.text).toContain('핵심 내용 첫 줄')
   })
 
   test('Tavily !ok → Exa 폴백', async () => {

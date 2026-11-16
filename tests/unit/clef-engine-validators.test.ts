@@ -27,6 +27,18 @@ import {
   type ClefSpec,
 } from '../../src/services/clef-engine'
 
+describe('ROUTING_SPEC — 실시간 정보는 chat, 메모 요약만 summarize', () => {
+  test('chat 기준에 실시간 외부 정보가 명시된다', () => {
+    expect(ROUTING_SPEC.criteria.chat).toContain('날씨')
+    expect(ROUTING_SPEC.criteria.chat).toContain('실시간')
+  })
+
+  test('summarize 기준은 저장된 메모·기록 대상으로 한정된다', () => {
+    expect(ROUTING_SPEC.criteria.summarize).toContain('저장된')
+    expect(ROUTING_SPEC.criteria.summarize).toContain('실시간')
+  })
+})
+
 describe('validateSpec — 운영 스펙은 전부 유효, 깨진 스펙은 코드로 거부', () => {
   test('운영 스펙 4종은 오류가 없다', () => {
     for (const spec of [ROUTING_SPEC, COMPOUND_SPEC, HISTORY_SPEC, URGENCY_SPEC]) {

@@ -162,6 +162,28 @@ describe('processMediaSearchMarkers — 웹검색 폴백 체인', () => {
     ])
   })
 
+  test('외부 검색 성공: 스니펫이 있으면 한 줄로 함께 보여준다', async () => {
+    mockExternal.mockResolvedValue([
+      { title: '제목1', url: 'https://x.test/1', snippet: '오늘 서울은 맑고 기온은 15도입니다.' },
+      { title: '제목2', url: 'https://y.test/2' },
+    ])
+    const ctx = makeCtx('[SEARCH: 날씨]')
+    await processMediaSearchMarkers(ctx)
+    expect(ctx.text).toContain('[제목1](https://x.test/1)')
+    expect(ctx.text).toContain('오늘 서울은 맑고 기온은 15도입니다.')
+    expect(ctx.text).toContain('[제목2](https://y.test/2)')
+  })
+
+  test('외부 검색 성공: 스니펫이 200자를 넘으면 자른다', async () => {
+    mockExternal.mockResolvedValue([
+      { title: '제목1', url: 'https://x.test/1', snippet: '가'.repeat(300) },
+    ])
+    const ctx = makeCtx('[SEARCH: 날씨]')
+    await processMediaSearchMarkers(ctx)
+    expect(ctx.text).toContain('가'.repeat(200))
+    expect(ctx.text).not.toContain('가'.repeat(201))
+  })
+
   test('외부 검색이 비고 게이트가 쿼리를 막으면 DDG로 내려가지 않는다', async () => {
     mockExternal.mockResolvedValue([])
     mockGuard.mockReturnValue(null)

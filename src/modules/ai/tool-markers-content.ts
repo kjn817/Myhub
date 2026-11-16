@@ -60,7 +60,13 @@ export async function processMediaSearchMarkers(ctx: ToolMarkerContext): Promise
     const query = match[1].trim()
     const extItems = await externalWebSearch(env, query)
     if (extItems.length > 0) {
-      const items = extItems.map((it) => `- [${sanitizeToolOutput(String(it.title || ''))}](${it.url})`).join('\n')
+      // 스니펫이 있으면 한 줄로 함께 보여준다 — 제목+URL만 나열하면
+      // 내용이 안 보여 링크 덤프가 된다 (2026-11-16 날씨 조사).
+      const items = extItems.map((it) => {
+        const link = `- [${sanitizeToolOutput(String(it.title || ''))}](${it.url})`
+        const snippet = typeof it.snippet === 'string' ? sanitizeToolOutput(it.snippet).replace(/\s+/g, ' ').trim().slice(0, 200) : ''
+        return snippet ? `${link}\n  ${snippet}` : link
+      }).join('\n')
       text = text.replace(match[0], `\n\n웹검색 (${query}):\n${items}\n`)
       for (const it of extItems) searchReplacementSources.push({ title: it.title || it.url, url: it.url })
       continue

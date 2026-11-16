@@ -118,6 +118,42 @@ describe('KeywordRouter.route', () => {
     const r = await router.route('API 문서 만들어줘');
     expect(r.primary).toBe('builder');
   });
+
+  test('실시간 예외: 날씨 정리해줘 → concierge (에코 아님)', async () => {
+    const r = await router.route('오늘 날씨 정리해줘 서울특별시');
+    expect(r.primary).toBe('concierge');
+    expect(r.reason).toContain('realtime:');
+    expect(r.confidence).toBe(0.9);
+  });
+
+  test('실시간 예외: 뉴스 요약해줘 → concierge', async () => {
+    const r = await router.route('오늘 뉴스 요약해줘');
+    expect(r.primary).toBe('concierge');
+    expect(r.reason).toContain('realtime:');
+  });
+
+  test('실시간 예외: 주가 정리해줘 → concierge', async () => {
+    const r = await router.route('삼성전자 주가 정리해줘');
+    expect(r.primary).toBe('concierge');
+  });
+
+  test('실시간 예외: 메모 대상 명시 시 에코 유지', async () => {
+    const r = await router.route('날씨 메모 정리해줘');
+    expect(r.primary).toBe('keeper');
+    expect(r.reason).toContain('keyword:');
+  });
+
+  test('실시간 예외: 클라이언트 힌트(에코)보다 우선', async () => {
+    // 프론트 구 버전이 에코 힌트를 보내도 서버가 최종 판정한다.
+    const r = await router.route('오늘 날씨 정리해줘', { suggestedPersonaId: 'keeper' });
+    expect(r.primary).toBe('concierge');
+    expect(r.reason).toContain('realtime:');
+  });
+
+  test('실시간 예외: 개발 키워드가 있으면 builder 우선', async () => {
+    const r = await router.route('날씨 코드 만들어줘');
+    expect(r.primary).toBe('builder');
+  });
 });
 
 describe('KeywordRouter.needsCollaboration', () => {

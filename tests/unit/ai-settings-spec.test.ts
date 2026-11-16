@@ -31,6 +31,25 @@ const STAGING = { ENVIRONMENT: 'staging' }
 
 // ---------------- 스펙 데이터 불변식 ----------------
 
+describe('에코 폴백 — 메모에 없는 실시간 정보는 루미에게 (2026-11-16)', () => {
+  const keeper = PERSONAS.find((p) => p.id === 'keeper')!
+
+  test('keeper가 존재하고 handoffWhen에 concierge가 있다', () => {
+    expect(keeper).toBeDefined()
+    expect(keeper.handoffWhen.some((h) => h.includes('[ASK:concierge]'))).toBe(true)
+  })
+
+  test('keeper 프롬프트에 "다른 앱 참고" 떠넘기기 금지 규칙이 있다', () => {
+    expect(keeper.systemPrompt).toContain('다른 앱을 참고하라')
+    expect(keeper.systemPrompt).toContain('[ASK:concierge]')
+  })
+
+  test('keeper CRITICAL 요약 규칙은 메모 대상으로 한정되고 실시간 정보는 루미로 넘긴다', () => {
+    expect(keeper.systemPrompt).toContain('메모·기록을 요약해달라는 요청')
+    expect(keeper.systemPrompt).toContain('실시간 외부 정보면 메모 검색이 아니라')
+  })
+})
+
 describe('스펙 데이터 불변식', () => {
   test('PERSONA_IDS는 PERSONAS 순서 그대로, 중복이 없다', () => {
     expect(PERSONA_IDS).toEqual(PERSONAS.map((p) => p.id))

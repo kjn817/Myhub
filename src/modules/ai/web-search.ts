@@ -14,7 +14,17 @@ import { guardSearchQuery } from '../../services/privacy-gateway'
 const EXTERNAL_SEARCH_TOTAL_TIMEOUT_MS = 20000
 const EXTERNAL_SEARCH_LEG_TIMEOUT_MS = 10000
 
-export async function externalWebSearch(env: any, query: string): Promise<{ title: string; url: string }[]> {
+/** 외부 웹검색 결과 — 스니펫을 보존한다 (2026-11-16 날씨 조사).
+ * 제목+URL만 반환하면 합성 경로가 내용을 볼 수 없어 링크 덤프가 된다.
+ * Tavily는 content, Exa는 highlights, Serper는 snippet 필드에 스니펫이 있다.
+ * 뉴스 체인 경로는 스니펫을 안 주므로 snippet이 없을 수 있다. */
+export interface WebSearchResult {
+  title: string
+  url: string
+  snippet?: string
+}
+
+export async function externalWebSearch(env: any, query: string): Promise<WebSearchResult[]> {
   if (guardSearchQuery(query) === null) return []
   const deadline = Date.now() + EXTERNAL_SEARCH_TOTAL_TIMEOUT_MS
   const remaining = () => Math.max(0, deadline - Date.now())
@@ -46,7 +56,7 @@ export async function externalWebSearch(env: any, query: string): Promise<{ titl
         )
         if (res.ok) {
           const data = (await res.json()) as any
-          const items = (data.results || []).slice(0, 5).map((r: any) => ({ title: r.title, url: r.url }))
+          const items = (data.results || []).slice(0, 5).map((r: any) => ({ title: r.title, url: r.url, snippet: typeof r.content === 'string' && r.content ? r.content : undefined }))
           if (items.length > 0) return items
         }
       } catch { /* 다음으로 */ }
@@ -67,7 +77,10 @@ export async function externalWebSearch(env: any, query: string): Promise<{ titl
         )
         if (res.ok) {
           const data = (await res.json()) as any
-          const items = (data.results || []).slice(0, 5).map((r: any) => ({ title: r.title, url: r.url }))
+          const items = (data.results || []).slice(0, 5).map((r: any) => {
+            const highlights = Array.isArray(r.highlights) ? r.highlights.filter((h: any) => typeof h === 'string').join(' ') : ''
+            return { title: r.title, url: r.url, snippet: highlights || undefined }
+          })
           if (items.length > 0) return items
         }
       } catch { /* 다음으로 */ }
@@ -89,7 +102,7 @@ export async function externalWebSearch(env: any, query: string): Promise<{ titl
       )
       if (res.ok) {
         const data = (await res.json()) as any
-        const items = (data.organic || []).slice(0, 5).map((r: any) => ({ title: r.title, url: r.link }))
+        const items = (data.organic || []).slice(0, 5).map((r: any) => ({ title: r.title, url: r.link, snippet: typeof r.snippet === 'string' && r.snippet ? r.snippet : undefined }))
         if (items.length > 0) return items
       }
     } catch { /* 다음으로 */ }

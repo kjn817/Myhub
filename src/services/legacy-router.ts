@@ -46,6 +46,12 @@ export class KeywordRouter implements Router {
   private novaKw = ['코드', '만들어', '버그', '함수', '개발', '프로그램', '테트리스', '게임', '모듈', 'api']
   private echoKw = ['메모', '기억', '요약', '정리해', '잊지마', '기록']
   private caliKw = ['일정', '스케줄', '할일', '할 일', '약속', '예약', '캘린더', '리마인드', '미리알림', '치과', '병원', '회의']
+  // 실시간 외부 정보 키워드 — "날씨 정리해줘" 같은 요청이 '정리해'/'요약'
+  // 때문에 에코(메모)로 오분류되는 것을 막는다 (2026-11-16 날씨 조사).
+  // '메모'/'기억'/'기록'처럼 메모 대상을 명시하는 키워드가 함께 있으면
+  // 메모 요청으로 보고 예외를 적용하지 않는다 ("날씨 메모 정리해줘" → 에코).
+  private realtimeKw = ['날씨', '뉴스', '주가', '주식', '가격', '환율', '환전', '시세', '코인', '비트코인', '기온', '미세먼지', '예보', '속보']
+  private memoTargetKw = ['메모', '기억', '잊지마', '기록']
 
   async route(text: string, ctx?: RouteContext): Promise<RouterDecision> {
     // @멘션 우선
@@ -65,9 +71,13 @@ export class KeywordRouter implements Router {
     }
 
     const t = text.toLowerCase()
+    const realtimeHits = this.realtimeKw.filter(k => t.includes(k))
+    const hasMemoTarget = this.memoTargetKw.some(k => t.includes(k))
+    // 실시간 외부 정보 질의: 메모 대상이 없으면 에코 후보에서 제외한다.
+    const isRealtimeQuery = realtimeHits.length > 0 && !hasMemoTarget
     const matches = {
       builder: this.novaKw.filter(k => t.includes(k)),
-      keeper: this.echoKw.filter(k => t.includes(k)),
+      keeper: isRealtimeQuery ? [] : this.echoKw.filter(k => t.includes(k)),
       scheduler: this.caliKw.filter(k => t.includes(k)),
     }
 
@@ -90,6 +100,17 @@ export class KeywordRouter implements Router {
       return {
         primary: matchedIds[0],
         reason: `keyword:${matches[matchedIds[0]].join(',')}`,
+        confidence: 0.9,
+      }
+    }
+
+    // 실시간 외부 정보 질의는 클라이언트 힌트보다 우선해 루미로 보낸다.
+    // (프론트도 같은 예외를 적용하지만, 구 버전 캐시나 직접 호출이
+    // 에코 힌트를 보낼 수 있으므로 서버가 최종 판정한다.)
+    if (isRealtimeQuery) {
+      return {
+        primary: 'concierge',
+        reason: `realtime:${realtimeHits.join(',')}`,
         confidence: 0.9,
       }
     }

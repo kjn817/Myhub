@@ -430,7 +430,17 @@ ${secondResult.text}`;
           }
         }
       }
-    } catch {
+    } catch (e) {
+      // 검색 합성 실패를 조용히 넘기지 않는다 — 로그에 남기고 사용자에게
+      // 고지한다. 조용한 링크 덤프(Path B)는 합성이 실패했다는 사실 자체를
+      // 숨겨 사용자가 "링크만 주는 비서"로 느끼게 한다 (2026-11-16 날씨 조사).
+      // 오픈소스 조사 결과, 조용한 격하를 쓰는 프로젝트는 하나도 없었다.
+      console.error('search_synthesis_failed', {
+        persona: personaId,
+        query,
+        error: e instanceof Error ? e.message : String(e),
+      })
+      result.text = `${result.text}\n\n(검색 결과를 정리하지 못했어요. 아래 링크에서 직접 확인해 주세요.)`
     }
   }
   try {

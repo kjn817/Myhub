@@ -305,6 +305,17 @@ function showTyping(personaId) {
   return div;
 }
 
+// 한글 조사 "으로/로" 처리 — 마지막 음절에 받침이 있으면 "으로", 없으면 "로".
+// (비서 이름 4개는 모두 모음으로 끝나 "로"가 맞지만, 이름이 바뀌어도 틀리지
+// 않게 받침을 직접 계산한다. 2026-11-16 날씨 조사: 조사 미처리 노출이 결함.)
+function particleRo(name) {
+  const last = name.charCodeAt(name.length - 1);
+  if (last >= 0xac00 && last <= 0xd7a3) {
+    return (last - 0xac00) % 28 === 0 ? '로' : '으로';
+  }
+  return '로';
+}
+
 // ===== 라우팅 =====
 function routeMessage(text) {
   // 1. @멘션 (비서 카드 선택은 입력창에 @멘션을 채우는 방식이라, 명시 선택은
@@ -320,7 +331,14 @@ function routeMessage(text) {
   const novaKw = ['코드', '만들기', '버그', '함수', '개발', '프로그램', '팩토리', '게임', '모듈', 'api'];
   const echoKw = ['메모', '기억', '요약', '정리해', '잊지마', '기록'];
   const caliKw = ['일정', '스케줄', '할일', '할 일', '약속', '예약', '캘린더', '리마인드', '미리알림', '치과', '병원', '회의'];
+  // 실시간 외부 정보 키워드 — "날씨 정리해줘"가 '정리해' 때문에 에코로
+  // 오분류되지 않게 한다 (2026-11-16 날씨 조사). 메모 대상이 명시되면
+  // ("날씨 메모 정리해줘") 예외를 적용하지 않는다. 서버 라우터와 동일 규칙.
+  const realtimeKw = ['날씨', '뉴스', '주가', '주식', '가격', '환율', '환전', '시세', '코인', '비트코인', '기온', '미세먼지', '예보', '속보'];
+  const memoTargetKw = ['메모', '기억', '잊지마', '기록'];
+  const isRealtime = realtimeKw.some((k) => t.includes(k)) && !memoTargetKw.some((k) => t.includes(k));
   if (novaKw.some((k) => t.includes(k))) return { personaId: 'builder', clean: text, routedBy: 'keyword' };
+  if (isRealtime) return { personaId: 'concierge', clean: text, routedBy: 'realtime' };
   if (echoKw.some((k) => t.includes(k))) return { personaId: 'keeper', clean: text, routedBy: 'keyword' };
   if (caliKw.some((k) => t.includes(k))) return { personaId: 'scheduler', clean: text, routedBy: 'keyword' };
   // 3. 기본: 루미
@@ -370,8 +388,9 @@ async function send() {
   history.push({ role: 'user', content: text });
   // I-08: 키워드 자동 라우팅으로 대상이 바뀌면 조용히 하지 않고 고정한다
   // (명시 @멘션·기본 루미는 사용자가 이미 아는 선택이라 고정하지 않는다).
-  if (routedBy === 'keyword' && persona) {
-    addMsg('assistant', `말씀하신 내용에 맞게 담당 비서를 ${persona.name}(으)로 바꿨어요. 다른 비서에게 묻고 싶으면 @로 지정해 주세요.`, personaId);
+  // 실시간 예외 라우팅도 자동 전환이라 같은 안내를 한다.
+  if ((routedBy === 'keyword' || routedBy === 'realtime') && persona) {
+    addMsg('assistant', `말씀하신 내용에 맞게 담당 비서를 ${persona.name}${particleRo(persona.name)} 바꿨어요. 다른 비서에게 묻고 싶으면 @로 지정해 주세요.`, personaId);
   }
 
   const typing = showTyping(personaId);
