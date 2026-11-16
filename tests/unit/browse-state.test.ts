@@ -186,11 +186,12 @@ function makeViewportHandler(): (msg: Record<string, any>, emit: (m: unknown) =>
     } else if (msg.method === 'Emulation.clearDeviceMetricsOverride') {
       emit({ id: msg.id, result: {} })
     } else if (msg.method === 'Runtime.evaluate') {
+      // innerWidth 읽기만 온다 — screen.width 측정은 QA 7차에 폐지됐다.
       if (String(msg.params?.expression ?? '').includes('innerWidth')) {
         const ov = overrides[String(msg.sessionId ?? '')]
         emit({ id: msg.id, result: { result: { type: 'string', value: JSON.stringify({ w: ov?.width ?? 0, h: ov?.height ?? 0, d: ov?.deviceScaleFactor ?? 1 }) } } })
       } else {
-        emit({ id: msg.id, result: { result: { type: 'number', value: 2940 } } })
+        emit({ id: msg.id, error: { message: 'unexpected evaluate' } })
       }
     } else if (msg.method === 'Emulation.setDeviceMetricsOverride') {
       overrides[String(msg.sessionId ?? '')] = msg.params
@@ -369,7 +370,8 @@ describe('POST /viewport — 전 탭 적용 결과 보고', () => {
     const vps = sock.sent.filter((m) => m.method === 'Emulation.setDeviceMetricsOverride')
     expect(vps).toHaveLength(2)
     for (const vp of vps) {
-      expect(vp.params.deviceScaleFactor).toBe(1.75)
+      // DSF는 REMOTE_DISPLAY_SCALE(1.0) 고정 (2026-11-16 QA 7차).
+      expect(vp.params.deviceScaleFactor).toBe(1)
     }
   })
 

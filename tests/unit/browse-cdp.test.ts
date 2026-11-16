@@ -12,11 +12,12 @@
  * - 응답이 없으면 timeoutMs 안에 현재 단계로 종료하고 소켓은 닫힌다.
  * - 키오스크 모드(2026-11-14): 이동 시 영구 탭 외의 페이지 타깃(팝업 창)을
  *   닫아 MyHub 주소창을 탈출구로 만든다. 영구 탭은 닫지 않는다.
- * - DSF 측정 (2026-11-15 밤): 뷰포트 적용 전에 낡은 override를 지우고
- *   screen.width × devicePixelRatio로 디스플레이 기기 픽셀을 재서
- *   DSF = 디스플레이/스테이지로 계산한다 (2940/1680 = 1.75). 측정
- *   실패는 DSF=1 폴백. DSF=1 하드코딩은 1.75 디스플레이에서 뿌옇게
- *   업스케일된다.
+ * - DSF 고정 (2026-11-16 QA 7차): 뷰포트 override의 DSF는 항상 1.0
+ *   (REMOTE_DISPLAY_SCALE) — 사이드카가 scaling_dpi를 96으로 고정해
+ *   출력 scale이 항상 1.0이다. 실측에서 DSF를 역산하는 옛 방식은
+ *   리사이즈 중 옛 디스플레이 크기 ÷ 새 스테이지로 1.5 같은 잘못된
+ *   배율을 만들고, 그 배율이 후보가 돼 자기 일치를 이뤄 고정이 안
+ *   됐다 (창은 안 줄고 내용만 1.5배로 커져 넘침).
  * - 전 탭 뷰포트 적용 (2026-11-15 밤): applyViewportToSession은 모든
  *   페이지 타깃에 같은 override를 걸고, 한 타깃이 실패해도 나머지는
  *   계속 적용하며 applied/total로 보고한다 (첫 타깃만 걸던 기존 코드는
@@ -45,11 +46,16 @@
  *   두고 적용 실패로 보지 않는다.
  * - 읽기 우선·건드리지 않기 (2026-11-16 QA 2차): 전 탭이 이미 의도와
  *   일치하면 set도 clear도 하지 않고 끝낸다 (주기 재적용이 올바른
- *   탭을 깜빡이게 하면 안 된다). 불일치 탭이 있을 때만 불일치 탭에서
- *   override를 지우고 디스플레이를 다시 잰 뒤, 불일치 탭에만 적용한다.
+ *   탭을 깜빡이게 하면 안 된다). 불일치 탭이 있을 때만 불일치 탭에
+ *   의도 뷰포트를 적용한다 (set이 기존 override를 대체하므로 clear
+ *   불필요, 디스플레이 재측정 없음 — QA 7차).
+ * - 리사이즈 경합 회귀 (2026-11-16 QA 7차): 낡은 1.5 override가 남은
+ *   탭은 의도(DSF 1.0)와 불일치로 판정돼 DSF 1.0으로 다시 걸린다.
+ *   옛 후보-DSF 방식은 낡은 배율을 후보로 삼아 자기 일치를 이뤄
+ *   고정을 안 했다.
  * 카나리아: 단계 보고(stage)나 폴백 조건을 깨면 해당 테스트가 실패한다.
  */
-import { applyViewportToSession, displayScaleFactor, getBrowserState, goBackSession, goForwardSession, navigateSession, wsToHttpUrl, type CdpSocket } from '../../src/modules/browse/cdp'
+import { applyViewportToSession, getBrowserState, goBackSession, goForwardSession, navigateSession, REMOTE_DISPLAY_SCALE, wsToHttpUrl, type CdpSocket } from '../../src/modules/browse/cdp'
 
 type Listener = (ev: { data: unknown }) => void
 
@@ -304,10 +310,9 @@ describe('navigateSession — 뷰포트 (2026-11-12 원격 화면 짤림 수정)
       emit({ id: msg.id, result: { targetInfos: [{ type: 'page', targetId: 'page-1' }] } })
     } else if (msg.method === 'Target.attachToTarget') {
       emit({ id: msg.id, result: { sessionId: 'sess-1' } })
-    } else if (msg.method === 'Emulation.clearDeviceMetricsOverride') {
-      emit({ id: msg.id, result: {} })
     } else if (msg.method === 'Runtime.evaluate') {
-      emit({ id: msg.id, result: { result: { type: 'number', value: 2940 } } })
+      // 활성 탭 식별용 visibility 평가만 온다 (DSF 측정은 QA 7차에 폐지).
+      emit({ id: msg.id, result: { result: { type: 'string', value: 'visible' } } })
     } else if (msg.method === 'Emulation.setDeviceMetricsOverride') {
       emit({ id: msg.id, result: {} })
     } else if (msg.method === 'Page.navigate') {
@@ -315,7 +320,7 @@ describe('navigateSession — 뷰포트 (2026-11-12 원격 화면 짤림 수정)
     }
   }
 
-  test('viewport가 주어지면 attach 후 낡은 override를 지우고 DSF를 측정해 뷰포트를 맞추고 이동한다', async () => {
+  test('viewport가 주어지면 attach 후 DSF 1.0으로 뷰포트를 맞추고 이동한다 (측정·clear 없음)', async () => {
     const sock = new FakeSocket(viewportHandler)
     const r = await navigateSession(WS_URL, TARGET, async () => sock as CdpSocket, {
       viewport: { width: 1680, height: 967 },
@@ -323,72 +328,24 @@ describe('navigateSession — 뷰포트 (2026-11-12 원격 화면 짤림 수정)
     expect(r).toEqual({ ok: true, stage: 'ok' })
     const methods = sock.sent.map((m) => m.method)
     // attach 뒤에 활성 탭 식별용 visibility 평가가 먼저 나간다 (2026-11-16 QA 4차).
+    // DSF 측정(screen.width 평가)·clear는 QA 7차에 폐지 — 리사이즈 중
+    // 옛 디스플레이 크기를 읽어 잘못된 배율을 만들었다.
     expect(methods).toEqual([
       'Target.getTargets',
       'Target.attachToTarget',
-      'Runtime.evaluate',
-      'Emulation.clearDeviceMetricsOverride',
       'Runtime.evaluate',
       'Emulation.setDeviceMetricsOverride',
       'Page.navigate',
     ])
     const vp = sock.sent.find((m) => m.method === 'Emulation.setDeviceMetricsOverride')
-    // 디스플레이 2940 / 스테이지 1680 = 1.75 (DSF=1 하드코딩이면 뿌옇게 업스케일된다).
-    expect(vp.params).toEqual({ width: 1680, height: 967, deviceScaleFactor: 1.75, mobile: false })
+    // DSF는 REMOTE_DISPLAY_SCALE(1.0) 고정 — 사이드카 DPI 고정으로
+    // 출력 scale이 항상 1.0이다.
+    expect(vp.params).toEqual({ width: 1680, height: 967, deviceScaleFactor: REMOTE_DISPLAY_SCALE, mobile: false })
+    expect(REMOTE_DISPLAY_SCALE).toBe(1)
     expect(vp.sessionId).toBe('sess-1')
     const evals = sock.sent.filter((m) => m.method === 'Runtime.evaluate')
+    expect(evals).toHaveLength(1)
     expect(evals[0].params.expression).toContain('visibilityState')
-    const ev = evals.find((m) => String(m.params.expression).includes('screen.width'))
-    expect(ev.params).toEqual({ expression: 'screen.width * devicePixelRatio', returnByValue: true })
-    expect(ev.sessionId).toBe('sess-1')
-  })
-
-  test('DSF 측정(평가)이 실패하면 DSF=1로 폴백해 이동한다', async () => {
-    const sock = new FakeSocket((msg, emit) => {
-      if (msg.method === 'Target.getTargets') {
-        emit({ id: msg.id, result: { targetInfos: [{ type: 'page', targetId: 'page-1' }] } })
-      } else if (msg.method === 'Target.attachToTarget') {
-        emit({ id: msg.id, result: { sessionId: 'sess-1' } })
-      } else if (msg.method === 'Emulation.clearDeviceMetricsOverride') {
-        emit({ id: msg.id, result: {} })
-      } else if (msg.method === 'Runtime.evaluate') {
-        emit({ id: msg.id, error: { message: 'eval denied' } })
-      } else if (msg.method === 'Emulation.setDeviceMetricsOverride') {
-        emit({ id: msg.id, result: {} })
-      } else if (msg.method === 'Page.navigate') {
-        emit({ id: msg.id, result: {} })
-      }
-    })
-    const r = await navigateSession(WS_URL, TARGET, async () => sock as CdpSocket, {
-      viewport: { width: 1680, height: 967 },
-    })
-    expect(r).toEqual({ ok: true, stage: 'ok' })
-    const vp = sock.sent.find((m) => m.method === 'Emulation.setDeviceMetricsOverride')
-    expect(vp.params.deviceScaleFactor).toBe(1)
-  })
-
-  test('측정값이 숫자가 아니면 DSF=1로 폴백해 이동한다', async () => {
-    const sock = new FakeSocket((msg, emit) => {
-      if (msg.method === 'Target.getTargets') {
-        emit({ id: msg.id, result: { targetInfos: [{ type: 'page', targetId: 'page-1' }] } })
-      } else if (msg.method === 'Target.attachToTarget') {
-        emit({ id: msg.id, result: { sessionId: 'sess-1' } })
-      } else if (msg.method === 'Emulation.clearDeviceMetricsOverride') {
-        emit({ id: msg.id, result: {} })
-      } else if (msg.method === 'Runtime.evaluate') {
-        emit({ id: msg.id, result: { result: { type: 'string', value: 'not-a-number' } } })
-      } else if (msg.method === 'Emulation.setDeviceMetricsOverride') {
-        emit({ id: msg.id, result: {} })
-      } else if (msg.method === 'Page.navigate') {
-        emit({ id: msg.id, result: {} })
-      }
-    })
-    const r = await navigateSession(WS_URL, TARGET, async () => sock as CdpSocket, {
-      viewport: { width: 1680, height: 967 },
-    })
-    expect(r).toEqual({ ok: true, stage: 'ok' })
-    const vp = sock.sent.find((m) => m.method === 'Emulation.setDeviceMetricsOverride')
-    expect(vp.params.deviceScaleFactor).toBe(1)
   })
 
   test('viewport가 없으면 뷰포트 명령 없이 바로 이동한다', async () => {
@@ -407,10 +364,8 @@ describe('navigateSession — 뷰포트 (2026-11-12 원격 화면 짤림 수정)
         emit({ id: msg.id, result: { targetInfos: [{ type: 'page', targetId: 'page-1' }] } })
       } else if (msg.method === 'Target.attachToTarget') {
         emit({ id: msg.id, result: { sessionId: 'sess-1' } })
-      } else if (msg.method === 'Emulation.clearDeviceMetricsOverride') {
-        emit({ id: msg.id, result: {} })
       } else if (msg.method === 'Runtime.evaluate') {
-        emit({ id: msg.id, result: { result: { type: 'number', value: 2940 } } })
+        emit({ id: msg.id, result: { result: { type: 'string', value: 'visible' } } })
       } else if (msg.method === 'Emulation.setDeviceMetricsOverride') {
         emit({ id: msg.id, error: { message: 'nope' } })
       } else if (msg.method === 'Page.navigate') {
@@ -425,27 +380,9 @@ describe('navigateSession — 뷰포트 (2026-11-12 원격 화면 짤림 수정)
   })
 })
 
-describe('displayScaleFactor — DSF 계산 (2026-11-15 밤)', () => {
-  test('디스플레이/스테이지 비율을 소수 2자리로 계산한다', () => {
-    expect(displayScaleFactor(2940, 1680)).toBe(1.75)
-    expect(displayScaleFactor(2940, 1470)).toBe(2)
-    expect(displayScaleFactor(3840, 1920)).toBe(2)
-    expect(displayScaleFactor(2940, 1440)).toBe(2.04)
-  })
-
-  test('1~3으로 클램프한다', () => {
-    expect(displayScaleFactor(6720, 1680)).toBe(3)
-    expect(displayScaleFactor(1000, 1680)).toBe(1)
-    expect(displayScaleFactor(2940, 2940)).toBe(1)
-  })
-
-  test('비정상 입력은 1이다', () => {
-    expect(displayScaleFactor(0, 1680)).toBe(1)
-    expect(displayScaleFactor(NaN, 1680)).toBe(1)
-    expect(displayScaleFactor(Infinity, 1680)).toBe(1)
-    expect(displayScaleFactor(2940, 0)).toBe(1)
-    expect(displayScaleFactor(2940, NaN)).toBe(1)
-    expect(displayScaleFactor(-100, 1680)).toBe(1)
+describe('REMOTE_DISPLAY_SCALE — 원격 출력 배율 (2026-11-16 QA 7차)', () => {
+  test('사이드카 DPI 고정으로 출력 scale이 1.0이므로 DSF는 항상 1', () => {
+    expect(REMOTE_DISPLAY_SCALE).toBe(1)
   })
 })
 
@@ -467,7 +404,6 @@ type VerifyBehavior = 'match' | 'mismatch-then-match' | 'always-mismatch' | 'rea
 
 function makeViewportHandler(opts: {
   pages?: string[]
-  measureValue?: number | 'error'
   verify?: VerifyBehavior
   verifyBySession?: Record<string, VerifyBehavior>
   attachFail?: string
@@ -476,7 +412,6 @@ function makeViewportHandler(opts: {
   natural?: { w: number; h: number; d: number }
 } = {}): (msg: Record<string, any>, emit: (m: unknown) => void) => void {
   const pages = opts.pages ?? ['page-1']
-  const measureValue = opts.measureValue ?? 2940
   const verify = opts.verify ?? 'match'
   const overrides: Record<string, { width: number; height: number; deviceScaleFactor: number }> = {}
   const setCounts: Record<string, number> = {}
@@ -496,6 +431,8 @@ function makeViewportHandler(opts: {
       emit({ id: msg.id, result: {} })
     } else if (msg.method === 'Runtime.evaluate') {
       const expr = String(msg.params?.expression ?? '')
+      // readAppliedViewport(innerWidth)만 온다 — screen.width 측정은
+      // QA 7차에 폐지됐다.
       if (expr.includes('innerWidth')) {
         // 검증 읽기: 세션별 마지막 override와 비교해 답한다.
         const sid = String(msg.sessionId ?? '')
@@ -514,10 +451,8 @@ function makeViewportHandler(opts: {
             : (opts.natural ?? { w: 0, h: 0, d: 1 })
           emit({ id: msg.id, result: { result: { type: 'string', value: JSON.stringify(m) } } })
         }
-      } else if (measureValue === 'error') {
-        emit({ id: msg.id, error: { message: 'eval denied' } })
       } else {
-        emit({ id: msg.id, result: { result: { type: 'number', value: measureValue } } })
+        emit({ id: msg.id, error: { message: 'unexpected evaluate' } })
       }
     } else if (msg.method === 'Emulation.setDeviceMetricsOverride') {
       const sid = String(msg.sessionId ?? '')
@@ -533,28 +468,28 @@ function makeViewportHandler(opts: {
 }
 
 describe('applyViewportToSession — 이동 없는 뷰포트 적용 (2026-11-15 세션 복원 뒤 절반 크기 수정)', () => {
-  test('getTargets→attach→1단계 읽기→지우기→측정→뷰포트→검증 순서로 가고 이동은 보내지 않으며 소켓이 닫힌다', async () => {
+  test('getTargets→attach→1단계 읽기→뷰포트→검증 순서로 가고 이동은 보내지 않으며 소켓이 닫힌다', async () => {
     const sock = new FakeSocket(makeViewportHandler())
     const r = await applyViewportToSession(WS_URL, { width: 1470, height: 850 }, async () => sock as CdpSocket)
     expect(r).toEqual({ ok: true, stage: 'ok', applied: 1, total: 1, verified: 1 })
+    // 지우기·권위 측정은 QA 7차에 폐지 — set이 기존 override를
+    // 대체하고 DSF는 1.0 고정이다.
     expect(sock.sent.map((m) => m.method)).toEqual([
       'Target.getTargets',
       'Target.attachToTarget',
-      'Runtime.evaluate', // 1단계 읽기 (현재 실측 — clear 전에 읽는다)
-      'Emulation.clearDeviceMetricsOverride',
-      'Runtime.evaluate', // 권위 측정 (screen.width × devicePixelRatio)
+      'Runtime.evaluate', // 1단계 읽기 (현재 실측)
       'Emulation.setDeviceMetricsOverride',
       'Runtime.evaluate', // 검증 읽기
     ])
     const vp = sock.sent.find((m) => m.method === 'Emulation.setDeviceMetricsOverride')
-    // 디스플레이 2940 / 스테이지 1470 = 2
-    expect(vp.params).toEqual({ width: 1470, height: 850, deviceScaleFactor: 2, mobile: false })
+    // DSF는 REMOTE_DISPLAY_SCALE(1.0) 고정 (QA 7차).
+    expect(vp.params).toEqual({ width: 1470, height: 850, deviceScaleFactor: 1, mobile: false })
     expect(vp.sessionId).toBe('sess-page-1')
-    // 첫 evaluate는 1단계 읽기, 두 번째는 권위 측정, 마지막은 검증 읽기.
+    // 첫 evaluate는 1단계 읽기, 마지막은 검증 읽기 (둘 다 innerWidth).
     const evals = sock.sent.filter((m) => m.method === 'Runtime.evaluate')
+    expect(evals).toHaveLength(2)
     expect(evals[0].params.expression).toContain('innerWidth')
-    expect(evals[1].params.expression).toContain('screen.width')
-    expect(evals[2].params.expression).toContain('innerWidth')
+    expect(evals[1].params.expression).toContain('innerWidth')
     expect(sock.closed).toBe(true)
   })
 
@@ -605,36 +540,28 @@ describe('applyViewportToSession — 이동 없는 뷰포트 적용 (2026-11-15 
     const r = await applyViewportToSession(WS_URL, { width: 100, height: 100 }, async () => sock as CdpSocket)
     expect(r).toEqual({ ok: false, stage: 'viewport', applied: 0, total: 1, verified: 0 })
   })
-
-  test('측정(평가)이 실패하면 DSF=1로 폴백해 적용하고 ok로 보고한다', async () => {
-    const sock = new FakeSocket(makeViewportHandler({ measureValue: 'error' }))
-    const r = await applyViewportToSession(WS_URL, { width: 1680, height: 967 }, async () => sock as CdpSocket)
-    expect(r).toEqual({ ok: true, stage: 'ok', applied: 1, total: 1, verified: 1 })
-    const vp = sock.sent.find((m) => m.method === 'Emulation.setDeviceMetricsOverride')
-    expect(vp.params.deviceScaleFactor).toBe(1)
-  })
 })
 
 describe('applyViewportToSession — 전 탭 적용 (2026-11-15 밤, 탭마다 크기 달랐던 문제)', () => {
-  test('페이지 타깃이 여러 개면 전부 같은 override를 받는다 (측정은 한 번만)', async () => {
+  test('페이지 타깃이 여러 개면 전부 같은 override를 받는다 (DSF 1.0 고정)', async () => {
     const sock = new FakeSocket(makeViewportHandler({ pages: ['page-1', 'page-2'] }))
     const r = await applyViewportToSession(WS_URL, { width: 1680, height: 967 }, async () => sock as CdpSocket)
     expect(r).toEqual({ ok: true, stage: 'ok', applied: 2, total: 2, verified: 2 })
     const vps = sock.sent.filter((m) => m.method === 'Emulation.setDeviceMetricsOverride')
     expect(vps).toHaveLength(2)
-    // 두 타깃 모두 디스플레이 2940 / 스테이지 1680 = 1.75, 각자 세션으로 간다.
+    // 두 타깃 모두 DSF 1.0 (QA 7차: 실측 역산 폐지).
     expect(vps.map((m) => m.sessionId).sort()).toEqual(['sess-page-1', 'sess-page-2'])
     for (const vp of vps) {
-      expect(vp.params).toEqual({ width: 1680, height: 967, deviceScaleFactor: 1.75, mobile: false })
+      expect(vp.params).toEqual({ width: 1680, height: 967, deviceScaleFactor: 1, mobile: false })
     }
     // service_worker 타깃에는 attach하지 않는다.
     expect(sock.sent.filter((m) => m.method === 'Target.attachToTarget')).toHaveLength(2)
-    // 1단계 읽기 탭마다 한 번 + 권위 측정 한 번 + 검증 읽기 탭마다 한 번.
+    // 1단계 읽기 탭마다 한 번 + 검증 읽기 탭마다 한 번 (측정 평가 없음).
     const evals = sock.sent.filter((m) => m.method === 'Runtime.evaluate')
-    expect(evals).toHaveLength(5)
-    expect(evals.filter((m) => String(m.params.expression).includes('screen.width'))).toHaveLength(1)
+    expect(evals).toHaveLength(4)
+    expect(evals.filter((m) => String(m.params.expression).includes('screen.width'))).toHaveLength(0)
     expect(evals.filter((m) => String(m.params.expression).includes('innerWidth'))).toHaveLength(4)
-    expect(sock.sent.filter((m) => m.method === 'Emulation.clearDeviceMetricsOverride')).toHaveLength(1)
+    expect(sock.sent.filter((m) => m.method === 'Emulation.clearDeviceMetricsOverride')).toHaveLength(0)
   })
 
   test('한 타깃의 attach가 실패해도 나머지는 적용하고 applied로 보고한다', async () => {
@@ -644,8 +571,8 @@ describe('applyViewportToSession — 전 탭 적용 (2026-11-15 밤, 탭마다 �
     const vps = sock.sent.filter((m) => m.method === 'Emulation.setDeviceMetricsOverride')
     expect(vps).toHaveLength(1)
     expect(vps[0].sessionId).toBe('sess-page-2')
-    // 첫 타깃 attach가 실패했어도 두 번째 타깃에서 측정이 이뤄진다 (DSF 1.75).
-    expect(vps[0].params.deviceScaleFactor).toBe(1.75)
+    // 첫 타깃 attach가 실패했어도 두 번째 타깃에 DSF 1.0으로 적용한다.
+    expect(vps[0].params.deviceScaleFactor).toBe(1)
   })
 
   test('한 타깃의 뷰포트가 실패해도 나머지는 적용하고 applied로 보고한다', async () => {
@@ -707,8 +634,8 @@ describe('applyViewportToSession — 읽기 우선·건드리지 않기 (2026-11
       makeViewportHandler({
         pages: ['page-1', 'page-2'],
         initialOverrides: {
-          'sess-page-1': { width: 1680, height: 967, deviceScaleFactor: 1.75 },
-          'sess-page-2': { width: 1680, height: 967, deviceScaleFactor: 1.75 },
+          'sess-page-1': { width: 1680, height: 967, deviceScaleFactor: 1 },
+          'sess-page-2': { width: 1680, height: 967, deviceScaleFactor: 1 },
         },
       }),
     )
@@ -721,9 +648,9 @@ describe('applyViewportToSession — 읽기 우선·건드리지 않기 (2026-11
   })
 
   test('자연 상태가 이미 의도와 일치해도 건드리지 않는다 (override가 필요 없다)', async () => {
-    // 디스플레이 2940·자연 DSF 1.75면 자연 CSS 크기가 1680×967로
-    // 의도와 같다 — override를 걸어도 같은 값이므로 건드릴 이유가 없다.
-    const sock = new FakeSocket(makeViewportHandler({ natural: { w: 1680, h: 967, d: 1.75 } }))
+    // 자연 상태가 이미 스테이지 크기 × DSF 1.0이면 override를 걸어도
+    // 같은 값이므로 건드릴 이유가 없다.
+    const sock = new FakeSocket(makeViewportHandler({ natural: { w: 1680, h: 967, d: 1 } }))
     const r = await applyViewportToSession(WS_URL, { width: 1680, height: 967 }, async () => sock as CdpSocket)
     expect(r).toEqual({ ok: true, stage: 'ok', applied: 1, total: 1, verified: 1 })
     expect(sock.sent.filter((m) => m.method === 'Emulation.setDeviceMetricsOverride')).toHaveLength(0)
@@ -736,7 +663,7 @@ describe('applyViewportToSession — 읽기 우선·건드리지 않기 (2026-11
       makeViewportHandler({
         pages: ['page-1', 'page-2'],
         initialOverrides: {
-          'sess-page-1': { width: 1680, height: 967, deviceScaleFactor: 1.75 },
+          'sess-page-1': { width: 1680, height: 967, deviceScaleFactor: 1 },
         },
       }),
     )
@@ -745,12 +672,9 @@ describe('applyViewportToSession — 읽기 우선·건드리지 않기 (2026-11
     const sets = sock.sent.filter((m) => m.method === 'Emulation.setDeviceMetricsOverride')
     expect(sets).toHaveLength(1)
     expect(sets[0].sessionId).toBe('sess-page-2')
-    expect(sets[0].params).toEqual({ width: 1680, height: 967, deviceScaleFactor: 1.75, mobile: false })
-    // 측정용 clear도 불일치 탭(새 탭)에서 한다 — 올바른 탭을 지우면
-    // 그 탭이 잠깐 자연 크기로 깜빡인다.
-    const clears = sock.sent.filter((m) => m.method === 'Emulation.clearDeviceMetricsOverride')
-    expect(clears).toHaveLength(1)
-    expect(clears[0].sessionId).toBe('sess-page-2')
+    expect(sets[0].params).toEqual({ width: 1680, height: 967, deviceScaleFactor: 1, mobile: false })
+    // clear는 나가지 않는다 — set이 기존 override를 대체한다 (QA 7차).
+    expect(sock.sent.filter((m) => m.method === 'Emulation.clearDeviceMetricsOverride')).toHaveLength(0)
   })
 
   test('일치 탭이 있어도 불일치 탭의 적용 실패는 ok=false로 보고한다', async () => {
@@ -758,13 +682,34 @@ describe('applyViewportToSession — 읽기 우선·건드리지 않기 (2026-11
       makeViewportHandler({
         pages: ['page-1', 'page-2'],
         initialOverrides: {
-          'sess-page-1': { width: 1680, height: 967, deviceScaleFactor: 1.75 },
+          'sess-page-1': { width: 1680, height: 967, deviceScaleFactor: 1 },
         },
         setFailSession: 'sess-page-2',
       }),
     )
     const r = await applyViewportToSession(WS_URL, { width: 1680, height: 967 }, async () => sock as CdpSocket)
     expect(r).toEqual({ ok: false, stage: 'viewport', applied: 1, total: 2, verified: 1 })
+  })
+
+  test('낡은 1.5 override가 남은 탭은 DSF 1.0으로 다시 건다 (2026-11-16 QA 7차 회귀)', async () => {
+    // 리사이즈 경합으로 남은 상태: 스테이지는 1280×800인데 override가
+    // 옛 디스플레이 1920 ÷ 새 스테이지 1280 = 1.5로 박혀 있다. 크기만
+    // 보면 일치하지만 DSF가 틀려 내용이 1.5배로 커져 넘친다.
+    const sock = new FakeSocket(
+      makeViewportHandler({
+        initialOverrides: {
+          'sess-page-1': { width: 1280, height: 800, deviceScaleFactor: 1.5 },
+        },
+      }),
+    )
+    const r = await applyViewportToSession(WS_URL, { width: 1280, height: 800 }, async () => sock as CdpSocket)
+    expect(r).toEqual({ ok: true, stage: 'ok', applied: 1, total: 1, verified: 1 })
+    const sets = sock.sent.filter((m) => m.method === 'Emulation.setDeviceMetricsOverride')
+    expect(sets).toHaveLength(1)
+    expect(sets[0].params).toEqual({ width: 1280, height: 800, deviceScaleFactor: 1, mobile: false })
+    // 옛 후보-DSF 방식은 실측(1280×1.5)÷1280 = 1.5를 후보로 삼아
+    // 자기 일치를 이뤄 set을 0회 보내고 고정을 안 했다 — 이 테스트는
+    // 그 구 코드에서 실패한다 (카나리아).
   })
 })
 

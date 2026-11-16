@@ -54,26 +54,19 @@ export const defaultCdpConnect: CdpConnectFn = async (wsUrl, headers) => {
 }
 
 /**
- * 디스플레이 기기 픽셀 너비에서 뷰포트 override의 DSF를 계산한다.
- * override는 {width: 스테이지 CSS px, DSF}이고 렌더링 기기 픽셀은
- * width × DSF이므로, 디스플레이를 꽉 채우려면 DSF = 디스플레이/스테이지다
- * (2940 디스플레이 × 1680 스테이지 = 1.75). DSF=1로 두면 1680px로
- * 래스터링해 1.75배 업스케일하므로 뿌옇다 (2026-11-15 라이브 진단).
- * 비정상 입력·측정 실패는 1로 폴백하고, 1~3으로 클램프·소수 2자리로 반올림한다.
+ * 원격 디스플레이 출력 배율 (2026-11-16 QA 7차: 항상 1.0).
+ * 사이드카가 클라이언트 SETTINGS의 scaling_dpi를 96으로 고정하므로
+ * Selkies 출력 scale은 항상 1.0이다 (diag 실측: "scale 1.00").
+ * 뷰포트 override의 DSF는 이 값과 같아야 한다 — 실측에서 역산하는
+ * 옛 방식(디스플레이/스테이지 비율)은 리사이즈 중 Selkies 출력이
+ * 아직 안 줄었을 때 옛 크기 ÷ 새 스테이지를 계산해 1.5 같은 잘못된
+ * 배율을 만들고, 그 배율이 후보가 돼 자기 일치를 이뤄 고정이 안
+ * 됐다 (창은 안 줄고 내용만 1.5배로 커져 넘치는 QA 7차 결함).
+ * 낡은 1.75 렌더러 탭에도 1.0이 맞다 — 출력이 이미 1.0이라 1.75를
+ * 걸면 물리 1.75배로 래스터링해 창을 넘친다. DPI 고정을 끄는
+ * 날에는 이 상수와 뷰포트 로직을 함께 재검토할 것.
  */
-export function displayScaleFactor(displayDeviceWidth: number, viewportWidth: number): number {
-  if (!Number.isFinite(displayDeviceWidth) || displayDeviceWidth <= 0) return 1
-  if (!Number.isFinite(viewportWidth) || viewportWidth <= 0) return 1
-  const raw = displayDeviceWidth / viewportWidth
-  const clamped = Math.min(3, Math.max(1, raw))
-  return Math.round(clamped * 100) / 100
-}
-
-/** Runtime.evaluate 응답(result)에서 숫자 값을 꺼낸다. 없으면 null. */
-function evalNumber(result: unknown): number | null {
-  const value = (result as { result?: { value?: unknown } } | null | undefined)?.result?.value
-  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : null
-}
+export const REMOTE_DISPLAY_SCALE = 1
 
 /** Runtime.evaluate 응답(result)에서 문자열 값을 꺼낸다. 없으면 null. */
 function evalString(result: unknown): string | null {
@@ -392,38 +385,20 @@ export async function navigateSession(
         if (!attached) return directNavigate('attach')
         sessionId = attached
       }
-      // 뷰포트 (있으면): DSF 측정 (2026-11-15) — 낡은 override가 남아
-      // 있으면 screen.width가 그 값을 돌려주므로 먼저 지우고 자연
-      // 상태에서 디스플레이 기기 픽셀(screen.width × devicePixelRatio)을
-      // 잰다. 지우기·측정 실패는 DSF=1 폴백으로 이어지고, 설정 실패여도
-      // 이동은 진행한다.
+      // 뷰포트 (있으면): DSF는 REMOTE_DISPLAY_SCALE(1.0) 고정.
+      // screen.width로 DSF를 역산하는 옛 방식은 리사이즈 중 옛
+      // 디스플레이 크기를 읽어 잘못된 배율을 만들었다 (2026-11-16
+      // QA 7차: 1.5배). set이 기존 override를 대체하므로 clear도
+      // 불필요하다. 설정 실패여도 이동은 진행한다.
       if (viewport && viewport.width > 0 && viewport.height > 0) {
         phase = 'viewport'
-        let dsf = 1
-        try {
-          await call('Emulation.clearDeviceMetricsOverride', undefined, sessionId)
-        } catch {
-          // 지우기 실패여도 측정은 진행한다 (낡은 override가 남으면
-          // 측정값이 틀릴 수 있으나 DSF=1 폴백보다는 낫다).
-        }
-        try {
-          const measureReply = await call(
-            'Runtime.evaluate',
-            { expression: 'screen.width * devicePixelRatio', returnByValue: true },
-            sessionId,
-          )
-          const measured = !measureReply.error ? evalNumber(measureReply.result) : null
-          if (measured !== null) dsf = displayScaleFactor(measured, viewport.width)
-        } catch {
-          // 측정 실패는 DSF=1 폴백.
-        }
         try {
           await call(
             'Emulation.setDeviceMetricsOverride',
             {
               width: Math.round(viewport.width),
               height: Math.round(viewport.height),
-              deviceScaleFactor: dsf,
+              deviceScaleFactor: REMOTE_DISPLAY_SCALE,
               mobile: false,
             },
             sessionId,
@@ -548,9 +523,10 @@ async function verifyViewportApplied(
  * 네이버 메인 2940×1692@dpr1 — 렌더러별 DSF 캐시 차이). 모든 페이지
  * 타깃에 차례로 attach해 같은 override를 걸고, 한 타깃이 실패해도
  * 나머지는 계속 적용한다. ok는 전 타깃 적용일 때만 true이고, applied/
- * total로 부분 적용을 보고한다. DSF는 첫 attach 성공 타깃에서 낡은
- * override를 지운 뒤 자연 상태로 측정한다 (screen.width ×
- * devicePixelRatio = 디스플레이 기기 픽셀).
+ * total로 부분 적용을 보고한다. DSF는 REMOTE_DISPLAY_SCALE(1.0)
+ * 고정이다 — 사이드카 DPI 고정으로 출력 scale이 항상 1.0이며,
+ * 실측 역산은 리사이즈 경합으로 잘못된 배율을 만들었다 (2026-11-16
+ * QA 7차).
  *
  * 적용 후 검증 (2026-11-16 QA 1차): 적용 명령이 성공을 돌려줘도 실제
  * 렌더링이 의도와 다를 수 있다 (측정 단계에서 override를 지운 뒤
@@ -562,20 +538,14 @@ async function verifyViewportApplied(
  * 보지 않는다.
  *
  * 읽기 우선·건드리지 않기 (2026-11-16 QA 2차): 새 탭(Ctrl+T)은
- * /viewport 이후에 생겨 override를 상속받지 않아 자연 DSF 1.75로
- * 남는다 (실측 1096×500). 프론트가 10초마다 재적용하므로, 재적용이
- * 올바른 탭을 건드려 깜빡임을 만들면 안 된다 — 예전처럼 매번 첫 탭의
- * override를 지우고 재는 방식은 10초마다 첫 탭을 깜빡이게 한다.
- * 그래서 1단계로 전 탭의 현재 실측을 먼저 읽고, 후보 DSF(첫 실측
- * 가능 탭의 innerWidth × devicePixelRatio = 디스플레이 기기 픽셀 —
- * override가 걸린 탭은 너비×DSF가, 없는 탭은 자연 너비×자연 DSF가
- * 디스플레이 너비다)와 비교해 전 탭이 일치하면 set도 clear도 없이
- * 끝낸다. 불일치 탭이 있을 때만 2단계로 불일치 탭에서 override를
- * 지우고 디스플레이를 권위 있게 다시 잰 뒤 (screen.width ×
- * devicePixelRatio), 불일치 탭에만 적용한다. 측정 탭은 지워서 자연
- * 상태가 됐으니 무조건 다시 건다. 디스플레이가 리사이즈되면
- * 스테이지도 함께 바뀌어 후보 너비와 안 맞아 2단계로 가므로, 낡은
- * 후보 DSF가 남지 않는다.
+ * /viewport 이후에 생겨 override를 상속받지 않아 자연 DSF로 남는다.
+ * 프론트가 10초마다 재적용하므로, 재적용이 올바른 탭을 건드려
+ * 깜빡임을 만들면 안 된다. 그래서 1단계로 전 탭의 현재 실측을
+ * 먼저 읽고, 의도 뷰포트(스테이지 크기 × DSF 1.0)와 비교해 전
+ * 탭이 일치하면 set도 clear도 없이 끝낸다. 불일치 탭이 있을 때만
+ * 2단계로 불일치 탭에만 의도 뷰포트를 적용한다 (set이 기존
+ * override를 대체하므로 clear 불필요, 디스플레이 재측정 없음 —
+ * 재측정은 리사이즈 경합으로 잘못된 DSF를 만들었다, QA 7차).
  */
 export async function applyViewportToSession(
   webSocketDebuggerUrl: string,
@@ -642,72 +612,33 @@ export async function applyViewportToSession(
       for (const s of sessions) {
         s.measured = await readAppliedViewport(call, s.sessionId)
       }
-      // 후보 DSF: 첫 실측 가능 탭의 innerWidth × devicePixelRatio.
-      let candidateDsf: number | null = null
-      for (const s of sessions) {
-        if (s.measured) {
-          candidateDsf = displayScaleFactor(s.measured.width * s.measured.dsf, viewport.width)
-          break
-        }
-      }
-      if (candidateDsf !== null) {
-        const candidate = {
-          width: Math.round(viewport.width),
-          height: Math.round(viewport.height),
-          deviceScaleFactor: candidateDsf,
-          mobile: false,
-        }
-        // 전 탭이 후보와 일치하면 끝 — set도 clear도 하지 않는다
-        // (주기 재적용의 정상 경로: 올바른 탭은 건드리지 않는다).
-        const allMatch = sessions.every((s) => s.measured !== null && viewportMatches(s.measured, candidate))
-        if (allMatch) {
-          const n = sessions.length
-          const ok = n === total
-          return { ok, stage: ok ? ('ok' as const) : ('attach' as const), applied: n, total, verified: n }
-        }
-      }
-      // 2단계: 불일치 탭이 있다 (또는 후보를 못 잰다). 불일치 탭에서
-      // override를 지우고 디스플레이를 권위 있게 다시 잰다. 측정 탭은
-      // 불일치 탭을 우선한다 — 이미 틀린 탭이라 지워도 손해가 없다.
-      let measureSessionId = sessions[0].sessionId
-      if (candidateDsf !== null) {
-        const candidate = {
-          width: Math.round(viewport.width),
-          height: Math.round(viewport.height),
-          deviceScaleFactor: candidateDsf,
-          mobile: false,
-        }
-        const bad = sessions.find((s) => s.measured === null || !viewportMatches(s.measured, candidate))
-        if (bad) measureSessionId = bad.sessionId
-      }
-      let dsf = candidateDsf ?? 1
-      try {
-        await call('Emulation.clearDeviceMetricsOverride', undefined, measureSessionId)
-      } catch {
-        // 무시 — 측정만 후보 DSF로 이어진다
-      }
-      try {
-        const measureReply = await call(
-          'Runtime.evaluate',
-          { expression: 'screen.width * devicePixelRatio', returnByValue: true },
-          measureSessionId,
-        )
-        const displayWidth = !measureReply.error ? evalNumber(measureReply.result) : null
-        if (displayWidth !== null) dsf = displayScaleFactor(displayWidth, viewport.width)
-      } catch {
-        // 무시 — 후보 DSF로 폴백한다
-      }
+      // 의도 뷰포트: DSF는 REMOTE_DISPLAY_SCALE(1.0) 고정.
+      // 실측에서 DSF를 역산하는 옛 방식은 리사이즈 중 옛 디스플레이
+      // 크기 ÷ 새 스테이지를 계산해 1.5 같은 잘못된 배율을 만들고,
+      // 그 배율이 후보가 돼 자기 일치를 이뤄 고정이 안 됐다
+      // (2026-11-16 QA 7차: 창은 안 줄고 내용만 1.5배로 커져 넘침).
       const overrideParams = {
         width: Math.round(viewport.width),
         height: Math.round(viewport.height),
-        deviceScaleFactor: dsf,
+        deviceScaleFactor: REMOTE_DISPLAY_SCALE,
         mobile: false,
       }
+      // 전 탭이 의도와 일치하면 끝 — set도 clear도 하지 않는다
+      // (주기 재적용의 정상 경로: 올바른 탭은 건드리지 않는다).
+      const allMatch = sessions.every((s) => s.measured !== null && viewportMatches(s.measured, overrideParams))
+      if (allMatch) {
+        const n = sessions.length
+        const ok = n === total
+        return { ok, stage: ok ? ('ok' as const) : ('attach' as const), applied: n, total, verified: n }
+      }
+      // 2단계: 불일치 탭이 있다. 의도 뷰포트를 불일치 탭에만
+      // 적용한다 (set이 기존 override를 대체하므로 clear 불필요).
+      // 디스플레이를 다시 재지 않는다 — 리사이즈 중에는
+      // screen.width가 옛 값을 돌려줘 잘못된 DSF를 만든다.
       for (const s of sessions) {
-        if (s.sessionId !== measureSessionId && s.measured !== null && viewportMatches(s.measured, overrideParams)) {
+        if (s.measured !== null && viewportMatches(s.measured, overrideParams)) {
           // 1단계 실측이 이미 의도와 일치한다 — 건드리지 않고
-          // 적용·검증됨으로 센다 (측정 탭은 지워서 자연 상태가
-          // 됐으니 아래에서 무조건 다시 건다).
+          // 적용·검증됨으로 센다.
           applied += 1
           verified += 1
           continue
