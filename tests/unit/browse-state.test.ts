@@ -9,6 +9,12 @@
  *   탭일 수 있어 /state가 매번 502가 됐다). 설정 없음 503, 잠김 423,
  *   /json/version 실패 502 ORACLE_UPSTREAM, 상태 읽기 실패
  *   502 BROWSER_STATE.
+ * - /state 빠른 경로 (2026-11-17 P0): 사이드카 영구 CDP 연결의
+ *   GET /control/state를 1회 fetch로 읽는다 (직접 CDP는 폴링 1회당
+ *   순차 왕복 ~8회, 약 1.5초 → 1왕복, 약 0.25초). 사이드카가
+ *   구버전(404)이거나 실패·응답이 깨지면 직접 CDP 방식으로 폴백한다
+ *   (배포 순서 어긋남 대비). 빠른 경로가 성공하면 /json/version·
+ *   CDP WS를 부르지 않는다. 잠금 검사는 한 번만 한다.
  * - /back·/forward: CDP getNavigationHistory로 엔트리 id를 읽어
  *   Page.navigateToHistoryEntry로 활성 탭을 이동시키고 200 + { ok, stage }
  *   로 보고한다 (실패해도 200). 설정 없음 503, 잠김 423. 라이브가
@@ -236,6 +242,119 @@ describe('GET /state — 원격 현재 상태', () => {
     const res = await app.request('/api/browse/state', {}, ENV as never)
     expect(res.status).toBe(502)
     expect(await res.json()).toEqual({ ok: false, error: 'BROWSER_STATE' })
+  })
+})
+
+describe('GET /state — 사이드카 빠른 경로 + 직접 CDP 폴백 (2026-11-17 P0)', () => {
+  const FAST_BODY = { ok: true, url: 'https://www.naver.com/', title: 'NAVER', canGoBack: true, canGoForward: false }
+
+  /** /control/state는 빠른 응답을, /json/version·CDP WS는 FakeSocket 경로를 준다. */
+  function stubFastThenCdp(sock: FakeSocket, stateResponse: () => Promise<unknown>): void {
+    stubFetch(async (url) => {
+      if (url.includes('/control/state')) return stateResponse()
+      if (url.includes('/json/version')) return jsonResponse(VERSION_BODY)
+      if (url.includes('/devtools/browser/')) return { webSocket: sock }
+      throw new Error(`unexpected fetch: ${url}`)
+    })
+  }
+
+  test('빠른 경로가 성공하면 /json/version·CDP WS를 부르지 않고 1회 fetch로 상태를 돌려준다', async () => {
+    const sock = new FakeSocket(stateHandler)
+    stubFastThenCdp(sock, async () => jsonResponse(FAST_BODY))
+    const res = await app.request('/api/browse/state', {}, ENV as never)
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({
+      ok: true,
+      url: 'https://www.naver.com/',
+      title: 'NAVER',
+      canGoBack: true,
+      canGoForward: false,
+    })
+    // 빠른 경로 1회만 나간다 — 직접 CDP 왕복이 없어야 한다.
+    expect(fetchCalls).toHaveLength(1)
+    expect(fetchCalls[0].url).toBe(`https://${HOST}:8081/control/state`)
+    expect(fetchCalls[0].method).toBe('GET')
+    expect(fetchCalls[0].headers['x-origin-secret']).toBe('origin-secret')
+    expect(fetchCalls[0].headers['x-cdp-secret']).toBe('cdp-secret')
+    expect(sock.sent).toHaveLength(0)
+    expect(sock.accepted).toBe(false)
+  })
+
+  test('구 사이드카(404)면 직접 CDP로 폴백해 상태를 돌려준다', async () => {
+    const sock = new FakeSocket(stateHandler)
+    stubFastThenCdp(sock, async () => new Response('{"error":"not_found"}', { status: 404 }))
+    const res = await app.request('/api/browse/state', {}, ENV as never)
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({
+      ok: true,
+      url: 'https://news.naver.com/article/123',
+      title: '뉴스 기사',
+      canGoBack: true,
+      canGoForward: true,
+    })
+    // 빠른 경로 시도 1회 + 폴백(/json/version + CDP WS) 2회.
+    expect(fetchCalls.map((c) => c.url)).toEqual([
+      `https://${HOST}:8081/control/state`,
+      `https://${HOST}:8081/json/version`,
+      `https://${HOST}:8081/devtools/browser/abc`,
+    ])
+    expect(sock.sent.map((m) => m.method)).toContain('Page.getNavigationHistory')
+  })
+
+  test('빠른 경로 fetch가 던지거나 응답이 깨져도 직접 CDP로 폴백한다', async () => {
+    const sock = new FakeSocket(stateHandler)
+    stubFastThenCdp(sock, async () => {
+      throw new Error('unreachable')
+    })
+    const res = await app.request('/api/browse/state', {}, ENV as never)
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({
+      ok: true,
+      url: 'https://news.naver.com/article/123',
+      title: '뉴스 기사',
+      canGoBack: true,
+      canGoForward: true,
+    })
+
+    const sock2 = new FakeSocket(stateHandler)
+    stubFastThenCdp(sock2, async () => jsonResponse({ ok: true, url: 42, title: 'NAVER' }))
+    const res2 = await app.request('/api/browse/state', {}, ENV as never)
+    expect(res2.status).toBe(200)
+    expect(await res2.json()).toEqual({
+      ok: true,
+      url: 'https://news.naver.com/article/123',
+      title: '뉴스 기사',
+      canGoBack: true,
+      canGoForward: true,
+    })
+  })
+
+  test('빠른 경로와 폴백이 둘 다 실패하면 502 BROWSER_STATE', async () => {
+    const sock = new FakeSocket((msg, emit) => {
+      if (msg.method === 'Target.getTargets') {
+        emit({ id: msg.id, result: { targetInfos: [] } })
+      }
+    })
+    stubFastThenCdp(sock, async () => jsonResponse({ error: 'browser_state' }, 502))
+    const res = await app.request('/api/browse/state', {}, ENV as never)
+    expect(res.status).toBe(502)
+    expect(await res.json()).toEqual({ ok: false, error: 'BROWSER_STATE' })
+  })
+
+  test('잠기면 빠른 경로를 부르기 전에 423이고, 잠금 검사는 한 번만 한다', async () => {
+    const sock = new FakeSocket(stateHandler)
+    stubFetch(async (url) => {
+      if (url.includes('/unlock/status')) {
+        return jsonResponse({ configured: true, unlocked: false })
+      }
+      throw new Error(`unexpected fetch: ${url}`)
+    })
+    const res = await app.request('/api/browse/state', {}, ENV_LOCKED as never)
+    expect(res.status).toBe(423)
+    expect(await res.json()).toEqual({ ok: false, error: 'BROWSER_LOCKED' })
+    expect(fetchCalls).toHaveLength(1)
+    expect(fetchCalls[0].url).toContain('/unlock/status')
+    expect(sock.sent).toHaveLength(0)
   })
 })
 

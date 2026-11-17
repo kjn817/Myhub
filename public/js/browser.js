@@ -639,15 +639,24 @@
        낡은 URL로 가고 go()→navigate가 다른 탭을 닫아버린다
        (2026-11-16 QA 1차). 원격 이동이 성공하면 상태를 즉시 다시 물어
        주소창을 빨리 맞춘다. 실패해도 폴백하지 않는다. 로컬 폴백은
-       라이브가 꺼져 있을 때만. */
+       라이브가 꺼져 있을 때만.
+       로딩 표시 (2026-11-17 N2): 원격 뒤로/앞으로 이동은 스트림
+       프레임 전달까지 10초 안팎이 걸리는데 그동안 피드백이 전혀 없어
+       버튼이 안 먹힌 것으로 보였다. 이동 시작 시 로딩을 켜고, 상태
+       재조회가 끝날 때 끈다 (실패해도 끈다 — 로딩이 영영 남지 않게). */
     function goBack() {
       var tab = activeTab();
       if (!tab) return;
       if (tab.id === liveTabId && live.isActive()) {
         if (tab.remote && tab.remote.canBack) {
+          setNavLoading(true);
           live.goBack().then(function (ok) {
-            if (ok) live.refreshState();
-          });
+            if (ok) return live.refreshState();
+            return null;
+          }).then(
+            function () { setNavLoading(false); },
+            function () { setNavLoading(false); },
+          );
         }
         return;
       }
@@ -659,9 +668,14 @@
       if (!tab) return;
       if (tab.id === liveTabId && live.isActive()) {
         if (tab.remote && tab.remote.canFwd) {
+          setNavLoading(true);
           live.goForward().then(function (ok) {
-            if (ok) live.refreshState();
-          });
+            if (ok) return live.refreshState();
+            return null;
+          }).then(
+            function () { setNavLoading(false); },
+            function () { setNavLoading(false); },
+          );
         }
         return;
       }

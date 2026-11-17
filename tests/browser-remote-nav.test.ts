@@ -28,6 +28,11 @@
  * - 라이브가 꺼져 있으면 로컬 기록 기준으로 동작한다 (폴백은 그때만).
  * - 폴링 결과는 뷰를 소유한 탭에만 반영된다 (다른 탭을 보고 있으면
  *   그 탭의 주소창은 안 바뀐다).
+ * - 뒤로/앞으로 로딩 표시 (2026-11-17 N2): 라이브 뒤로/앞으로 클릭 시
+ *   창 바에 로딩(true)이 즉시 게시되고, 상태 재조회가 끝나면
+ *   로딩(false)이 게시된다. 원격 이동이 실패해도 로딩은 꺼진다
+ *   (영영 남지 않는다). refreshState()는 폴링 완료 시점에 resolve되는
+ *   Promise를 돌려주고, 진행 중 폴링이 있으면 같은 Promise를 공유한다.
  * 카나리아: onState 연동·navCaps 우선순위·CDP 우선 이동·라이브 켜짐
  * 시 폴백 금지를 빼면 해당 테스트가 실패한다.
  */
@@ -114,6 +119,8 @@ interface Harness {
   setRemote: (s: RemoteState) => void
   historyOk: boolean
   fetchStateOk: boolean
+  navPosts: Array<Record<string, any>>
+  clearNavPosts: () => void
 }
 
 function makeApp(): Harness {
@@ -123,6 +130,18 @@ function makeApp(): Harness {
   const navigateCalls: string[] = []
   const historyCalls: string[] = []
   const stateCalls = { n: 0 }
+  // 창 바 채널을 받는 가짜 부모 창 — 내비 게시(myhub:browser-nav)의
+  // loading 값을 기록해 로딩 표시를 검증한다 (2026-11-17 N2).
+  const navPosts: Array<Record<string, any>> = []
+  const fakeWin = {
+    parent: {
+      postMessage: (payload: Record<string, any>) => {
+        navPosts.push(payload)
+      },
+    },
+    location: { origin: 'https://myhub.test' },
+    addEventListener: () => {},
+  }
   const h: Harness = {
     app: null as any,
     navigateCalls,
@@ -141,9 +160,14 @@ function makeApp(): Harness {
     },
     historyOk: true,
     fetchStateOk: true,
+    navPosts,
+    clearNavPosts() {
+      navPosts.length = 0
+    },
   }
   const app = api.createApp({
     doc,
+    win: fakeWin,
     storage: new MemoryStorage(),
     liveDeps: {
       navigate: (url: string) => {
@@ -413,5 +437,122 @@ describe('browser 원격 상태 연동', () => {
     jest.advanceTimersByTime(10000)
     await flush()
     expect(h.stateCalls).toBe(1)
+  })
+
+  test('뒤로 클릭 시 로딩이 즉시 켜지고, 상태 재조회가 끝나면 꺼진다 (2026-11-17 N2)', async () => {
+    const h = makeApp()
+    h.setRemote({
+      url: 'https://news.naver.com/article/123',
+      title: '뉴스 기사',
+      canGoBack: true,
+      canGoForward: false,
+    })
+    h.app.go('https://www.naver.com')
+    await flush()
+    // 뒤로 간 뒤의 원격 상태를 미리 정해 둔다.
+    h.setRemote({
+      url: 'https://www.naver.com',
+      title: 'naver.com',
+      canGoBack: false,
+      canGoForward: true,
+    })
+    h.clearNavPosts()
+    const { urlInput, backBtn } = els()
+    backBtn.click()
+    // 클릭과 동시에 로딩이 게시된다 (비동기 이동을 기다리지 않는다).
+    const loadingsAtClick = h.navPosts.map((p) => p.loading)
+    expect(loadingsAtClick).toContain(true)
+    expect(loadingsAtClick[loadingsAtClick.length - 1]).toBe(true)
+    await flush()
+    // 상태 재조회까지 끝나면 로딩이 꺼지고 주소가 바뀐다.
+    const loadingsAfter = h.navPosts.map((p) => p.loading)
+    expect(loadingsAfter[loadingsAfter.length - 1]).toBe(false)
+    expect(urlInput.value).toBe('https://www.naver.com')
+    await h.app.live.endLive()
+  })
+
+  test('앞으로 클릭 시에도 로딩이 켜졌다가 상태 재조회 후 꺼진다 (2026-11-17 N2)', async () => {
+    const h = makeApp()
+    h.setRemote({
+      url: 'https://www.naver.com',
+      title: 'naver.com',
+      canGoBack: false,
+      canGoForward: true,
+    })
+    h.app.go('https://www.naver.com')
+    await flush()
+    h.setRemote({
+      url: 'https://news.naver.com/article/123',
+      title: '뉴스 기사',
+      canGoBack: true,
+      canGoForward: false,
+    })
+    h.clearNavPosts()
+    const { urlInput, fwdBtn } = els()
+    fwdBtn.click()
+    expect(h.navPosts.map((p) => p.loading)).toContain(true)
+    await flush()
+    const loadingsAfter = h.navPosts.map((p) => p.loading)
+    expect(loadingsAfter[loadingsAfter.length - 1]).toBe(false)
+    expect(urlInput.value).toBe('https://news.naver.com/article/123')
+    await h.app.live.endLive()
+  })
+
+  test('원격 뒤로가기가 실패해도 로딩은 꺼지고 상태 재조회는 나가지 않는다', async () => {
+    const h = makeApp()
+    h.setRemote({
+      url: 'https://news.naver.com/article/123',
+      title: '뉴스 기사',
+      canGoBack: true,
+      canGoForward: false,
+    })
+    h.app.go('https://www.naver.com')
+    await flush()
+    h.historyOk = false
+    const callsBefore = h.stateCalls
+    h.clearNavPosts()
+    const { backBtn } = els()
+    backBtn.click()
+    expect(h.navPosts.map((p) => p.loading)).toContain(true)
+    await flush()
+    // 실패해도 로딩이 영영 남지 않는다.
+    const loadingsAfter = h.navPosts.map((p) => p.loading)
+    expect(loadingsAfter[loadingsAfter.length - 1]).toBe(false)
+    // 실패 시에는 상태를 다시 묻지 않는다.
+    expect(h.stateCalls).toBe(callsBefore)
+    await h.app.live.endLive()
+  })
+
+  test('refreshState()는 폴링 완료 시점에 resolve되는 Promise를 돌려준다', async () => {
+    const h = makeApp()
+    h.app.go('https://www.naver.com')
+    await flush()
+    h.setRemote({
+      url: 'https://news.naver.com/article/123',
+      title: '뉴스 기사',
+      canGoBack: true,
+      canGoForward: false,
+    })
+    const p = h.app.live.refreshState()
+    expect(p !== null && typeof p.then === 'function').toBe(true)
+    // 아직 반영 전 — 주소는 이전 값이다.
+    expect(els().urlInput.value).toBe('https://www.naver.com')
+    await p
+    // Promise가 resolve된 뒤에는 상태가 반영돼 있다.
+    expect(els().urlInput.value).toBe('https://news.naver.com/article/123')
+    await h.app.live.endLive()
+  })
+
+  test('폴링 진행 중 refreshState를 다시 부르면 같은 폴링을 공유하고 fetch를 한 번만 부른다', async () => {
+    const h = makeApp()
+    h.app.go('https://www.naver.com')
+    await flush()
+    const before = h.stateCalls
+    const p1 = h.app.live.refreshState()
+    const p2 = h.app.live.refreshState()
+    expect(p1).toBe(p2)
+    await p1
+    expect(h.stateCalls).toBe(before + 1)
+    await h.app.live.endLive()
   })
 })

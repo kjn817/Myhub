@@ -434,12 +434,57 @@ export interface BrowserState {
 }
 
 /**
+ * 사이드카 영구 CDP 연결에서 브라우저 상태를 1회 HTTPS fetch로 읽는다
+ * (2026-11-17 P0: GET /control/state). getBrowserState의 직접 CDP
+ * 경로는 폴링 1회당 Worker→Oracle 순차 왕복 ~8회(/json/version + CDP
+ * WS 신규 연결 + CDP 5회, RTT ~168ms × 8 ≈ 1.5초)였으나, 이 경로는
+ * 1왕복(약 0.25초)으로 줄어든다. 사이드카가 구버전(404)이거나
+ * 실패·응답이 깨졌으면 null — 호출자는 getBrowserState 직접 CDP
+ * 방식으로 폴백한다 (배포 순서 어긋남 대비). fetchFn을 주입할 수 있어
+ * 테스트에서 모킹할 수 있다 (기본값은 전역 fetch).
+ */
+export type SidecarFetchFn = (
+  url: string,
+  init?: { method?: string; headers?: Record<string, string> },
+) => Promise<{ ok: boolean; status: number; json: () => Promise<unknown> }>
+
+export async function fetchSidecarBrowserState(
+  sidecarStateUrl: string,
+  headers: Record<string, string>,
+  fetchFn: SidecarFetchFn = fetch as unknown as SidecarFetchFn,
+): Promise<BrowserState | null> {
+  let res: { ok: boolean; status: number; json: () => Promise<unknown> }
+  try {
+    res = await fetchFn(sidecarStateUrl, { method: 'GET', headers })
+  } catch {
+    return null
+  }
+  if (!res.ok) return null
+  let body: unknown
+  try {
+    body = await res.json()
+  } catch {
+    return null
+  }
+  const b = body as
+    | { ok?: unknown; url?: unknown; title?: unknown; canGoBack?: unknown; canGoForward?: unknown }
+    | null
+    | undefined
+  if (!b || typeof b !== 'object' || b.ok !== true) return null
+  if (typeof b.url !== 'string' || typeof b.title !== 'string') return null
+  if (typeof b.canGoBack !== 'boolean' || typeof b.canGoForward !== 'boolean') return null
+  return { url: b.url, title: b.title, canGoBack: b.canGoBack, canGoForward: b.canGoForward }
+}
+
+/**
  * 원격 브라우저의 현재 상태를 읽는다 (2026-11-15: 주소창·뒤로가기가
  * 셸 로컬 기록만 봐서 원격 내 링크 이동을 몰랐던 문제의 정식 수정).
  * 활성(visible) 탭에 attach해 location.href·document.title과
  * Page.getNavigationHistory를 읽는다 (2026-11-16: 첫 타깃은 동결된
  * 백그라운드 탭일 수 있어 /state가 매번 502가 됐다). 어느 단계든
  * 실패하면 null을 돌려준다 (호출자는 기존 표시를 유지한다).
+ * 2026-11-17부터 /state 라우트의 빠른 경로(fetchSidecarBrowserState)
+ * 가 실패할 때의 폴백이다 (구 사이드카·/control/state 장애 대비).
  */
 export async function getBrowserState(
   webSocketDebuggerUrl: string,

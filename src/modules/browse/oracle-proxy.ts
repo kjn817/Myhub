@@ -29,7 +29,7 @@
 import { Hono } from 'hono'
 import type { Env } from '../../types'
 import { validatePublicUrlAsync } from './assistant-read'
-import { defaultCdpConnect, getBrowserState, goBackSession, goForwardSession, navigateSession, toDirectCdpWsUrl, type ViewportSize } from './cdp'
+import { defaultCdpConnect, fetchSidecarBrowserState, getBrowserState, goBackSession, goForwardSession, navigateSession, toDirectCdpWsUrl, type ViewportSize } from './cdp'
 import { isBrowserLocked } from './unlock'
 
 export const ORACLE_VIEW_PORT = 8080
@@ -307,17 +307,33 @@ export function registerOracleProxyRoutes(app: Hono<{ Bindings: Env }>): void {
   })
 
   // 원격 브라우저 현재 상태 (2026-11-15): 활성 탭의 실제 URL·
-  // 제목·뒤로/앞으로 가능 여부를 CDP로 읽는다. 셸 로컬 기록만 보던
+  // 제목·뒤로/앞으로 가능 여부를 읽는다. 셸 로컬 기록만 보던
   // 기존 주소창·뒤로가기는 원격 내 링크 이동을 몰라 주소가 고정되고
   // 뒤로가기가 안 됐다 — 프론트는 이 상태를 2초마다 폴링해 주소창·
   // 버튼을 원격 기준으로 맞춘다. 상태 읽기 실패는 502 BROWSER_STATE
   // (호출자는 기존 표시를 유지한다).
+  // 빠른 경로 (2026-11-17 P0): 사이드카 영구 CDP 연결의
+  // GET /control/state를 1회 fetch로 읽는다. 기존 직접 CDP 경로는
+  // 폴링 1회당 순차 왕복 ~8회(/json/version + CDP WS 신규 연결 +
+  // CDP 5회, 약 1.5초)였으나 이 경로는 1왕복(약 0.25초)이다.
+  // 사이드카가 구버전이거나 실패하면 null이 돌아오고, 아래 직접
+  // CDP 방식으로 폴백한다 (배포 순서 어긋남 대비). 잠금 검사는
+  // gateSidecar에서 한 번만 한다 (폴백 경로에서 다시 안 한다).
   app.get('/state', async (c) => {
     const cfg = oracleConfigOf(c.env)
     if (!cfg) return c.json({ ok: false, error: 'ORACLE_NOT_CONFIGURED' }, 503)
-    const gate = await gateCdp(c, cfg)
+    const gate = await gateSidecar(c, cfg)
     if (!gate.ok) return gate.response
-    const state = await getBrowserState(gate.directWs, defaultCdpConnect, {
+    const fast = await fetchSidecarBrowserState(
+      `https://${cfg.host}:${ORACLE_CDP_PORT}/control/state`,
+      gate.secretHeaders,
+    )
+    if (fast) {
+      return c.json({ ok: true, url: fast.url, title: fast.title, canGoBack: fast.canGoBack, canGoForward: fast.canGoForward })
+    }
+    const directWs = await directCdpWsUrl(cfg, gate.secretHeaders)
+    if (!directWs) return c.json({ ok: false, error: 'ORACLE_UPSTREAM' }, 502)
+    const state = await getBrowserState(directWs, defaultCdpConnect, {
       headers: gate.secretHeaders,
     })
     if (!state) return c.json({ ok: false, error: 'BROWSER_STATE' }, 502)
@@ -355,9 +371,10 @@ export function registerOracleProxyRoutes(app: Hono<{ Bindings: Env }>): void {
   })
 
   // 화질 수동 전환 (2026-11-15): 사이드카 /control/quality로 중계한다.
-  // { bitrate: <kbps> }는 수동 고정(사이드카 자동 조절 중단),
-  // { mode: 'auto' }는 자동 조절로 되돌린다. 비트레이트 범위는
-  // 500~8000kbps (사이드카 BITRATE_FLOOR/CEILING과 동일). 세션 게이트
+  // { bitrate: <kbps> }는 수동 고정(한 번만 vb를 보낸다),
+  // { mode: 'auto' }는 수동 고정을 풀고 Selkies 혼잡 제어로 되돌린다
+  // (2026-11-17 적응 폐지 — 사이드카 자동 조절은 없다). 비트레이트
+  // 범위는 500~8000kbps (사이드카 BITRATE_FLOOR/CEILING과 동일). 세션 게이트
   // 뒤에 있다 (전역 /api/* 미들웨어). 사이드카 응답(상태·본문)을
   // 그대로 돌려준다.
   app.post('/quality', async (c) => {

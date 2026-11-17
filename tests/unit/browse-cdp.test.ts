@@ -45,9 +45,14 @@
  *   시 함께 제거됨): 낡은 1.5 override가 남은 탭은 의도(DSF 1.0)와
  *   불일치로 판정돼 DSF 1.0으로 다시 걸렸다. 옛 후보-DSF 방식은 낡은
  *   배율을 후보로 삼아 자기 일치를 이뤄 고정을 안 했다.
+ * - 사이드카 상태 빠른 경로 (2026-11-17 P0): fetchSidecarBrowserState가
+ *   GET /control/state를 1회 fetch로 읽어 BrowserState를 돌려준다.
+ *   직접 CDP 경로(폴링 1회당 순차 왕복 ~8회, 약 1.5초) 대신 1왕복
+ *   (약 0.25초)으로 상태를 얻는다. 구 사이드카(404)·네트워크 실패·
+ *   깨진 응답이면 null을 돌려 호출자가 직접 CDP 방식으로 폴백하게 한다.
  * 카나리아: 단계 보고(stage)나 폴백 조건을 깨면 해당 테스트가 실패한다.
  */
-import { getBrowserState, goBackSession, goForwardSession, navigateSession, REMOTE_DISPLAY_SCALE, wsToHttpUrl, type CdpSocket } from '../../src/modules/browse/cdp'
+import { fetchSidecarBrowserState, getBrowserState, goBackSession, goForwardSession, navigateSession, REMOTE_DISPLAY_SCALE, wsToHttpUrl, type CdpSocket } from '../../src/modules/browse/cdp'
 
 type Listener = (ev: { data: unknown }) => void
 
@@ -825,6 +830,59 @@ describe('navigateSession — 연결·단계 실패', () => {
       expect(jest.getTimerCount()).toBe(before)
     } finally {
       jest.useRealTimers()
+    }
+  })
+})
+
+describe('fetchSidecarBrowserState — 사이드카 상태 빠른 경로 (2026-11-17 P0)', () => {
+  const URL = 'https://203.0.113.7:8081/control/state'
+  const HEADERS = { 'x-origin-secret': 'origin-secret', 'x-cdp-secret': 'cdp-secret' }
+  const GOOD = { ok: true, url: 'https://www.naver.com/', title: 'NAVER', canGoBack: true, canGoForward: false }
+
+  function fakeFetch(body: unknown, ok = true, status = 200) {
+    const calls: Array<{ url: string; init?: { method?: string; headers?: Record<string, string> } }> = []
+    const fn = async (url: string, init?: { method?: string; headers?: Record<string, string> }) => {
+      calls.push({ url, init })
+      return { ok, status, json: async () => body }
+    }
+    return { fn, calls }
+  }
+
+  test('정상 응답이면 1회 GET으로 BrowserState를 돌려주고 시크릿 헤더를 보낸다', async () => {
+    const { fn, calls } = fakeFetch(GOOD)
+    const r = await fetchSidecarBrowserState(URL, HEADERS, fn)
+    expect(r).toEqual({ url: 'https://www.naver.com/', title: 'NAVER', canGoBack: true, canGoForward: false })
+    expect(calls).toHaveLength(1)
+    expect(calls[0].url).toBe(URL)
+    expect(calls[0].init?.method).toBe('GET')
+    expect(calls[0].init?.headers).toEqual(HEADERS)
+  })
+
+  test('구 사이드카(404)·502면 null — 호출자가 직접 CDP로 폴백한다', async () => {
+    const { fn: f404 } = fakeFetch({ error: 'not_found' }, false, 404)
+    await expect(fetchSidecarBrowserState(URL, HEADERS, f404)).resolves.toBeNull()
+    const { fn: f502 } = fakeFetch({ error: 'browser_state' }, false, 502)
+    await expect(fetchSidecarBrowserState(URL, HEADERS, f502)).resolves.toBeNull()
+  })
+
+  test('fetch가 던지거나 JSON이 깨지면 null', async () => {
+    const throwing = async () => { throw new Error('unreachable') }
+    await expect(fetchSidecarBrowserState(URL, HEADERS, throwing)).resolves.toBeNull()
+    const badJson = async () => ({ ok: true, status: 200, json: async () => { throw new Error('bad json') } })
+    await expect(fetchSidecarBrowserState(URL, HEADERS, badJson)).resolves.toBeNull()
+  })
+
+  test('ok가 아니거나 필드가 깨졌으면 null (타입 검증)', async () => {
+    const cases: unknown[] = [
+      null,
+      { ok: false, url: 'https://www.naver.com/', title: 'NAVER', canGoBack: true, canGoForward: false },
+      { ok: true, url: 123, title: 'NAVER', canGoBack: true, canGoForward: false },
+      { ok: true, url: 'https://www.naver.com/', title: 'NAVER', canGoBack: 'yes', canGoForward: false },
+      { ok: true, url: 'https://www.naver.com/', title: 'NAVER' },
+    ]
+    for (const body of cases) {
+      const { fn } = fakeFetch(body)
+      await expect(fetchSidecarBrowserState(URL, HEADERS, fn)).resolves.toBeNull()
     }
   })
 })

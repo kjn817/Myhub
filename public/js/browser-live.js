@@ -351,9 +351,12 @@
     var viewportRetryUsed = false;
     var lastFailedViewport = null;
     var stageObserver = null;
-    /* 원격 상태 폴링 상태 (2026-11-15): 주기 타이머·진행 중 플래그. */
+    /* 원격 상태 폴링 상태 (2026-11-15): 주기 타이머·진행 중 플래그·
+       진행 중 폴링의 Promise (2026-11-17 N2: 뒤로/앞으로 이동이 상태
+       재조회 완료를 기다려 로딩 표시를 끌 수 있게 한다). */
     var statePollTimer = null;
     var statePolling = false;
+    var statePollPromise = null;
     /* 뷰포트 주기 재적용 상태 (2026-11-16 QA 2차): 주기 타이머·진행 중 플래그. */
     var viewportReapplyTimer = null;
     var viewportReapplying = false;
@@ -451,26 +454,38 @@
     /* 원격 상태를 한 번 묻고 받으면 onState로 주인에게 알린다.
        탭이 hidden이면 쉬고 (백그라운드 폴링 낭비 방지), 요청이
        진행 중이면 겹치지 않는다. 늦게 도착한 응답은 liveGen으로
-       걸러 종료 뒤에 상태를 건드리지 않는다. */
+       걸러 종료 뒤에 상태를 건드리지 않는다.
+       완료 시점에 resolve되는 Promise를 돌려준다 — 뒤로/앞으로
+       이동이 상태 재조회 완료를 기다려 로딩 표시를 끌 수 있게 한다
+       (2026-11-17 N2). 진행 중 폴링이 있으면 그 Promise를 공유하고,
+       건너뛰면 즉시 resolve되는 Promise를 돌려준다. resolve 값은
+       상태 반영 여부(true/false)이며, fetch 실패도 false로 resolve돼
+       reject되지 않는다 (호출자가 로딩을 끄는 데만 쓴다). */
     function pollStateOnce() {
-      if (liveState !== 'on') return;
-      if (doc.hidden) return;
-      if (statePolling) return;
+      if (liveState !== 'on') return Promise.resolve(false);
+      if (doc.hidden) return Promise.resolve(false);
+      if (statePolling) return statePollPromise || Promise.resolve(false);
       var gen = liveGen;
       statePolling = true;
-      fetchState().then(
+      statePollPromise = fetchState().then(
         function (res) {
           statePolling = false;
-          if (gen !== liveGen || liveState !== 'on') return;
+          statePollPromise = null;
+          if (gen !== liveGen || liveState !== 'on') return false;
           var body = res && res.body;
           if (res && res.status === 200 && body && body.ok) {
             onState(body);
+            return true;
           }
+          return false;
         },
         function () {
           statePolling = false;
+          statePollPromise = null;
+          return false;
         },
       );
+      return statePollPromise;
     }
 
     /* 상태 폴링 시작: 즉시 한 번 묻고 이후 주기적으로 묻는다 (주소창이
