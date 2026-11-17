@@ -20,7 +20,7 @@
  */
 import { Hono } from 'hono'
 import { browseApp } from '../../src/modules/browse/routes'
-import { isBrowserLocked } from '../../src/modules/browse/unlock'
+import { invalidateUnlockStatusCache, isBrowserLocked } from '../../src/modules/browse/unlock'
 
 const app = new Hono()
 app.route('/api/browse', browseApp)
@@ -69,6 +69,11 @@ function stubFetch(handler: (url: string, init?: RequestInit) => Promise<unknown
     return handler(String(url), init)
   }) as typeof fetch
 }
+
+beforeEach(() => {
+  // 모듈 단위 언록 상태 캐시가 테스트 간에 새지 않게 한다.
+  invalidateUnlockStatusCache()
+})
 
 afterEach(() => {
   global.fetch = realFetch
@@ -213,10 +218,14 @@ describe('isBrowserLocked', () => {
     selkiesPassword: 'selkies-pass',
   }
   test('configured && !unlocked일 때만 true', async () => {
+    // 이 테스트는 상태값별 논리를 본다 — 스텁을 바꿀 때마다 캐시를
+    // 비워 이전 상태가 다음 단언에 새지 않게 한다.
     stubFetch(async () => jsonResponse({ configured: true, unlocked: false }))
     expect(await isBrowserLocked(cfg, 'unlock-secret-1234')).toBe(true)
+    invalidateUnlockStatusCache()
     stubFetch(async () => jsonResponse({ configured: true, unlocked: true }))
     expect(await isBrowserLocked(cfg, 'unlock-secret-1234')).toBe(false)
+    invalidateUnlockStatusCache()
     stubFetch(async () => jsonResponse({ configured: false, unlocked: false }))
     expect(await isBrowserLocked(cfg, 'unlock-secret-1234')).toBe(false)
   })
@@ -230,6 +239,112 @@ describe('isBrowserLocked', () => {
     expect(await isBrowserLocked(cfg, 'unlock-secret-1234')).toBe(false)
     stubFetch(async () => jsonResponse({ configured: 'yes' }))
     expect(await isBrowserLocked(cfg, 'unlock-secret-1234')).toBe(false)
+  })
+
+  test('두 번째 호출부터 언록 조회를 안 한다 (30초 캐시)', async () => {
+    stubFetch(async () => jsonResponse({ configured: true, unlocked: false }))
+    expect(await isBrowserLocked(cfg, 'unlock-secret-1234')).toBe(true)
+    expect(await isBrowserLocked(cfg, 'unlock-secret-1234')).toBe(true)
+    expect(await isBrowserLocked(cfg, 'unlock-secret-1234')).toBe(true)
+    // 3회 호출에 조회는 1회만 나간다 — 캐시가 없으면 3회다.
+    expect(fetchCalls).toHaveLength(1)
+    expect(fetchCalls[0].url).toBe(`https://${HOST}:8080/unlock/status`)
+  })
+
+  test('조회 실패는 캐시하지 않는다 — 다음 호출이 다시 조회한다', async () => {
+    let fail = true
+    stubFetch(async () => {
+      if (fail) throw new Error('down')
+      return jsonResponse({ configured: true, unlocked: false })
+    })
+    expect(await isBrowserLocked(cfg, 'unlock-secret-1234')).toBe(false)
+    fail = false
+    // 실패가 캐시됐으면 두 번째 호출도 false(조회 없음)가 된다.
+    expect(await isBrowserLocked(cfg, 'unlock-secret-1234')).toBe(true)
+    expect(fetchCalls).toHaveLength(2)
+  })
+
+  test('TTL(30초)이 지나면 다시 조회한다', async () => {
+    jest.useFakeTimers()
+    try {
+      stubFetch(async () => jsonResponse({ configured: true, unlocked: true }))
+      expect(await isBrowserLocked(cfg, 'unlock-secret-1234')).toBe(false)
+      jest.advanceTimersByTime(29_000)
+      expect(await isBrowserLocked(cfg, 'unlock-secret-1234')).toBe(false)
+      expect(fetchCalls).toHaveLength(1)
+      jest.advanceTimersByTime(2_000)
+      expect(await isBrowserLocked(cfg, 'unlock-secret-1234')).toBe(false)
+      expect(fetchCalls).toHaveLength(2)
+    } finally {
+      jest.useRealTimers()
+    }
+  })
+})
+
+describe('언록 상태 캐시 무효화 (2026-11-17 P1)', () => {
+  const cfg = {
+    host: HOST,
+    originSecret: 'origin-secret',
+    cdpSecret: 'cdp-secret',
+    selkiesPassword: 'selkies-pass',
+  }
+
+  test('언록 POST 성공 시 캐시가 풀려 다음 조회가 새 상태를 읽는다', async () => {
+    let locked = true
+    stubFetch(async (url) => {
+      if (url.includes('/unlock/status')) {
+        return jsonResponse({ configured: true, unlocked: !locked })
+      }
+      if (url.includes('/unlock/unlock')) {
+        locked = false
+        return jsonResponse({ ok: true, unlocked: true })
+      }
+      throw new Error(`unexpected fetch: ${url}`)
+    })
+    expect(await isBrowserLocked(cfg, 'unlock-secret-1234')).toBe(true)
+    const r = await postUnlock('/unlock/unlock', ENV as never, { password: 'correct-horse-1' })
+    expect(r.status).toBe(200)
+    // 무효화가 안 됐으면 캐시된 잠금 때문에 true가 된다.
+    expect(await isBrowserLocked(cfg, 'unlock-secret-1234')).toBe(false)
+  })
+
+  test('언록 POST 실패(423) 시 캐시는 유지된다 — 상태가 안 바뀌었으므로', async () => {
+    stubFetch(async (url) => {
+      if (url.includes('/unlock/status')) {
+        return jsonResponse({ configured: true, unlocked: false })
+      }
+      if (url.includes('/unlock/unlock')) {
+        return jsonResponse({ ok: false, error: 'locked_out', lockout_remaining: 420 }, 423)
+      }
+      throw new Error(`unexpected fetch: ${url}`)
+    })
+    expect(await isBrowserLocked(cfg, 'unlock-secret-1234')).toBe(true)
+    const before = fetchCalls.length
+    const r = await postUnlock('/unlock/unlock', ENV as never, { password: 'correct-horse-1' })
+    expect(r.status).toBe(423)
+    expect(await isBrowserLocked(cfg, 'unlock-secret-1234')).toBe(true)
+    // 실패로 무효화됐으면 상태 조회가 한 번 더 나간다.
+    expect(fetchCalls.slice(before).filter((c) => c.url.includes('/unlock/status'))).toHaveLength(0)
+  })
+
+  test('셋업 POST 성공 시에도 캐시가 풀린다', async () => {
+    let configured = false
+    stubFetch(async (url) => {
+      if (url.includes('/unlock/status')) {
+        return jsonResponse({ configured, unlocked: false })
+      }
+      if (url.includes('/unlock/setup')) {
+        configured = true
+        return jsonResponse({ ok: true, configured: true })
+      }
+      throw new Error(`unexpected fetch: ${url}`)
+    })
+    // 미설정 → false가 캐시된다.
+    expect(await isBrowserLocked(cfg, 'unlock-secret-1234')).toBe(false)
+    const r = await postUnlock('/unlock/setup', ENV as never, { password: 'correct-horse-1' })
+    expect(r.status).toBe(200)
+    // 셋업 후에는 설정됨+잠김 → true가 돼야 한다.
+    expect(await isBrowserLocked(cfg, 'unlock-secret-1234')).toBe(true)
   })
 })
 

@@ -50,6 +50,11 @@
  *   직접 CDP 경로(폴링 1회당 순차 왕복 ~8회, 약 1.5초) 대신 1왕복
  *   (약 0.25초)으로 상태를 얻는다. 구 사이드카(404)·네트워크 실패·
  *   깨진 응답이면 null을 돌려 호출자가 직접 CDP 방식으로 폴백하게 한다.
+ * - evaluate 통합 (2026-11-17 P1): getBrowserState는 visibility 평가와
+ *   URL 읽기 평가를 나누지 않고 프로브 식(visibility·url·title 병합)
+ *   1회로 읽는다 (직접 CDP 경로 5왕복 → 4왕복, 약 170ms 절감).
+ *   프로브가 url·title을 못 주면(XML 문서·타임아웃·깨진 응답) 별도
+ *   평가로 읽는 폴백이 있어 동작이 동일하다.
  * 카나리아: 단계 보고(stage)나 폴백 조건을 깨면 해당 테스트가 실패한다.
  */
 import { fetchSidecarBrowserState, getBrowserState, goBackSession, goForwardSession, navigateSession, REMOTE_DISPLAY_SCALE, wsToHttpUrl, type CdpSocket } from '../../src/modules/browse/cdp'
@@ -89,14 +94,24 @@ class FakeSocket implements CdpSocket {
 const WS_URL = 'wss://browser.example/devtools/browser/abc'
 const TARGET = 'https://example.com/page'
 
+/** 병합 프로브 응답: visibility·url·title을 한 번의 평가로 돌려준다
+ *  (2026-11-17 P1 evaluate 통합 — 실제 Chromium의 프로브 결과 모양). */
+function probeResult(
+  visibility: 'visible' | 'hidden',
+  url = 'https://example.com',
+  title = 't',
+): { result: { result: { type: string; value: string } } } {
+  return { result: { result: { type: 'string', value: JSON.stringify({ visibility, url, title }) } } }
+}
+
 function happyHandler(msg: Record<string, any>, emit: (m: unknown) => void): void {
   if (msg.method === 'Target.getTargets') {
     emit({ id: msg.id, result: { targetInfos: [{ type: 'page', targetId: 'page-1' }, { type: 'browser' }] } })
   } else if (msg.method === 'Target.attachToTarget') {
     emit({ id: msg.id, result: { sessionId: 'sess-1' } })
   } else if (msg.method === 'Runtime.evaluate') {
-    // 활성 탭 식별용 visibility 평가 — 단일 탭은 visible이다.
-    emit({ id: msg.id, result: { result: { type: 'string', value: 'visible' } } })
+    // 활성 탭 식별용 프로브 평가 — 단일 탭은 visible이다.
+    emit({ id: msg.id, ...probeResult('visible') })
   } else if (msg.method === 'Page.navigate') {
     emit({ id: msg.id, result: {} })
   }
@@ -161,7 +176,7 @@ describe('navigateSession — 정상 경로', () => {
       } else if (msg.method === 'Target.attachToTarget') {
         emit({ id: msg.id, result: { sessionId: 's' } })
       } else if (msg.method === 'Runtime.evaluate') {
-        emit({ id: msg.id, result: { result: { type: 'string', value: 'visible' } } })
+        emit({ id: msg.id, ...probeResult('visible') })
       } else if (msg.method === 'Page.navigate') {
         emit({ id: msg.id, result: {} })
       }
@@ -191,9 +206,9 @@ describe('navigateSession — 키오스크 팝업 정리 (2026-11-14)', () => {
       } else if (msg.method === 'Target.attachToTarget') {
         emit({ id: msg.id, result: { sessionId: `sess-${msg.params.targetId}` } })
       } else if (msg.method === 'Runtime.evaluate') {
-        // 영구 탭만 visible, 팝업은 hidden이다.
+        // 영구 탭만 visible, 팝업은 hidden이다 (병합 프로브로 답한다).
         const vis = String(msg.sessionId ?? '').endsWith('page-1') ? 'visible' : 'hidden'
-        emit({ id: msg.id, result: { result: { type: 'string', value: vis } } })
+        emit({ id: msg.id, ...probeResult(vis as 'visible' | 'hidden') })
       } else if (msg.method === 'Page.navigate') {
         emit({ id: msg.id, result: {} })
       }
@@ -237,7 +252,7 @@ describe('navigateSession — 활성 탭 이동 (2026-11-16 QA 4차)', () => {
         if (vis === 'error') {
           emit({ id: msg.id, error: { message: 'eval denied' } })
         } else {
-          emit({ id: msg.id, result: { result: { type: 'string', value: vis ?? 'hidden' } } })
+          emit({ id: msg.id, ...probeResult((vis ?? 'hidden') as 'visible' | 'hidden') })
         }
       } else if (msg.method === 'Page.navigate') {
         emit({ id: msg.id, result: {} })
@@ -308,8 +323,8 @@ describe('navigateSession — 뷰포트 (2026-11-12 원격 화면 짤림 수정)
     } else if (msg.method === 'Target.attachToTarget') {
       emit({ id: msg.id, result: { sessionId: 'sess-1' } })
     } else if (msg.method === 'Runtime.evaluate') {
-      // 활성 탭 식별용 visibility 평가만 온다 (DSF 측정은 QA 7차에 폐지).
-      emit({ id: msg.id, result: { result: { type: 'string', value: 'visible' } } })
+      // 활성 탭 식별용 프로브 평가만 온다 (DSF 측정은 QA 7차에 폐지).
+      emit({ id: msg.id, ...probeResult('visible') })
     } else if (msg.method === 'Emulation.setDeviceMetricsOverride') {
       emit({ id: msg.id, result: {} })
     } else if (msg.method === 'Page.navigate') {
@@ -362,7 +377,7 @@ describe('navigateSession — 뷰포트 (2026-11-12 원격 화면 짤림 수정)
       } else if (msg.method === 'Target.attachToTarget') {
         emit({ id: msg.id, result: { sessionId: 'sess-1' } })
       } else if (msg.method === 'Runtime.evaluate') {
-        emit({ id: msg.id, result: { result: { type: 'string', value: 'visible' } } })
+        emit({ id: msg.id, ...probeResult('visible') })
       } else if (msg.method === 'Emulation.setDeviceMetricsOverride') {
         emit({ id: msg.id, error: { message: 'nope' } })
       } else if (msg.method === 'Page.navigate') {
@@ -390,9 +405,13 @@ describe('getBrowserState — 원격 현재 상태 읽기 (2026-11-15 밤)', () 
     } else if (msg.method === 'Target.attachToTarget') {
       emit({ id: msg.id, result: { sessionId: 'sess-1' } })
     } else if (msg.method === 'Runtime.evaluate') {
-      // 활성 탭 식별용 visibility 평가와 URL 읽기 식을 구분해 답한다.
+      // 병합 프로브 식에는 visibility·url·title을 한 번에 답한다.
+      // 별도 URL 읽기 식(프로브 폴백)이 오면 URL JSON으로 답한다.
       if (String(msg.params?.expression ?? '').includes('visibilityState')) {
-        emit({ id: msg.id, result: { result: { type: 'string', value: 'visible' } } })
+        emit({
+          id: msg.id,
+          ...probeResult('visible', 'https://news.naver.com/article/123', '뉴스 기사 제목'),
+        })
       } else {
         emit({ id: msg.id, result: { result: { type: 'string', value: JSON.stringify({ url: 'https://news.naver.com/article/123', title: '뉴스 기사 제목' }) } } })
       }
@@ -410,18 +429,75 @@ describe('getBrowserState — 원격 현재 상태 읽기 (2026-11-15 밤)', () 
       canGoBack: true,
       canGoForward: true,
     })
-    // visibility 평가가 URL 읽기보다 먼저 나간다 (활성 탭 식별).
+    // P1 통합: visibility 평가와 URL 읽기 평가가 프로브 1회로 합쳐졌다
+    // (옛날에는 Runtime.evaluate가 2회 나갔다 — 1왕복 절감).
     expect(sock.sent.map((m) => m.method)).toEqual([
       'Target.getTargets',
       'Target.attachToTarget',
       'Runtime.evaluate',
-      'Runtime.evaluate',
       'Page.getNavigationHistory',
     ])
     const evals = sock.sent.filter((m) => m.method === 'Runtime.evaluate')
+    expect(evals).toHaveLength(1)
     expect(evals[0].params.expression).toContain('visibilityState')
-    expect(evals[1].params.expression).toContain('location.href')
+    expect(evals[0].params.expression).toContain('location.href')
+    expect(evals[0].params.expression).toContain('document.title')
     expect(sock.closed).toBe(true)
+  })
+
+  test('프로브에 title이 없으면(XML 문서) 별도 평가로 읽어 같은 결과를 돌려준다', async () => {
+    // 프로브는 visible인데 title이 빠졌다 — page가 null이 돼 별도
+    // 평가가 나가야 한다. 별도 평가가 없으면 url이 있어도 null이 된다.
+    const sock = new FakeSocket((msg, emit) => {
+      if (msg.method === 'Target.getTargets') {
+        emit({ id: msg.id, result: { targetInfos: [{ type: 'page', targetId: 'page-1' }] } })
+      } else if (msg.method === 'Target.attachToTarget') {
+        emit({ id: msg.id, result: { sessionId: 'sess-1' } })
+      } else if (msg.method === 'Runtime.evaluate') {
+        if (String(msg.params?.expression ?? '').includes('visibilityState')) {
+          emit({
+            id: msg.id,
+            result: { result: { type: 'string', value: JSON.stringify({ visibility: 'visible', url: 'https://example.com/feed.xml' }) } },
+          })
+        } else {
+          emit({ id: msg.id, result: { result: { type: 'string', value: JSON.stringify({ url: 'https://example.com/feed.xml', title: '피드' }) } } })
+        }
+      } else if (msg.method === 'Page.getNavigationHistory') {
+        emit({ id: msg.id, result: { currentIndex: 0, entries: [{ id: 1 }] } })
+      }
+    })
+    const r = await getBrowserState(WS_URL, async () => sock as CdpSocket)
+    expect(r).toEqual({
+      url: 'https://example.com/feed.xml',
+      title: '피드',
+      canGoBack: false,
+      canGoForward: false,
+    })
+    expect(sock.sent.filter((m) => m.method === 'Runtime.evaluate')).toHaveLength(2)
+  })
+
+  test('프로브가 깨지면 첫 탭으로 폴백해 별도 평가로 읽는다', async () => {
+    // 프로브 응답이 깨진 JSON이면 visibility를 못 읽어 첫 탭 폴백이
+    // 되고, page가 없어 별도 평가가 나간다 — 별도 평가가 성공하면
+    // 상태는 정상으로 읽힌다.
+    const sock = new FakeSocket((msg, emit) => {
+      if (msg.method === 'Target.getTargets') {
+        emit({ id: msg.id, result: { targetInfos: [{ type: 'page', targetId: 'page-1' }] } })
+      } else if (msg.method === 'Target.attachToTarget') {
+        emit({ id: msg.id, result: { sessionId: 'sess-1' } })
+      } else if (msg.method === 'Runtime.evaluate') {
+        if (String(msg.params?.expression ?? '').includes('visibilityState')) {
+          emit({ id: msg.id, result: { result: { type: 'string', value: '{{{깨진 프로브' } } })
+        } else {
+          emit({ id: msg.id, result: { result: { type: 'string', value: JSON.stringify({ url: 'https://example.com', title: 't' }) } } })
+        }
+      } else if (msg.method === 'Page.getNavigationHistory') {
+        emit({ id: msg.id, result: { currentIndex: 0, entries: [{ id: 1 }] } })
+      }
+    })
+    const r = await getBrowserState(WS_URL, async () => sock as CdpSocket)
+    expect(r).toEqual({ url: 'https://example.com', title: 't', canGoBack: false, canGoForward: false })
+    expect(sock.sent.filter((m) => m.method === 'Runtime.evaluate')).toHaveLength(2)
   })
 
   test('첫 항목이면 뒤로 불가, 마지막 항목이면 앞으로 불가', async () => {
@@ -433,7 +509,7 @@ describe('getBrowserState — 원격 현재 상태 읽기 (2026-11-15 밤)', () 
           emit({ id: msg.id, result: { sessionId: 'sess-1' } })
         } else if (msg.method === 'Runtime.evaluate') {
           if (String(msg.params?.expression ?? '').includes('visibilityState')) {
-            emit({ id: msg.id, result: { result: { type: 'string', value: 'visible' } } })
+            emit({ id: msg.id, ...probeResult('visible', 'https://example.com', 't') })
           } else {
             emit({ id: msg.id, result: { result: { type: 'string', value: JSON.stringify({ url: 'https://example.com', title: 't' }) } } })
           }
@@ -524,9 +600,9 @@ describe('goBackSession/goForwardSession — 원격 뒤로/앞으로 (2026-11-15
       } else if (msg.method === 'Target.attachToTarget') {
         emit({ id: msg.id, result: { sessionId: 'sess-1' } })
       } else if (msg.method === 'Runtime.evaluate') {
-        // 활성 탭 식별용 visibility 평가에 visible로 답한다 (무응답이면
+        // 활성 탭 식별용 프로브 평가에 visible로 답한다 (무응답이면
         // 타깃당 1.5초 제한까지 기다려 테스트가 느려진다).
-        emit({ id: msg.id, result: { result: { type: 'string', value: 'visible' } } })
+        emit({ id: msg.id, ...probeResult('visible') })
       } else if (msg.method === 'Page.getNavigationHistory') {
         if (history === 'error') emit({ id: msg.id, error: { message: 'no history' } })
         else emit({ id: msg.id, result: history })
@@ -632,7 +708,8 @@ describe('attachActivePage — 활성 탭 선택 (2026-11-16 QA 1차)', () => {
           if (tab.visibility === 'error') {
             emit({ id: msg.id, error: { message: 'eval denied' } })
           } else {
-            emit({ id: msg.id, result: { result: { type: 'string', value: tab.visibility } } })
+            // 병합 프로브로 답한다 — 해당 탭의 visibility와 URL을 함께.
+            emit({ id: msg.id, ...probeResult(tab.visibility as 'visible' | 'hidden', tab.url, 't') })
           }
         } else {
           emit({ id: msg.id, result: { result: { type: 'string', value: JSON.stringify({ url: tab?.url ?? 'https://example.com', title: 't' }) } } })
@@ -652,11 +729,10 @@ describe('attachActivePage — 활성 탭 선택 (2026-11-16 QA 1차)', () => {
     ]))
     const r = await getBrowserState(WS_URL, async () => sock as CdpSocket)
     expect(r?.url).toBe('https://news.naver.com/article/123')
-    // URL 읽기·히스토리는 visible 탭의 세션으로 간다 (첫 타깃이 아니다).
-    const urlEval = sock.sent.find(
-      (m) => m.method === 'Runtime.evaluate' && String(m.params.expression).includes('location.href'),
-    )
-    expect(urlEval?.sessionId).toBe('sess-page-2')
+    // 프로브는 두 탭을 순서대로 스캔하고, 히스토리는 visible 탭의
+    // 세션으로 간다 (첫 타깃이 아니다). URL은 page-2 프로브에서 왔다.
+    const evals = sock.sent.filter((m) => m.method === 'Runtime.evaluate')
+    expect(evals.map((m) => m.sessionId)).toEqual(['sess-page-1', 'sess-page-2'])
     const hist = sock.sent.find((m) => m.method === 'Page.getNavigationHistory')
     expect(hist?.sessionId).toBe('sess-page-2')
   })
@@ -668,10 +744,11 @@ describe('attachActivePage — 활성 탭 선택 (2026-11-16 QA 1차)', () => {
     ]))
     const r = await getBrowserState(WS_URL, async () => sock as CdpSocket)
     expect(r?.url).toBe('https://www.naver.com')
-    const urlEval = sock.sent.find(
-      (m) => m.method === 'Runtime.evaluate' && String(m.params.expression).includes('location.href'),
-    )
-    expect(urlEval?.sessionId).toBe('sess-page-1')
+    // 두 탭을 스캔한 뒤 첫 탭 프로브의 URL을 쓴다 (별도 평가 없음).
+    const evals = sock.sent.filter((m) => m.method === 'Runtime.evaluate')
+    expect(evals.map((m) => m.sessionId)).toEqual(['sess-page-1', 'sess-page-2'])
+    const hist = sock.sent.find((m) => m.method === 'Page.getNavigationHistory')
+    expect(hist?.sessionId).toBe('sess-page-1')
   })
 
   test('visibility 평가가 실패하면 첫 타깃으로 폴백한다', async () => {
@@ -694,10 +771,8 @@ describe('attachActivePage — 활성 탭 선택 (2026-11-16 QA 1차)', () => {
     const started = Date.now()
     const r = await getBrowserState(WS_URL, async () => sock as CdpSocket)
     expect(r?.url).toBe('https://news.naver.com/article/123')
-    const urlEval = sock.sent.find(
-      (m) => m.method === 'Runtime.evaluate' && String(m.params.expression).includes('location.href'),
-    )
-    expect(urlEval?.sessionId).toBe('sess-page-2')
+    const evals = sock.sent.filter((m) => m.method === 'Runtime.evaluate')
+    expect(evals.map((m) => m.sessionId)).toEqual(['sess-page-1', 'sess-page-2'])
     // 1.5초 제한으로 건너뛰므로 5초 전체 타임아웃보다 훨씬 빨리 끝난다.
     expect(Date.now() - started).toBeLessThan(4000)
   }, 10000)
@@ -739,7 +814,7 @@ describe('navigateSession — 연결·단계 실패', () => {
     const sock = new FakeSocket((msg, emit) => {
       if (msg.method === 'Target.getTargets') emit({ id: msg.id, result: { targetInfos: [{ type: 'page', targetId: 'p' }] } })
       else if (msg.method === 'Target.attachToTarget') emit({ id: msg.id, result: { sessionId: 's' } })
-      else if (msg.method === 'Runtime.evaluate') emit({ id: msg.id, result: { result: { type: 'string', value: 'visible' } } })
+      else if (msg.method === 'Runtime.evaluate') emit({ id: msg.id, ...probeResult('visible') })
       else if (msg.method === 'Page.navigate') emit({ id: msg.id, error: { message: 'cannot navigate' } })
     })
     const r = await navigateSession(WS_URL, TARGET, async () => sock as CdpSocket)

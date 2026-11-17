@@ -50,8 +50,7 @@
      응답 없이 걸리면 이 시간 뒤에 중단해 호출자가 {status: 0}으로
      정리하게 한다 (2026-11-16 QA 1차: 폴링 fetch가 영원히 걸리면
      statePolling이 안 풀려 주소가 안 바뀌었다. QA 4차: 뷰포트 fetch도
-     마찬가지 — 타임아웃이 없으면 한 번의 정체로 주기 재적용의
-     viewportReapplying이 영원히 걸려 새 탭·이동 후 크기가 안 맞는다). */
+     마찬가지 — 타임아웃이 없으면 한 번의 정체로 적용이 영원히 멈춘다). */
   var FETCH_TIMEOUT_MS = 10000;
 
   /* fetch에 AbortController 타임아웃을 건다. 요청이 끝나면 타이머를
@@ -199,8 +198,8 @@
   /* 이동 없이 원격 뷰포트만 맞춘다 (2026-11-15): 라이브 진입·리사이즈
      때 호출한다. Promise<{ status, body }> — navigate와 같은 모양.
      10초 타임아웃 (2026-11-16 QA 4차): 안 끝나면 {status: 0}으로 돌려
-     주기 재적용의 viewportReapplying이 풀리게 한다 — 타임아웃이 없으면
-     한 번의 정체로 재적용이 영원히 멈춘다 (plain fetch 시절의 결함). */
+     호출자가 정리하게 한다 — 타임아웃이 없으면 한 번의 정체로 적용이
+     영원히 멈춘다 (plain fetch 시절의 결함). */
   function defaultApplyViewport(viewport) {
     if (typeof fetch !== 'function') return Promise.resolve({ status: 0, body: null });
     if (!viewport || viewport.width <= 0 || viewport.height <= 0) {
@@ -275,7 +274,7 @@
   }
 
   /**
-   * deps = { doc, navigate, applyViewport, onChange, checkUnlock, submitUnlock, setQuality, pollDelayMs, fetchState, history, onState, statePollMs, viewportReapplyMs }
+   * deps = { doc, navigate, applyViewport, onChange, checkUnlock, submitUnlock, setQuality, pollDelayMs, fetchState, history, onState, statePollMs }
    * doc에서 #bwLiveFrame/#bwNoticeCard/#bwNoticeMsg/#bwNoticeClose와
    * #bwLockCard/#bwLockForm/#bwLockPassword/#bwLockConfirm/#bwLockMsg/
    * #bwLockSubmit/#bwLockClose/#bwLockTitle/#bwLockDesc를 찾는다 (없으면
@@ -287,9 +286,12 @@
    * fetchState()·history(direction)도 같은 모양의 테스트 주입 지난
    * (2026-11-15 원격 상태 폴링·뒤로/앞으로). onState(body)는 폴링이
    * 받은 원격 상태를 주인에게 알리는 콜백, statePollMs는 폴링 간격
-   * (기본 2000ms). viewportReapplyMs는 뷰포트 주기 재적용 간격
-   * (기본 10000ms, 2026-11-16 QA 2차: 새 탭 적용용). onChange()는
-   * 상태 변경 등 주인의 너비를 다시 그리며 알림 콜백.
+   * (기본 2000ms). onChange()는 상태 변경 등 주인의 너비를 다시
+   * 그리며 알림 콜백. 뷰포트 주기 재적용(2026-11-16 QA 2차, 10초)은
+   * 2026-11-17 P1에 폐지했다 — 사이드카 영구 CDP 세션이 새 탭에도
+   * 현재 뷰포트를 즉시 적용하므로 클라이언트 재적용이 불필요하다
+   * (사이드카 Target.setDiscoverTargets). 뷰포트는 진입·navigate·
+   * 리사이즈 때만 맞춘다.
    */
   function createLive(deps) {
     deps = deps || {};
@@ -310,8 +312,6 @@
       typeof deps.history === 'function' ? deps.history : defaultHistory;
     var pollDelayMs = typeof deps.pollDelayMs === 'number' ? deps.pollDelayMs : 5000;
     var statePollMs = typeof deps.statePollMs === 'number' ? deps.statePollMs : 2000;
-    var viewportReapplyMs =
-      typeof deps.viewportReapplyMs === 'number' ? deps.viewportReapplyMs : 10000;
     var onChange =
       typeof deps.onChange === 'function'
         ? deps.onChange
@@ -357,10 +357,6 @@
     var statePollTimer = null;
     var statePolling = false;
     var statePollPromise = null;
-    /* 뷰포트 주기 재적용 상태 (2026-11-16 QA 2차): 주기 타이머·진행 중 플래그. */
-    var viewportReapplyTimer = null;
-    var viewportReapplying = false;
-
     function sameViewport(a, b) {
       if (!a || !b) return false;
       return Math.round(a.width) === Math.round(b.width) && Math.round(a.height) === Math.round(b.height);
@@ -369,15 +365,15 @@
     /* 뷰포트를 서버에 적용하고 성공하면 기록한다. 실패하면 기록하지
        않고 2초 뒤 한 번만 다시 시도한다 (서버 일시 장애 대비 — 같은
        크기에 대한 재시도는 한 번으로 끝내고, 새 크기가 오면 다시
-       한 번의 재시도를 얻는다). force가 참이면 같은 크기라도 서버에
-       다시 보낸다 (주기 재적용: 목적이 크기 변경이 아니라 새 탭
-       적용이다). 늦게 도착한 응답은 liveGen으로 버린다 — endLive
-       뒤에 lastAppliedViewport를 채우면 다음 시작 때 같은 크기의
-       적용을 건너뛰어 버린다 (주기 재적용은 요청이 떠 있는 시간이
-       길어 이 경합이 잦다). */
-    function applyViewportNow(viewport, force) {
+       한 번의 재시도를 얻는다). 같은 크기는 다시 보내지 않는다
+       (2026-11-17 P1: 10초 주기 재적용 폐지 — 새 탭 적용은 사이드카
+       영구 CDP가 맡으므로 클라이언트가 같은 크기를 되풀이할 이유가
+       없다). 늦게 도착한 응답은 liveGen으로 버린다 — endLive 뒤에
+       lastAppliedViewport를 채우면 다음 시작 때 같은 크기의 적용을
+       건너뛰어 버린다. */
+    function applyViewportNow(viewport) {
       if (!viewport || viewport.width <= 0 || viewport.height <= 0) return Promise.resolve(false);
-      if (!force && sameViewport(viewport, lastAppliedViewport)) return Promise.resolve(true);
+      if (sameViewport(viewport, lastAppliedViewport)) return Promise.resolve(true);
       if (!sameViewport(viewport, lastFailedViewport)) viewportRetryUsed = false;
       var gen = liveGen;
       return applyViewport(viewport).then(function (res) {
@@ -503,40 +499,6 @@
       }
     }
 
-    /* 뷰포트 주기 재적용 (2026-11-16 QA 2차): 새 탭(Ctrl+T)은
-       /viewport 이후에 생겨 override를 상속받지 않아 자연 DSF로 남는다
-       (실측 1096×500). 라이브가 켜져 있는 동안 10초마다 현재 스테이지
-       크기를 다시 적용해 새 탭을 바로잡는다. 서버는 이미 일치하는 탭을
-       건드리지 않으므로(읽기 우선) 올바른 탭은 깜빡이지 않는다.
-       요청이 진행 중이면 틱을 건너뛴다 (상태 폴링과 같은 겹침 방지). */
-    function reapplyViewportOnce() {
-      if (liveState !== 'on') return;
-      if (viewportReapplying) return;
-      var viewport = measureViewport();
-      if (!viewport) return;
-      viewportReapplying = true;
-      applyViewportNow(viewport, true).then(
-        function () {
-          viewportReapplying = false;
-        },
-        function () {
-          viewportReapplying = false;
-        },
-      );
-    }
-
-    function startViewportReapply() {
-      stopViewportReapply();
-      viewportReapplyTimer = setInterval(reapplyViewportOnce, viewportReapplyMs);
-    }
-
-    function stopViewportReapply() {
-      if (viewportReapplyTimer !== null) {
-        clearInterval(viewportReapplyTimer);
-        viewportReapplyTimer = null;
-      }
-    }
-
     /* 원격 뒤로/앞으로 이동: 성공 여부를 돌려준다. 꺼져 있으면 false
        (주인은 라이브가 꺼져 있을 때만 로컬 기록으로 폴백한다 —
        켜져 있을 때의 폴백은 낡은 기록으로 엉뚱한 곳에 간다, 2026-11-16). */
@@ -641,7 +603,6 @@
       setLockBusy(false);
       liveState = 'locked';
       stopStatePolling();
-      stopViewportReapply();
       onChange();
     }
 
@@ -848,7 +809,6 @@
       onChange();
       startStageObserver();
       startStatePolling();
-      startViewportReapply();
       if (!url) {
         // 뷰포트 적용 실패는 시작을 막지 않는다 (화면은 뜨고, 다음
         // 진입·리사이즈 때 다시 시도한다).
@@ -887,7 +847,6 @@
         // 시크릿 미설정 — 화면 프록시도 못 뜨므로 뷰를 끄고 안내한다.
         liveState = 'notice';
         stopStatePolling();
-        stopViewportReapply();
         if (liveFrame) liveFrame.removeAttribute('src');
         setNotice('원격 브라우저가 아직 설정되지 않았어요.');
         onChange();
@@ -908,7 +867,6 @@
       liveState = 'off';
       stopStageObserver();
       stopStatePolling();
-      stopViewportReapply();
       lastAppliedViewport = null;
       lastFailedViewport = null;
       viewportRetryUsed = false;

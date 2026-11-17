@@ -26,11 +26,11 @@
  *   {status: 0}으로 정리돼 statePolling이 풀리고 다음 폴링이 돈다.
  *   타임아웃이 없으면 폴링이 영원히 걸려 주소가 안 바뀐다.
  *   (QA 4차: 뷰포트 적용도 같은 타임아웃 — 없으면 한 번의 정체로
- *   주기 재적용의 viewportReapplying이 영원히 걸려 크기가 안 맞는다.)
- * - 뷰포트 주기 재적용 (2026-11-16 QA 2차): 새 탭(Ctrl+T)은
- *   /viewport 이후에 생겨 override를 상속받지 않으므로, 라이브가
- *   켜져 있는 동안 10초마다 같은 크기라도 applyViewport를 다시 부른다.
- *   endLive·notice 전환 시 멈추고, 요청 진행 중에는 겹치지 않는다.
+ *   적용이 영원히 멈춘다.)
+ * - 뷰포트 주기 재적용 폐지 (2026-11-17 P1): 10초마다 같은 크기라도
+ *   applyViewport를 다시 부르던 QA 2차 메커니즘은 사이드카 영구 CDP가
+ *   새 탭에도 뷰포트를 즉시 적용하므로 불필요해 폐지됐다. 시간이
+ *   지나도 applyViewport가 다시 나가지 않는다 (진입·리사이즈 때만).
  * 카나리아: 폴링 시작·정지·hidden 일시정지를 빼면 해당 테스트가 실패한다.
  */
 import * as fs from 'fs'
@@ -92,7 +92,6 @@ function makeLive(opts: {
   navigateImpl?: (url: string, viewport: unknown) => Promise<unknown>
   applyViewportImpl?: (viewport: unknown) => Promise<unknown>
   statePollMs?: number
-  viewportReapplyMs?: number
 } = {}): LiveHarness {
   const stateCalls = { n: 0 }
   const viewportCalls = { n: 0 }
@@ -135,7 +134,6 @@ function makeLive(opts: {
     },
     onChange: () => undefined,
     statePollMs: opts.statePollMs ?? 2000,
-    viewportReapplyMs: opts.viewportReapplyMs ?? 10000,
   })
   return {
     live,
@@ -329,7 +327,7 @@ describe('browser-live 상태 폴링', () => {
   })
 })
 
-describe('browser-live 뷰포트 주기 재적용 (2026-11-16 QA 2차)', () => {
+describe('browser-live 뷰포트 주기 재적용 폐지 (2026-11-17 P1)', () => {
   beforeEach(() => {
     jest.useFakeTimers()
   })
@@ -337,79 +335,42 @@ describe('browser-live 뷰포트 주기 재적용 (2026-11-16 QA 2차)', () => {
     jest.useRealTimers()
   })
 
-  test('enterLive 후 10초마다 같은 크기라도 applyViewport를 다시 부른다 (새 탭 적용)', async () => {
+  test('enterLive 후 30초가 지나도 applyViewport를 다시 부르지 않는다', async () => {
+    // 10초 주기 재적용(QA 2차)은 사이드카 영구 CDP가 새 탭에도
+    // 뷰포트를 즉시 적용하므로 폐지됐다 — 다시 넣으면 이 테스트가
+    // 실패한다. URL 진입은 navigate가 뷰포트를 적용하므로 호출 0회.
     setupFixture()
-    const h = makeLive({ viewportReapplyMs: 10000 })
+    const h = makeLive()
     await h.live.enterLive('https://www.naver.com')
     await flush()
-    // URL 진입은 navigate가 뷰포트를 적용하므로 applyViewport 호출은 아직 0회.
     expect(h.viewportCalls).toBe(0)
-    // 크기가 안 바뀌어도 재적용한다 — 같은 크기 스킵을 우회하지 않으면
-    // 새 탭에 override가 영원히 안 닿는다 (force 플래그의 존재 이유).
-    jest.advanceTimersByTime(10000)
+    jest.advanceTimersByTime(30000)
     await flush()
-    expect(h.viewportCalls).toBe(1)
-    jest.advanceTimersByTime(10000)
-    await flush()
-    expect(h.viewportCalls).toBe(2)
+    expect(h.viewportCalls).toBe(0)
     await h.live.endLive()
   })
 
-  test('endLive하면 재적용이 멈춘다', async () => {
+  test('url 없이 진입해도 시간이 지나도 다시 부르지 않는다', async () => {
     setupFixture()
-    const h = makeLive({ viewportReapplyMs: 10000 })
-    await h.live.enterLive('https://www.naver.com')
-    await flush()
-    jest.advanceTimersByTime(10000)
+    const h = makeLive()
+    await h.live.enterLive()
     await flush()
     expect(h.viewportCalls).toBe(1)
-    await h.live.endLive()
     jest.advanceTimersByTime(30000)
     await flush()
     expect(h.viewportCalls).toBe(1)
-  })
-
-  test('재적용 요청이 진행 중이면 다음 틱이 겹쳐서 부르지 않는다', async () => {
-    setupFixture()
-    let release!: (v: unknown) => void
-    const pending = new Promise((resolve) => {
-      release = resolve
-    })
-    const h = makeLive({
-      viewportReapplyMs: 10000,
-      applyViewportImpl: () => pending,
-    })
-    await h.live.enterLive('https://www.naver.com')
-    await flush()
-    jest.advanceTimersByTime(10000)
-    await flush()
-    expect(h.viewportCalls).toBe(1)
-    // 아직 끝나지 않았는데 10초가 더 지나도 다시 부르지 않는다.
-    jest.advanceTimersByTime(10000)
-    await flush()
-    expect(h.viewportCalls).toBe(1)
-    // 끝나면 다음 틱에 다시 부른다.
-    release({ status: 200, body: { ok: true, stage: 'ok' } })
-    await flush()
-    jest.advanceTimersByTime(10000)
-    await flush()
-    expect(h.viewportCalls).toBe(2)
     await h.live.endLive()
   })
 
-  test('navigate 503으로 notice가 되면 재적용이 멈춘다', async () => {
+  test('navigate 503으로 notice가 되면 뷰포트 호출이 없다', async () => {
     setupFixture()
     const h = makeLive({
-      viewportReapplyMs: 10000,
       navigateImpl: () => Promise.resolve({ status: 503, body: { ok: false } }),
     })
     const started = await h.live.enterLive('https://www.naver.com')
     expect(started).toBe(false)
     expect(h.live.state()).toBe('notice')
     await flush()
-    // 첫 틱(10초) 전에 notice로 전환됐으므로 호출은 0회이고, 30초가
-    // 지나도 그대로다. (재적용이 시작 자체를 한다는 것은 첫 테스트가
-    // 증명한다 — 이 테스트는 정지만을 본다.)
     jest.advanceTimersByTime(30000)
     await flush()
     expect(h.viewportCalls).toBe(0)
@@ -556,7 +517,7 @@ describe('browser-live fetch 타임아웃 (2026-11-16 QA 1차)', () => {
   }
 
   /** fetchState/history 주입 없이 기본 fetch를 쓰는 live (타임아웃 대상). */
-  function makeLiveDefault(viewportReapplyMs = 10000): { live: any; states: Array<Record<string, unknown>> } {
+  function makeLiveDefault(): { live: any; states: Array<Record<string, unknown>> } {
     const states: Array<Record<string, unknown>> = []
     const api = loadLive()
     const live = api.createLive({
@@ -566,7 +527,6 @@ describe('browser-live fetch 타임아웃 (2026-11-16 QA 1차)', () => {
       },
       onChange: () => undefined,
       statePollMs: 2000,
-      viewportReapplyMs,
     })
     return { live, states }
   }
@@ -617,9 +577,7 @@ describe('browser-live fetch 타임아웃 (2026-11-16 QA 1차)', () => {
   test('viewport fetch가 10초 안에 안 끝나면 타임아웃돼 {status: 0}으로 정리되고 2초 뒤 재시도한다 (2026-11-16 QA 4차)', async () => {
     setupFixture()
     const calls = stubLiveFetch({ viewport: (init) => hangUntilAbort(init) })
-    // 주기 재적용(10초)은 끄고 단발 적용·재시도만 본다 — 틱이 끼면
-    // 호출 횟수로 타임아웃을 가릴 수 없다.
-    const { live } = makeLiveDefault(3600000)
+    const { live } = makeLiveDefault()
     // url 없는 진입: startLive가 applyViewportNow를 부른다 (기본 fetch 사용).
     await live.enterLive()
     await flush()
@@ -638,10 +596,11 @@ describe('browser-live fetch 타임아웃 (2026-11-16 QA 1차)', () => {
     await live.endLive()
   })
 
-  test('viewport 재적용이 한 번 멈춰도 타임아웃으로 풀려 다음 10초 틱에 다시 시도한다 (2026-11-16 QA 4차 wedge)', async () => {
+  test('viewport fetch가 한 번 멈춰도 타임아웃으로 풀려 2초 뒤 재시도가 성공한다 (2026-11-16 QA 4차 wedge, 2026-11-17 P1 주기 재적용 폐지)', async () => {
     setupFixture()
-    // 첫 호출만 abort까지 멈추고 이후는 즉시 성공한다 — 멈춤이 다음
-    // 틱을 막는지(플래그 wedge)가 이 테스트가 보는 성질이다.
+    // 첫 호출만 abort까지 멈추고 이후는 즉시 성공한다 — 멈춤이
+    // 재시도를 막는지(wedge)가 이 테스트가 보는 성질이다. 주기
+    // 재적용이 폐지됐으므로 재시도 뒤에는 시간만으로 더 안 나간다.
     let n = 0
     const calls = stubLiveFetch({
       viewport: (init) => {
@@ -650,21 +609,21 @@ describe('browser-live fetch 타임아웃 (2026-11-16 QA 1차)', () => {
         return Promise.resolve(jsonRes(200, { ok: true, stage: 'ok' }))
       },
     })
-    const { live } = makeLiveDefault(10000)
+    const { live } = makeLiveDefault()
     await live.enterLive()
     await flush()
     expect(calls.viewportCalls()).toBe(1)
-    // +10초: 재적용 틱이 먼저(인터벌이 abort 타이머보다 먼저 만들어짐)
-    // 두 번째 호출을 내고, 이어서 첫 호출의 abort가 정리한다. 두 번째
-    // 호출이 성공해 lastApplied가 채워지므로 abort 뒤의 재시도는
-    // 같은 크기라 스킵된다.
+    // +10초: 첫 호출이 abort돼 {status: 0}으로 정리되고 2초 뒤 재시도.
     jest.advanceTimersByTime(10000)
+    await flush()
+    expect(calls.viewportCalls()).toBe(1) // 아직 재시도 전
+    jest.advanceTimersByTime(2000)
+    await flush()
+    expect(calls.viewportCalls()).toBe(2) // 재시도가 성공한다
+    // 이후 30초가 지나도 주기 재적용이 없어 더 나가지 않는다.
+    jest.advanceTimersByTime(30000)
     await flush()
     expect(calls.viewportCalls()).toBe(2)
-    // 다음 틱에도 다시 시도한다 — 플래그가 걸렸으면 여기서 2회에 머문다.
-    jest.advanceTimersByTime(10000)
-    await flush()
-    expect(calls.viewportCalls()).toBe(3)
     await live.endLive()
   })
 })

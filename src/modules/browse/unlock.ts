@@ -70,12 +70,60 @@ export async function fetchUnlockStatus(
   }
 }
 
-/** 볼륨이 설정됐고 잠겨 있으면 true. 미설정이거나 조회 실패면 false. */
+/**
+ * 언록 상태 캐시 (2026-11-17 P1: /state는 2초마다 폴링되는데 매번
+ * 언록 조회 1왕복 + 상태 조회 1왕복을 했다 — 언록 조회만 캐시해도
+ * 1왕복(약 170ms)이 줄어든다. 모듈 단위(Worker 아이솔레이트별) 캐시라
+ * 콜드 아이솔레이트는 첫 호출에 한 번 조회한다.
+ *
+ * 무효화 — 잘못된 캐시가 잠금 상태를 거짓으로 보여주면 안 된다:
+ * - 언록/셋업 POST가 성공(2xx)하면 즉시 무효화한다 (이 Worker를 통한
+ *   상태 변경은 그 자리에서 반영 — "풀었는데 계속 423"이 없어야 한다).
+ *   실패(401·423 등)는 상태가 안 바뀌었으므로 캐시를 건드리지 않는다.
+ * - TTL 30초: Worker를 거치지 않는 상태 변경(서버 재부팅으로 잠김,
+ *   Run Command 직접 언록)은 TTL 안에서만 낡을 수 있다. 재부팅 후
+ *   최대 30초간 /state가 423 대신 502를 돌려줄 수 있으나, 잠금 자체는
+ *   chromium이 안 떠서 CDP가 실패하므로 접근이 열리는 일은 없고,
+ *   잠금 화면이 폴링하는 GET /unlock/status는 캐시를 안 타서 즉시
+ *   정확하다. 조회 실패(null)는 캐시하지 않는다 (다음 호출이 재시도).
+ * - 키는 호스트다 (env가 바뀌면 다른 호스트로 본다).
+ */
+export const UNLOCK_STATUS_CACHE_TTL_MS = 30_000
+
+let unlockStatusCache: { host: string; status: UnlockStatus; fetchedAt: number } | null = null
+
+/** 언록 상태 캐시를 버린다. 언록/셋업 성공 시 + 테스트 격리용. */
+export function invalidateUnlockStatusCache(): void {
+  unlockStatusCache = null
+}
+
+/** 캐시된 언록 상태(신선할 때만) 또는 새로 조회한 상태. 실패 시 null. */
+async function fetchUnlockStatusCached(
+  cfg: OracleConfig,
+  unlockSecret: string,
+): Promise<UnlockStatus | null> {
+  const now = Date.now()
+  if (
+    unlockStatusCache &&
+    unlockStatusCache.host === cfg.host &&
+    now - unlockStatusCache.fetchedAt < UNLOCK_STATUS_CACHE_TTL_MS
+  ) {
+    return unlockStatusCache.status
+  }
+  const status = await fetchUnlockStatus(cfg, unlockSecret)
+  if (status) {
+    unlockStatusCache = { host: cfg.host, status, fetchedAt: now }
+  }
+  return status
+}
+
+/** 볼륨이 설정됐고 잠겨 있으면 true. 미설정이거나 조회 실패면 false.
+ *  언록 상태는 30초 캐시를 쓴다 (위 주석 참조). */
 export async function isBrowserLocked(
   cfg: OracleConfig,
   unlockSecret: string,
 ): Promise<boolean> {
-  const status = await fetchUnlockStatus(cfg, unlockSecret)
+  const status = await fetchUnlockStatusCached(cfg, unlockSecret)
   return !!status && status.configured && !status.unlocked
 }
 
@@ -123,6 +171,10 @@ export function registerUnlockRoutes(app: Hono<{ Bindings: Env }>): void {
           body: JSON.stringify({ password: parsed.password }),
         })
         const resBody = await res.json().catch(() => ({}))
+        // 성공(2xx)하면 볼륨 상태가 바뀌었을 수 있으니 언록 상태 캐시를
+        // 즉시 버린다 — 안 그러면 "풀었는데 /state가 계속 423"이 된다.
+        // 실패(401·423 등)는 상태가 안 바뀌었으므로 캐시를 건드리지 않는다.
+        if (res.ok) invalidateUnlockStatusCache()
         return c.json(resBody, res.status as 200)
       } catch {
         return c.json({ ok: false, error: 'ORACLE_UPSTREAM' }, 502)

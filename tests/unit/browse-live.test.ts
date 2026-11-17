@@ -20,6 +20,7 @@
 import { Hono } from 'hono'
 import { browseApp } from '../../src/modules/browse/routes'
 import { toDirectCdpWsUrl } from '../../src/modules/browse/cdp'
+import { invalidateDirectCdpWsUrlCache } from '../../src/modules/browse/oracle-proxy'
 
 const app = new Hono()
 app.route('/api/browse', browseApp)
@@ -60,6 +61,11 @@ function stubFetch(handler: (url: string, init?: RequestInit) => Promise<unknown
     return handler(String(url), init)
   }) as typeof fetch
 }
+
+beforeEach(() => {
+  // 모듈 단위 CDP WS URL 캐시가 테스트 간에 새지 않게 한다.
+  invalidateDirectCdpWsUrlCache()
+})
 
 afterEach(() => {
   global.fetch = realFetch

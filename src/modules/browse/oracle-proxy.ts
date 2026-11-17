@@ -119,9 +119,40 @@ function parseViewport(raw: unknown): ViewportSize | undefined {
   return { width: Math.round(width), height: Math.round(height) }
 }
 
+/**
+ * CDP 브라우저 WS URL 캐시 (2026-11-17 P1: /navigate·/back·/forward·
+ * /state 폴백이 매번 /json/version 1왕복을 했다 — 캐시하면 그 왕복이
+ * 사라진다. 모듈 단위(Worker 아이솔레이트별) 캐시.
+ *
+ * 무효화 — WS URL은 Chromium 재시작 때마다 바뀐다 (/devtools/browser/
+ * <id>가 새로 발급된다). 낡은 URL로 연결하면 stage='connect' 실패가
+ * 되므로, CDP 작업이 'connect'로 실패하면 캐시를 버리고 버전을 다시
+ * 읽어 한 번만 재시도한다 (runCdpWithVersionRetry). TTL 60초는 그
+ * 밖의 낡음(재시도 없이 지나간 실패)을 묶는다. 조회 실패(null)는
+ * 캐시하지 않는다.
+ */
+export const DIRECT_CDP_WS_URL_CACHE_TTL_MS = 60_000
+
+let directCdpWsUrlCache: { host: string; port: number; url: string; fetchedAt: number } | null = null
+
+/** CDP WS URL 캐시를 버린다. 'connect' 실패 시 재시도 전 + 테스트 격리용. */
+export function invalidateDirectCdpWsUrlCache(): void {
+  directCdpWsUrlCache = null
+}
+
 /* CDP 브라우저 WS URL을 사이드카에서 받아 직접 연결용으로 바꾼다.
-   실패 시 null (호출자가 502 ORACLE_UPSTREAM으로 보고한다). */
+   캐시가 신선하면 조회 없이 돌려준다. 실패 시 null (호출자가
+   502 ORACLE_UPSTREAM으로 보고한다). */
 async function directCdpWsUrl(cfg: OracleConfig, secretHeaders: Record<string, string>): Promise<string | null> {
+  const now = Date.now()
+  if (
+    directCdpWsUrlCache &&
+    directCdpWsUrlCache.host === cfg.host &&
+    directCdpWsUrlCache.port === ORACLE_CDP_PORT &&
+    now - directCdpWsUrlCache.fetchedAt < DIRECT_CDP_WS_URL_CACHE_TTL_MS
+  ) {
+    return directCdpWsUrlCache.url
+  }
   let version: unknown
   try {
     const res = await fetch(`https://${cfg.host}:${ORACLE_CDP_PORT}/json/version`, {
@@ -133,7 +164,11 @@ async function directCdpWsUrl(cfg: OracleConfig, secretHeaders: Record<string, s
     return null
   }
   const publicWs = (version as { webSocketDebuggerUrl?: unknown })?.webSocketDebuggerUrl
-  return typeof publicWs === 'string' ? toDirectCdpWsUrl(publicWs, cfg.host, ORACLE_CDP_PORT) : null
+  const direct = typeof publicWs === 'string' ? toDirectCdpWsUrl(publicWs, cfg.host, ORACLE_CDP_PORT) : null
+  if (direct) {
+    directCdpWsUrlCache = { host: cfg.host, port: ORACLE_CDP_PORT, url: direct, fetchedAt: now }
+  }
+  return direct
 }
 
 type CdpGate =
@@ -189,6 +224,31 @@ async function gateCdp(
   const directWs = await directCdpWsUrl(cfg, secretHeaders)
   if (!directWs) return { ok: false, response: c.json({ ok: false, error: 'ORACLE_UPSTREAM' }, 502) }
   return { ok: true, directWs, secretHeaders }
+}
+
+/* CDP 게이트 + 'connect' 실패 시 1회 재시도 (2026-11-17 P1 버전 캐시).
+   run은 게이트가 준 directWs로 CDP 작업을 한 번 수행하고,
+   isConnectFailure가 그 결과를 'connect' 실패로 판정한다. 캐시된 WS
+   URL이 낡았으면(Chromium 재시작) 첫 시도가 'connect'로 실패하는데,
+   그때만 캐시를 버리고 버전을 다시 읽어 한 번 더 시도한다 — 재시도의
+   게이트는 언록 캐시를 써서 추가 왕복이 없다. 재시도 게이트 자체가
+   실패하면 원래 결과를 돌려준다 (재시도 불가 ≠ 원래 실패의 변질).
+   게이트 실패(잠금·버전 조회 실패)는 재시도하지 않고 그대로 돌려준다. */
+async function runCdpWithVersionRetry<T>(
+  c: { env: Env; json: (body: unknown, status?: number) => Response },
+  cfg: OracleConfig,
+  run: (gate: { directWs: string; secretHeaders: Record<string, string> }) => Promise<T>,
+  isConnectFailure: (result: T) => boolean,
+): Promise<{ ok: true; result: T } | { ok: false; response: Response }> {
+  const gate = await gateCdp(c, cfg)
+  if (!gate.ok) return { ok: false as const, response: gate.response }
+  let result = await run(gate)
+  if (isConnectFailure(result)) {
+    invalidateDirectCdpWsUrlCache()
+    const fresh = await gateCdp(c, cfg)
+    if (fresh.ok) result = await run(fresh)
+  }
+  return { ok: true, result }
 }
 
 export function registerOracleProxyRoutes(app: Hono<{ Bindings: Env }>): void {
@@ -247,12 +307,18 @@ export function registerOracleProxyRoutes(app: Hono<{ Bindings: Env }>): void {
     if (!validated.ok) return c.json({ ok: false, error: 'INVALID_URL' }, 400)
     const targetUrl = validated.url
     const viewport = parseViewport(body.viewport)
-    const gate = await gateCdp(c, cfg)
-    if (!gate.ok) return gate.response
-    const nav = await navigateSession(gate.directWs, targetUrl, defaultCdpConnect, {
-      headers: gate.secretHeaders,
-      viewport,
-    })
+    const ran = await runCdpWithVersionRetry(
+      c,
+      cfg,
+      (gate) =>
+        navigateSession(gate.directWs, targetUrl, defaultCdpConnect, {
+          headers: gate.secretHeaders,
+          viewport,
+        }),
+      (nav) => !nav.ok && nav.stage === 'connect',
+    )
+    if (!ran.ok) return ran.response
+    const nav = ran.result
     return c.json({ ok: nav.ok, nav: nav.ok ? 'ok' : 'fail', navStage: nav.stage })
   })
 
@@ -319,6 +385,8 @@ export function registerOracleProxyRoutes(app: Hono<{ Bindings: Env }>): void {
   // 사이드카가 구버전이거나 실패하면 null이 돌아오고, 아래 직접
   // CDP 방식으로 폴백한다 (배포 순서 어긋남 대비). 잠금 검사는
   // gateSidecar에서 한 번만 한다 (폴백 경로에서 다시 안 한다).
+  // 언록 조회는 30초 캐시를 쓴다 (unlock.ts) — /state 폴링 2초마다
+  // 언록 1왕복이 나가던 것을 없애 전체가 1왕복(약 0.17초)이 된다.
   app.get('/state', async (c) => {
     const cfg = oracleConfigOf(c.env)
     if (!cfg) return c.json({ ok: false, error: 'ORACLE_NOT_CONFIGURED' }, 503)
@@ -336,7 +404,12 @@ export function registerOracleProxyRoutes(app: Hono<{ Bindings: Env }>): void {
     const state = await getBrowserState(directWs, defaultCdpConnect, {
       headers: gate.secretHeaders,
     })
-    if (!state) return c.json({ ok: false, error: 'BROWSER_STATE' }, 502)
+    if (!state) {
+      // 폴백 실패 — 원인이 낡은 버전 캐시일 수 있으니 버려 다음 폴링(2초)이
+      // 버전을 다시 읽게 한다. 재시도는 안 한다 (폴링이 곧 다시 온다).
+      invalidateDirectCdpWsUrlCache()
+      return c.json({ ok: false, error: 'BROWSER_STATE' }, 502)
+    }
     return c.json({ ok: true, url: state.url, title: state.title, canGoBack: state.canGoBack, canGoForward: state.canGoForward })
   })
 
@@ -351,22 +424,34 @@ export function registerOracleProxyRoutes(app: Hono<{ Bindings: Env }>): void {
   app.post('/back', async (c) => {
     const cfg = oracleConfigOf(c.env)
     if (!cfg) return c.json({ ok: false, error: 'ORACLE_NOT_CONFIGURED' }, 503)
-    const gate = await gateCdp(c, cfg)
-    if (!gate.ok) return gate.response
-    const r = await goBackSession(gate.directWs, defaultCdpConnect, {
-      headers: gate.secretHeaders,
-    })
+    const ran = await runCdpWithVersionRetry(
+      c,
+      cfg,
+      (gate) =>
+        goBackSession(gate.directWs, defaultCdpConnect, {
+          headers: gate.secretHeaders,
+        }),
+      (r) => !r.ok && r.stage === 'connect',
+    )
+    if (!ran.ok) return ran.response
+    const r = ran.result
     return c.json({ ok: r.ok, stage: r.stage })
   })
 
   app.post('/forward', async (c) => {
     const cfg = oracleConfigOf(c.env)
     if (!cfg) return c.json({ ok: false, error: 'ORACLE_NOT_CONFIGURED' }, 503)
-    const gate = await gateCdp(c, cfg)
-    if (!gate.ok) return gate.response
-    const r = await goForwardSession(gate.directWs, defaultCdpConnect, {
-      headers: gate.secretHeaders,
-    })
+    const ran = await runCdpWithVersionRetry(
+      c,
+      cfg,
+      (gate) =>
+        goForwardSession(gate.directWs, defaultCdpConnect, {
+          headers: gate.secretHeaders,
+        }),
+      (r) => !r.ok && r.stage === 'connect',
+    )
+    if (!ran.ok) return ran.response
+    const r = ran.result
     return c.json({ ok: r.ok, stage: r.stage })
   })
 

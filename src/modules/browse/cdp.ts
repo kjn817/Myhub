@@ -173,8 +173,43 @@ async function runCdpScript<T>(
   }
 }
 
+/**
+ * 활성 탭 프로브 식 (2026-11-17 P1 evaluate 통합): visibility 판별과
+ * URL·제목 읽기를 한 번의 Runtime.evaluate로 합친다. getBrowserState는
+ * 옛날에 visibility 평가와 URL 읽기 평가를 나눠서 2왕복을 했다 —
+ * 프로브 1회로 visibility·url·title을 한 번에 받아 1왕복(약 170ms)을
+ * 줄인다. XML 문서처럼 document.title이 없는 페이지는 JSON에서 title이
+ * 빠지는데, 그때는 page가 null이 돼 getBrowserState가 기존처럼 별도
+ * 평가로 읽는다 (동작 동일).
+ */
+const PAGE_PROBE_EXPRESSION =
+  'JSON.stringify({visibility: document.visibilityState, url: location.href, title: document.title})'
+
+/** 프로브 평가 결과: visibility는 필수, url·title은 없으면 null. */
+interface PageProbe {
+  visibility: string
+  url: string | null
+  title: string | null
+}
+
+/** 프로브 평가 문자열(JSON)을 파싱한다. 깨졌거나 visibility가 없으면 null. */
+function parsePageProbe(raw: string | null): PageProbe | null {
+  if (raw === null) return null
+  try {
+    const parsed = JSON.parse(raw) as { visibility?: unknown; url?: unknown; title?: unknown }
+    if (typeof parsed.visibility !== 'string') return null
+    return {
+      visibility: parsed.visibility,
+      url: typeof parsed.url === 'string' ? parsed.url : null,
+      title: typeof parsed.title === 'string' ? parsed.title : null,
+    }
+  } catch {
+    return null
+  }
+}
+
 type AttachResult =
-  | { ok: true; sessionId: string; targetId: string }
+  | { ok: true; sessionId: string; targetId: string; page: { url: string; title: string } | null }
   | { ok: false; stage: 'targets' | 'attach' }
 
 /** 활성 탭 식별용 visibility 평가의 타깃당 제한 (ms). 동결된 탭의
@@ -212,18 +247,20 @@ async function evalStringWithTimeout(
  * 활성(visible) 페이지 타깃에 attach한다 (2026-11-16 QA 1차: 첫
  * 타깃은 사용자가 보는 탭이 아닐 수 있고, 동결된 백그라운드 탭에
  * evaluate를 걸면 타임아웃돼 /state가 매번 502가 됐다).
- * 모든 페이지 타깃에 차례로 attach해 document.visibilityState를
- * 평가하고 'visible'인 탭을 선택한다. visible인 탭이 없으면(전부
- * hidden·평가 실패·응답 없음 포함) attach에 성공한 첫 페이지 타깃으로
- * 폴백한다. attach가 전부 실패하면 stage='attach', 타깃이 없으면
- * stage='targets'. 라운드트립이 늘어도 괜찮다 — 폴링 간격 2초 +
- * 진행 중 가드가 있다. visible이 여러 탭이면 목록 순서상 첫 번째가
- * 이긴다 (가장 먼저 생긴 탭 — 키오스크 팝업이 떠 있어도 영구 탭이
- * visible로 보고되면 영구 탭이 선택된다).
+ * 모든 페이지 타깃에 차례로 attach해 프로브 식(visibility·url·title
+ * 병합, PAGE_PROBE_EXPRESSION)을 평가하고 'visible'인 탭을 선택한다.
+ * visible인 탭이 없으면(전부 hidden·평가 실패·응답 없음 포함) attach에
+ * 성공한 첫 페이지 타깃으로 폴백한다. attach가 전부 실패하면
+ * stage='attach', 타깃이 없으면 stage='targets'. 라운드트립이 늘어도
+ * 괜찮다 — 폴링 간격 2초 + 진행 중 가드가 있다. visible이 여러 탭이면
+ * 목록 순서상 첫 번째가 이긴다 (가장 먼저 생긴 탭 — 키오스크 팝업이
+ * 떠 있어도 영구 탭이 visible로 보고되면 영구 탭이 선택된다).
  * pages를 넘기면 getTargets를 다시 부르지 않고 그 목록을 쓴다
  * (navigateSession은 닫을 타깃 목록이 필요해 미리 조회해 둔다).
  * 성공 시 sessionId와 함께 targetId도 돌려준다 — 호출자가 선택된 탭
- * 외의 탭을 닫는 데 쓴다.
+ * 외의 탭을 닫는 데 쓴다. page는 선택된 탭의 프로브 결과(url·title) —
+ * 프로브가 url·title을 못 줬으면(타임아웃·XML 문서 등) null이고,
+ * 그때 getBrowserState는 별도 평가로 읽는다.
  */
 async function attachActivePage(
   call: CdpCall,
@@ -244,6 +281,7 @@ async function attachActivePage(
   if (pageList.length === 0) return { ok: false, stage: 'targets' }
   let firstSession: string | null = null
   let firstTargetId: string | null = null
+  let firstPage: { url: string; title: string } | null = null
   for (const page of pageList) {
     let sessionId: string | null = null
     try {
@@ -255,19 +293,26 @@ async function attachActivePage(
       sessionId = null
     }
     if (!sessionId) continue
+    // 프로브 1회로 visibility·url·title을 함께 읽는다 (P1 통합).
+    const probe = parsePageProbe(
+      await evalStringWithTimeout(call, PAGE_PROBE_EXPRESSION, sessionId, VISIBILITY_EVAL_TIMEOUT_MS),
+    )
+    const pageInfo =
+      probe && probe.url !== null && probe.title !== null
+        ? { url: probe.url, title: probe.title }
+        : null
     if (!firstSession) {
       firstSession = sessionId
       firstTargetId = page.targetId
+      firstPage = pageInfo
     }
-    const visibility = await evalStringWithTimeout(
-      call,
-      'document.visibilityState',
-      sessionId,
-      VISIBILITY_EVAL_TIMEOUT_MS,
-    )
-    if (visibility === 'visible') return { ok: true, sessionId, targetId: page.targetId }
+    if (probe?.visibility === 'visible') {
+      return { ok: true, sessionId, targetId: page.targetId, page: pageInfo }
+    }
   }
-  if (firstSession && firstTargetId) return { ok: true, sessionId: firstSession, targetId: firstTargetId }
+  if (firstSession && firstTargetId) {
+    return { ok: true, sessionId: firstSession, targetId: firstTargetId, page: firstPage }
+  }
   return { ok: false, stage: 'attach' }
 }
 
@@ -479,10 +524,11 @@ export async function fetchSidecarBrowserState(
 /**
  * 원격 브라우저의 현재 상태를 읽는다 (2026-11-15: 주소창·뒤로가기가
  * 셸 로컬 기록만 봐서 원격 내 링크 이동을 몰랐던 문제의 정식 수정).
- * 활성(visible) 탭에 attach해 location.href·document.title과
- * Page.getNavigationHistory를 읽는다 (2026-11-16: 첫 타깃은 동결된
- * 백그라운드 탭일 수 있어 /state가 매번 502가 됐다). 어느 단계든
- * 실패하면 null을 돌려준다 (호출자는 기존 표시를 유지한다).
+ * 활성(visible) 탭에 attach해 프로브 식(visibility·url·title 병합,
+ * 2026-11-17 P1 통합)과 Page.getNavigationHistory를 읽는다
+ * (2026-11-16: 첫 타깃은 동결된 백그라운드 탭일 수 있어 /state가
+ * 매번 502가 됐다). 어느 단계든 실패하면 null을 돌려준다 (호출자는
+ * 기존 표시를 유지한다).
  * 2026-11-17부터 /state 라우트의 빠른 경로(fetchSidecarBrowserState)
  * 가 실패할 때의 폴백이다 (구 사이드카·/control/state 장애 대비).
  */
@@ -498,24 +544,29 @@ export async function getBrowserState(
     async (call) => {
       const attached = await attachActivePage(call)
       if (!attached.ok) return null
-      const evalReply = await call(
-        'Runtime.evaluate',
-        { expression: 'JSON.stringify({url: location.href, title: document.title})', returnByValue: true },
-        attached.sessionId,
-      )
-      if (evalReply.error) return null
-      const raw = evalString(evalReply.result)
-      if (raw === null) return null
-      let url: unknown
-      let title: unknown
-      try {
-        const parsed = JSON.parse(raw) as { url?: unknown; title?: unknown }
-        url = parsed.url
-        title = parsed.title
-      } catch {
-        return null
+      // 프로브가 url·title을 이미 줬으면 별도 평가 없이 쓴다 (P1 통합 —
+      // 2회 평가가 1회로 줄어 1왕복이 사라진다). 프로브가 못 줬으면
+      // (타임아웃·XML 문서 등) 기존처럼 별도 평가로 읽는다.
+      let url: string | null = attached.page?.url ?? null
+      let title: string | null = attached.page?.title ?? null
+      if (url === null || title === null) {
+        const evalReply = await call(
+          'Runtime.evaluate',
+          { expression: 'JSON.stringify({url: location.href, title: document.title})', returnByValue: true },
+          attached.sessionId,
+        )
+        if (evalReply.error) return null
+        const raw = evalString(evalReply.result)
+        if (raw === null) return null
+        try {
+          const parsed = JSON.parse(raw) as { url?: unknown; title?: unknown }
+          url = typeof parsed.url === 'string' ? parsed.url : null
+          title = typeof parsed.title === 'string' ? parsed.title : null
+        } catch {
+          return null
+        }
+        if (url === null || title === null) return null
       }
-      if (typeof url !== 'string' || typeof title !== 'string') return null
       const histReply = await call('Page.getNavigationHistory', undefined, attached.sessionId)
       if (histReply.error) return null
       const hist = parseNavigationHistory(histReply.result)

@@ -29,12 +29,19 @@
  *   502 ORACLE_UPSTREAM.
  * - 공통 게이트(gateCdp): 잠금 검사는 UNLOCK_SECRET이 있을 때만 하고,
  *   CDP 연결은 사이드카 직접 URL(https://호스트:8081/devtools/...)로 간다.
+ * - 언록/버전 캐시 (2026-11-17 P1): /state 폴링은 언록 조회 1왕복 +
+ *   상태 조회 1왕복이었으나 언록 상태를 30초 캐시해 1왕복으로 줄인다.
+ *   언록/셋업 POST 성공 시 캐시를 즉시 무효화한다 ("풀었는데 계속
+ *   423"이 없어야 한다). /json/version도 60초 캐시하고, 낡은 WS URL로
+ *   'connect' 실패가 나면 캐시를 버리고 한 번만 재시도한다.
  * 네트워크 경계는 전역 fetch 목킹이다 (실 Oracle 연결은 하지 않는다).
  * 카나리아: 시크릿 주입·잠금 게이트·CDP 메서드·응답 모양을 깨면
  * 해당 테스트가 실패한다.
  */
 import { Hono } from 'hono'
 import { browseApp } from '../../src/modules/browse/routes'
+import { invalidateDirectCdpWsUrlCache } from '../../src/modules/browse/oracle-proxy'
+import { invalidateUnlockStatusCache } from '../../src/modules/browse/unlock'
 
 const app = new Hono()
 app.route('/api/browse', browseApp)
@@ -111,6 +118,12 @@ function stubFetch(handler: (url: string, init?: RequestInit) => Promise<unknown
   }) as typeof fetch
 }
 
+beforeEach(() => {
+  // 모듈 단위 캐시(언록 상태·CDP WS URL)가 테스트 간에 새지 않게 한다.
+  invalidateUnlockStatusCache()
+  invalidateDirectCdpWsUrlCache()
+})
+
 afterEach(() => {
   global.fetch = realFetch
 })
@@ -145,9 +158,18 @@ function stateHandler(msg: Record<string, any>, emit: (m: unknown) => void): voi
   } else if (msg.method === 'Target.attachToTarget') {
     emit({ id: msg.id, result: { sessionId: 'sess-1' } })
   } else if (msg.method === 'Runtime.evaluate') {
-    // 활성 탭 식별용 visibility 평가와 URL 읽기 식을 구분해 답한다.
+    // 병합 프로브 식(visibility·url·title)에는 한 번에 답한다.
+    // 별도 URL 읽기 식(프로브 폴백)이 오면 URL JSON으로 답한다.
     if (String(msg.params?.expression ?? '').includes('visibilityState')) {
-      emit({ id: msg.id, result: { result: { type: 'string', value: 'visible' } } })
+      emit({
+        id: msg.id,
+        result: {
+          result: {
+            type: 'string',
+            value: JSON.stringify({ visibility: 'visible', url: 'https://news.naver.com/article/123', title: '뉴스 기사' }),
+          },
+        },
+      })
     } else {
       emit({
         id: msg.id,
@@ -170,9 +192,17 @@ function historyHandler(msg: Record<string, any>, emit: (m: unknown) => void): v
   } else if (msg.method === 'Target.attachToTarget') {
     emit({ id: msg.id, result: { sessionId: 'sess-1' } })
   } else if (msg.method === 'Runtime.evaluate') {
-    // 활성 탭 식별용 visibility 평가에 visible로 답한다 (무응답이면
+    // 활성 탭 식별용 프로브 평가에 visible로 답한다 (무응답이면
     // 타깃당 1.5초 제한까지 기다려 테스트가 느려진다).
-    emit({ id: msg.id, result: { result: { type: 'string', value: 'visible' } } })
+    emit({
+      id: msg.id,
+      result: {
+        result: {
+          type: 'string',
+          value: JSON.stringify({ visibility: 'visible', url: 'https://example.com', title: 't' }),
+        },
+      },
+    })
   } else if (msg.method === 'Page.getNavigationHistory') {
     emit({ id: msg.id, result: { currentIndex: 1, entries: [{ id: 1 }, { id: 2 }, { id: 3 }] } })
   } else if (msg.method === 'Page.navigateToHistoryEntry') {
@@ -358,6 +388,162 @@ describe('GET /state — 사이드카 빠른 경로 + 직접 CDP 폴백 (2026-11
   })
 })
 
+describe('GET /state — 언록 상태 캐시 (2026-11-17 P1)', () => {
+  const FAST_BODY = { ok: true, url: 'https://www.naver.com/', title: 'NAVER', canGoBack: true, canGoForward: false }
+
+  test('두 번째 /state부터 언록 조회를 안 한다 — 전체가 1회 fetch가 된다', async () => {
+    stubFetch(async (url) => {
+      if (url.includes('/unlock/status')) {
+        return jsonResponse({ configured: true, unlocked: true })
+      }
+      if (url.includes('/control/state')) return jsonResponse(FAST_BODY)
+      throw new Error(`unexpected fetch: ${url}`)
+    })
+    // 첫 호출: 언록 조회 + 상태 조회 2회 (캐시가 비어 있다).
+    let res = await app.request('/api/browse/state', {}, ENV_LOCKED as never)
+    expect(res.status).toBe(200)
+    expect(fetchCalls.map((c) => c.url)).toEqual([
+      `https://${HOST}:8080/unlock/status`,
+      `https://${HOST}:8081/control/state`,
+    ])
+    // 두 번째 호출: 상태 조회만 1회 — 언록 조회 1왕복이 사라진다.
+    const before = fetchCalls.length
+    res = await app.request('/api/browse/state', {}, ENV_LOCKED as never)
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({
+      ok: true,
+      url: 'https://www.naver.com/',
+      title: 'NAVER',
+      canGoBack: true,
+      canGoForward: false,
+    })
+    expect(fetchCalls.slice(before).map((c) => c.url)).toEqual([
+      `https://${HOST}:8081/control/state`,
+    ])
+  })
+
+  test('언록 POST 성공 후에는 잠금 캐시가 풀려 /state가 200을 돌려준다', async () => {
+    let locked = true
+    stubFetch(async (url) => {
+      if (url.includes('/unlock/status')) {
+        return jsonResponse({ configured: true, unlocked: !locked })
+      }
+      if (url.includes('/unlock/unlock')) {
+        locked = false
+        return jsonResponse({ ok: true, unlocked: true })
+      }
+      if (url.includes('/control/state')) return jsonResponse(FAST_BODY)
+      throw new Error(`unexpected fetch: ${url}`)
+    })
+    // 잠긴 상태로 /state → 423 (잠금 결과가 캐시된다).
+    let res = await app.request('/api/browse/state', {}, ENV_LOCKED as never)
+    expect(res.status).toBe(423)
+    // 언록 POST 성공 — 캐시 무효화가 안 되면 다음 /state가 423이다.
+    res = await app.request(
+      '/api/browse/unlock/unlock',
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ password: 'correct-horse-1' }),
+      },
+      ENV_LOCKED as never,
+    )
+    expect(res.status).toBe(200)
+    res = await app.request('/api/browse/state', {}, ENV_LOCKED as never)
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({
+      ok: true,
+      url: 'https://www.naver.com/',
+      title: 'NAVER',
+      canGoBack: true,
+      canGoForward: false,
+    })
+  })
+
+  test('TTL(30초)이 지나면 언록 상태를 다시 조회한다', async () => {
+    jest.useFakeTimers()
+    try {
+      stubFetch(async (url) => {
+        if (url.includes('/unlock/status')) {
+          return jsonResponse({ configured: true, unlocked: true })
+        }
+        if (url.includes('/control/state')) return jsonResponse(FAST_BODY)
+        throw new Error(`unexpected fetch: ${url}`)
+      })
+      const unlockCalls = () => fetchCalls.filter((c) => c.url.includes('/unlock/status')).length
+      let res = await app.request('/api/browse/state', {}, ENV_LOCKED as never)
+      expect(res.status).toBe(200)
+      expect(unlockCalls()).toBe(1)
+      // TTL 안에서는 다시 안 묻는다.
+      jest.advanceTimersByTime(29_000)
+      res = await app.request('/api/browse/state', {}, ENV_LOCKED as never)
+      expect(res.status).toBe(200)
+      expect(unlockCalls()).toBe(1)
+      // TTL이 지나면 다시 묻는다 (재부팅 같은 Worker 밖 변경을 묶는다).
+      jest.advanceTimersByTime(2_000)
+      res = await app.request('/api/browse/state', {}, ENV_LOCKED as never)
+      expect(res.status).toBe(200)
+      expect(unlockCalls()).toBe(2)
+    } finally {
+      jest.useRealTimers()
+    }
+  })
+})
+
+describe('POST /back — 버전 캐시 + connect 재시도 (2026-11-17 P1)', () => {
+  test('/back을 두 번 부르면 /json/version은 한 번만 나간다', async () => {
+    stubFetch(async (url) => {
+      if (url.includes('/json/version')) return jsonResponse(VERSION_BODY)
+      if (url.includes('/devtools/browser/')) return { webSocket: new FakeSocket(historyHandler) }
+      throw new Error(`unexpected fetch: ${url}`)
+    })
+    const versionCalls = () => fetchCalls.filter((c) => c.url.includes('/json/version')).length
+    let res = await app.request('/api/browse/back', { method: 'POST' }, ENV as never)
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ ok: true, stage: 'ok' })
+    expect(versionCalls()).toBe(1)
+    res = await app.request('/api/browse/back', { method: 'POST' }, ENV as never)
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ ok: true, stage: 'ok' })
+    expect(versionCalls()).toBe(1)
+  })
+
+  test('낡은 버전으로 connect가 실패하면 버전을 다시 읽어 재시도해 성공한다', async () => {
+    let wsAttempts = 0
+    stubFetch(async (url) => {
+      if (url.includes('/json/version')) return jsonResponse(VERSION_BODY)
+      if (url.includes('/devtools/browser/')) {
+        wsAttempts += 1
+        // 첫 시도는 webSocket 없음(낡은 엔드포인트) → connect 실패,
+        // 재시도는 정상 소켓을 돌려준다.
+        if (wsAttempts === 1) return new Response('{}', { status: 200 })
+        return { webSocket: new FakeSocket(historyHandler) }
+      }
+      throw new Error(`unexpected fetch: ${url}`)
+    })
+    const res = await app.request('/api/browse/back', { method: 'POST' }, ENV as never)
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ ok: true, stage: 'ok' })
+    // 버전은 초기 1회 + 재시도 1회 = 2회, WS 시도도 2회.
+    expect(fetchCalls.filter((c) => c.url.includes('/json/version'))).toHaveLength(2)
+    expect(wsAttempts).toBe(2)
+  })
+
+  test('재시도해도 connect가 실패하면 stage=connect로 보고한다 (재시도는 1회뿐)', async () => {
+    stubFetch(async (url) => {
+      if (url.includes('/json/version')) return jsonResponse(VERSION_BODY)
+      if (url.includes('/devtools/browser/')) return new Response('{}', { status: 200 })
+      throw new Error(`unexpected fetch: ${url}`)
+    })
+    const res = await app.request('/api/browse/back', { method: 'POST' }, ENV as never)
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ ok: false, stage: 'connect' })
+    // 버전 2회(초기+재시도), WS 2회 — 무한 재시도가 아니다.
+    expect(fetchCalls.filter((c) => c.url.includes('/json/version'))).toHaveLength(2)
+    expect(fetchCalls.filter((c) => c.url.includes('/devtools/browser/'))).toHaveLength(2)
+  })
+})
+
 describe('POST /back · POST /forward — 원격 뒤로/앞으로', () => {
   test('설정이 없으면 503이고 fetch를 부르지 않는다', async () => {
     stubFetch(async () => {
@@ -418,7 +604,15 @@ describe('POST /back · POST /forward — 원격 뒤로/앞으로', () => {
       } else if (msg.method === 'Target.attachToTarget') {
         emit({ id: msg.id, result: { sessionId: 'sess-1' } })
       } else if (msg.method === 'Runtime.evaluate') {
-        emit({ id: msg.id, result: { result: { type: 'string', value: 'visible' } } })
+        emit({
+          id: msg.id,
+          result: {
+            result: {
+              type: 'string',
+              value: JSON.stringify({ visibility: 'visible', url: 'https://example.com', title: 't' }),
+            },
+          },
+        })
       } else if (msg.method === 'Page.getNavigationHistory') {
         emit({ id: msg.id, result: { currentIndex: 0, entries: [{ id: 1 }] } })
       }

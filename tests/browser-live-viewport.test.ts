@@ -91,7 +91,6 @@ function loadLive(): any {
 function makeLive(
   navigateImpl?: (url: string, viewport: unknown) => Promise<unknown>,
   applyViewportImpl?: (viewport: unknown) => Promise<unknown>,
-  viewportReapplyMs?: number
 ) {
   const calls: Array<{ url: string; viewport: unknown }> = []
   const vpCalls: Array<{ viewport: unknown }> = []
@@ -109,7 +108,6 @@ function makeLive(
       return Promise.resolve({ status: 200, body: { ok: true, stage: 'ok' } })
     },
     onChange: () => undefined,
-    viewportReapplyMs: viewportReapplyMs ?? 10000,
   })
   return { live, calls, vpCalls }
 }
@@ -313,12 +311,9 @@ describe('browser-live viewport 적용 — 이동 없는 진입·리사이즈 (2
 
   test('계속 실패해도 재시도는 한 번뿐이다 (무한 재시도 없음)', async () => {
     setupFixture({ w: 1920, h: 1000 }, { w: 0, h: 0 })
-    // 주기 재적용(10초)은 별개 메커니즘이라 끄고 단발 재시도만 본다 —
-    // 켜두면 10초 틱이 의도대로 다시 시도해 이 테스트의 2회 단언이 깨진다.
     const { live, vpCalls } = makeLive(
       undefined,
       () => Promise.resolve({ status: 502, body: null }),
-      3600000
     )
     await live.enterLive()
     await flush()
@@ -329,6 +324,40 @@ describe('browser-live viewport 적용 — 이동 없는 진입·리사이즈 (2
     jest.advanceTimersByTime(10000)
     await flush()
     expect(vpCalls).toHaveLength(2)
+  })
+
+  test('시간이 지나도 같은 크기를 다시 보내지 않는다 (2026-11-17 P1 주기 재적용 폐지)', async () => {
+    // 옛 10초 주기 재적용은 사이드카 영구 CDP가 새 탭에도 뷰포트를
+    // 적용하므로 불필요해 폐지됐다 — 다시 넣으면 이 테스트가 실패한다.
+    // 뷰포트는 진입·리사이즈 때만 나가고, 시간만으로는 안 나간다.
+    setupFixture({ w: 1920, h: 1000 }, { w: 0, h: 0 })
+    const { live, vpCalls } = makeLive()
+    await live.enterLive()
+    await flush()
+    expect(vpCalls).toHaveLength(1)
+    jest.advanceTimersByTime(30000)
+    await flush()
+    expect(vpCalls).toHaveLength(1)
+    await live.endLive()
+  })
+})
+
+describe('browser-live 주기 재적용 부재 (2026-11-17 P1 폐지)', () => {
+  // 10초 주기 재적용을 다시 넣으면 실패한다: 실제 소스에 식별자가
+  // 없어야 하고, setInterval은 상태 폴링(2초)만 남아야 한다.
+  test('browser-live.js에 주기 재적용 식별자가 없다', () => {
+    for (const id of [
+      'viewportReapplyMs',
+      'viewportReapplyTimer',
+      'viewportReapplying',
+      'startViewportReapply',
+      'stopViewportReapply',
+      'reapplyViewportOnce',
+    ]) {
+      expect(LIVE_JS).not.toContain(id)
+    }
+    expect(LIVE_JS.match(/setInterval\(/g) ?? []).toHaveLength(1)
+    expect(LIVE_JS).toContain('setInterval(pollStateOnce, statePollMs)')
   })
 })
 
