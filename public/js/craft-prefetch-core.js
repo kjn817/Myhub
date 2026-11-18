@@ -27,6 +27,15 @@
   // 메모리에 올리지 않는다). 스트림이 없으면 arrayBuffer로 받아
   // 버린다. pump 실패도 삼킨다 (office본의 catch 포함 버전으로 통일 —
   // 체인 안에서는 바깥 catch가 덮으므로 관측이 같다).
+  //
+  // 참고 (2026-11-18): 청크마다 setTimeout(0)으로 양보하는 안을
+  // 시도했으나 longtask가 줄지 않았다 — LoAF 실측에서 drain 중
+  // longtask은 스크립트 귀속이 없는 GC성 블록(blocking 50~100ms,
+  // scripts 비어 있음)이었다. 18MB 단발성 ArrayBuffer 할당이 원인이라
+  // 양보로는 안 줄고, 근본 해법은 JS를 거치지 않는
+  // <link rel="prefetch"> 방식의 전환이다 (별도 작업으로 남긴다).
+  // 호버 프리패치의 longtask은 합성 mouseenter 게이트
+  // (office-prefetch.js)가 막으므로, drain 자체는 그대로 둔다.
   function drain(res) {
     if (!res || !res.body || typeof res.body.getReader !== 'function') {
       return res && typeof res.arrayBuffer === 'function'

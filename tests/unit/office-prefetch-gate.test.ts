@@ -142,3 +142,99 @@ describe('office-prefetch', () => {
     await new Promise((r) => setTimeout(r, 20))
   })
 })
+
+/**
+ * 합성 mouseenter 게이트 (2026-11-18 미션 종료 회귀).
+ * mouseenter는 마우스가 움직여 들어갈 때만 오지 않는다 — 요소가
+ * 고정된 마우스 아래에 다시 나타나도 온다. 미션 종료 시 finalize가
+ * dt-mission-open을 떼면 아이콘이 마우스 아래에 다시 나타나고, 그
+ * 자리에 오피스 아이콘이 있으면 호버 프리패치가 시작돼 drain이 메인
+ * 스레드를 90~150ms씩 막았다 (LoAF 실측 — missionClose p95 83.2ms).
+ * 진짜 호버의 mouseenter는 mousemove와 같은 디스패치(~0ms)이고,
+ * 합성은 마지막 mousemove로부터 최소 280ms 뒤에 온다 — 200ms 안에
+ * mousemove가 없으면 프리패치를 건너뛴다.
+ * 카나리아: 게이트를 빼면 첫 테스트가, once 플래그를 차단 시점에도
+ * 세우면 세 번째 테스트가 실패한다.
+ */
+function loadModuleWithMouse(fetchFn: any): { api: any; fireMouseMove: () => void } {
+  const listeners: Record<string, Array<(e?: any) => void>> = {}
+  const sandbox: any = {
+    window: {
+      addEventListener: (type: string, cb: (e?: any) => void) => {
+        ;(listeners[type] = listeners[type] || []).push(cb)
+      },
+    },
+    navigator: { connection: { saveData: false } },
+    fetch: fetchFn,
+    console,
+  }
+  sandbox.window.navigator = sandbox.navigator
+  const loadCore = new Function('window', 'navigator', 'fetch', 'console', CORE_SRC)
+  loadCore(sandbox.window, sandbox.navigator, fetchFn, console)
+  const fn = new Function('window', 'navigator', 'fetch', 'console', SRC)
+  fn(sandbox.window, sandbox.navigator, fetchFn, console)
+  return {
+    api: sandbox.window.MyHubOfficePrefetch,
+    fireMouseMove: () => (listeners.mousemove || []).forEach((cb) => cb({})),
+  }
+}
+
+describe('office-prefetch 합성 mouseenter 게이트', () => {
+  let nowSpy: any
+  let nowValue = 0
+  beforeEach(() => {
+    nowValue = 1000000
+    nowSpy = jest.spyOn(Date, 'now').mockImplementation(() => nowValue)
+  })
+  afterEach(() => {
+    nowSpy.mockRestore()
+  })
+
+  test('mousemove 없이 200ms가 지난 뒤의 prefetch는 fetch하지 않는다', async () => {
+    let count = 0
+    const fetchFn = async () => {
+      count++
+      return okRes()
+    }
+    const { api } = loadModuleWithMouse(fetchFn)
+    // 로드 후 mousemove 없이 1초 경과 — 미션 종료 시 아이콘 재표시와
+    // 같은 합성 mouseenter 상황이다.
+    nowValue += 1000
+    api.prefetch('pdf')
+    await new Promise((r) => setTimeout(r, 50))
+    expect(count).toBe(0)
+  })
+
+  test('mousemove 직후의 prefetch는 fetch한다 (진짜 호버)', async () => {
+    const fetched: string[] = []
+    const fetchFn = async (url: string) => {
+      fetched.push(url)
+      if (url.endsWith('manifest.json')) return jsonRes({ js: 'a.js', wasm: 'a.wasm' })
+      return okRes()
+    }
+    const { api, fireMouseMove } = loadModuleWithMouse(fetchFn)
+    nowValue += 1000
+    fireMouseMove()
+    api.prefetch('pdf')
+    await new Promise((r) => setTimeout(r, 50))
+    expect(fetched).toContain('/vendor/pdfcraft/manifest.json')
+  })
+
+  test('차단된 시도는 once 플래그를 소모하지 않는다', async () => {
+    let count = 0
+    const fetchFn = async (url: string) => {
+      count++
+      if (url.endsWith('manifest.json')) return jsonRes({ js: 'a.js', wasm: 'a.wasm' })
+      return okRes()
+    }
+    const { api, fireMouseMove } = loadModuleWithMouse(fetchFn)
+    nowValue += 1000
+    api.prefetch('pdf') // 합성 — 차단돼야 한다
+    await new Promise((r) => setTimeout(r, 30))
+    expect(count).toBe(0)
+    fireMouseMove()
+    api.prefetch('pdf') // 진짜 호버 — 이번에는 데워야 한다
+    await new Promise((r) => setTimeout(r, 50))
+    expect(count).toBeGreaterThan(0)
+  })
+})
