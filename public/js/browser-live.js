@@ -799,6 +799,190 @@
       }
     }
 
+    /* 호버 오프셋 진단용 오버레이 (2026-11-18, 임시 — 원인 확정 후 제거).
+       iframe 안의 실제 마우스 위치와 Selkies 클라이언트가 보는 기하를
+       스테이지 모서리에 표시한다. 동일 출처라 contentWindow/Document를
+       읽을 수 있다. 부착·갱신 실패는 브라우저 동작을 막지 않는다. */
+    var mouseDbgOverlay = null;
+    var mouseDbgPos = null;
+    var mouseDbgTimer = null;
+
+    function mouseDbgRect(el) {
+      if (!el || typeof el.getBoundingClientRect !== 'function') return null;
+      try {
+        var r = el.getBoundingClientRect();
+        return {
+          l: Math.round(r.left),
+          t: Math.round(r.top),
+          w: Math.round(r.width),
+          h: Math.round(r.height),
+          ow: el.offsetWidth || 0,
+          oh: el.offsetHeight || 0,
+        };
+      } catch (e) {
+        return null;
+      }
+    }
+
+    function mouseDbgFmtRect(name, r, extra) {
+      if (!r) return name + ': -';
+      return (
+        name +
+        ': ' +
+        r.l +
+        ',' +
+        r.t +
+        ' ' +
+        r.w +
+        'x' +
+        r.h +
+        ' ow:' +
+        r.ow +
+        'x' +
+        r.oh +
+        (extra || '')
+      );
+    }
+
+    /* _windowMath를 그대로 재계산한다 (selkies-core.js의 this.m과 같은 식). */
+    function mouseDbgWindowMath(r) {
+      if (!r || r.w <= 0 || r.h <= 0 || r.ow <= 0 || r.oh <= 0) return null;
+      var a = r.w / r.ow,
+        o = r.h / r.oh,
+        s = Math.min(a, o);
+      var c = r.ow * s,
+        l = r.oh * s;
+      return {
+        mx: c > 0 ? r.ow / c : 1,
+        my: l > 0 ? r.oh / l : 1,
+        ox: (r.w - c) / 2,
+        oy: (r.h - l) / 2,
+        ex: r.l,
+        ey: r.t,
+      };
+    }
+
+    function mouseDbgRefresh() {
+      if (!mouseDbgOverlay) return;
+      var win = liveFrame && liveFrame.contentWindow;
+      if (!win) {
+        mouseDbgOverlay.textContent = 'mouse-dbg: no frame';
+        return;
+      }
+      try {
+        var d = win.document;
+        var lines = [];
+        lines.push('mouse: ' + (mouseDbgPos ? mouseDbgPos.x + ',' + mouseDbgPos.y : '-'));
+        lines.push(
+          'dpr:' +
+            (win.devicePixelRatio || 1) +
+            ' srd:' +
+            !!win.streamResolutionDiverged +
+            ' man:' +
+            !!win.manualResolution +
+            '/' +
+            !!win.manual_resolution +
+            ' win:' +
+            (win.innerWidth || 0) +
+            'x' +
+            (win.innerHeight || 0),
+        );
+        var stream = d.getElementById('stream');
+        var sr = mouseDbgRect(stream);
+        var sextra =
+          stream && stream.videoWidth ? ' vw:' + stream.videoWidth + 'x' + stream.videoHeight : '';
+        lines.push(mouseDbgFmtRect('stream', sr, sextra));
+        var canvas =
+          d.getElementById('videoCanvas') ||
+          d.getElementById('videoStream') ||
+          d.getElementById('videoWorkerCanvas');
+        var cr = mouseDbgRect(canvas);
+        var cextra = canvas ? ' w:' + (canvas.width || 0) + 'x' + (canvas.height || 0) : '';
+        lines.push(mouseDbgFmtRect('canvas', cr, cextra));
+        var app = d.getElementById('app') || d.getElementById('root');
+        var ar = mouseDbgRect(app);
+        lines.push(mouseDbgFmtRect('app', ar, ''));
+        if (mouseDbgPos && sr) {
+          /* 싱크 경로 계산 (_sinkBox와 같은 식: VIDEO+contain이면
+             letterbox를 보정한 콘텐츠 박스 기준). */
+          var sinkW = (stream && stream.videoWidth) || sr.w;
+          var sinkH = (stream && stream.videoHeight) || sr.h;
+          var bl = sr.l,
+            bt = sr.t,
+            bw = sr.w,
+            bh = sr.h;
+          if (stream && stream.tagName === 'VIDEO' && sinkW > 0 && sinkH > 0) {
+            var fit = (stream.style && stream.style.objectFit) || 'contain';
+            if (fit !== 'fill') {
+              var sc = Math.min(sr.w / sinkW, sr.h / sinkH);
+              bw = Math.round(sinkW * sc);
+              bh = Math.round(sinkH * sc);
+              bl = sr.l + Math.round((sr.w - bw) / 2);
+              bt = sr.t + Math.round((sr.h - bh) / 2);
+            }
+          }
+          var sx = bw > 0 ? Math.round(((mouseDbgPos.x - bl) * sinkW) / bw) : 0;
+          var sy = bh > 0 ? Math.round(((mouseDbgPos.y - bt) * sinkH) / bh) : 0;
+          lines.push('sink-> ' + sx + ',' + sy);
+          /* windowMath 경로: app을 this.element로 가정한 재계산. */
+          var m = mouseDbgWindowMath(ar);
+          if (m) {
+            var dpr = win.devicePixelRatio || 1;
+            var wx = Math.round((mouseDbgPos.x - m.ex - m.ox) * m.mx * dpr);
+            var wy = Math.round((mouseDbgPos.y - m.ey - m.oy) * m.my * dpr);
+            lines.push(
+              'wmath-> ' +
+                wx +
+                ',' +
+                wy +
+                ' multi:' +
+                m.mx.toFixed(3) +
+                '/' +
+                m.my.toFixed(3) +
+                ' off:' +
+                Math.round(m.ox) +
+                '/' +
+                Math.round(m.oy),
+            );
+          }
+        }
+        mouseDbgOverlay.textContent = lines.join('\n');
+      } catch (e) {
+        mouseDbgOverlay.textContent = 'mouse-dbg: blocked';
+      }
+    }
+
+    function attachMouseDebug() {
+      try {
+        var win = liveFrame && liveFrame.contentWindow;
+        if (!win || typeof win.addEventListener !== 'function') return;
+        if (!mouseDbgOverlay && liveFrame && liveFrame.parentElement) {
+          var el = doc.createElement('div');
+          el.style.cssText =
+            'position:absolute;left:8px;top:8px;z-index:50;' +
+            'pointer-events:none;background:rgba(0,0,0,0.72);color:#7ef0a8;' +
+            'font:11px/1.5 ui-monospace,Menlo,monospace;white-space:pre;' +
+            'padding:6px 8px;border-radius:8px;max-width:560px;';
+          el.textContent = 'mouse-dbg: ...';
+          liveFrame.parentElement.appendChild(el);
+          mouseDbgOverlay = el;
+        }
+        win.addEventListener(
+          'mousemove',
+          function (ev) {
+            if (ev) mouseDbgPos = { x: Math.round(ev.clientX), y: Math.round(ev.clientY) };
+          },
+          { passive: true, capture: true },
+        );
+        if (!mouseDbgTimer) mouseDbgTimer = setInterval(mouseDbgRefresh, 250);
+        mouseDbgRefresh();
+      } catch (e) {
+        if (typeof console !== 'undefined' && typeof console.warn === 'function') {
+          console.warn('[browser-live] 마우스 디버그 부착 실패', e);
+        }
+      }
+    }
+
     /* iframe을 켜고 url이 있으면 이동한다. enterLive의 잠금 검사 통과 후.
        url이 없어도 뷰포트는 맞춘다 (2026-11-15: 세션 복원 뒤 navigate가
        없으면 override가 적용되지 않아 원격이 절반 크기로 보였다). */
@@ -910,6 +1094,7 @@
     }
     if (liveFrame) {
       liveFrame.addEventListener('load', attachPinchGuard);
+      liveFrame.addEventListener('load', attachMouseDebug);
     }
 
     return {
