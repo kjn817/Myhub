@@ -806,6 +806,26 @@
     var mouseDbgOverlay = null;
     var mouseDbgPos = null;
     var mouseDbgTimer = null;
+    var mouseDbgWin = null;
+
+    function mouseDbgOnMove(ev) {
+      if (ev) mouseDbgPos = { x: Math.round(ev.clientX), y: Math.round(ev.clientY) };
+    }
+
+    /* contentWindow가 바뀌면(페이지 이동·재연결) 리스너가 죽은 창에
+       남는다 — refresh 때마다 창이 바뀌었는지 보고 다시 건다. */
+    function mouseDbgEnsureListener(win) {
+      if (!win || typeof win.addEventListener !== 'function') return;
+      if (mouseDbgWin === win) return;
+      try {
+        win.addEventListener('mousemove', mouseDbgOnMove, { passive: true, capture: true });
+        mouseDbgWin = win;
+      } catch (e) {
+        if (typeof console !== 'undefined' && typeof console.warn === 'function') {
+          console.warn('[browser-live] 마우스 디버그 리스너 재부착 실패', e);
+        }
+      }
+    }
 
     function mouseDbgRect(el) {
       if (!el || typeof el.getBoundingClientRect !== 'function') return null;
@@ -871,6 +891,7 @@
       }
       try {
         var d = win.document;
+        mouseDbgEnsureListener(win);
         var lines = [];
         lines.push('mouse: ' + (mouseDbgPos ? mouseDbgPos.x + ',' + mouseDbgPos.y : '-'));
         lines.push(
@@ -899,9 +920,51 @@
         var cr = mouseDbgRect(canvas);
         var cextra = canvas ? ' w:' + (canvas.width || 0) + 'x' + (canvas.height || 0) : '';
         lines.push(mouseDbgFmtRect('canvas', cr, cextra));
-        var app = d.getElementById('app') || d.getElementById('root');
-        var ar = mouseDbgRect(app);
-        lines.push(mouseDbgFmtRect('app', ar, ''));
+        var app = d.getElementById('app');
+        lines.push(mouseDbgFmtRect('app', mouseDbgRect(app), ''));
+        var root = d.getElementById('root');
+        var rr = mouseDbgRect(root);
+        lines.push(mouseDbgFmtRect('root', rr, ''));
+        /* 모든 video/canvas 원소 (id 무관) — 실제 화면을 그리는 원소 찾기. */
+        var media = d.querySelectorAll('video,canvas');
+        for (var mi = 0; mi < media.length && mi < 6; mi++) {
+          var mel = media[mi];
+          var mr = mouseDbgRect(mel);
+          var mextra = '';
+          if (mel.tagName === 'VIDEO' && mel.videoWidth) {
+            mextra = ' vw:' + mel.videoWidth + 'x' + mel.videoHeight;
+          } else if (mel.tagName === 'CANVAS') {
+            mextra = ' w:' + (mel.width || 0) + 'x' + (mel.height || 0);
+          }
+          lines.push(
+            mouseDbgFmtRect(
+              (mel.tagName === 'VIDEO' ? 'vid' : 'cv') + '#' + (mel.id || '(noid)'),
+              mr,
+              mextra,
+            ),
+          );
+        }
+        /* rect와 offset이 안 맞는 원소 (transform·스케일) — this.element의
+           _windowMath를 틀어지게 하는 후보. 최대 4개만 표시한다. */
+        var all = d.querySelectorAll('*');
+        var shown = 0;
+        for (var ai = 0; ai < all.length && shown < 4; ai++) {
+          var ael = all[ai];
+          if (!ael.offsetWidth || !ael.offsetHeight) continue;
+          var ar2 = mouseDbgRect(ael);
+          if (!ar2) continue;
+          var dw = Math.abs(ar2.w - ar2.ow);
+          var dh = Math.abs(ar2.h - ar2.oh);
+          if (dw < 2 && dh < 2) continue;
+          lines.push(
+            mouseDbgFmtRect(
+              'X:' + ael.tagName.toLowerCase() + '#' + (ael.id || '(noid)'),
+              ar2,
+              '',
+            ),
+          );
+          shown++;
+        }
         if (mouseDbgPos && sr) {
           /* 싱크 경로 계산 (_sinkBox와 같은 식: VIDEO+contain이면
              letterbox를 보정한 콘텐츠 박스 기준). */
@@ -924,14 +987,23 @@
           var sx = bw > 0 ? Math.round(((mouseDbgPos.x - bl) * sinkW) / bw) : 0;
           var sy = bh > 0 ? Math.round(((mouseDbgPos.y - bt) * sinkH) / bh) : 0;
           lines.push('sink-> ' + sx + ',' + sy);
-          /* windowMath 경로: app을 this.element로 가정한 재계산. */
-          var m = mouseDbgWindowMath(ar);
-          if (m) {
-            var dpr = win.devicePixelRatio || 1;
+        }
+        if (mouseDbgPos) {
+          /* windowMath 경로: app·root를 각각 this.element로 가정한 재계산. */
+          var dpr = win.devicePixelRatio || 1;
+          var cands = [
+            ['app', mouseDbgRect(app)],
+            ['root', rr],
+          ];
+          for (var ci = 0; ci < cands.length; ci++) {
+            var m = mouseDbgWindowMath(cands[ci][1]);
+            if (!m) continue;
             var wx = Math.round((mouseDbgPos.x - m.ex - m.ox) * m.mx * dpr);
             var wy = Math.round((mouseDbgPos.y - m.ey - m.oy) * m.my * dpr);
             lines.push(
-              'wmath-> ' +
+              'wmath[' +
+                cands[ci][0] +
+                ']-> ' +
                 wx +
                 ',' +
                 wy +
@@ -942,7 +1014,11 @@
                 ' off:' +
                 Math.round(m.ox) +
                 '/' +
-                Math.round(m.oy),
+                Math.round(m.oy) +
+                ' e:' +
+                m.ex +
+                '/' +
+                m.ey,
             );
           }
         }
@@ -967,13 +1043,7 @@
           liveFrame.parentElement.appendChild(el);
           mouseDbgOverlay = el;
         }
-        win.addEventListener(
-          'mousemove',
-          function (ev) {
-            if (ev) mouseDbgPos = { x: Math.round(ev.clientX), y: Math.round(ev.clientY) };
-          },
-          { passive: true, capture: true },
-        );
+        mouseDbgEnsureListener(win);
         if (!mouseDbgTimer) mouseDbgTimer = setInterval(mouseDbgRefresh, 250);
         mouseDbgRefresh();
       } catch (e) {
