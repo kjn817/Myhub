@@ -309,7 +309,7 @@ describe('browser-live viewport 적용 — 이동 없는 진입·리사이즈 (2
     expect(vpCalls).toHaveLength(2)
   })
 
-  test('계속 실패해도 재시도는 한 번뿐이다 (무한 재시도 없음)', async () => {
+  test('계속 실패해도 재시도는 세 번뿐이다 (2026-11-18 백오프, 무한 재시도 없음)', async () => {
     setupFixture({ w: 1920, h: 1000 }, { w: 0, h: 0 })
     const { live, vpCalls } = makeLive(
       undefined,
@@ -321,9 +321,15 @@ describe('browser-live viewport 적용 — 이동 없는 진입·리사이즈 (2
     jest.advanceTimersByTime(2000)
     await flush()
     expect(vpCalls).toHaveLength(2)
-    jest.advanceTimersByTime(10000)
+    jest.advanceTimersByTime(5000)
     await flush()
-    expect(vpCalls).toHaveLength(2)
+    expect(vpCalls).toHaveLength(3)
+    jest.advanceTimersByTime(15000)
+    await flush()
+    expect(vpCalls).toHaveLength(4)
+    jest.advanceTimersByTime(60000)
+    await flush()
+    expect(vpCalls).toHaveLength(4)
   })
 
   test('시간이 지나도 같은 크기를 다시 보내지 않는다 (2026-11-17 P1 주기 재적용 폐지)', async () => {
@@ -344,7 +350,8 @@ describe('browser-live viewport 적용 — 이동 없는 진입·리사이즈 (2
 
 describe('browser-live 주기 재적용 부재 (2026-11-17 P1 폐지)', () => {
   // 10초 주기 재적용을 다시 넣으면 실패한다: 실제 소스에 식별자가
-  // 없어야 하고, setInterval은 상태 폴링(2초)만 남아야 한다.
+  // 없어야 하고, setInterval은 상태 폴링(2초)과 마우스 오프셋 폴링
+  // (2026-11-18, 창 위치 추적 — 뷰포트 재적용이 아니다)만 남아야 한다.
   test('browser-live.js에 주기 재적용 식별자가 없다', () => {
     for (const id of [
       'viewportReapplyMs',
@@ -356,8 +363,9 @@ describe('browser-live 주기 재적용 부재 (2026-11-17 P1 폐지)', () => {
     ]) {
       expect(LIVE_JS).not.toContain(id)
     }
-    expect(LIVE_JS.match(/setInterval\(/g) ?? []).toHaveLength(1)
+    expect(LIVE_JS.match(/setInterval\(/g) ?? []).toHaveLength(2)
     expect(LIVE_JS).toContain('setInterval(pollStateOnce, statePollMs)')
+    expect(LIVE_JS).toContain('setInterval(reportMouseOffsetNow, mouseOffsetPollMs)')
   })
 })
 

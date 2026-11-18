@@ -231,6 +231,38 @@
       });
   }
 
+  /* 마우스 오프셋 보고 (2026-11-18): iframe의 화면상 위치 {x, y}를
+     사이드카에 알려 클라이언트가 더해 보낸 창 위치를 빼게 한다.
+     Promise<{ status, body }> — applyViewport와 같은 모양. 10초 타임아웃. */
+  function defaultReportMouseOffset(offset) {
+    if (typeof fetch !== 'function') return Promise.resolve({ status: 0, body: null });
+    if (!offset || typeof offset.x !== 'number' || typeof offset.y !== 'number') {
+      return Promise.resolve({ status: 0, body: null });
+    }
+    return fetchWithTimeout(
+      '/api/browse/mouse-offset',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ x: Math.round(offset.x), y: Math.round(offset.y) }),
+      },
+      FETCH_TIMEOUT_MS,
+    )
+      .then(function (r) {
+        return r
+          .json()
+          .catch(function () {
+            return null;
+          })
+          .then(function (body) {
+            return { status: r.status, body: body };
+          });
+      })
+      .catch(function () {
+        return { status: 0, body: null };
+      });
+  }
+
   /* 원격 현재 상태 조회: Promise<{ status, body }> (navigate와 같은 모양).
      body는 { ok, url, title, canGoBack, canGoForward }. 10초 타임아웃 —
      안 끝나면 {status: 0}으로 돌려 statePolling이 풀리게 한다. */
@@ -274,7 +306,7 @@
   }
 
   /**
-   * deps = { doc, navigate, applyViewport, onChange, checkUnlock, submitUnlock, setQuality, pollDelayMs, fetchState, history, onState, statePollMs }
+   * deps = { doc, navigate, applyViewport, onChange, checkUnlock, submitUnlock, setQuality, pollDelayMs, fetchState, history, onState, statePollMs, reportMouseOffset, mouseOffsetPollMs }
    * doc에서 #bwLiveFrame/#bwNoticeCard/#bwNoticeMsg/#bwNoticeClose와
    * #bwLockCard/#bwLockForm/#bwLockPassword/#bwLockConfirm/#bwLockMsg/
    * #bwLockSubmit/#bwLockClose/#bwLockTitle/#bwLockDesc를 찾는다 (없으면
@@ -286,12 +318,16 @@
    * fetchState()·history(direction)도 같은 모양의 테스트 주입 지난
    * (2026-11-15 원격 상태 폴링·뒤로/앞으로). onState(body)는 폴링이
    * 받은 원격 상태를 주인에게 알리는 콜백, statePollMs는 폴링 간격
-   * (기본 2000ms). onChange()는 상태 변경 등 주인의 너비를 다시
+   * (기본 2000ms). reportMouseOffset(offset)은 iframe 화면 위치 보고
+   * (2026-11-18, 같은 모양의 테스트 주입 지난), mouseOffsetPollMs는
+   * 그 폴링 간격(기본 500ms — 창 드래그는 ResizeObserver에 안 잡혀
+   * 폴링으로만 따라간다). onChange()는 상태 변경 등 주인의 너비를 다시
    * 그리며 알림 콜백. 뷰포트 주기 재적용(2026-11-16 QA 2차, 10초)은
    * 2026-11-17 P1에 폐지했다 — 사이드카 영구 CDP 세션이 새 탭에도
    * 현재 뷰포트를 즉시 적용하므로 클라이언트 재적용이 불필요하다
    * (사이드카 Target.setDiscoverTargets). 뷰포트는 진입·navigate·
-   * 리사이즈 때만 맞춘다.
+   * 리사이즈 때만 맞춘다. 마우스 오프셋 폴링은 뷰포트 재적용이 아니라
+   * 창 위치 추적이라 별개다 (setInterval 2개 허용 — viewport 테스트 참조).
    */
   function createLive(deps) {
     deps = deps || {};
@@ -310,8 +346,14 @@
       typeof deps.fetchState === 'function' ? deps.fetchState : defaultFetchState;
     var historyFetch =
       typeof deps.history === 'function' ? deps.history : defaultHistory;
+    var reportMouseOffsetFetch =
+      typeof deps.reportMouseOffset === 'function'
+        ? deps.reportMouseOffset
+        : defaultReportMouseOffset;
     var pollDelayMs = typeof deps.pollDelayMs === 'number' ? deps.pollDelayMs : 5000;
     var statePollMs = typeof deps.statePollMs === 'number' ? deps.statePollMs : 2000;
+    var mouseOffsetPollMs =
+      typeof deps.mouseOffsetPollMs === 'number' ? deps.mouseOffsetPollMs : 500;
     var onChange =
       typeof deps.onChange === 'function'
         ? deps.onChange
@@ -344,13 +386,17 @@
     var pendingUrl = null; // 잠금 때문에 못 간 주소 (풀리면 이동한다)
     var lockBusy = false; // 제출 진행 중 (중복 제출 방지)
     /* 뷰포트 적용 상태 (2026-11-15): 마지막으로 적용된 크기·리사이즈
-       디바운스 타이머·단발 재시도 타이머·stage 관찰자. */
+       디바운스 타이머·백오프 재시도 타이머·stage 관찰자. */
     var lastAppliedViewport = null;
     var viewportTimer = null;
     var viewportRetryTimer = null;
-    var viewportRetryUsed = false;
+    var viewportRetryCount = 0;
     var lastFailedViewport = null;
     var stageObserver = null;
+    /* 마우스 오프셋 보고 상태 (2026-11-18): 마지막으로 보고한 iframe
+       화면 위치·폴링 타이머. */
+    var lastReportedMouseOffset = null;
+    var mouseOffsetTimer = null;
     /* 원격 상태 폴링 상태 (2026-11-15): 주기 타이머·진행 중 플래그·
        진행 중 폴링의 Promise (2026-11-17 N2: 뒤로/앞으로 이동이 상태
        재조회 완료를 기다려 로딩 표시를 끌 수 있게 한다). */
@@ -362,40 +408,97 @@
       return Math.round(a.width) === Math.round(b.width) && Math.round(a.height) === Math.round(b.height);
     }
 
+    /* 뷰포트 재시도 간격 (2026-11-18 백오프): 2초 단발 재시도로는
+       1078×658 축소 적용이 유실된 전례가 있다 — 실패가 두 번 겹치면
+       그 크기는 다시 안 간다. 2초·5초·15초 세 번까지 다시 시도하고,
+       새 크기가 오면 횟수를 리셋한다. */
+    var VIEWPORT_RETRY_DELAYS_MS = [2000, 5000, 15000];
+
     /* 뷰포트를 서버에 적용하고 성공하면 기록한다. 실패하면 기록하지
-       않고 2초 뒤 한 번만 다시 시도한다 (서버 일시 장애 대비 — 같은
-       크기에 대한 재시도는 한 번으로 끝내고, 새 크기가 오면 다시
-       한 번의 재시도를 얻는다). 같은 크기는 다시 보내지 않는다
-       (2026-11-17 P1: 10초 주기 재적용 폐지 — 새 탭 적용은 사이드카
-       영구 CDP가 맡으므로 클라이언트가 같은 크기를 되풀이할 이유가
-       없다). 늦게 도착한 응답은 liveGen으로 버린다 — endLive 뒤에
-       lastAppliedViewport를 채우면 다음 시작 때 같은 크기의 적용을
-       건너뛰어 버린다. */
+       않고 백오프 간격으로 최대 3번 다시 시도한다 (서버 일시 장애
+       대비 — 새 크기가 오면 횟수를 리셋한다). 같은 크기는 다시 보내지
+       않는다 (2026-11-17 P1: 10초 주기 재적용 폐지 — 새 탭 적용은
+       사이드카 영구 CDP가 맡으므로 클라이언트가 같은 크기를 되풀이할
+       이유가 없다). 늦게 도착한 응답은 liveGen으로 버린다 — endLive
+       뒤에 lastAppliedViewport를 채우면 다음 시작 때 같은 크기의
+       적용을 건너뛰어 버린다. */
     function applyViewportNow(viewport) {
       if (!viewport || viewport.width <= 0 || viewport.height <= 0) return Promise.resolve(false);
       if (sameViewport(viewport, lastAppliedViewport)) return Promise.resolve(true);
-      if (!sameViewport(viewport, lastFailedViewport)) viewportRetryUsed = false;
+      if (!sameViewport(viewport, lastFailedViewport)) viewportRetryCount = 0;
       var gen = liveGen;
       return applyViewport(viewport).then(function (res) {
         if (gen !== liveGen || liveState !== 'on') return false;
         if (res && res.status === 200 && res.body && res.body.ok) {
           lastAppliedViewport = { width: Math.round(viewport.width), height: Math.round(viewport.height) };
           lastFailedViewport = null;
-          viewportRetryUsed = false;
+          viewportRetryCount = 0;
           return true;
         }
         lastFailedViewport = { width: Math.round(viewport.width), height: Math.round(viewport.height) };
-        if (!viewportRetryUsed && viewportRetryTimer === null && liveState === 'on') {
-          viewportRetryUsed = true;
+        if (viewportRetryCount < VIEWPORT_RETRY_DELAYS_MS.length && viewportRetryTimer === null && liveState === 'on') {
+          var delay = VIEWPORT_RETRY_DELAYS_MS[viewportRetryCount];
+          viewportRetryCount += 1;
           viewportRetryTimer = setTimeout(function () {
             viewportRetryTimer = null;
             if (liveState !== 'on') return;
             var current = measureViewport();
             if (current && !sameViewport(current, lastAppliedViewport)) applyViewportNow(current);
-          }, 2000);
+          }, delay);
         }
         return false;
       });
+    }
+
+    /* iframe의 화면상 위치를 잰다 (2026-11-18 호버 캘리브레이션).
+       Selkies 클라이언트가 iframe 좌표에 이 위치를 더해 보내므로,
+       사이드카가 같은 값을 빼서 되돌린다. iframe이 없거나 숨겨져
+       있으면(0 크기) null — 그때는 마지막 보고 값을 유지한다. */
+    function measureMouseOffset() {
+      if (!liveFrame || typeof liveFrame.getBoundingClientRect !== 'function') return null;
+      var r = liveFrame.getBoundingClientRect();
+      if (!r || r.width <= 0 || r.height <= 0) return null;
+      return { x: Math.round(r.left), y: Math.round(r.top) };
+    }
+
+    function sameMouseOffset(a, b) {
+      if (!a || !b) return false;
+      return Math.round(a.x) === Math.round(b.x) && Math.round(a.y) === Math.round(b.y);
+    }
+
+    /* 바뀐 위치만 보고한다. 실패하면 기록하지 않아 다음 폴링·리사이즈
+       때 다시 시도한다. 보고 자체가 실패해도 화면 동작은 막지 않는다. */
+    function reportMouseOffsetNow() {
+      if (liveState !== 'on') return Promise.resolve(false);
+      var current = measureMouseOffset();
+      if (!current || sameMouseOffset(current, lastReportedMouseOffset)) {
+        return Promise.resolve(true);
+      }
+      var gen = liveGen;
+      return reportMouseOffsetFetch(current).then(function (res) {
+        if (gen !== liveGen || liveState !== 'on') return false;
+        if (res && res.status === 200 && res.body && res.body.ok) {
+          lastReportedMouseOffset = { x: Math.round(current.x), y: Math.round(current.y) };
+          return true;
+        }
+        return false;
+      });
+    }
+
+    /* 마우스 오프셋 폴링: 즉시 한 번 보고하고 이후 주기적으로 잰다.
+       창 드래그(이동)는 ResizeObserver에 안 잡히므로 폴링으로만
+       따라간다. 위치가 안 바뀌면 보고를 안 보내 트래픽이 없다. */
+    function startMouseOffsetPolling() {
+      stopMouseOffsetPolling();
+      reportMouseOffsetNow();
+      mouseOffsetTimer = setInterval(reportMouseOffsetNow, mouseOffsetPollMs);
+    }
+
+    function stopMouseOffsetPolling() {
+      if (mouseOffsetTimer !== null) {
+        clearInterval(mouseOffsetTimer);
+        mouseOffsetTimer = null;
+      }
     }
 
     /* stage 크기 변화를 감지해 뷰포트를 다시 맞춘다. 창을 최대화·복원
@@ -421,6 +524,7 @@
           if (liveState !== 'on') return;
           var current = measureViewport();
           if (current) applyViewportNow(current);
+          reportMouseOffsetNow();
         }, 300);
       });
       stageObserver.observe(stage);
@@ -603,6 +707,7 @@
       setLockBusy(false);
       liveState = 'locked';
       stopStatePolling();
+      stopMouseOffsetPolling();
       onChange();
     }
 
@@ -809,6 +914,7 @@
       onChange();
       startStageObserver();
       startStatePolling();
+      startMouseOffsetPolling();
       if (!url) {
         // 뷰포트 적용 실패는 시작을 막지 않는다 (화면은 뜨고, 다음
         // 진입·리사이즈 때 다시 시도한다).
@@ -847,6 +953,7 @@
         // 시크릿 미설정 — 화면 프록시도 못 뜨므로 뷰를 끄고 안내한다.
         liveState = 'notice';
         stopStatePolling();
+        stopMouseOffsetPolling();
         if (liveFrame) liveFrame.removeAttribute('src');
         setNotice('원격 브라우저가 아직 설정되지 않았어요.');
         onChange();
@@ -867,9 +974,11 @@
       liveState = 'off';
       stopStageObserver();
       stopStatePolling();
+      stopMouseOffsetPolling();
       lastAppliedViewport = null;
       lastFailedViewport = null;
-      viewportRetryUsed = false;
+      viewportRetryCount = 0;
+      lastReportedMouseOffset = null;
       if (liveFrame) liveFrame.removeAttribute('src');
       onChange();
       return Promise.resolve();

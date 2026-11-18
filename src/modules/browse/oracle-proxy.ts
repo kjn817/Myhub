@@ -504,6 +504,52 @@ export function registerOracleProxyRoutes(app: Hono<{ Bindings: Env }>): void {
     }
   })
 
+  // 마우스 오프셋 보고 (2026-11-18): 프론트가 #bwLiveFrame의 화면상
+  // 위치 {x, y}를 보내면 사이드카 /control/mouse-offset으로 중계한다.
+  // Selkies 클라이언트가 iframe 좌표에 창 위치를 더해 보내므로
+  // 사이드카가 빼서 되돌린다. 세션 게이트 뒤에 있다 (전역 /api/*
+  // 미들웨어). 사이드카 응답(상태·본문)을 그대로 돌려준다.
+  app.post('/mouse-offset', async (c) => {
+    const cfg = oracleConfigOf(c.env)
+    if (!cfg) return c.json({ ok: false, error: 'ORACLE_NOT_CONFIGURED' }, 503)
+    let body: { x?: unknown; y?: unknown } = {}
+    try {
+      body = (await c.req.json()) as { x?: unknown; y?: unknown }
+    } catch {
+      return c.json({ ok: false, error: 'INVALID_OFFSET' }, 400)
+    }
+    if (
+      typeof body.x !== 'number' ||
+      typeof body.y !== 'number' ||
+      !Number.isFinite(body.x) ||
+      !Number.isFinite(body.y)
+    ) {
+      return c.json({ ok: false, error: 'INVALID_OFFSET' }, 400)
+    }
+    const x = Math.round(body.x)
+    const y = Math.round(body.y)
+    if (x < 0 || x > 8192 || y < 0 || y > 8192) {
+      return c.json({ ok: false, error: 'INVALID_OFFSET' }, 400)
+    }
+    try {
+      const res = await fetch(`https://${cfg.host}:${ORACLE_VIEW_PORT}/control/mouse-offset`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'x-origin-secret': cfg.originSecret,
+        },
+        body: JSON.stringify({ x, y }),
+      })
+      const text = await res.text()
+      return new Response(text, {
+        status: res.status,
+        headers: { 'content-type': 'application/json' },
+      })
+    } catch {
+      return c.json({ ok: false, error: 'ORACLE_UPSTREAM' }, 502)
+    }
+  })
+
   // 지연 분해 통계 (2026-11-15): 사이드카 GET /control/stats를 중계한다.
   // 연결별 _f/_l 보고·전달 처리 시간·버퍼·역압·keepalive RTT를 돌려줘
   // 지연이 어느 구간에서 쌓이는지 가른다. 세션 게이트 뒤에 있다
