@@ -2,6 +2,9 @@
  * @jest-environment jsdom
  */
 /// <reference types="jest" />
+// 모듈 스코프 선언 (2026-11-18): pdf-format-fallback.test.ts와 동명
+// 최상위 선언(createHost 등)이 전역 스코프에서 TS2451 충돌을 냈다.
+export {};
 /**
  * PDF 편집기 부팅 강건화 — 포맷 층 (2026-11-15, 1dc37bf 패턴의 PDF 적용).
  *

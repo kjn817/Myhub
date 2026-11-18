@@ -2,6 +2,9 @@
  * @jest-environment jsdom
  */
 /// <reference types="jest" />
+// 모듈 스코프 선언 (2026-11-18): import/export가 없어 두 테스트 파일이
+// 전역 스코프를 공유해 createHost 등 동명 선언이 TS2451 충돌을 냈다.
+export {};
 /**
  * PDF 뷰어 대체 화면·지연 로딩 테스트 (2026-11-15).
  *
