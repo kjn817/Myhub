@@ -7,12 +7,20 @@
 import { Hono } from 'hono'
 import type { Env } from '../../types'
 import { storageUpload, storageDestroy } from '../../services/storage'
+import { deleteOracleFile, fetchOracleFile, putOracleFile } from '../../services/oracle-files'
 import { searchDriveItems } from './search'
-import { saveDriveFile } from './upload'
+import { nextOracleVersion, saveDriveFile } from './upload'
 
 export const driveApp = new Hono<{ Bindings: Env }>()
 
 const MAX_SIZE = 10 * 1024 * 1024
+/**
+ * 오라클 파일 저장 상한 (50MB): PUT은 parseBody로 본문을 버퍼링하므로
+ * Worker 메모리 128MB를 감안해 이 선에서 끊는다. 문서(HWP·XLSX·PPTX·
+ * PDF)는 사실상 이 안에 들고, 내려받기·열기(GET)는 스트리밍이라 상한이
+ * 없다. 상한을 넘기면 400으로 거부한다 (조용히 잘라 저장하지 않는다).
+ */
+export const ORACLE_SAVE_MAX_SIZE = 50 * 1024 * 1024
 
 interface DriveFileRow {
   id: number
@@ -23,6 +31,8 @@ interface DriveFileRow {
   size: number
   url: string | null
   resource_type: string
+  storage: string
+  oracle_path: string | null
   created_at: string
   deleted_at: string | null
   [key: string]: unknown
@@ -197,10 +207,17 @@ driveApp.delete('/folders/:id', async (c) => {
   const ids = await collectFolderIds(c.env.DB, id)
   const ph = ids.map(() => '?').join(',')
   const { results: files } = await c.env.DB.prepare(
-    `SELECT storage_key, resource_type FROM drive_files WHERE folder_id IN (${ph})`
-  ).bind(...ids).all<{ storage_key: string; resource_type: string }>()
+    `SELECT storage_key, resource_type, storage, oracle_path FROM drive_files WHERE folder_id IN (${ph})`
+  ).bind(...ids).all<{ storage_key: string; resource_type: string; storage: string; oracle_path: string | null }>()
   for (const f of files) {
-    await storageDestroy(c.env, f.storage_key, f.resource_type)
+    if (f.storage === 'oracle' && f.oracle_path) {
+      // 사이드카에 닿지 않으면 502로 중단한다 — 행만 지우면 고아 파일이
+      // 남아 감시가 재등록해 되살아나기 때문이다 (DELETE /files/:id와 동일).
+      const gone = await deleteOracleFile(c.env, f.oracle_path)
+      if (!gone.ok) return c.json({ ok: false, error: 'upstream failed' }, 502)
+    } else {
+      await storageDestroy(c.env, f.storage_key, f.resource_type)
+    }
   }
   await c.env.DB.prepare(`DELETE FROM drive_files WHERE folder_id IN (${ph})`).bind(...ids).run()
   await c.env.DB.prepare(`DELETE FROM drive_folders WHERE id IN (${ph})`).bind(...ids).run()
@@ -244,18 +261,45 @@ driveApp.post('/files', async (c) => {
 })
 
 driveApp.get('/files/:id', async (c) => {
-  const row = await c.env.DB.prepare('SELECT url FROM drive_files WHERE id = ? AND deleted_at IS NULL').bind(c.req.param('id')).first<{ url: string | null }>()
-  if (!row?.url) return c.json({ ok: false, error: 'not found' }, 404)
+  const row = await c.env.DB.prepare(
+    'SELECT url, storage FROM drive_files WHERE id = ? AND deleted_at IS NULL'
+  ).bind(c.req.param('id')).first<{ url: string | null; storage: string }>()
+  if (!row) return c.json({ ok: false, error: 'not found' }, 404)
+  // 오라클 파일은 직접 URL이 없어 내용 엔드포인트로 보낸다 — 프론트의
+  // 내려받기·새 탭 열기가 이 리다이렉트를 쓰므로, 여기서 갈라야
+  // Cloudinary 파일과 똑같이 동작한다 (구분 없음).
+  if (row.storage === 'oracle') {
+    const contentUrl = new URL(`/api/drive/files/${c.req.param('id')}/content`, c.req.url)
+    return Response.redirect(contentUrl.toString(), 302)
+  }
+  if (!row.url) return c.json({ ok: false, error: 'not found' }, 404)
   return Response.redirect(row.url, 302)
 })
 
 driveApp.get('/files/:id/content', async (c) => {
   const row = await c.env.DB.prepare(
-    'SELECT url, filename, mime FROM drive_files WHERE id = ? AND deleted_at IS NULL'
-  ).bind(c.req.param('id')).first<{ url: string | null; filename: string; mime: string | null }>()
-  if (!row?.url) return c.json({ ok: false, error: 'not found' }, 404)
+    'SELECT url, filename, mime, storage, oracle_path FROM drive_files WHERE id = ? AND deleted_at IS NULL'
+  ).bind(c.req.param('id')).first<{
+    url: string | null
+    filename: string
+    mime: string | null
+    storage: string
+    oracle_path: string | null
+  }>()
+  if (!row) return c.json({ ok: false, error: 'not found' }, 404)
   const range = c.req.header('Range')
-  const up = await fetch(row.url, range ? { headers: { Range: range } } : undefined)
+  let up: Response | null
+  if (row.storage === 'oracle') {
+    if (!row.oracle_path) return c.json({ ok: false, error: 'not found' }, 404)
+    up = await fetchOracleFile(c.env, row.oracle_path, range)
+    if (!up) return c.json({ ok: false, error: 'upstream failed' }, 502)
+    // 디스크에서 사라진 파일은 없는 파일과 똑같이 404다 — 백엔드명을
+    // 노출하지 않는다 (Finder의 "구분 없음").
+    if (up.status === 404) return c.json({ ok: false, error: 'not found' }, 404)
+  } else {
+    if (!row.url) return c.json({ ok: false, error: 'not found' }, 404)
+    up = await fetch(row.url, range ? { headers: { Range: range } } : undefined)
+  }
   if (!up.ok) return c.json({ ok: false, error: 'upstream failed' }, 502)
   const headers = new Headers()
   headers.set('Content-Type', row.mime || 'application/octet-stream')
@@ -289,12 +333,43 @@ driveApp.put('/files/:id/content', async (c) => {
   const f = body['file']
   const file = Array.isArray(f) ? f[0] : f
   if (!(file instanceof File)) return c.json({ ok: false, error: 'empty' }, 400)
-  if (file.size > MAX_SIZE) {
+  if (row.storage === 'oracle') {
+    if (file.size > ORACLE_SAVE_MAX_SIZE) {
+      return c.json({ ok: false, error: '50MB를 초과해서 저장할 수 없어요' }, 400)
+    }
+  } else if (file.size > MAX_SIZE) {
     return c.json({ ok: false, error: '10MB를 초과해서 저장할 수 없어요' }, 400)
   }
   const baseVersion = typeof body['base_version'] === 'string' ? body['base_version'] : null
   if (baseVersion !== null && baseVersion !== row.storage_key) {
     return c.json({ ok: false, error: 'CONFLICT', file: fileView(row) }, 409)
+  }
+  if (row.storage === 'oracle') {
+    // 오라클 저장 (2026-11-19 하이브리드): 디스크 파일을 제자리에서
+    // 덮어쓴다. Cloudinary와 달리 원자적 WHERE 검사는 하지 않는다 —
+    // 제자리 덮어쓰기라 경쟁에서 지면 디스크 바이트와 버전 토큰이
+    // 어긋나기 때문이다. 사전 base_version 검사로 낡은 저장은 막고,
+    // 그 좁은 경쟁 창을 통과하면 마지막 쓰기가 버전까지 가져가
+    // 결과는 항상 자기 일관적이다 (단일 사용자라 경쟁 자체가 사실상 없음).
+    // 순서는 사이드카 쓰기 → D1 업데이트 — D1이 실패해도 낡은 메타만
+    // 남고, 내용과 어긋나는 거짓 버전은 생기지 않는다.
+    if (!row.oracle_path) return c.json({ ok: false, error: 'not found' }, 404)
+    try {
+      const bytes = await file.arrayBuffer()
+      const put = await putOracleFile(c.env, row.oracle_path, bytes, file.type || null)
+      if (!put.ok) {
+        if (put.status === 404) return c.json({ ok: false, error: 'not found' }, 404)
+        return c.json({ ok: false, error: 'upstream failed' }, 502)
+      }
+      const version = nextOracleVersion(row.oracle_path)
+      await c.env.DB.prepare(
+        'UPDATE drive_files SET storage_key = ?, size = ?, mime = ? WHERE id = ?',
+      ).bind(version, file.size, file.type || null, id).run()
+      await c.env.KV.delete('system:stats').catch(() => {})
+      return c.json({ ok: true, size: file.size, version })
+    } catch (e) {
+      return c.json({ ok: false, error: String(e).slice(0, 200) }, 500)
+    }
   }
   let uploaded: Awaited<ReturnType<typeof storageUpload>> | null = null
   try {
@@ -396,9 +471,23 @@ driveApp.post('/files/:id/restore', async (c) => {
 
 driveApp.delete('/files/:id', async (c) => {
   const id = c.req.param('id')
-  const row = await c.env.DB.prepare('SELECT storage_key, resource_type FROM drive_files WHERE id = ?').bind(id).first<{ storage_key: string; resource_type: string }>()
+  const row = await c.env.DB.prepare(
+    'SELECT storage_key, resource_type, storage, oracle_path FROM drive_files WHERE id = ?'
+  ).bind(id).first<{
+    storage_key: string
+    resource_type: string
+    storage: string
+    oracle_path: string | null
+  }>()
   if (!row) return c.json({ ok: false, error: 'not found' }, 404)
-  await storageDestroy(c.env, row.storage_key, row.resource_type)
+  if (row.storage === 'oracle' && row.oracle_path) {
+    // 사이드카에 닿지 않으면 502로 행을 유지한다 — 행만 지우면 디스크에
+    // 고아 파일이 남아 감시가 재등록해 되살아나기 때문이다.
+    const gone = await deleteOracleFile(c.env, row.oracle_path)
+    if (!gone.ok) return c.json({ ok: false, error: 'upstream failed' }, 502)
+  } else {
+    await storageDestroy(c.env, row.storage_key, row.resource_type)
+  }
   await c.env.DB.prepare('DELETE FROM drive_files WHERE id = ?').bind(id).run()
   await c.env.KV.delete('system:stats').catch(() => {})
   return c.json({ ok: true })

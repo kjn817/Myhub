@@ -2,8 +2,8 @@
 /**
  * src/modules/drive/routes.ts — 파인더 보관함 API 성질 테스트 (C3).
  *
- * 실제 SQLite(local-d1 + 0067 실마이그레이션) + 전역 fetch 목킹(Cloudinary
- * 경계)으로 고정하는 성질:
+ * 실제 SQLite(local-d1 + 0067·0079 실마이그레이션) + 전역 fetch 목킹
+ * (Cloudinary·사이드카 경계)으로 고정하는 성질:
  * - 목록·최근·사용량·휴지통은 삭제된 항목을 숨기고, 파일 뷰의 version은
  *   storage_key와 일치한다 (낙관적 동시성 표식).
  * - 폴더/파일 CRUD와 이동은 순환·자기 참조를 거부하고, 잘못된 id·이름은
@@ -11,7 +11,10 @@
  * - 업로드/교체는 10MB 상한과 base_version 충돌(409)을 지키며, 교체 중
  *   원본이 사라지면 새 업로드를 정리하고 409로 돌아온다.
  * - 영구 삭제는 하위 트리 전체의 스토리지 파괴를 동반한다.
- * 카나리아: 충돌 검사나 상한을 깨면 해당 테스트가 실패한다.
+ * - 오라클 파일(storage='oracle')은 내용·리다이렉트·저장·삭제가
+ *   사이드카로 분기되고, 응답 모양에는 storage가 노출되지 않는다
+ *   (하이브리드 저장소 2026-11-19 — Finder의 "구분 없음").
+ * 카나리아: 충돌 검사·상한·오라클 분기를 깨면 해당 테스트가 실패한다.
  */
 import * as fs from 'fs'
 import * as path from 'path'
@@ -26,6 +29,7 @@ const mig = (n: string) => fs.readFileSync(path.join(ROOT, 'migrations', n), 'ut
 function makeDb() {
   const db = createLocalD1()
   db.exec(mig('0067_drive_storage.sql'))
+  db.exec(mig('0079_drive_oracle_storage.sql'))
   return db
 }
 
@@ -43,6 +47,7 @@ let uploadSeq = 0
 let destroyResult: unknown = { result: 'ok' }
 let onUpload: (() => void) | null = null
 let contentHandler: ((url: string, init?: { headers?: Record<string, string> }) => Promise<unknown>) | null = null
+let oracleHandler: ((url: string, init?: { method?: string; headers?: Record<string, string>; body?: unknown }) => Promise<unknown>) | null = null
 
 function stubFetch(): void {
   fetchCalls = []
@@ -50,7 +55,8 @@ function stubFetch(): void {
   destroyResult = { result: 'ok' }
   onUpload = null
   contentHandler = null
-  global.fetch = (async (url: unknown, init?: { method?: string; headers?: Record<string, string> }) => {
+  oracleHandler = null
+  global.fetch = (async (url: unknown, init?: { method?: string; headers?: Record<string, string>; body?: unknown }) => {
     const u = String(url)
     fetchCalls.push({ url: u, method: init?.method ?? 'GET' })
     if (u.includes('/auto/upload')) {
@@ -66,6 +72,10 @@ function stubFetch(): void {
     if (u.includes('/destroy')) {
       return { ok: true, status: 200, json: async () => destroyResult }
     }
+    if (u.includes('/control/file')) {
+      if (oracleHandler) return oracleHandler(u, init)
+      return { ok: false, status: 404, json: async () => ({}) }
+    }
     if (contentHandler) return contentHandler(u, init)
     return { ok: false, status: 404, json: async () => ({}) }
   }) as typeof fetch
@@ -79,6 +89,16 @@ function envOf(db: any, kv: FakeKV = new FakeKV()) {
     DB: db, KV: kv,
     CLOUDINARY_CLOUD_NAME: 'testcloud', CLOUDINARY_API_KEY: 'key', CLOUDINARY_API_SECRET: 'secret',
   } as never
+}
+
+const ORACLE_ENV = {
+  ORACLE_BROWSER_HOST: 'oracle.test',
+  ORIGIN_SECRET: 'origin-secret-16',
+  CDP_SECRET: 'cdp-secret-16',
+}
+
+function envOracleOf(db: any, kv: FakeKV = new FakeKV()) {
+  return { ...(envOf(db, kv) as unknown as Record<string, unknown>), ...ORACLE_ENV } as never
 }
 
 async function req(env: never, routePath: string, init: RequestInit = {}) {
@@ -102,6 +122,27 @@ async function seedFile(db: any, filename: string, folderId: number | null = nul
   const r = await db.prepare(
     'INSERT INTO drive_files (folder_id, storage_key, filename, mime, size, url, resource_type, deleted_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
   ).bind(folderId, opts.key ?? `key/${filename}`, filename, 'text/plain', opts.size ?? 10, `https://cdn.example/${filename}`, 'raw', opts.deleted ? '2026-01-01T00:00:00Z' : null).run()
+  return Number(r.meta.last_row_id)
+}
+
+async function seedOracleFile(
+  db: any,
+  filename: string,
+  folderId: number | null = null,
+  opts: { key?: string; size?: number; mime?: string } = {},
+): Promise<number> {
+  const r = await db.prepare(
+    'INSERT INTO drive_files (folder_id, storage_key, filename, mime, size, url, resource_type, storage, oracle_path) VALUES (?, ?, ?, ?, ?, NULL, ?, ?, ?)',
+  ).bind(
+    folderId,
+    opts.key ?? `oracle:${filename}#v1`,
+    filename,
+    opts.mime ?? 'application/x-hwp',
+    opts.size ?? 20 * 1024 * 1024,
+    'raw',
+    'oracle',
+    filename,
+  ).run()
   return Number(r.meta.last_row_id)
 }
 
@@ -579,5 +620,235 @@ describe('파일 이름변경·이동·휴지통·삭제', () => {
     expect(byId.get(via).via_folder).toBe(true)
     expect(byId.get(own).via_folder).toBe(false)
     expect(r.json.files).toHaveLength(2)
+  })
+})
+
+describe('오라클 저장소 파일 — Cloudinary와 구분 없는 동작 (2026-11-19)', () => {
+  test('목록에 뜨고 version은 storage_key, storage 필드는 노출되지 않는다', async () => {
+    const db = makeDb()
+    await seedOracleFile(db, '큰문서.hwp', null, { key: 'oracle:큰문서.hwp#v1' })
+    await seedFile(db, '작은.txt')
+    const r = await get(envOracleOf(db), '/list')
+    expect(r.status).toBe(200)
+    const byName = new Map<string, any>(r.json.files.map((f: any) => [f.filename, f]))
+    const big = byName.get('큰문서.hwp')
+    expect(big.version).toBe('oracle:큰문서.hwp#v1')
+    expect(big.url).toBeNull()
+    expect('storage' in big).toBe(false)
+    expect('oracle_path' in big).toBe(false)
+    expect(Object.keys(big).sort()).toEqual(Object.keys(byName.get('작은.txt')).sort())
+  })
+
+  test('GET /files/:id는 내용 엔드포인트로 302한다', async () => {
+    const db = makeDb()
+    const id = await seedOracleFile(db, '큰문서.hwp')
+    const r = await get(envOracleOf(db), `/files/${id}`)
+    expect(r.status).toBe(302)
+    expect(r.headers.get('location')).toBe(`http://localhost/api/drive/files/${id}/content`)
+  })
+
+  test('GET content는 사이드카 바이트를 Cloudinary와 같은 헤더로 스트리밍한다', async () => {
+    const db = makeDb()
+    const id = await seedOracleFile(db, '큰문서.hwp', null, { mime: 'application/x-hwp' })
+    let seenUrl = ''
+    let seenRange: string | undefined
+    oracleHandler = async (u, init) => {
+      seenUrl = u
+      seenRange = init?.headers?.Range
+      return new Response('oracle-bytes', { status: 200 })
+    }
+    const r = await driveApp.request(`/files/${id}/content`, {}, envOracleOf(db))
+    expect(r.status).toBe(200)
+    expect(await r.text()).toBe('oracle-bytes')
+    expect(seenUrl).toBe('https://oracle.test:8081/control/file?path=%ED%81%B0%EB%AC%B8%EC%84%9C.hwp')
+    expect(seenRange).toBeUndefined()
+    expect(r.headers.get('content-type')).toBe('application/x-hwp')
+    expect(r.headers.get('content-disposition')).toContain(encodeURIComponent('큰문서.hwp'))
+    expect(r.headers.get('cache-control')).toBe('no-store')
+    expect(r.headers.get('accept-ranges')).toBe('bytes')
+    expect(r.headers.get('x-content-type-options')).toBe('nosniff')
+    expect(fetchCalls.filter((c) => c.url.includes('cdn.example'))).toHaveLength(0)
+  })
+
+  test('content Range는 사이드카에 전달되고 206이 그대로 중계된다', async () => {
+    const db = makeDb()
+    const id = await seedOracleFile(db, '영상.mp4', null, { mime: 'video/mp4' })
+    oracleHandler = async (_u, init) => {
+      expect(init?.headers?.Range).toBe('bytes=10-19')
+      return new Response('0123456789', {
+        status: 206,
+        headers: { 'Content-Range': 'bytes 10-19/100', 'Content-Length': '10' },
+      })
+    }
+    const r = await driveApp.request(
+      `/files/${id}/content`,
+      { headers: { Range: 'bytes=10-19' } },
+      envOracleOf(db),
+    )
+    expect(r.status).toBe(206)
+    expect(await r.text()).toBe('0123456789')
+    expect(r.headers.get('content-range')).toBe('bytes 10-19/100')
+    expect(r.headers.get('content-length')).toBe('10')
+  })
+
+  test('content: 사이드카 404는 404, 미구성·네트워크 실패는 502', async () => {
+    const db = makeDb()
+    const id = await seedOracleFile(db, '사라진.hwp')
+    oracleHandler = async () => new Response('gone', { status: 404 })
+    const gone = await get(envOracleOf(db), `/files/${id}/content`)
+    expect(gone.status).toBe(404)
+    expect(gone.json.error).toBe('not found')
+    oracleHandler = async () => {
+      throw new Error('connect refused')
+    }
+    const down = await get(envOracleOf(db), `/files/${id}/content`)
+    expect(down.status).toBe(502)
+    // 오라클 설정이 없는 환경이면 사이드카에 닿지 않아 502다.
+    const unconfigured = await get(envOf(db), `/files/${id}/content`)
+    expect(unconfigured.status).toBe(502)
+  })
+
+  test('PUT: 사이드카에 바이트를 쓰고 version·size가 바뀐다 (Cloudinary 무관)', async () => {
+    const db = makeDb()
+    const id = await seedOracleFile(db, '편집.hwp', null, { key: 'oracle:편집.hwp#v1', size: 100 })
+    let putBody: unknown
+    let putUrl = ''
+    oracleHandler = async (u, init) => {
+      putUrl = u
+      putBody = init?.body
+      return new Response(JSON.stringify({ ok: true, size: 9 }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    }
+    const form = new FormData()
+    form.append('file', new File(['new-bytes'], 'ignored.hwp', { type: 'application/x-hwp' }))
+    form.append('base_version', 'oracle:편집.hwp#v1')
+    const r = await req(envOracleOf(db), `/files/${id}/content`, { method: 'PUT', body: form })
+    expect(r.status).toBe(200)
+    expect(r.json.size).toBe(9)
+    expect(r.json.version).toMatch(/^oracle:편집\.hwp#/)
+    expect(r.json.version).not.toBe('oracle:편집.hwp#v1')
+    expect(putUrl).toContain('/control/file?path=%ED%8E%B8%EC%A7%91.hwp')
+    expect(new TextDecoder().decode(putBody as ArrayBuffer)).toBe('new-bytes')
+    const row = await fileRow(db, id)
+    expect(row.storage_key).toBe(r.json.version)
+    expect(row.size).toBe(9)
+    expect(row.filename).toBe('편집.hwp')
+    expect(fetchCalls.filter((c) => c.url.includes('/auto/upload'))).toHaveLength(0)
+    expect(fetchCalls.filter((c) => c.url.includes('/destroy'))).toHaveLength(0)
+  })
+
+  test('PUT 충돌: base_version이 다르면 409이고 사이드카에 닿지 않는다', async () => {
+    const db = makeDb()
+    const id = await seedOracleFile(db, '충돌.hwp', null, { key: 'oracle:충돌.hwp#v1' })
+    let putCalls = 0
+    oracleHandler = async () => {
+      putCalls += 1
+      return new Response('{}', { status: 200 })
+    }
+    const form = new FormData()
+    form.append('file', new File(['x'], 'x.hwp'))
+    form.append('base_version', 'oracle:충돌.hwp#stale')
+    const r = await req(envOracleOf(db), `/files/${id}/content`, { method: 'PUT', body: form })
+    expect(r.status).toBe(409)
+    expect(r.json.error).toBe('CONFLICT')
+    expect(r.json.file.version).toBe('oracle:충돌.hwp#v1')
+    expect(putCalls).toBe(0)
+    expect((await fileRow(db, id)).storage_key).toBe('oracle:충돌.hwp#v1')
+  })
+
+  test('PUT 50MB 초과는 400이고 사이드카에 닿지 않는다', async () => {
+    const db = makeDb()
+    const id = await seedOracleFile(db, '너무큼.hwp')
+    let putCalls = 0
+    oracleHandler = async () => {
+      putCalls += 1
+      return new Response('{}', { status: 200 })
+    }
+    const bigForm = new FormData()
+    bigForm.append('file', new File([new Uint8Array(50 * 1024 * 1024 + 1)], 'big.hwp'))
+    const r = await req(envOracleOf(db), `/files/${id}/content`, { method: 'PUT', body: bigForm })
+    expect(r.status).toBe(400)
+    expect(r.json.error).toContain('50MB')
+    expect(putCalls).toBe(0)
+  })
+
+  test('PUT: 사이드카 404는 404, 실패는 502이고 D1 행은 그대로다', async () => {
+    const db = makeDb()
+    const id = await seedOracleFile(db, '대상.hwp', null, { key: 'oracle:대상.hwp#v1', size: 100 })
+    const form = () => {
+      const f = new FormData()
+      f.append('file', new File(['data'], 'data.hwp'))
+      return f
+    }
+    oracleHandler = async () => new Response('gone', { status: 404 })
+    const gone = await req(envOracleOf(db), `/files/${id}/content`, { method: 'PUT', body: form() })
+    expect(gone.status).toBe(404)
+    oracleHandler = async () => {
+      throw new Error('connect refused')
+    }
+    const down = await req(envOracleOf(db), `/files/${id}/content`, { method: 'PUT', body: form() })
+    expect(down.status).toBe(502)
+    const row = await fileRow(db, id)
+    expect(row.storage_key).toBe('oracle:대상.hwp#v1')
+    expect(row.size).toBe(100)
+  })
+
+  test('DELETE: 사이드카 DELETE 후 행이 사라지고 Cloudinary destroy는 없다', async () => {
+    const db = makeDb()
+    const kv = new FakeKV()
+    const env = envOracleOf(db, kv)
+    const id = await seedOracleFile(db, '지울.hwp')
+    let deleteUrl = ''
+    oracleHandler = async (u, init) => {
+      expect(init?.method).toBe('DELETE')
+      deleteUrl = u
+      return new Response(JSON.stringify({ ok: true, deleted: true }), { status: 200 })
+    }
+    const r = await del(env, `/files/${id}`)
+    expect(r.json).toEqual({ ok: true })
+    expect(deleteUrl).toContain('/control/file?path=%EC%A7%80%EC%9A%B8.hwp')
+    expect(await fileRow(db, id)).toBeNull()
+    expect(fetchCalls.filter((c) => c.url.includes('/destroy'))).toHaveLength(0)
+    expect(kv.deletes).toContain('system:stats')
+  })
+
+  test('DELETE: 사이드카에 이미 없어도(404) 행은 지워지고, 닿지 않으면 502로 행 유지', async () => {
+    const db = makeDb()
+    const env = envOracleOf(db)
+    const goneId = await seedOracleFile(db, '이미없음.hwp')
+    oracleHandler = async () => new Response('gone', { status: 404 })
+    const gone = await del(env, `/files/${goneId}`)
+    expect(gone.json).toEqual({ ok: true })
+    expect(await fileRow(db, goneId)).toBeNull()
+    const stuckId = await seedOracleFile(db, '지킬.hwp')
+    oracleHandler = async () => {
+      throw new Error('connect refused')
+    }
+    const stuck = await del(env, `/files/${stuckId}`)
+    expect(stuck.status).toBe(502)
+    expect(await fileRow(db, stuckId)).not.toBeNull()
+  })
+
+  test('폴더 영구 삭제: 오라클 파일은 사이드카로, Cloudinary 파일은 destroy로', async () => {
+    const db = makeDb()
+    const env = envOracleOf(db)
+    const folder = await seedFolder(db, '섞인폴더')
+    await seedOracleFile(db, '큰파일.hwp', folder)
+    await seedFile(db, '작은파일.txt', folder)
+    await seedFile(db, '밖파일.txt', null)
+    const deletedPaths: string[] = []
+    oracleHandler = async (u) => {
+      deletedPaths.push(u)
+      return new Response(JSON.stringify({ ok: true, deleted: true }), { status: 200 })
+    }
+    const r = await del(env, `/folders/${folder}`)
+    expect(r.json).toEqual({ ok: true, files: 2, folders: 1 })
+    expect(deletedPaths).toHaveLength(1)
+    expect(deletedPaths[0]).toContain(encodeURIComponent('큰파일.hwp'))
+    expect(fetchCalls.filter((c) => c.url.includes('/destroy'))).toHaveLength(1)
+    const left = await db.prepare('SELECT COUNT(*) AS n FROM drive_files').first()
+    expect(left.n).toBe(1)
   })
 })

@@ -35,6 +35,8 @@ function makeDb() {
       'ALTER TABLE memos ADD COLUMN title_hint TEXT;',
   )
   db.exec(mig('0067_drive_storage.sql'))
+  db.exec(mig('0079_drive_oracle_storage.sql'))
+  db.exec(mig('0054_google_integrations.sql'))
   db.exec(mig('0030_fts_d1_compat.sql'))
   db.exec(mig('0059_memo_fts_trigram.sql'))
   return db
@@ -69,18 +71,28 @@ async function seedFile(
   return { id: Number(r.meta.last_row_id), filename, folderId }
 }
 
+async function seedOracleFile(db: any, filename: string): Promise<SeededFile> {
+  const r = await db
+    .prepare(
+      'INSERT INTO drive_files (filename, folder_id, mime, size, storage_key, url, storage, oracle_path) VALUES (?, ?, ?, ?, ?, NULL, ?, ?)',
+    )
+    .bind(filename, null, 'application/x-hwp', 20 * 1024 * 1024, `oracle:${filename}#v1`, 'oracle', filename)
+    .run()
+  return { id: Number(r.meta.last_row_id), filename, folderId: null }
+}
+
 interface Call {
   messages: Array<{ role: string; content: string }>
 }
 
-function makeApp(chatText: string | ((call: Call) => string)) {
+function makeApp(chatText: string | ((call: Call) => string), fetchFn?: typeof fetch) {
   const calls: Call[] = []
   const chat: OfficeChatFn = async (_env, _policy, messages) => {
     const call: Call = { messages: messages as Call['messages'] }
     calls.push(call)
     return { text: typeof chatText === 'function' ? chatText(call) : chatText }
   }
-  const app = createOfficeAiApp({ chat })
+  const app = createOfficeAiApp({ chat, fetchFn })
   return { app, calls }
 }
 
@@ -296,6 +308,60 @@ describe('/mail/draft · /mail/send — 승인 경계', () => {
       confirm: true,
       fileId,
     })
+    expect(r.status).toBe(404)
+    expect(r.json.error).toBe('file_not_found')
+  })
+
+  test('send: 오라클 파일 첨부는 사이드카에서 바이트를 받아 발송 단계까지 간다', async () => {
+    const db = makeDb()
+    const file = await seedOracleFile(db, '첨부문서.hwp')
+    const seenUrls: string[] = []
+    const fetchFn = (async (url: unknown) => {
+      const u = String(url)
+      seenUrls.push(u)
+      if (u.includes('/control/file')) return new Response('oracle-attachment-bytes', { status: 200 })
+      // Gmail 토큰 단계: 토큰이 없으면 getValidAccessToken이 실패하므로
+      // 이 fetch는 도달하지 않아도 되지만, 도달하면 실패로 답한다.
+      return new Response('no', { status: 401 })
+    }) as unknown as typeof fetch
+    const { app } = makeApp(DRAFT, fetchFn)
+    const draft = { to: 'a@b.co', subject: '제목', body: '본문' }
+    const token = await signApproval(SECRET, { draft, fileId: file.id })
+    const r = await post(
+      app,
+      envOf(db, {
+        GOOGLE_WRITE_ENABLED: 'true',
+        ORACLE_BROWSER_HOST: 'oracle.test',
+        ORIGIN_SECRET: 'origin-secret-16',
+        CDP_SECRET: 'cdp-secret-16',
+      }),
+      '/mail/send',
+      { draft, token, confirm: true, fileId: file.id },
+    )
+    expect(seenUrls.some((u) => u.includes('/control/file?path=%EC%B2%A8%EB%B6%80%EB%AC%B8%EC%84%9C.hwp'))).toBe(true)
+    // 첨부는 받아졌고 Gmail 토큰 단계에서 멈춘다 — file_not_found가 아니다.
+    expect(r.status).toBe(403)
+    expect(r.json.error).not.toBe('file_not_found')
+  })
+
+  test('send: 오라클 파일이 사이드카에 없으면 404 file_not_found', async () => {
+    const db = makeDb()
+    const file = await seedOracleFile(db, '사라진첨부.hwp')
+    const fetchFn = (async () => new Response('gone', { status: 404 })) as unknown as typeof fetch
+    const { app } = makeApp(DRAFT, fetchFn)
+    const draft = { to: 'a@b.co', subject: '제목', body: '본문' }
+    const token = await signApproval(SECRET, { draft, fileId: file.id })
+    const r = await post(
+      app,
+      envOf(db, {
+        GOOGLE_WRITE_ENABLED: 'true',
+        ORACLE_BROWSER_HOST: 'oracle.test',
+        ORIGIN_SECRET: 'origin-secret-16',
+        CDP_SECRET: 'cdp-secret-16',
+      }),
+      '/mail/send',
+      { draft, token, confirm: true, fileId: file.id },
+    )
     expect(r.status).toBe(404)
     expect(r.json.error).toBe('file_not_found')
   })

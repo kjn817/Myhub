@@ -16,6 +16,7 @@ import {
 } from '../../services/office-ai'
 import { signApproval, verifyApproval } from '../../services/office-ops'
 import { executeGmailSend } from '../../services/google-tools'
+import { fetchOracleFile } from '../../services/oracle-files'
 
 export interface OfficeAiDeps {
   fetchFn?: typeof fetch
@@ -140,10 +141,27 @@ export function createOfficeAiApp(deps: OfficeAiDeps = {}) {
     let attachment: { filename: string; mime: string; bytes: Uint8Array } | undefined
     if (fileId) {
       const row = await c.env.DB.prepare(
-        'SELECT filename, mime, url FROM drive_files WHERE id = ? AND deleted_at IS NULL'
-      ).bind(fileId).first<{ filename: string; mime: string | null; url: string | null }>()
-      if (!row?.url) return c.json({ ok: false, error: 'file_not_found' }, 404)
-      const up = await fetchFn(row.url)
+        'SELECT filename, mime, url, storage, oracle_path FROM drive_files WHERE id = ? AND deleted_at IS NULL'
+      ).bind(fileId).first<{
+        filename: string
+        mime: string | null
+        url: string | null
+        storage: string
+        oracle_path: string | null
+      }>()
+      if (!row) return c.json({ ok: false, error: 'file_not_found' }, 404)
+      // 오라클 파일은 직접 URL이 없어 사이드카에서 가져온다 (하이브리드
+      // 저장소 2026-11-19 — 메일 첨부도 Finder와 구분 없이 동작한다).
+      let up: Response | null
+      if (row.storage === 'oracle') {
+        if (!row.oracle_path) return c.json({ ok: false, error: 'file_not_found' }, 404)
+        up = await fetchOracleFile(c.env, row.oracle_path, null, fetchFn)
+        if (!up) return c.json({ ok: false, error: 'attachment_failed' }, 502)
+        if (up.status === 404) return c.json({ ok: false, error: 'file_not_found' }, 404)
+      } else {
+        if (!row.url) return c.json({ ok: false, error: 'file_not_found' }, 404)
+        up = await fetchFn(row.url)
+      }
       if (!up.ok) return c.json({ ok: false, error: 'attachment_failed' }, 502)
       attachment = {
         filename: row.filename,

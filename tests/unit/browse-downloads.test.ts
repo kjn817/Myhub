@@ -1,9 +1,10 @@
 /// <reference types="jest" />
 /**
- * POST /api/browse/downloads — 브라우저 다운로드 수신 (2026-11-19).
+ * POST /api/browse/downloads (+ /downloads/register) — 브라우저 다운로드
+ * 수신 (2026-11-19).
  *
- * 실제 SQLite(local-d1 + 0067 실마이그레이션) + 전역 fetch 목킹(Cloudinary
- * 경계)으로 고정하는 성질:
+ * 실제 SQLite(local-d1 + 0067·0079 실마이그레이션) + 전역 fetch 목킹
+ * (Cloudinary 경계)으로 고정하는 성질:
  * - ORIGIN_SECRET Bearer가 아니면 401, 시크릿 미설정 시 503으로 비활성화한다
  *   (열린 업로드 금지 — 전역 미들웨어를 우회하는 경로라 모듈 인증이 전부다).
  * - 받은 파일은 Finder '다운로드' 폴더에 들어가고, 폴더는 한 번만 만든다
@@ -12,7 +13,10 @@
  * - 삭제된 '다운로드' 폴더가 있으면 복원해 쓰고 새로 만들지 않는다.
  * - 10MB 초과는 400으로 거부하고 Cloudinary·D1에 닿지 않는다.
  * - 빈 파일·파일 없음은 400이다.
- * 카나리아: 인증·폴더 재사용·상한을 깨면 해당 테스트가 실패한다.
+ * - 등록(/register)은 오라클 행(storage='oracle', url NULL)을 만들고,
+ *   같은 oracle_path 재등록은 duplicate로 돌려보내 행이 중복되지 않으며,
+ *   휴지통에 있는 행은 복원하지 않는다.
+ * 카나리아: 인증·폴더 재사용·상한·upsert를 깨면 해당 테스트가 실패한다.
  */
 import * as fs from 'fs'
 import * as path from 'path'
@@ -31,6 +35,7 @@ const mig = (n: string) => fs.readFileSync(path.join(ROOT, 'migrations', n), 'ut
 function makeDb() {
   const db = createLocalD1()
   db.exec(mig('0067_drive_storage.sql'))
+  db.exec(mig('0079_drive_oracle_storage.sql'))
   return db
 }
 
@@ -192,5 +197,149 @@ describe('POST /api/browse/downloads', () => {
     const noFile = await postDownload(env, new FormData())
     expect(noFile.status).toBe(400)
     expect(fetchCalls.filter((u) => u.includes('/auto/upload'))).toHaveLength(0)
+  })
+})
+
+async function postRegister(
+  env: never,
+  payload: unknown,
+  auth: string | null = 'Bearer origin-secret-16',
+) {
+  const headers: Record<string, string> = { 'content-type': 'application/json' }
+  if (auth !== null) headers['authorization'] = auth
+  const res = await app.request(
+    '/api/browse/downloads/register',
+    { method: 'POST', headers, body: typeof payload === 'string' ? payload : JSON.stringify(payload) },
+    env,
+  )
+  let json: any = null
+  try {
+    json = await res.json()
+  } catch {
+    /* ignore */
+  }
+  return { status: res.status, json }
+}
+
+describe('POST /api/browse/downloads/register', () => {
+  test('오라클 행을 만들고 확장자로 mime을 추정한다', async () => {
+    const db = makeDb()
+    const r = await postRegister(envOf(db), {
+      name: '보고서.hwp',
+      size: 20 * 1024 * 1024,
+      oraclePath: '보고서.hwp',
+    })
+    expect(r.status).toBe(200)
+    expect(r.json.ok).toBe(true)
+    expect(r.json.file.filename).toBe('보고서.hwp')
+    expect(r.json.file.size).toBe(20 * 1024 * 1024)
+    const row = await db
+      .prepare('SELECT * FROM drive_files WHERE id = ?')
+      .bind(r.json.file.id)
+      .first()
+    expect(row.storage).toBe('oracle')
+    expect(row.oracle_path).toBe('보고서.hwp')
+    expect(row.url).toBeNull()
+    expect(row.mime).toBe('application/x-hwp')
+    expect(row.folder_id).toBe(r.json.folderId)
+    expect(String(row.storage_key)).toMatch(/^oracle:보고서\.hwp#/)
+    // Cloudinary에는 닿지 않는다 — 바이트가 아니라 메타데이터만 등록한다.
+    expect(fetchCalls.filter((u) => u.includes('/auto/upload'))).toHaveLength(0)
+    const folders = await foldersNamed(db, '다운로드')
+    expect(folders.results).toHaveLength(1)
+  })
+
+  test('같은 oracle_path 재등록은 duplicate로 돌려보내고 행이 늘지 않는다', async () => {
+    const db = makeDb()
+    const env = envOf(db)
+    const payload = { name: 'big.zip', size: 15 * 1024 * 1024, oraclePath: 'big.zip' }
+    const r1 = await postRegister(env, payload)
+    expect(r1.status).toBe(200)
+    expect(r1.json.duplicate).toBeUndefined()
+    const r2 = await postRegister(env, payload)
+    expect(r2.status).toBe(200)
+    expect(r2.json.ok).toBe(true)
+    expect(r2.json.duplicate).toBe(true)
+    expect(r2.json.file.id).toBe(r1.json.file.id)
+    const count = await db.prepare('SELECT COUNT(*) AS n FROM drive_files').first()
+    expect(count?.n).toBe(1)
+  })
+
+  test('휴지통에 있는 행은 복원하지 않고 trashed로 알린다', async () => {
+    const db = makeDb()
+    const env = envOf(db)
+    const payload = { name: 'old.bin', size: 12 * 1024 * 1024, oraclePath: 'old.bin' }
+    const r1 = await postRegister(env, payload)
+    expect(r1.status).toBe(200)
+    await db
+      .prepare("UPDATE drive_files SET deleted_at = datetime('now') WHERE id = ?")
+      .bind(r1.json.file.id)
+      .run()
+    const r2 = await postRegister(env, payload)
+    expect(r2.status).toBe(200)
+    expect(r2.json.duplicate).toBe(true)
+    expect(r2.json.trashed).toBe(true)
+    const row = await db
+      .prepare('SELECT deleted_at FROM drive_files WHERE id = ?')
+      .bind(r1.json.file.id)
+      .first()
+    expect(row?.deleted_at).not.toBeNull()
+    const count = await db.prepare('SELECT COUNT(*) AS n FROM drive_files').first()
+    expect(count?.n).toBe(1)
+  })
+
+  test('Bearer가 틀리거나 없으면 401, 시크릿 미설정이면 503', async () => {
+    const db = makeDb()
+    const env = envOf(db)
+    const payload = { name: 'x.bin', size: 11 * 1024 * 1024, oraclePath: 'x.bin' }
+    const wrong = await postRegister(env, payload, 'Bearer wrong-secret-16')
+    expect(wrong.status).toBe(401)
+    const missing = await postRegister(env, payload, null)
+    expect(missing.status).toBe(401)
+    const disabled = await postRegister(envOf(db, null), payload)
+    expect(disabled.status).toBe(503)
+    const count = await db.prepare('SELECT COUNT(*) AS n FROM drive_files').first()
+    expect(count?.n).toBe(0)
+  })
+
+  test('잘못된 본문은 400이고 행을 만들지 않는다', async () => {
+    const db = makeDb()
+    const env = envOf(db)
+    const bad = [
+      { name: 'x.bin', size: 11, oraclePath: '../x.bin' },
+      { name: 'x.bin', size: 11, oraclePath: 'sub/x.bin' },
+      { name: 'x.bin', size: 11, oraclePath: 'x\\bin' },
+      { name: '', size: 11, oraclePath: 'x.bin' },
+      { name: 'a/b.bin', size: 11, oraclePath: 'b.bin' },
+      { name: 'x.bin', size: 0, oraclePath: 'x.bin' },
+      { name: 'x.bin', size: -5, oraclePath: 'x.bin' },
+      { name: 'x.bin', size: 11.5, oraclePath: 'x.bin' },
+      { name: 'x.bin', size: 11 },
+      'not-json{',
+    ]
+    for (const payload of bad) {
+      const r = await postRegister(env, payload)
+      expect(r.status).toBe(400)
+    }
+    const count = await db.prepare('SELECT COUNT(*) AS n FROM drive_files').first()
+    expect(count?.n).toBe(0)
+  })
+
+  test('모르는 확장자는 mime null, 명시 mime은 그대로 쓴다', async () => {
+    const db = makeDb()
+    const env = envOf(db)
+    const r1 = await postRegister(env, { name: 'data.xyz', size: 11, oraclePath: 'data.xyz' })
+    expect(r1.status).toBe(200)
+    const row1 = await db.prepare('SELECT mime FROM drive_files WHERE id = ?').bind(r1.json.file.id).first()
+    expect(row1?.mime).toBeNull()
+    const r2 = await postRegister(env, {
+      name: 'data.xyz',
+      size: 12,
+      oraclePath: 'data2.xyz',
+      mime: 'application/x-custom',
+    })
+    expect(r2.status).toBe(200)
+    const row2 = await db.prepare('SELECT mime FROM drive_files WHERE id = ?').bind(r2.json.file.id).first()
+    expect(row2?.mime).toBe('application/x-custom')
   })
 })

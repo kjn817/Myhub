@@ -14,6 +14,51 @@ export interface SavedDriveFile {
   size: number
 }
 
+/**
+ * 확장자로 MIME을 추정한다 — 오라클 저장소 파일은 Cloudinary 업로드
+ * 응답이 없어 mime을 알 방법이 없으므로 등록 시점에 파일명으로 추정한다.
+ * 모르는 확장자는 null (내용 서빙이 application/octet-stream으로 폴백).
+ */
+const MIME_BY_EXTENSION: Record<string, string> = {
+  hwp: 'application/x-hwp',
+  hwpx: 'application/vnd.hancom.hwpx',
+  xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  xls: 'application/vnd.ms-excel',
+  docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  doc: 'application/msword',
+  pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  ppt: 'application/vnd.ms-powerpoint',
+  pdf: 'application/pdf',
+  zip: 'application/zip',
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  png: 'image/png',
+  gif: 'image/gif',
+  webp: 'image/webp',
+  mp4: 'video/mp4',
+  mp3: 'audio/mpeg',
+  txt: 'text/plain',
+  csv: 'text/csv',
+  json: 'application/json',
+  md: 'text/markdown',
+}
+
+export function mimeFromFilename(filename: string): string | null {
+  const m = /\.([^.]+)$/.exec(filename.trim().toLowerCase())
+  if (!m) return null
+  return MIME_BY_EXTENSION[m[1]] ?? null
+}
+
+/**
+ * 오라클 파일의 버전 토큰 — storage_key에 들어가는 낙관적 동시성 표식.
+ * Cloudinary 파일은 public_id가 저장마다 바뀌듯, 오라클 파일은 이 토큰이
+ * 저장마다 바뀐다. 시각 + 난수를 섞어 같은 밀리초의 연속 저장도 구분한다.
+ */
+export function nextOracleVersion(oraclePath: string): string {
+  const rand = Math.random().toString(16).slice(2, 8)
+  return `oracle:${oraclePath}#${Date.now()}-${rand}`
+}
+
 /** 파일 하나를 Cloudinary에 올리고 drive_files 행을 만든다. */
 export async function saveDriveFile(
   env: Env,
