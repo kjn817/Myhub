@@ -346,6 +346,63 @@ describe('browser-live viewport 적용 — 이동 없는 진입·리사이즈 (2
     expect(vpCalls).toHaveLength(1)
     await live.endLive()
   })
+
+  test('리사이즈 보고가 유실돼도 상태 폴링이 새 크기를 다시 보낸다 (2026-11-19 정합)', async () => {
+    // 새로고침 직후 최대화 때 1018×765 override에 머물러 화면이 절반만
+    // 보이던 실화면 전례: 리사이즈 관찰자가 안 불리면(혹은 보고가
+    // 유실되면) 복구 경로가 없었다. 상태 폴링(2초)이 매번 재서
+    // 적용된 크기와 다르면 다시 보낸다.
+    // 카나리아: 정합 호출을 빼면 두 번째 호출이 없어 실패한다.
+    setupFixture({ w: 1018, h: 765 }, { w: 0, h: 0 })
+    const { live, vpCalls } = makeLive()
+    await live.enterLive()
+    await flush()
+    expect(vpCalls).toEqual([{ viewport: { width: 1018, height: 765 } }])
+    // 관찰자를 일부러 안 불린다 — 최대화가 관찰자에 안 잡힌 경우.
+    stubRect(getDoc().getElementById('bwStage'), 1920, 1014)
+    jest.advanceTimersByTime(2000)
+    await flush()
+    expect(vpCalls).toHaveLength(2)
+    expect(vpCalls[1]).toEqual({ viewport: { width: 1920, height: 1014 } })
+    // 한 번 맞혀지면 이후 폴링은 요청을 안 보낸다.
+    jest.advanceTimersByTime(30000)
+    await flush()
+    expect(vpCalls).toHaveLength(2)
+    await live.endLive()
+  })
+
+  test('적용 실패 뒤 재시도가 끝나도 상태 폴링이 계속 다시 보내 결국 맞춘다 (2026-11-19 정합)', async () => {
+    // 리사이즈 보고가 실패하고 2초·5초·15초 재시도까지 다 떨어지면
+    // 그 크기는 다시 안 가는 게 옛 동작이었다 — 상태 폴링 정합이
+    // 2초마다 다시 보내 서버가 살아나면 맞추고, 맞혀지면 그만둔다.
+    setupFixture({ w: 1018, h: 765 }, { w: 0, h: 0 })
+    let n1920 = 0
+    const { live, vpCalls } = makeLive(undefined, (viewport: any) => {
+      if (viewport && viewport.width === 1920) {
+        n1920 += 1
+        if (n1920 <= 3) return Promise.resolve({ status: 502, body: null })
+      }
+      return Promise.resolve({ status: 200, body: { ok: true, stage: 'ok' } })
+    })
+    await live.enterLive()
+    await flush()
+    expect(vpCalls).toEqual([{ viewport: { width: 1018, height: 765 } }])
+    stubRect(getDoc().getElementById('bwStage'), 1920, 1014)
+    FakeResizeObserver.triggerAll()
+    jest.advanceTimersByTime(300)
+    await flush()
+    // 관찰자 보고(실패) 뒤 재시도·폴링이 이어진다 — 3번 실패 뒤
+    // 네 번째 시도에서 성공해 맞혀진다.
+    jest.advanceTimersByTime(10000)
+    await flush()
+    expect(n1920).toBeGreaterThanOrEqual(4)
+    expect(vpCalls[vpCalls.length - 1]).toEqual({ viewport: { width: 1920, height: 1014 } })
+    const settled = vpCalls.length
+    jest.advanceTimersByTime(30000)
+    await flush()
+    expect(vpCalls).toHaveLength(settled)
+    await live.endLive()
+  })
 })
 
 describe('browser-live 주기 재적용 부재 (2026-11-17 P1 폐지)', () => {

@@ -397,6 +397,7 @@
        화면 위치·폴링 타이머. */
     var lastReportedMouseOffset = null;
     var mouseOffsetTimer = null;
+    var frameChainWarned = false;
     /* 원격 상태 폴링 상태 (2026-11-15): 주기 타이머·진행 중 플래그·
        진행 중 폴링의 Promise (2026-11-17 N2: 뒤로/앞으로 이동이 상태
        재조회 완료를 기다려 로딩 표시를 끌 수 있게 한다). */
@@ -453,12 +454,37 @@
     /* iframe의 화면상 위치를 잰다 (2026-11-18 호버 캘리브레이션).
        Selkies 클라이언트가 iframe 좌표에 이 위치를 더해 보내므로,
        사이드카가 같은 값을 빼서 되돌린다. iframe이 없거나 숨겨져
-       있으면(0 크기) null — 그때는 마지막 보고 값을 유지한다. */
+       있으면(0 크기) null — 그때는 마지막 보고 값을 유지한다.
+       주의: 브라우저 앱은 데스크톱 창 iframe 안에서 돈다 (중첩
+       iframe). 직접 잰 rect는 앱 iframe 기준이라 임베드 시 (0,0)이
+       나온다 (g-nav·툴바가 숨혀져 스테이지가 앱 최상단부터 시작).
+       보정에 필요한 건 최상위 뷰포트 기준 위치이므로 frameElement
+       체인을 따라 부모 iframe들의 위치를 더한다. 단독 실행이면
+       frameElement가 null이라 그대로 쓰고, 크로스오리진으로 접근이
+       막히면(예외) 가진 값으로 폴백한다 (경고는 한 번만). */
     function measureMouseOffset() {
       if (!liveFrame || typeof liveFrame.getBoundingClientRect !== 'function') return null;
       var r = liveFrame.getBoundingClientRect();
       if (!r || r.width <= 0 || r.height <= 0) return null;
-      return { x: Math.round(r.left), y: Math.round(r.top) };
+      var x = r.left;
+      var y = r.top;
+      try {
+        var view = doc.defaultView;
+        while (view && view.frameElement) {
+          var fr = view.frameElement.getBoundingClientRect();
+          if (!fr) break;
+          x += fr.left;
+          y += fr.top;
+          if (view === view.parent) break;
+          view = view.parent;
+        }
+      } catch (e) {
+        if (!frameChainWarned && typeof console !== 'undefined' && typeof console.warn === 'function') {
+          frameChainWarned = true;
+          console.warn('[browser-live] frameElement 체인 접근 불가, 직접 잰 오프셋 사용');
+        }
+      }
+      return { x: Math.round(x), y: Math.round(y) };
     }
 
     function sameMouseOffset(a, b) {
@@ -561,9 +587,25 @@
        건너뛰면 즉시 resolve되는 Promise를 돌려준다. resolve 값은
        상태 반영 여부(true/false)이며, fetch 실패도 false로 resolve돼
        reject되지 않는다 (호출자가 로딩을 끄는 데만 쓴다). */
+    /* 뷰포트 정합 (2026-11-19): 리사이즈 보고가 유실되면 override가 옛
+       크기에 머물러 화면이 절반만 보인다 (새로고침 직후 최대화 때
+       1018×765에 머문 실화면 전례 — 보고가 한 번 빠지면 되돌리는
+       경로가 없었다). 상태 폴링(2초)에 실어 매번 재고, 적용된 크기가
+       있고 측정값과 다를 때만 다시 보낸다. 초기 적용 전에는 시작
+       경로(navigate·applyViewportNow)가 맡으므로 그때는 건드리지
+       않는다 — 안 그러면 시작할 때 같은 크기를 두 번 보내게 된다.
+       정상이면 측정만 하고 요청은 나가지 않는다 (같은 크기를 되풀이
+       보내는 주기 재적용이 아니다 — P1 폐지 취지 유지). */
+    function reconcileViewport() {
+      if (!lastAppliedViewport) return;
+      var current = measureViewport();
+      if (current && !sameViewport(current, lastAppliedViewport)) applyViewportNow(current);
+    }
+
     function pollStateOnce() {
       if (liveState !== 'on') return Promise.resolve(false);
       if (doc.hidden) return Promise.resolve(false);
+      reconcileViewport();
       if (statePolling) return statePollPromise || Promise.resolve(false);
       var gen = liveGen;
       statePolling = true;

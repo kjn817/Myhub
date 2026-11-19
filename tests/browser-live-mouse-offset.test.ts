@@ -11,6 +11,13 @@
  * 사이드카가 'm,' 메시지에서 빼서 되돌린다. 창 드래그(이동)는
  * ResizeObserver에 안 잡히므로 500ms 폴링으로 따라간다.
  *
+ * 좌표계 주의 (2026-11-18 오후 실측): 브라우저 앱은 데스크톱 창
+ * iframe 안에서 돈다. #bwLiveFrame의 직접 rect는 앱 iframe
+ * 기준이라 임베드 시 (0,0)이 나온다 — 실제로 17:19 보고가 (0,0)
+ * 이라 보정이 안 먹혀 호버가 그대로였던 전례. 보정에 필요한 건
+ * 최상위 뷰포트 기준 위치이므로 frameElement 체인을 따라 부모
+ * iframe들의 위치를 더한다.
+ *
  * 뷰포트 재시도 백오프: 2초 단발 재시도로는 1078×658 축소 적용이
  * 유실된 전례가 있다 (실패가 두 번 겹치면 그 크기는 다시 안 감).
  * 2초·5초·15초 세 번까지 다시 시도하고, 새 크기가 오면 횟수를 리셋한다.
@@ -22,10 +29,12 @@
  * - iframe이 숨겨지면(0 크기) 보고하지 않고 마지막 값을 유지한다.
  * - 보고 실패는 기록하지 않아 다음 틱에 다시 시도한다.
  * - endLive하면 오프셋 폴링이 멈춘다.
+ * - 임베드 시 frameElement 체인을 더해 최상위 뷰포트 기준 위치를 보고한다.
+ * - frameElement 접근이 던지면(크로스오리진) 직접 잰 값으로 폴백한다.
  * - 뷰포트 적용 실패 시 2초·5초·15초 뒤 세 번 재시도하고 멈춘다.
  * - 재시도 중 성공하면 더 이상 재시도하지 않는다.
  * - 새 크기가 오면 재시도 횟수가 리셋돼 새 크기에 3번의 기회가 있다.
- * 카나리아: 보고·폴링·백오프를 빼면 해당 테스트가 실패한다.
+ * 카나리아: 보고·폴링·백오프·frameElement 체인을 빼면 해당 테스트가 실패한다.
  */
 import * as fs from 'fs'
 import * as path from 'path'
@@ -118,12 +127,34 @@ async function tick(ms: number): Promise<void> {
   await flush()
 }
 
+function mockFrameElement(rect: { left: number; top: number; width: number; height: number }): void {
+  const el = getDoc().createElement('iframe')
+  stubRect(el, rect)
+  Object.defineProperty(getWin(), 'frameElement', { value: el, configurable: true })
+}
+
+function mockThrowingFrameElement(): void {
+  Object.defineProperty(getWin(), 'frameElement', {
+    get() {
+      throw new Error('cross-origin')
+    },
+    configurable: true,
+  })
+}
+
+function restoreFrameElement(): void {
+  // 인스턴스 섀도만 지우면 프로토타입의 원래 동작(null)으로 돌아간다.
+  delete (getWin() as any).frameElement
+  delete (getWin() as any).parent
+}
+
 describe('browser-live 마우스 오프셋 보고', () => {
   beforeEach(() => {
     jest.useFakeTimers()
     setupFixture()
   })
   afterEach(() => {
+    restoreFrameElement()
     jest.useRealTimers()
   })
 
@@ -192,6 +223,62 @@ describe('browser-live 마우스 오프셋 보고', () => {
     stubRect(getDoc().getElementById('bwLiveFrame'), { left: 500, top: 300, width: 1078, height: 658 })
     await tick(5000)
     expect(offsetCalls).toEqual([{ x: 0, y: 66 }])
+  })
+
+  test('임베드 시 frameElement를 더해 최상위 뷰포트 기준 위치를 보고한다', async () => {
+    // 실제 임베드 상태 재현: 라이브 iframe은 앱 안에서 (0,0),
+    // 앱 iframe(창 프레임)은 최상위에서 (0,66) — 합이 보정값이다.
+    stubRect(getDoc().getElementById('bwLiveFrame'), { left: 0, top: 0, width: 1920, height: 1000 })
+    mockFrameElement({ left: 0, top: 66, width: 1920, height: 1014 })
+    const { live, offsetCalls } = makeLive()
+    await live.enterLive('https://example.com')
+    await flush()
+    expect(offsetCalls).toEqual([{ x: 0, y: 66 }])
+  })
+
+  test('창을 옮기면 frameElement 위치 변화를 다음 틱에 보고한다', async () => {
+    stubRect(getDoc().getElementById('bwLiveFrame'), { left: 0, top: 0, width: 1078, height: 658 })
+    mockFrameElement({ left: 0, top: 66, width: 1920, height: 1014 })
+    const { live, offsetCalls } = makeLive()
+    await live.enterLive('https://example.com')
+    await flush()
+    expect(offsetCalls).toEqual([{ x: 0, y: 66 }])
+    mockFrameElement({ left: 339, top: 273, width: 1078, height: 658 })
+    await tick(100)
+    expect(offsetCalls).toEqual([
+      { x: 0, y: 66 },
+      { x: 339, y: 273 },
+    ])
+  })
+
+  test('frameElement 체인이 두 단이면 두 단을 모두 더한다', async () => {
+    stubRect(getDoc().getElementById('bwLiveFrame'), { left: 0, top: 0, width: 1078, height: 658 })
+    mockFrameElement({ left: 0, top: 66, width: 1920, height: 1014 })
+    const outer = getDoc().createElement('iframe')
+    stubRect(outer, { left: 100, top: 50, width: 1920, height: 1080 })
+    const fakeParent: any = { frameElement: outer, parent: null }
+    fakeParent.parent = fakeParent
+    Object.defineProperty(getWin(), 'parent', { value: fakeParent, configurable: true })
+    const { live, offsetCalls } = makeLive()
+    await live.enterLive('https://example.com')
+    await flush()
+    expect(offsetCalls).toEqual([{ x: 100, y: 116 }])
+  })
+
+  test('frameElement 접근이 던지면 직접 잰 값으로 폴백한다', async () => {
+    mockThrowingFrameElement()
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined)
+    const { live, offsetCalls } = makeLive()
+    try {
+      await live.enterLive('https://example.com')
+      await flush()
+      expect(offsetCalls).toEqual([{ x: 0, y: 66 }])
+      expect(warn).toHaveBeenCalledTimes(1)
+      await tick(1000)
+      expect(warn).toHaveBeenCalledTimes(1)
+    } finally {
+      warn.mockRestore()
+    }
   })
 })
 
