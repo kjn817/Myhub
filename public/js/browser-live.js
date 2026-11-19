@@ -176,7 +176,11 @@
     // stage 크기를 보내 원격 뷰포트를 맞춘다 (2026-11-12: 기본
     // 1280x720이 창보다 넓으면 원격 화면이 짤린다).
     if (viewport && viewport.width > 0 && viewport.height > 0) {
-      payload.viewport = { width: Math.round(viewport.width), height: Math.round(viewport.height) };
+      payload.viewport = {
+        width: Math.round(viewport.width),
+        height: Math.round(viewport.height),
+        dpr: viewport.dpr || 1,
+      };
     }
     init.body = JSON.stringify(payload);
     return fetch('/api/browse/navigate', init)
@@ -211,7 +215,11 @@
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          viewport: { width: Math.round(viewport.width), height: Math.round(viewport.height) },
+          viewport: {
+            width: Math.round(viewport.width),
+            height: Math.round(viewport.height),
+            dpr: viewport.dpr || 1,
+          },
         }),
       },
       FETCH_TIMEOUT_MS,
@@ -244,7 +252,11 @@
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ x: Math.round(offset.x), y: Math.round(offset.y) }),
+        body: JSON.stringify({
+          x: Math.round(offset.x),
+          y: Math.round(offset.y),
+          dpr: offset.dpr || 1,
+        }),
       },
       FETCH_TIMEOUT_MS,
     )
@@ -404,9 +416,14 @@
     var statePollTimer = null;
     var statePolling = false;
     var statePollPromise = null;
+    var statePollFailed = false; // 직전 폴링 실패 여부 — 복구 시 마우스 오프셋 재전송 트리거
     function sameViewport(a, b) {
       if (!a || !b) return false;
-      return Math.round(a.width) === Math.round(b.width) && Math.round(a.height) === Math.round(b.height);
+      return (
+        Math.round(a.width) === Math.round(b.width) &&
+        Math.round(a.height) === Math.round(b.height) &&
+        Math.round((a.dpr || 1) * 1000) === Math.round((b.dpr || 1) * 1000)
+      );
     }
 
     /* 뷰포트 재시도 간격 (2026-11-18 백오프): 2초 단발 재시도로는
@@ -431,12 +448,20 @@
       return applyViewport(viewport).then(function (res) {
         if (gen !== liveGen || liveState !== 'on') return false;
         if (res && res.status === 200 && res.body && res.body.ok) {
-          lastAppliedViewport = { width: Math.round(viewport.width), height: Math.round(viewport.height) };
+          lastAppliedViewport = {
+            width: Math.round(viewport.width),
+            height: Math.round(viewport.height),
+            dpr: viewport.dpr || 1,
+          };
           lastFailedViewport = null;
           viewportRetryCount = 0;
           return true;
         }
-        lastFailedViewport = { width: Math.round(viewport.width), height: Math.round(viewport.height) };
+        lastFailedViewport = {
+          width: Math.round(viewport.width),
+          height: Math.round(viewport.height),
+          dpr: viewport.dpr || 1,
+        };
         if (viewportRetryCount < VIEWPORT_RETRY_DELAYS_MS.length && viewportRetryTimer === null && liveState === 'on') {
           var delay = VIEWPORT_RETRY_DELAYS_MS[viewportRetryCount];
           viewportRetryCount += 1;
@@ -484,7 +509,11 @@
           console.warn('[browser-live] frameElement 체인 접근 불가, 직접 잰 오프셋 사용');
         }
       }
-      return { x: Math.round(x), y: Math.round(y) };
+      // 디바이스 px로 바꿔 보낸다 (2026-11-19): 서버 디스플레이·마우스
+      // 좌표계가 디바이스 px이라 CSS px 그대로 보내면 레티나에서 절반만
+      // 보정된다. dpr도 함께 보내 사이드카가 이미 디바이스 px임을 안다.
+      var dpr = readDevicePixelRatio();
+      return { x: Math.round(x * dpr), y: Math.round(y * dpr), dpr: dpr };
     }
 
     function sameMouseOffset(a, b) {
@@ -504,7 +533,11 @@
       return reportMouseOffsetFetch(current).then(function (res) {
         if (gen !== liveGen || liveState !== 'on') return false;
         if (res && res.status === 200 && res.body && res.body.ok) {
-          lastReportedMouseOffset = { x: Math.round(current.x), y: Math.round(current.y) };
+          lastReportedMouseOffset = {
+            x: Math.round(current.x),
+            y: Math.round(current.y),
+            dpr: current.dpr || 1,
+          };
           return true;
         }
         return false;
@@ -616,14 +649,24 @@
           if (gen !== liveGen || liveState !== 'on') return false;
           var body = res && res.body;
           if (res && res.status === 200 && body && body.ok) {
+            // 폴링 실패 뒤 복구됐다면 사이드카가 재시작됐을 수 있다 —
+            // 재시작은 메모리 속 마우스 오프셋을 지우는데 프론트는
+            // lastReported와 같다고 보고를 건너뛰어 버린다. 보고 기록을
+            // 비워 다음 오프셋 폴링(500ms)이 다시 보내게 한다.
+            if (statePollFailed) {
+              statePollFailed = false;
+              lastReportedMouseOffset = null;
+            }
             onState(body);
             return true;
           }
+          statePollFailed = true;
           return false;
         },
         function () {
           statePolling = false;
           statePollPromise = null;
+          statePollFailed = true;
           return false;
         },
       );
@@ -700,12 +743,27 @@
       if (lockCard) lockCard.hidden = liveState !== 'locked';
     }
 
+    /* 기기 픽셀 비율 (2026-11-19 맥 레티나 결함): Selkies 디스플레이는
+       스테이지 CSS px × DPR(디바이스 px) 크기다 — 맥은 1470×847 CSS에
+       디스플레이 2940×1694. 그래서 오버라이드 크기는 CSS px 그대로 두고
+       DSF를 이 DPR로 걸어야 레이아웃은 네이티브와 같고 래스터만
+       디스플레이를 꽉 채운다 (DSF 1.0이면 페이지가 절반 크기로 보인다).
+       마우스 오프셋도 같은 DPR로 디바이스 px로 바꿔 보낸다. window에
+       없거나 비정상이면 1. 소수점 셋째 자리까지만 (비교 안정성). */
+    function readDevicePixelRatio() {
+      var view = doc.defaultView;
+      var dpr = view && typeof view.devicePixelRatio === 'number' ? view.devicePixelRatio : 1;
+      if (typeof dpr !== 'number' || !isFinite(dpr) || dpr < 1 || dpr > 4) return 1;
+      return Math.round(dpr * 1000) / 1000;
+    }
+
     // 뷰포트 측정: iframe은 시작 중 hidden(display:none)이라 자기
     // rect가 항상 0x0이다 — iframe이 꽉 채우는 .bw-stage(부모, 항상
     // 보임) 크기를 잰다 (2026-11-12: hidden iframe을 재서 뷰포트가
     // 서버에 한 번도 전달되지 않았고, 원격이 기본 1280x720으로 뜬
     // 채 최대화 창에서 1.5배 확대돼 보였다 — 사용자 실화면 지적).
-    // 부모를 못 재면 iframe 자기 rect로 폴백한다.
+    // 부모를 못 재면 iframe 자기 rect로 폴백한다. 크기는 CSS px,
+    // dpr은 오버라이드 DSF로 쓴다 (위 readDevicePixelRatio 참조).
     function measureViewport() {
       var measureTargets = [];
       if (liveFrame && liveFrame.parentElement) measureTargets.push(liveFrame.parentElement);
@@ -715,7 +773,7 @@
         if (typeof target.getBoundingClientRect !== 'function') continue;
         var r = target.getBoundingClientRect();
         if (r && r.width > 0 && r.height > 0) {
-          return { width: r.width, height: r.height };
+          return { width: r.width, height: r.height, dpr: readDevicePixelRatio() };
         }
       }
       return null;
@@ -976,7 +1034,11 @@
         // navigate도 뷰포트를 적용했으므로 기록해 둔다 (리사이즈 관찰자가
         // 같은 크기를 다시 보내지 않게 한다).
         if (viewport && viewport.width > 0 && viewport.height > 0) {
-          lastAppliedViewport = { width: Math.round(viewport.width), height: Math.round(viewport.height) };
+          lastAppliedViewport = {
+            width: Math.round(viewport.width),
+            height: Math.round(viewport.height),
+            dpr: viewport.dpr || 1,
+          };
         }
         // 진단: 보낸 뷰포트와 서버의 CDP 이동 결과(nav/navStage)를
         // 남겨 원격 뷰포트 적용 여부를 콘솔에서 확인할 수 있게 한다.

@@ -112,11 +112,15 @@ async function proxyToSidecar(
 
 function parseViewport(raw: unknown): ViewportSize | undefined {
   if (typeof raw !== 'object' || raw === null) return undefined
-  const { width, height } = raw as { width?: unknown; height?: unknown }
+  const { width, height, dpr } = raw as { width?: unknown; height?: unknown; dpr?: unknown }
   if (typeof width !== 'number' || typeof height !== 'number') return undefined
   if (!Number.isFinite(width) || !Number.isFinite(height)) return undefined
   if (width <= 0 || height <= 0 || width > 4096 || height > 4096) return undefined
-  return { width: Math.round(width), height: Math.round(height) }
+  // dpr은 선택 — 없거나 비정상이면 1.0으로 둔다 (구 프론트 호환:
+  // dpr이 이상하다고 뷰포트 전체를 버리면 안 된다).
+  const dsf =
+    typeof dpr === 'number' && Number.isFinite(dpr) && dpr >= 1 && dpr <= 4 ? dpr : 1
+  return { width: Math.round(width), height: Math.round(height), dpr: dsf }
 }
 
 /**
@@ -348,7 +352,7 @@ export function registerOracleProxyRoutes(app: Hono<{ Bindings: Env }>): void {
       res = await fetch(`https://${cfg.host}:${ORACLE_CDP_PORT}/control/viewport`, {
         method: 'POST',
         headers: { ...gate.secretHeaders, 'content-type': 'application/json' },
-        body: JSON.stringify({ width: viewport.width, height: viewport.height }),
+        body: JSON.stringify({ width: viewport.width, height: viewport.height, dpr: viewport.dpr }),
       })
     } catch {
       return c.json({ ok: false, error: 'ORACLE_UPSTREAM' }, 502)
@@ -558,12 +562,16 @@ export function registerOracleProxyRoutes(app: Hono<{ Bindings: Env }>): void {
   // Selkies 클라이언트가 iframe 좌표에 창 위치를 더해 보내므로
   // 사이드카가 빼서 되돌린다. 세션 게이트 뒤에 있다 (전역 /api/*
   // 미들웨어). 사이드카 응답(상태·본문)을 그대로 돌려준다.
+  // (2026-11-19) 프론트는 디바이스 px + dpr을 보내고, dpr이 있으면
+  // 이미 디바이스 px이라는 뜻이라 사이드카가 그대로 쓴다. dpr이
+  // 없으면(구 프론트·수동 POST) CSS px로 보고 사이드카가 배운 DPR로
+  // 변환한다. dpr은 검증만 하고 그대로 중계한다.
   app.post('/mouse-offset', async (c) => {
     const cfg = oracleConfigOf(c.env)
     if (!cfg) return c.json({ ok: false, error: 'ORACLE_NOT_CONFIGURED' }, 503)
-    let body: { x?: unknown; y?: unknown } = {}
+    let body: { x?: unknown; y?: unknown; dpr?: unknown } = {}
     try {
-      body = (await c.req.json()) as { x?: unknown; y?: unknown }
+      body = (await c.req.json()) as { x?: unknown; y?: unknown; dpr?: unknown }
     } catch {
       return c.json({ ok: false, error: 'INVALID_OFFSET' }, 400)
     }
@@ -580,6 +588,10 @@ export function registerOracleProxyRoutes(app: Hono<{ Bindings: Env }>): void {
     if (x < 0 || x > 8192 || y < 0 || y > 8192) {
       return c.json({ ok: false, error: 'INVALID_OFFSET' }, 400)
     }
+    const dpr =
+      typeof body.dpr === 'number' && Number.isFinite(body.dpr) && body.dpr >= 1 && body.dpr <= 4
+        ? body.dpr
+        : undefined
     try {
       const res = await fetch(`https://${cfg.host}:${ORACLE_VIEW_PORT}/control/mouse-offset`, {
         method: 'POST',
@@ -587,7 +599,7 @@ export function registerOracleProxyRoutes(app: Hono<{ Bindings: Env }>): void {
           'content-type': 'application/json',
           'x-origin-secret': cfg.originSecret,
         },
-        body: JSON.stringify({ x, y }),
+        body: JSON.stringify(dpr === undefined ? { x, y } : { x, y, dpr }),
       })
       const text = await res.text()
       return new Response(text, {

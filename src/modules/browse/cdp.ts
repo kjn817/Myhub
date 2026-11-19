@@ -328,6 +328,17 @@ export interface NavigateResult {
 export interface ViewportSize {
   width: number
   height: number
+  /** 클라이언트 기기 픽셀 비율 — 오버라이드 DSF로 쓴다 (2026-11-19 맥
+   *  레티나: 크기는 CSS px, DSF=DPR라야 레이아웃은 네이티브와 같고
+   *  래스터만 디스플레이를 채운다. 없으면 REMOTE_DISPLAY_SCALE(1.0). */
+  dpr?: number
+}
+
+/** 뷰포트의 DSF — dpr이 유효한 범위(1..4)면 그 값, 아니면 기본 1.0. */
+export function viewportDsf(viewport: ViewportSize | undefined): number {
+  const dpr = viewport?.dpr
+  if (typeof dpr === 'number' && Number.isFinite(dpr) && dpr >= 1 && dpr <= 4) return dpr
+  return REMOTE_DISPLAY_SCALE
 }
 
 /**
@@ -423,11 +434,14 @@ export async function navigateSession(
         if (!attached) return directNavigate('attach')
         sessionId = attached
       }
-      // 뷰포트 (있으면): DSF는 REMOTE_DISPLAY_SCALE(1.0) 고정.
+      // 뷰포트 (있으면): DSF는 클라이언트 DPR(viewport.dpr, 없으면 1.0).
       // screen.width로 DSF를 역산하는 옛 방식은 리사이즈 중 옛
       // 디스플레이 크기를 읽어 잘못된 배율을 만들었다 (2026-11-16
-      // QA 7차: 1.5배). set이 기존 override를 대체하므로 clear도
-      // 불필요하다. 설정 실패여도 이동은 진행한다.
+      // QA 7차: 1.5배) — 역산 금지는 그대로고, 여기서 쓰는 건
+      // 클라이언트가 직접 잰 DPR이라 역산이 아니다 (2026-11-19 맥
+      // 레티나: DSF 1.0이면 페이지가 디스플레이 절반 크기로 보인다).
+      // set이 기존 override를 대체하므로 clear도 불필요하다.
+      // 설정 실패여도 이동은 진행한다.
       if (viewport && viewport.width > 0 && viewport.height > 0) {
         phase = 'viewport'
         try {
@@ -436,7 +450,7 @@ export async function navigateSession(
             {
               width: Math.round(viewport.width),
               height: Math.round(viewport.height),
-              deviceScaleFactor: REMOTE_DISPLAY_SCALE,
+              deviceScaleFactor: viewportDsf(viewport),
               mobile: false,
             },
             sessionId,

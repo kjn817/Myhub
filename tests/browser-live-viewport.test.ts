@@ -146,7 +146,7 @@ describe('browser-live viewport 측정', () => {
     expect(started).toBe(true)
     expect(calls).toHaveLength(1)
     expect(calls[0].url).toBe('https://www.naver.com')
-    expect(calls[0].viewport).toEqual({ width: 1920, height: 1000 })
+    expect(calls[0].viewport).toEqual({ width: 1920, height: 1000, dpr: 1 })
     expect(getDoc().getElementById('bwLiveFrame').getAttribute('src')).toBe('/api/browse/view/')
     live.endLive()
   })
@@ -156,7 +156,7 @@ describe('browser-live viewport 측정', () => {
     const { live, calls } = makeLive()
     const started = await live.enterLive('https://www.naver.com')
     expect(started).toBe(true)
-    expect(calls[0].viewport).toEqual({ width: 1280, height: 720 })
+    expect(calls[0].viewport).toEqual({ width: 1280, height: 720, dpr: 1 })
     live.endLive()
   })
 
@@ -246,7 +246,7 @@ describe('browser-live viewport 적용 — 이동 없는 진입·리사이즈 (2
     await live.enterLive()
     await flush()
     expect(calls).toEqual([])
-    expect(vpCalls).toEqual([{ viewport: { width: 1920, height: 1000 } }])
+    expect(vpCalls).toEqual([{ viewport: { width: 1920, height: 1000, dpr: 1 } }])
   })
 
   test('리사이즈하면 새 크기로 뷰포트를 다시 맞춘다', async () => {
@@ -260,7 +260,7 @@ describe('browser-live viewport 적용 — 이동 없는 진입·리사이즈 (2
     jest.advanceTimersByTime(300)
     await flush()
     expect(vpCalls).toHaveLength(2)
-    expect(vpCalls[1]).toEqual({ viewport: { width: 1470, height: 850 } })
+    expect(vpCalls[1]).toEqual({ viewport: { width: 1470, height: 850, dpr: 1 } })
   })
 
   test('같은 크기로 다시 불려도 뷰포트를 다시 보내지 않는다', async () => {
@@ -357,13 +357,13 @@ describe('browser-live viewport 적용 — 이동 없는 진입·리사이즈 (2
     const { live, vpCalls } = makeLive()
     await live.enterLive()
     await flush()
-    expect(vpCalls).toEqual([{ viewport: { width: 1018, height: 765 } }])
+    expect(vpCalls).toEqual([{ viewport: { width: 1018, height: 765, dpr: 1 } }])
     // 관찰자를 일부러 안 불린다 — 최대화가 관찰자에 안 잡힌 경우.
     stubRect(getDoc().getElementById('bwStage'), 1920, 1014)
     jest.advanceTimersByTime(2000)
     await flush()
     expect(vpCalls).toHaveLength(2)
-    expect(vpCalls[1]).toEqual({ viewport: { width: 1920, height: 1014 } })
+    expect(vpCalls[1]).toEqual({ viewport: { width: 1920, height: 1014, dpr: 1 } })
     // 한 번 맞혀지면 이후 폴링은 요청을 안 보낸다.
     jest.advanceTimersByTime(30000)
     await flush()
@@ -386,7 +386,7 @@ describe('browser-live viewport 적용 — 이동 없는 진입·리사이즈 (2
     })
     await live.enterLive()
     await flush()
-    expect(vpCalls).toEqual([{ viewport: { width: 1018, height: 765 } }])
+    expect(vpCalls).toEqual([{ viewport: { width: 1018, height: 765, dpr: 1 } }])
     stubRect(getDoc().getElementById('bwStage'), 1920, 1014)
     FakeResizeObserver.triggerAll()
     jest.advanceTimersByTime(300)
@@ -396,7 +396,7 @@ describe('browser-live viewport 적용 — 이동 없는 진입·리사이즈 (2
     jest.advanceTimersByTime(10000)
     await flush()
     expect(n1920).toBeGreaterThanOrEqual(4)
-    expect(vpCalls[vpCalls.length - 1]).toEqual({ viewport: { width: 1920, height: 1014 } })
+    expect(vpCalls[vpCalls.length - 1]).toEqual({ viewport: { width: 1920, height: 1014, dpr: 1 } })
     const settled = vpCalls.length
     jest.advanceTimersByTime(30000)
     await flush()
@@ -464,5 +464,127 @@ describe('browser-live 필 부재 (2026-11-14 제거)', () => {
     // 종료 버튼 없이도 endLive API로는 끌 수 있다.
     live.endLive()
     expect(live.state()).toBe('off')
+  })
+})
+
+describe('browser-live 뷰포트 DPR (2026-11-19 맥 레티나)', () => {
+  // 맥 레티나(DPR 2): Selkies 디스플레이는 스테이지×2(2940×1694)인데
+  // 오버라이드가 DSF 1.0이면 페이지가 절반 크기로 보인다. 크기는 CSS px
+  // 그대로 두고 DSF를 클라이언트 DPR로 걸어야 레이아웃은 네이티브와
+  // 같고 래스터만 디스플레이를 채운다. 윈도우(DPR 1)는 dpr 1이라
+  // 동작이 안 바뀐다. 카나리아: dpr을 빼면 해당 테스트가 실패한다.
+  function stubDpr(value: number): void {
+    Object.defineProperty(getWin(), 'devicePixelRatio', { value, configurable: true })
+  }
+  function restoreDpr(): void {
+    delete (getWin() as any).devicePixelRatio
+  }
+  beforeEach(() => {
+    jest.useFakeTimers()
+    FakeResizeObserver.instances = []
+    ;(getWin() as any).ResizeObserver = FakeResizeObserver
+  })
+  afterEach(() => {
+    restoreDpr()
+    jest.useRealTimers()
+    FakeResizeObserver.instances = []
+    delete (getWin() as any).ResizeObserver
+  })
+
+  test('DPR 2면 navigate 뷰포트에 dpr: 2가 실린다', async () => {
+    stubDpr(2)
+    setupFixture({ w: 1470, h: 847 }, { w: 0, h: 0 })
+    const { live, calls } = makeLive()
+    await live.enterLive('https://www.naver.com')
+    await flush()
+    expect(calls[0].viewport).toEqual({ width: 1470, height: 847, dpr: 2 })
+    live.endLive()
+  })
+
+  test('DPR 2면 url 없는 진입의 applyViewport에도 dpr: 2가 실린다', async () => {
+    stubDpr(2)
+    setupFixture({ w: 1470, h: 847 }, { w: 0, h: 0 })
+    const { live, vpCalls } = makeLive()
+    await live.enterLive()
+    await flush()
+    expect(vpCalls).toEqual([{ viewport: { width: 1470, height: 847, dpr: 2 } }])
+    live.endLive()
+  })
+
+  test('크기는 같고 DPR만 바뀌면(디스플레이 이동) 뷰포트를 다시 보낸다', async () => {
+    setupFixture({ w: 1470, h: 847 }, { w: 0, h: 0 })
+    const { live, vpCalls } = makeLive()
+    await live.enterLive()
+    await flush()
+    expect(vpCalls).toHaveLength(1)
+    // 같은 크기로 창을 레티나 디스플레이로 옮긴 경우 — DPR만 2가 된다.
+    stubDpr(2)
+    jest.advanceTimersByTime(2000)
+    await flush()
+    expect(vpCalls).toHaveLength(2)
+    expect(vpCalls[1]).toEqual({ viewport: { width: 1470, height: 847, dpr: 2 } })
+    // 맞혀지면 이후 폴링은 다시 보내지 않는다.
+    jest.advanceTimersByTime(30000)
+    await flush()
+    expect(vpCalls).toHaveLength(2)
+    live.endLive()
+  })
+
+  test('navigate 뒤에는 같은 크기·DPR을 폴링이 다시 보내지 않는다', async () => {
+    // handleNavigateResult가 lastApplied에 dpr을 안 남기면 정합이 매번
+    // 다르다고 보고 2초마다 재전송한다 — 이 테스트가 그 회귀를 잡는다.
+    stubDpr(2)
+    setupFixture({ w: 1470, h: 847 }, { w: 0, h: 0 })
+    const { live, vpCalls } = makeLive()
+    await live.enterLive('https://www.naver.com')
+    await flush()
+    expect(vpCalls).toHaveLength(0)
+    jest.advanceTimersByTime(10000)
+    await flush()
+    expect(vpCalls).toHaveLength(0)
+    live.endLive()
+  })
+
+  test('기본 applyViewport·navigate가 POST 본문에 dpr을 싣는다', async () => {
+    // 주입 없이 기본 fetch 경로를 쓴다 — 본문 조립에서 dpr을 빼면 실패한다.
+    stubDpr(2)
+    setupFixture({ w: 1470, h: 847 }, { w: 0, h: 0 })
+    const posted: Array<{ url: string; body: unknown }> = []
+    const fetchStub = (url: string, init: any) => {
+      posted.push({ url, body: init && init.body ? JSON.parse(init.body) : null })
+      return Promise.resolve({
+        status: 200,
+        json: () => Promise.resolve({ ok: true, nav: 'ok', navStage: 'ok', stage: 'ok' }),
+      })
+    }
+    const origFetch = (globalThis as any).fetch
+    ;(globalThis as any).fetch = fetchStub
+    try {
+      const api = loadLive()
+      const live = api.createLive({
+        doc: getDoc(),
+        checkUnlock: () => Promise.resolve({ status: 0, body: null }),
+        fetchState: () => Promise.resolve({ status: 200, body: { ok: true } }),
+        onChange: () => undefined,
+        statePollMs: 60000,
+        mouseOffsetPollMs: 60000,
+      })
+      await live.enterLive()
+      await flush()
+      const vp = posted.find((p) => p.url === '/api/browse/viewport')
+      expect(vp).toBeDefined()
+      expect(vp!.body).toEqual({ viewport: { width: 1470, height: 847, dpr: 2 } })
+      await live.enterLive('https://www.naver.com')
+      await flush()
+      const nav = posted.find((p) => p.url === '/api/browse/navigate')
+      expect(nav).toBeDefined()
+      expect(nav!.body).toEqual({
+        url: 'https://www.naver.com',
+        viewport: { width: 1470, height: 847, dpr: 2 },
+      })
+      live.endLive()
+    } finally {
+      ;(globalThis as any).fetch = origFetch
+    }
   })
 })

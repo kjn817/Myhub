@@ -83,30 +83,33 @@ function loadLive(): any {
 
 interface OffsetHarness {
   live: any
-  offsetCalls: Array<{ x: number; y: number }>
-  viewportCalls: Array<{ width: number; height: number }>
+  offsetCalls: Array<{ x: number; y: number; dpr?: number }>
+  viewportCalls: Array<{ width: number; height: number; dpr?: number }>
 }
 
 function makeLive(opts: {
-  reportMouseOffsetImpl?: (offset: { x: number; y: number }) => Promise<unknown>
-  applyViewportImpl?: (viewport: { width: number; height: number }) => Promise<unknown>
+  reportMouseOffsetImpl?: (offset: { x: number; y: number; dpr?: number }) => Promise<unknown>
+  applyViewportImpl?: (viewport: { width: number; height: number; dpr?: number }) => Promise<unknown>
+  fetchStateImpl?: () => Promise<unknown>
   mouseOffsetPollMs?: number
 } = {}): OffsetHarness {
-  const offsetCalls: Array<{ x: number; y: number }> = []
-  const viewportCalls: Array<{ width: number; height: number }> = []
+  const offsetCalls: Array<{ x: number; y: number; dpr?: number }> = []
+  const viewportCalls: Array<{ width: number; height: number; dpr?: number }> = []
   const api = loadLive()
   const live = api.createLive({
     doc: getDoc(),
     navigate: () => Promise.resolve({ status: 200, body: { ok: true, nav: 'ok', navStage: 'ok' } }),
-    applyViewport: (viewport: { width: number; height: number }) => {
+    applyViewport: (viewport: { width: number; height: number; dpr?: number }) => {
       viewportCalls.push({ ...viewport })
       if (opts.applyViewportImpl) return opts.applyViewportImpl(viewport)
       return Promise.resolve({ status: 200, body: { ok: true, stage: 'ok' } })
     },
     checkUnlock: () => Promise.resolve({ status: 0, body: null }),
-    fetchState: () =>
-      Promise.resolve({ status: 200, body: { ok: true, url: 'https://example.com', title: 't' } }),
-    reportMouseOffset: (offset: { x: number; y: number }) => {
+    fetchState: () => {
+      if (opts.fetchStateImpl) return opts.fetchStateImpl()
+      return Promise.resolve({ status: 200, body: { ok: true, url: 'https://example.com', title: 't' } })
+    },
+    reportMouseOffset: (offset: { x: number; y: number; dpr?: number }) => {
       offsetCalls.push({ ...offset })
       if (opts.reportMouseOffsetImpl) return opts.reportMouseOffsetImpl(offset)
       return Promise.resolve({ status: 200, body: { ok: true, offset } })
@@ -162,7 +165,7 @@ describe('browser-live 마우스 오프셋 보고', () => {
     const { live, offsetCalls } = makeLive()
     await live.enterLive('https://example.com')
     await flush()
-    expect(offsetCalls).toEqual([{ x: 0, y: 66 }])
+    expect(offsetCalls).toEqual([{ x: 0, y: 66, dpr: 1 }])
   })
 
   test('위치가 안 바뀌면 폴링 틱이 다시 보고하지 않는다', async () => {
@@ -170,7 +173,7 @@ describe('browser-live 마우스 오프셋 보고', () => {
     await live.enterLive('https://example.com')
     await flush()
     await tick(1000)
-    expect(offsetCalls).toEqual([{ x: 0, y: 66 }])
+    expect(offsetCalls).toEqual([{ x: 0, y: 66, dpr: 1 }])
   })
 
   test('위치가 바뀌면 다음 폴링 틱에 새 위치를 보고한다', async () => {
@@ -180,8 +183,8 @@ describe('browser-live 마우스 오프셋 보고', () => {
     stubRect(getDoc().getElementById('bwLiveFrame'), { left: 339, top: 273, width: 1078, height: 658 })
     await tick(100)
     expect(offsetCalls).toEqual([
-      { x: 0, y: 66 },
-      { x: 339, y: 273 },
+      { x: 0, y: 66, dpr: 1 },
+      { x: 339, y: 273, dpr: 1 },
     ])
   })
 
@@ -191,7 +194,7 @@ describe('browser-live 마우스 오프셋 보고', () => {
     await flush()
     stubRect(getDoc().getElementById('bwLiveFrame'), { left: 0, top: 0, width: 0, height: 0 })
     await tick(1000)
-    expect(offsetCalls).toEqual([{ x: 0, y: 66 }])
+    expect(offsetCalls).toEqual([{ x: 0, y: 66, dpr: 1 }])
   })
 
   test('보고 실패는 기록하지 않아 다음 틱에 다시 시도하고, 성공하면 멈춘다', async () => {
@@ -205,11 +208,11 @@ describe('browser-live 마우스 오프셋 보고', () => {
     })
     await live.enterLive('https://example.com')
     await flush()
-    expect(offsetCalls).toEqual([{ x: 0, y: 66 }])
+    expect(offsetCalls).toEqual([{ x: 0, y: 66, dpr: 1 }])
     await tick(100)
     expect(offsetCalls).toEqual([
-      { x: 0, y: 66 },
-      { x: 0, y: 66 },
+      { x: 0, y: 66, dpr: 1 },
+      { x: 0, y: 66, dpr: 1 },
     ])
     await tick(1000)
     expect(offsetCalls).toHaveLength(2)
@@ -222,7 +225,7 @@ describe('browser-live 마우스 오프셋 보고', () => {
     await live.endLive()
     stubRect(getDoc().getElementById('bwLiveFrame'), { left: 500, top: 300, width: 1078, height: 658 })
     await tick(5000)
-    expect(offsetCalls).toEqual([{ x: 0, y: 66 }])
+    expect(offsetCalls).toEqual([{ x: 0, y: 66, dpr: 1 }])
   })
 
   test('임베드 시 frameElement를 더해 최상위 뷰포트 기준 위치를 보고한다', async () => {
@@ -233,7 +236,7 @@ describe('browser-live 마우스 오프셋 보고', () => {
     const { live, offsetCalls } = makeLive()
     await live.enterLive('https://example.com')
     await flush()
-    expect(offsetCalls).toEqual([{ x: 0, y: 66 }])
+    expect(offsetCalls).toEqual([{ x: 0, y: 66, dpr: 1 }])
   })
 
   test('창을 옮기면 frameElement 위치 변화를 다음 틱에 보고한다', async () => {
@@ -242,12 +245,12 @@ describe('browser-live 마우스 오프셋 보고', () => {
     const { live, offsetCalls } = makeLive()
     await live.enterLive('https://example.com')
     await flush()
-    expect(offsetCalls).toEqual([{ x: 0, y: 66 }])
+    expect(offsetCalls).toEqual([{ x: 0, y: 66, dpr: 1 }])
     mockFrameElement({ left: 339, top: 273, width: 1078, height: 658 })
     await tick(100)
     expect(offsetCalls).toEqual([
-      { x: 0, y: 66 },
-      { x: 339, y: 273 },
+      { x: 0, y: 66, dpr: 1 },
+      { x: 339, y: 273, dpr: 1 },
     ])
   })
 
@@ -262,7 +265,7 @@ describe('browser-live 마우스 오프셋 보고', () => {
     const { live, offsetCalls } = makeLive()
     await live.enterLive('https://example.com')
     await flush()
-    expect(offsetCalls).toEqual([{ x: 100, y: 116 }])
+    expect(offsetCalls).toEqual([{ x: 100, y: 116, dpr: 1 }])
   })
 
   test('frameElement 접근이 던지면 직접 잰 값으로 폴백한다', async () => {
@@ -272,7 +275,7 @@ describe('browser-live 마우스 오프셋 보고', () => {
     try {
       await live.enterLive('https://example.com')
       await flush()
-      expect(offsetCalls).toEqual([{ x: 0, y: 66 }])
+      expect(offsetCalls).toEqual([{ x: 0, y: 66, dpr: 1 }])
       expect(warn).toHaveBeenCalledTimes(1)
       await tick(1000)
       expect(warn).toHaveBeenCalledTimes(1)
@@ -331,23 +334,132 @@ describe('browser-live 뷰포트 재시도 백오프', () => {
     })
     await live.enterLive()
     await flush()
-    expect(viewportCalls).toEqual([{ width: 1920, height: 1000 }])
+    expect(viewportCalls).toEqual([{ width: 1920, height: 1000, dpr: 1 }])
     // 첫 재시도 전에 stage를 축소한다 — 재시도가 새 크기를 보낸다.
     stubRect(getDoc().getElementById('bwStage'), { left: 339, top: 273, width: 1078, height: 658 })
     await tick(2000)
     expect(viewportCalls).toHaveLength(2)
-    expect(viewportCalls[1]).toEqual({ width: 1078, height: 658 })
+    expect(viewportCalls[1]).toEqual({ width: 1078, height: 658, dpr: 1 })
     await tick(2000)
     await tick(5000)
     await tick(15000)
     expect(viewportCalls).toHaveLength(5)
     expect(viewportCalls.slice(1)).toEqual([
-      { width: 1078, height: 658 },
-      { width: 1078, height: 658 },
-      { width: 1078, height: 658 },
-      { width: 1078, height: 658 },
+      { width: 1078, height: 658, dpr: 1 },
+      { width: 1078, height: 658, dpr: 1 },
+      { width: 1078, height: 658, dpr: 1 },
+      { width: 1078, height: 658, dpr: 1 },
     ])
     await tick(60000)
     expect(viewportCalls).toHaveLength(5)
+  })
+})
+
+describe('browser-live 마우스 오프셋 DPR·복구 재전송 (2026-11-19)', () => {
+  // 서버 디스플레이·마우스 좌표계가 디바이스 px이라 오프셋도 디바이스
+  // px(위치×DPR)로 보내야 한다. CSS px 그대로 보내면 레티나에서 절반만
+  // 보정돼 호버·클릭이 어긋난다. dpr도 함께 보내 사이드카가 이미
+  // 디바이스 px임을 안다. 카나리아: DPR 곱셈을 빼면 실패한다.
+  // 복구 재전송: 사이드카 재시작은 메모리 속 오프셋을 지우는데 프론트는
+  // lastReported와 같다고 보고를 건너뛴다. 상태 폴링 실패 뒤 복구되면
+  // 보고 기록을 비워 다음 틱에 다시 보내게 한다.
+  function stubDpr(value: number): void {
+    Object.defineProperty(getWin(), 'devicePixelRatio', { value, configurable: true })
+  }
+  function restoreDpr(): void {
+    delete (getWin() as any).devicePixelRatio
+  }
+  beforeEach(() => {
+    jest.useFakeTimers()
+    setupFixture()
+  })
+  afterEach(() => {
+    restoreFrameElement()
+    restoreDpr()
+    jest.useRealTimers()
+  })
+
+  test('DPR 2면 오프셋이 두 배(디바이스 px)로 보고되고 dpr: 2가 실린다', async () => {
+    stubDpr(2)
+    const { live, offsetCalls } = makeLive()
+    await live.enterLive('https://example.com')
+    await flush()
+    expect(offsetCalls).toEqual([{ x: 0, y: 132, dpr: 2 }])
+  })
+
+  test('DPR 2면 임베드 frameElement 합도 디바이스 px로 보고된다', async () => {
+    stubDpr(2)
+    stubRect(getDoc().getElementById('bwLiveFrame'), { left: 0, top: 0, width: 1078, height: 658 })
+    mockFrameElement({ left: 339, top: 273, width: 1078, height: 658 })
+    const { live, offsetCalls } = makeLive()
+    await live.enterLive('https://example.com')
+    await flush()
+    expect(offsetCalls).toEqual([{ x: 678, y: 546, dpr: 2 }])
+  })
+
+  test('기본 reportMouseOffset이 POST 본문에 dpr을 싣는다', async () => {
+    stubDpr(2)
+    const posted: Array<{ url: string; body: unknown }> = []
+    const fetchStub = (url: string, init: any) => {
+      posted.push({ url, body: init && init.body ? JSON.parse(init.body) : null })
+      return Promise.resolve({
+        status: 200,
+        json: () => Promise.resolve({ ok: true, offset: { x: 0, y: 132 } }),
+      })
+    }
+    const origFetch = (globalThis as any).fetch
+    ;(globalThis as any).fetch = fetchStub
+    try {
+      const api = loadLive()
+      const live = api.createLive({
+        doc: getDoc(),
+        navigate: () => Promise.resolve({ status: 200, body: { ok: true, nav: 'ok', navStage: 'ok' } }),
+        applyViewport: () => Promise.resolve({ status: 200, body: { ok: true, stage: 'ok' } }),
+        checkUnlock: () => Promise.resolve({ status: 0, body: null }),
+        fetchState: () => Promise.resolve({ status: 200, body: { ok: true } }),
+        onChange: () => undefined,
+        statePollMs: 60000,
+        mouseOffsetPollMs: 60000,
+      })
+      await live.enterLive('https://example.com')
+      await flush()
+      const off = posted.find((p) => p.url === '/api/browse/mouse-offset')
+      expect(off).toBeDefined()
+      expect(off!.body).toEqual({ x: 0, y: 132, dpr: 2 })
+      live.endLive()
+    } finally {
+      ;(globalThis as any).fetch = origFetch
+    }
+  })
+
+  test('상태 폴링 실패 뒤 복구되면 같은 오프셋을 다시 보고한다', async () => {
+    let polls = 0
+    const { live, offsetCalls } = makeLive({
+      fetchStateImpl: () => {
+        polls += 1
+        // 첫 폴링(enterLive 직후)은 성공, 두 번째는 실패(사이드카 재시작),
+        // 세 번째부터 성공(복구) — 복구 뒤 오프셋이 다시 간다.
+        if (polls === 2) return Promise.resolve({ status: 502, body: null })
+        return Promise.resolve({ status: 200, body: { ok: true, url: 'https://example.com', title: 't' } })
+      },
+    })
+    await live.enterLive('https://example.com')
+    await flush()
+    expect(offsetCalls).toEqual([{ x: 0, y: 66, dpr: 1 }])
+    // 위치가 안 바뀌면 평상시에는 다시 안 보낸다.
+    await tick(1000)
+    expect(offsetCalls).toHaveLength(1)
+    // 상태 폴링 60초 간격: 실패 틱 → 복구 틱.
+    await tick(60000)
+    await tick(60000)
+    await flush()
+    expect(polls).toBeGreaterThanOrEqual(3)
+    // 복구 뒤 다음 오프셋 틱(100ms)에 같은 값을 다시 보낸다.
+    await tick(100)
+    expect(offsetCalls).toHaveLength(2)
+    expect(offsetCalls[1]).toEqual({ x: 0, y: 66, dpr: 1 })
+    // 그 뒤로는 다시 안 보낸다.
+    await tick(5000)
+    expect(offsetCalls).toHaveLength(2)
   })
 })

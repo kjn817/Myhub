@@ -658,7 +658,8 @@ describe('POST /viewport — 사이드카 영구 override 경유 (2026-11-16 QA 
     )
     expect(res.status).toBe(200)
     expect(await res.json()).toEqual({ ok: true, stage: 'ok', applied: 2, total: 2, verified: 2 })
-    expect(postedBody).toEqual({ width: 1680, height: 967 })
+    // dpr이 없으면 기본 1.0이 실린다 (구 프론트 호환).
+    expect(postedBody).toEqual({ width: 1680, height: 967, dpr: 1 })
     // 시크릿 헤더가 사이드카로 나간다 (이중 게이트).
     expect(fetchCalls).toHaveLength(1)
     expect(fetchCalls[0].headers['x-origin-secret']).toBe('origin-secret')
@@ -712,6 +713,127 @@ describe('POST /viewport — 사이드카 영구 override 경유 (2026-11-16 QA 
     )
     expect(res.status).toBe(400)
     expect(await res.json()).toEqual({ ok: false, error: 'INVALID_VIEWPORT' })
+    expect(fetchCalls).toHaveLength(0)
+  })
+
+  test('dpr: 2면 사이드카에 dpr이 그대로 전달된다 (2026-11-19 맥 레티나)', async () => {
+    let postedBody: unknown = null
+    stubFetch(async (url, init) => {
+      postedBody = JSON.parse(String(init?.body ?? '{}'))
+      return jsonResponse({ ok: true, applied: 1, total: 1, connected: true })
+    })
+    const res = await app.request(
+      '/api/browse/viewport',
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ viewport: { width: 1470, height: 847, dpr: 2 } }),
+      },
+      ENV as never,
+    )
+    expect(res.status).toBe(200)
+    expect(postedBody).toEqual({ width: 1470, height: 847, dpr: 2 })
+  })
+
+  test('비정상 dpr은 1.0으로 두고 뷰포트 전체를 버리지 않는다', async () => {
+    let postedBody: unknown = null
+    stubFetch(async (url, init) => {
+      postedBody = JSON.parse(String(init?.body ?? '{}'))
+      return jsonResponse({ ok: true, applied: 1, total: 1, connected: true })
+    })
+    const res = await app.request(
+      '/api/browse/viewport',
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ viewport: { width: 1470, height: 847, dpr: 99 } }),
+      },
+      ENV as never,
+    )
+    expect(res.status).toBe(200)
+    expect(postedBody).toEqual({ width: 1470, height: 847, dpr: 1 })
+  })
+})
+
+describe('POST /mouse-offset — 사이드카 중계 + dpr (2026-11-19)', () => {
+  // 프론트는 디바이스 px + dpr을 보낸다. dpr이 있으면 사이드카가 이미
+  // 디바이스 px인 줄 알고 그대로 쓰고, 없으면(구 프론트·수동) CSS px로
+  // 보고 배운 DPR로 변환한다. Worker는 dpr을 검증만 하고 중계한다.
+  test('dpr이 있으면 그대로 중계한다', async () => {
+    let postedBody: unknown = null
+    let postedUrl: unknown = null
+    stubFetch(async (url, init) => {
+      postedUrl = url
+      postedBody = JSON.parse(String(init?.body ?? '{}'))
+      return jsonResponse({ ok: true, offset: { x: 0, y: 132 } })
+    })
+    const res = await app.request(
+      '/api/browse/mouse-offset',
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ x: 0, y: 132, dpr: 2 }),
+      },
+      ENV as never,
+    )
+    expect(res.status).toBe(200)
+    expect(postedUrl).toBe(`https://${HOST}:8080/control/mouse-offset`)
+    expect(postedBody).toEqual({ x: 0, y: 132, dpr: 2 })
+  })
+
+  test('dpr이 없으면 dpr 키 없이 중계한다 (사이드카가 CSS px로 본다)', async () => {
+    let postedBody: unknown = null
+    stubFetch(async (url, init) => {
+      postedBody = JSON.parse(String(init?.body ?? '{}'))
+      return jsonResponse({ ok: true, offset: { x: 0, y: 66 } })
+    })
+    const res = await app.request(
+      '/api/browse/mouse-offset',
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ x: 0, y: 66 }),
+      },
+      ENV as never,
+    )
+    expect(res.status).toBe(200)
+    expect(postedBody).toEqual({ x: 0, y: 66 })
+  })
+
+  test('비정상 dpr은 빼고 중계한다', async () => {
+    let postedBody: unknown = null
+    stubFetch(async (url, init) => {
+      postedBody = JSON.parse(String(init?.body ?? '{}'))
+      return jsonResponse({ ok: true, offset: { x: 0, y: 66 } })
+    })
+    const res = await app.request(
+      '/api/browse/mouse-offset',
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ x: 0, y: 66, dpr: 99 }),
+      },
+      ENV as never,
+    )
+    expect(res.status).toBe(200)
+    expect(postedBody).toEqual({ x: 0, y: 66 })
+  })
+
+  test('잘못된 오프셋은 400 INVALID_OFFSET', async () => {
+    stubFetch(async () => {
+      throw new Error('must not be called')
+    })
+    const res = await app.request(
+      '/api/browse/mouse-offset',
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ x: -1, y: 66 }),
+      },
+      ENV as never,
+    )
+    expect(res.status).toBe(400)
+    expect(await res.json()).toEqual({ ok: false, error: 'INVALID_OFFSET' })
     expect(fetchCalls).toHaveLength(0)
   })
 })

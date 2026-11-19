@@ -57,7 +57,7 @@
  *   평가로 읽는 폴백이 있어 동작이 동일하다.
  * 카나리아: 단계 보고(stage)나 폴백 조건을 깨면 해당 테스트가 실패한다.
  */
-import { fetchSidecarBrowserState, getBrowserState, goBackSession, goForwardSession, navigateSession, REMOTE_DISPLAY_SCALE, wsToHttpUrl, type CdpSocket } from '../../src/modules/browse/cdp'
+import { fetchSidecarBrowserState, getBrowserState, goBackSession, goForwardSession, navigateSession, REMOTE_DISPLAY_SCALE, viewportDsf, wsToHttpUrl, type CdpSocket } from '../../src/modules/browse/cdp'
 
 type Listener = (ev: { data: unknown }) => void
 
@@ -341,8 +341,7 @@ describe('navigateSession — 뷰포트 (2026-11-12 원격 화면 짤림 수정)
       'Page.navigate',
     ])
     const vp = sock.sent.find((m) => m.method === 'Emulation.setDeviceMetricsOverride')
-    // DSF는 REMOTE_DISPLAY_SCALE(1.0) 고정 — 사이드카 DPI 고정으로
-    // 출력 scale이 항상 1.0이다.
+    // dpr이 없으면 기본 REMOTE_DISPLAY_SCALE(1.0) — 구 프론트 호환.
     expect(vp.params).toEqual({ width: 1680, height: 967, deviceScaleFactor: REMOTE_DISPLAY_SCALE, mobile: false })
     expect(REMOTE_DISPLAY_SCALE).toBe(1)
     expect(vp.sessionId).toBe('sess-1')
@@ -381,11 +380,45 @@ describe('navigateSession — 뷰포트 (2026-11-12 원격 화면 짤림 수정)
     expect(r).toEqual({ ok: true, stage: 'ok' })
     expect(sock.sent.map((m) => m.method)).toContain('Page.navigate')
   })
+
+  test('viewport.dpr: 2면 override DSF가 2.0이 된다 (2026-11-19 맥 레티나)', async () => {
+    const sock = new FakeSocket(viewportHandler)
+    const r = await navigateSession(WS_URL, TARGET, async () => sock as CdpSocket, {
+      viewport: { width: 1470, height: 847, dpr: 2 },
+    })
+    expect(r).toEqual({ ok: true, stage: 'ok' })
+    const vp = sock.sent.find((m) => m.method === 'Emulation.setDeviceMetricsOverride')
+    expect(vp.params).toEqual({ width: 1470, height: 847, deviceScaleFactor: 2, mobile: false })
+  })
+
+  test('viewport.dpr이 비정상이면 DSF 1.0으로 둔다', async () => {
+    const sock = new FakeSocket(viewportHandler)
+    const r = await navigateSession(WS_URL, TARGET, async () => sock as CdpSocket, {
+      viewport: { width: 1470, height: 847, dpr: 99 },
+    })
+    expect(r).toEqual({ ok: true, stage: 'ok' })
+    const vp = sock.sent.find((m) => m.method === 'Emulation.setDeviceMetricsOverride')
+    expect(vp.params.deviceScaleFactor).toBe(1)
+  })
 })
 
 describe('REMOTE_DISPLAY_SCALE — 원격 출력 배율 (2026-11-16 QA 7차)', () => {
-  test('사이드카 DPI 고정으로 출력 scale이 1.0이므로 DSF는 항상 1', () => {
+  // DSF 기본값 1.0 — dpr을 모를 때(구 프론트·미학습)만 쓴다. DSF 자체는
+  // 2026-11-19부터 클라이언트 DPR이다 (맥 레티나 2.0).
+  test('DSF 기본값은 1', () => {
     expect(REMOTE_DISPLAY_SCALE).toBe(1)
+  })
+})
+
+describe('viewportDsf — 뷰포트 DSF 결정 (2026-11-19)', () => {
+  test('유효한 dpr은 그대로, 없거나 비정상이면 1', () => {
+    expect(viewportDsf({ width: 1470, height: 847, dpr: 2 })).toBe(2)
+    expect(viewportDsf({ width: 1470, height: 847, dpr: 1.25 })).toBe(1.25)
+    expect(viewportDsf({ width: 1470, height: 847 })).toBe(1)
+    expect(viewportDsf({ width: 1470, height: 847, dpr: 0.5 })).toBe(1)
+    expect(viewportDsf({ width: 1470, height: 847, dpr: 5 })).toBe(1)
+    expect(viewportDsf({ width: 1470, height: 847, dpr: Number.NaN })).toBe(1)
+    expect(viewportDsf(undefined)).toBe(1)
   })
 })
 
