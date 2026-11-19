@@ -165,6 +165,7 @@
     var tabs = [];
     var activeTabId = null;
     var liveTabId = null; // 원격 뷰를 소유한 탭 (한 번에 한 탭에만 보임)
+    var mainTargetId = null; // 원격 메인 타깃 id (상태 폴링이 알려준다)
     var tabSeq = 0;
     function makeTab(url) {
       tabSeq += 1;
@@ -176,6 +177,9 @@
         // 원격 상태 폴링이 본 뒤로/앞으로 가능 여부 (null = 아직 모름).
         // 원격이 켜져 있으면 이 값이 로컬 기록보다 우선한다 (2026-11-15).
         remote: null,
+        // 원격 페이지 타깃 id (2026-11-19 새 창→새 탭): 팝업 탭은 생성
+        // 시, 라이브 탭은 메인 타깃에 묶인다. null이면 로컬 전용 탭.
+        remoteTargetId: null,
       };
     }
     function activeTab() {
@@ -224,6 +228,9 @@
             }),
             hIndex: Math.max(-1, Math.min(t.hIndex, t.history.length - 1)),
             remote: null, // 원격 상태는 런타임 값이라 복원하지 않는다
+            // 원격 타깃은 영구 크로뮴에 살아 있으므로 복원한다 — 사라진
+            // 타깃은 다음 상태 폴링에서 연결만 끊긴다 (탭은 안 지운다).
+            remoteTargetId: typeof t.remoteTargetId === 'string' ? t.remoteTargetId : null,
           };
         });
         activeTabId =
@@ -283,9 +290,24 @@
        이동을 로컬 기록에 섞으면 뒤로가기 폴백이 엉킨다. */
     function applyRemoteState(state) {
       if (!state || typeof state.url !== 'string') return;
+      // 동기화부터: 팝업이 생겼으면 그 탭이 라이브 탭이 되고, 팝업이
+      // 사라졌으면 메인 탭으로 뷰가 돌아간다. URL 반영은 그 뒤에 해야
+      // 팝업 URL이 예전 라이브 탭에 찍히는 일이 없다.
+      syncRemoteTabs(state);
+      // URL·탐색 상태는 원격 활성 타깃을 가진 탭에 반영한다. tabs가 없는
+      // 폴백에서는 라이브 탭에 반영한다. 활성 타깃 소유자가 없으면
+      // (비서 임시 탭이 활성) 이번 폴링은 반영하지 않는다.
       var owner = null;
-      for (var i = 0; i < tabs.length; i++) {
-        if (tabs[i].id === liveTabId) owner = tabs[i];
+      if (Array.isArray(state.tabs)) {
+        if (state.activeTargetId) {
+          tabs.forEach(function (t) {
+            if (t.remoteTargetId === state.activeTargetId) owner = t;
+          });
+        }
+      } else {
+        tabs.forEach(function (t) {
+          if (t.id === liveTabId) owner = t;
+        });
       }
       if (!owner) return;
       var changed = false;
@@ -304,6 +326,127 @@
       ) {
         owner.remote = remote;
         changed = true;
+      }
+      if (changed) {
+        saveTabs();
+        syncChrome();
+      }
+    }
+
+    /* 원격 탭 앞으로 불러오기·닫기 (2026-11-19 새 창→새 탭). fetch가
+       없거나 실패해도 false로 resolve될 뿐 던지지 않는다 — 상태 폴링이
+       2초 뒤에 바로잡는다. */
+    function postTabAction(action, targetId) {
+      var f =
+        (appWin && typeof appWin.fetch === 'function' && appWin.fetch) ||
+        (typeof fetch === 'function' && fetch);
+      if (!f) return Promise.resolve(false);
+      return f('/api/browse/tab/' + action, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ targetId: targetId }),
+      })
+        .then(function (res) {
+          return !!(res && res.ok);
+        })
+        .catch(function () {
+          return false;
+        });
+    }
+    function activateRemoteTab(targetId) {
+      return postTabAction('activate', targetId);
+    }
+    function closeRemoteTab(targetId) {
+      postTabAction('close', targetId);
+    }
+
+    /* 원격 탭 목록을 셸 탭과 맞춘다 (2026-11-19 새 창→새 탭, 상태 폴링
+       2초마다). 키오스크 팝업은 전체 화면 창이라 셸이 모르면 돌아올
+       방법이 없었는데, 이제 팝업이 셸 탭이 된다.
+       - tabs가 없으면(직접 CDP 폴백) 건드리지 않는다 — 없는 목록으로
+         팝업 탭을 지워버리면 안 된다.
+       - openerId가 있는 타깃만 새 탭으로 만든다 (메인·비서 임시 탭 제외).
+       - 사라진 원격 탭의 셸 탭은 지운다. 단, 마지막 탭이거나 라이브 탭의
+         타깃이 사라졌는데 활성 타깃 소유자가 없으면(크로뮴 재시작)
+         연결만 끊고 다음 폴링에서 다시 묶는다. 라이브 팝업이 닫혀 활성
+         타깃 소유자(메인 탭)가 있으면 팝업 탭을 지우고 뷰를 넘긴다.
+       - 팝업이 열리면 그 탭으로 전환하고 뷰 소유권도 옮긴다 — 원격
+         화면이 이미 팝업이므로 주소창·탭 줄이 화면과 맞아야 한다. */
+    function syncRemoteTabs(state) {
+      if (!state || !Array.isArray(state.tabs)) return;
+      if (typeof state.mainTargetId === 'string' || state.mainTargetId === null) {
+        mainTargetId = state.mainTargetId;
+      }
+      var byRemote = {};
+      state.tabs.forEach(function (t) {
+        byRemote[t.targetId] = t;
+      });
+      var changed = false;
+      // 0. 라이브 탭 바인딩: 아직 안 묶였으면 메인 타깃에 묶는다.
+      var liveTab = null;
+      tabs.forEach(function (t) {
+        if (t.id === liveTabId) liveTab = t;
+      });
+      if (liveTab && !liveTab.remoteTargetId && mainTargetId) {
+        liveTab.remoteTargetId = mainTargetId;
+        changed = true;
+      }
+      // 1. 새 팝업 → 셸 탭 생성 + 전환.
+      state.tabs.forEach(function (rt) {
+        if (!rt.openerId) return;
+        var exists = tabs.some(function (t) {
+          return t.remoteTargetId === rt.targetId;
+        });
+        if (exists) return;
+        var tab = makeTab(rt.url || null);
+        tab.remoteTargetId = rt.targetId;
+        tabs.push(tab);
+        activeTabId = tab.id;
+        liveTabId = tab.id;
+        changed = true;
+      });
+      // 2. 사라진 원격 탭 → 셸 탭 제거.
+      var removedActive = false;
+      for (var i = tabs.length - 1; i >= 0; i--) {
+        var t = tabs[i];
+        if (!t.remoteTargetId || byRemote[t.remoteTargetId]) continue;
+        var isLive = t.id === liveTabId;
+        // 활성 타깃을 가진 다른 탭이 있으면 뷰가 그쪽으로 넘어가므로
+        // 사라진 탭은 제거해도 된다. 없으면(재시작) 연결만 끊는다.
+        var activeOwner = null;
+        if (state.activeTargetId) {
+          tabs.forEach(function (x) {
+            if (x.id !== t.id && x.remoteTargetId === state.activeTargetId) activeOwner = x;
+          });
+        }
+        if (tabs.length <= 1 || (isLive && !activeOwner)) {
+          t.remoteTargetId = null;
+          changed = true;
+          continue;
+        }
+        if (t.id === activeTabId) removedActive = true;
+        if (isLive) liveTabId = activeOwner.id;
+        tabs.splice(i, 1);
+        changed = true;
+      }
+      // 3. 활성 탭이 사라졌으면 활성 타깃 소유 탭으로 따라간다.
+      if (removedActive) {
+        var follow = null;
+        if (state.activeTargetId) {
+          tabs.forEach(function (t) {
+            if (t.remoteTargetId === state.activeTargetId) follow = t;
+          });
+        }
+        if (!follow) {
+          tabs.forEach(function (t) {
+            if (t.id === liveTabId) follow = t;
+          });
+        }
+        if (!follow && tabs.length) follow = tabs[0];
+        if (follow) {
+          activeTabId = follow.id;
+          liveTabId = follow.id;
+        }
       }
       if (changed) {
         saveTabs();
@@ -547,6 +690,13 @@
       if (!exists) return;
       activeTabId = id;
       if (tabsMenuEl) tabsMenuEl.hidden = true;
+      // 원격 탭이면 뷰 소유권을 옮기고 원격을 앞으로 불러온다 — 로컬
+      // 탭은 기존처럼 뷰를 두지 않는다 (다른 탭 실행 중 안내).
+      var tab = activeTab();
+      if (tab && tab.remoteTargetId && live.isActive()) {
+        liveTabId = id;
+        activateRemoteTab(tab.remoteTargetId);
+      }
       saveTabs();
       syncChrome();
     }
@@ -566,8 +716,32 @@
         if (t.id === id) idx = i;
       });
       if (idx < 0) return;
-      // 뷰를 소유한 탭을 접으면 뷰도 꺼진다
-      if (id === liveTabId && live.isActive()) live.endLive();
+      var tab = tabs[idx];
+      // 원격 팝업 탭이면 원격도 닫는다 (메인 타깃은 닫지 않는다 — 영구 브라우저).
+      var isPopup = !!(tab.remoteTargetId && tab.remoteTargetId !== mainTargetId);
+      if (isPopup && live.isActive()) closeRemoteTab(tab.remoteTargetId);
+      // 뷰를 소유한 탭을 접으면 뷰도 꺼진다 — 단, 팝업 탭이면 메인 탭으로
+      // 뷰를 옮긴다 (팝업을 닫고 원래 페이지로 돌아가는 것이 자연스럽다).
+      if (id === liveTabId && live.isActive()) {
+        var fallback = null;
+        if (isPopup) {
+          tabs.forEach(function (t) {
+            if (t.id !== id && t.remoteTargetId === mainTargetId) fallback = t;
+          });
+          if (!fallback) {
+            tabs.forEach(function (t) {
+              if (t.id !== id && t.remoteTargetId) fallback = t;
+            });
+          }
+        }
+        if (fallback) {
+          liveTabId = fallback.id;
+          activeTabId = fallback.id;
+          activateRemoteTab(fallback.remoteTargetId);
+        } else {
+          live.endLive();
+        }
+      }
       tabs.splice(idx, 1);
       if (!tabs.length) tabs.push(makeTab(null));
       if (activeTabId === id) {
@@ -583,6 +757,14 @@
     function enterLiveHere(url) {
       if (!live.isActive() || liveTabId === activeTabId) {
         liveTabId = activeTabId;
+      }
+      // 원격 탭에서 다시 켤 때는 그 타깃을 먼저 앞으로 불러온 뒤 이동한다
+      // (안 그러면 이동이 지금 보이는 다른 탭에 가버린다).
+      var tab = activeTab();
+      if (tab && tab.remoteTargetId && !live.isActive()) {
+        return activateRemoteTab(tab.remoteTargetId).then(function () {
+          return live.enterLive(url);
+        });
       }
       return live.enterLive(url);
     }
@@ -1220,6 +1402,7 @@
             hIndex: t.hIndex,
             active: t.id === activeTabId,
             live: t.id === liveTabId,
+            remoteTargetId: t.remoteTargetId || null,
           };
         });
       },

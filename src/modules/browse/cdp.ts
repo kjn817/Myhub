@@ -402,18 +402,10 @@ export async function navigateSession(
         const attached = await attachActivePage(call, pages)
         if (!attached.ok) return directNavigate('attach')
         sessionId = attached.sessionId
-        // 키오스크 모드(2026-11-14)에서는 팝업 창이 전체 화면으로 떠서
-        // 돌아올 방법이 없다 — 이동 시 이동시킬 탭 외의 페이지 타깃을
-        // 닫아 MyHub 주소창을 탈출구로 만든다. 닫기는 응답을 안 기다리는
-        // 발사 후 망각이다. (비서 읽기가 진행 중이면 그 탭도 닫혀 읽기가
-        // 실패할 수 있으나 드물고 우아하게 실패한다 — 읽기는 실패를
-        // 보고하고 탭은 어차피 닫힐 운명이다.) 스캔이 탭들을 attach한
-        // 뒤라 닫기는 attach 뒤에 나가지만, navigate보다는 먼저 나간다.
-        for (const t of pages) {
-          if (t.targetId !== attached.targetId) {
-            void call('Target.closeTarget', { targetId: t.targetId }).catch(() => undefined)
-          }
-        }
+        // 다른 페이지 타깃은 닫지 않는다 (2026-11-19 변경 — 2026-11-14의
+        // 일괄 닫기는 폐기). 팝업은 이제 셸 탭이 되어 탭 전환으로 돌아올
+        // 수 있으므로 주소창이 탈출구일 필요가 없다. 비서 읽기용 임시 탭은
+        // assistant-read.ts가 직접 닫는다 (읽기 완료 시 closeTarget).
       } else {
         // page 타입이 없으면 첫 타깃으로 attach한다 (기존 동작 유지).
         phase = 'attach'
@@ -471,11 +463,28 @@ export async function navigateSession(
 
 
 
+/** 원격 페이지 타깃 하나 (사이드카 /control/state의 tabs 항목). */
+export interface RemoteTab {
+  targetId: string
+  url: string
+  title: string
+  /** 팝업이면 연 부모 타깃 id, 아니면 null — 셸은 openerId가 있는 타깃만 새 탭으로 만든다. */
+  openerId: string | null
+}
+
 export interface BrowserState {
   url: string
   title: string
   canGoBack: boolean
   canGoForward: boolean
+  /** 탭 목록 — 빠른 경로(사이드카)에서만 온다. 폴백(직접 CDP)에서는
+   *  없어 셸이 탭 동기화를 건드리지 않는다 (없는 목록으로 팝업 탭을
+   *  지워버리는 것을 막는다). */
+  tabs?: RemoteTab[]
+  /** 현재 화면에 보이는 타깃 id (빠른 경로에서만). */
+  activeTargetId?: string | null
+  /** 연결 시 처음 본 페이지 타깃 id (빠른 경로에서만). */
+  mainTargetId?: string | null
 }
 
 /**
@@ -512,13 +521,62 @@ export async function fetchSidecarBrowserState(
     return null
   }
   const b = body as
-    | { ok?: unknown; url?: unknown; title?: unknown; canGoBack?: unknown; canGoForward?: unknown }
+    | {
+        ok?: unknown
+        url?: unknown
+        title?: unknown
+        canGoBack?: unknown
+        canGoForward?: unknown
+        tabs?: unknown
+        activeTargetId?: unknown
+        mainTargetId?: unknown
+      }
     | null
     | undefined
   if (!b || typeof b !== 'object' || b.ok !== true) return null
   if (typeof b.url !== 'string' || typeof b.title !== 'string') return null
   if (typeof b.canGoBack !== 'boolean' || typeof b.canGoForward !== 'boolean') return null
-  return { url: b.url, title: b.title, canGoBack: b.canGoBack, canGoForward: b.canGoForward }
+  const state: BrowserState = {
+    url: b.url,
+    title: b.title,
+    canGoBack: b.canGoBack,
+    canGoForward: b.canGoForward,
+  }
+  // 탭 목록은 배열일 때만, 항목 모양을 검증해서 통과시킨다 — 깨진 항목은
+  // 버리고 목록 자체는 살린다 (하나 깨졌다고 탭 동기화 전체가 멈추면 안 된다).
+  if (Array.isArray(b.tabs)) {
+    const tabs: RemoteTab[] = []
+    for (const t of b.tabs) {
+      if (
+        t &&
+        typeof t === 'object' &&
+        typeof (t as { targetId?: unknown }).targetId === 'string' &&
+        typeof (t as { url?: unknown }).url === 'string' &&
+        typeof (t as { title?: unknown }).title === 'string' &&
+        ((t as { openerId?: unknown }).openerId === null ||
+          typeof (t as { openerId?: unknown }).openerId === 'string')
+      ) {
+        const tt = t as { targetId: string; url: string; title: string; openerId: string | null }
+        tabs.push({ targetId: tt.targetId, url: tt.url, title: tt.title, openerId: tt.openerId })
+      }
+    }
+    state.tabs = tabs
+  }
+  // unknown은 `typeof x === 'string' || x === null` 복합 가드로 좁혀지지
+  // 않는다(TS 5.9 실측 — 분기문을 나누면 좁혀진다).
+  const activeTargetId = b.activeTargetId
+  if (typeof activeTargetId === 'string') {
+    state.activeTargetId = activeTargetId
+  } else if (activeTargetId === null) {
+    state.activeTargetId = null
+  }
+  const mainTargetId = b.mainTargetId
+  if (typeof mainTargetId === 'string') {
+    state.mainTargetId = mainTargetId
+  } else if (mainTargetId === null) {
+    state.mainTargetId = null
+  }
+  return state
 }
 
 /**

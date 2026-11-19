@@ -397,7 +397,18 @@ export function registerOracleProxyRoutes(app: Hono<{ Bindings: Env }>): void {
       gate.secretHeaders,
     )
     if (fast) {
-      return c.json({ ok: true, url: fast.url, title: fast.title, canGoBack: fast.canGoBack, canGoForward: fast.canGoForward })
+      // 탭 목록은 빠른 경로에서만 온다 — 폴백(직접 CDP)은 탭을 몰라
+      // 필드를 빼고, 셸은 필드가 없을 때 탭 동기화를 건드리지 않는다.
+      return c.json({
+        ok: true,
+        url: fast.url,
+        title: fast.title,
+        canGoBack: fast.canGoBack,
+        canGoForward: fast.canGoForward,
+        ...(fast.tabs !== undefined ? { tabs: fast.tabs } : {}),
+        ...(fast.activeTargetId !== undefined ? { activeTargetId: fast.activeTargetId } : {}),
+        ...(fast.mainTargetId !== undefined ? { mainTargetId: fast.mainTargetId } : {}),
+      })
     }
     const directWs = await directCdpWsUrl(cfg, gate.secretHeaders)
     if (!directWs) return c.json({ ok: false, error: 'ORACLE_UPSTREAM' }, 502)
@@ -412,6 +423,44 @@ export function registerOracleProxyRoutes(app: Hono<{ Bindings: Env }>): void {
     }
     return c.json({ ok: true, url: state.url, title: state.title, canGoBack: state.canGoBack, canGoForward: state.canGoForward })
   })
+
+  // 원격 탭 앞으로 불러오기·닫기 (2026-11-19 새 창→새 탭): 셸 탭 전환·
+  // 닫기가 사이드카 /control/tab/*으로 중계된다. 키오스크에서는 팝업이
+  // 전체 화면 창이므로 activate가 곧 화면 전환이다. 실패해도 200 +
+  // ok:false로 보고하고 셸은 다음 상태 폴링(2초)에서 바로잡는다.
+  const tabAction = (action: 'activate' | 'close') => async (c: {
+    env: Env
+    req: { json: () => Promise<unknown> }
+    json: (body: unknown, status?: number) => Response
+  }) => {
+    const cfg = oracleConfigOf(c.env)
+    if (!cfg) return c.json({ ok: false, error: 'ORACLE_NOT_CONFIGURED' }, 503)
+    let body: { targetId?: unknown } = {}
+    try {
+      body = (await c.req.json()) as { targetId?: unknown }
+    } catch {
+      return c.json({ ok: false, error: 'INVALID_TARGET' }, 400)
+    }
+    if (typeof body.targetId !== 'string' || !body.targetId) {
+      return c.json({ ok: false, error: 'INVALID_TARGET' }, 400)
+    }
+    const gate = await gateSidecar(c, cfg)
+    if (!gate.ok) return gate.response
+    let res: Response
+    try {
+      res = await fetch(`https://${cfg.host}:${ORACLE_CDP_PORT}/control/tab/${action}`, {
+        method: 'POST',
+        headers: { ...gate.secretHeaders, 'content-type': 'application/json' },
+        body: JSON.stringify({ targetId: body.targetId }),
+      })
+    } catch {
+      return c.json({ ok: false, error: 'ORACLE_UPSTREAM' }, 502)
+    }
+    if (!res.ok) return c.json({ ok: false, error: 'ORACLE_UPSTREAM' }, 502)
+    return c.json({ ok: true })
+  }
+  app.post('/tab/activate', tabAction('activate'))
+  app.post('/tab/close', tabAction('close'))
 
   // 원격 뒤로/앞으로 가기 (2026-11-15): CDP getNavigationHistory로
   // 엔트리 id를 읽어 Page.navigateToHistoryEntry로 활성 탭을 이동시킨다

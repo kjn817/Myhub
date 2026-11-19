@@ -8,6 +8,7 @@ import { Hono } from 'hono'
 import type { Env } from '../../types'
 import { storageUpload, storageDestroy } from '../../services/storage'
 import { searchDriveItems } from './search'
+import { saveDriveFile } from './upload'
 
 export const driveApp = new Hono<{ Bindings: Env }>()
 
@@ -233,11 +234,7 @@ driveApp.post('/files', async (c) => {
     const saved: Array<{ id: number; filename: string; size: number }> = []
     for (const uf of uploadFiles) {
       if (!uf.size) continue
-      const up = await storageUpload(c.env, uf, 'myhub/drive')
-      const r = await c.env.DB.prepare(
-        'INSERT INTO drive_files (folder_id, storage_key, filename, mime, size, url, resource_type) VALUES (?, ?, ?, ?, ?, ?, ?)'
-      ).bind(folderId, up.public_id, uf.name, uf.type || null, up.bytes, up.secure_url, up.resource_type).run()
-      saved.push({ id: Number(r.meta.last_row_id), filename: uf.name, size: up.bytes })
+      saved.push(await saveDriveFile(c.env, uf, folderId))
     }
     await c.env.KV.delete('system:stats').catch(() => {})
     return c.json({ ok: true, files: saved })

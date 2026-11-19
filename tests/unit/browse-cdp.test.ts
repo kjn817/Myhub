@@ -193,8 +193,10 @@ describe('navigateSession — 정상 경로', () => {
   })
 })
 
-describe('navigateSession — 키오스크 팝업 정리 (2026-11-14)', () => {
-  test('영구 탭 외의 페이지 타깃은 이동 전에 닫고, 영구 탭은 닫지 않는다', async () => {
+describe('navigateSession — 다른 탭을 닫지 않는다 (2026-11-19 새 창→새 탭)', () => {
+  // 2026-11-14의 일괄 닫기는 폐기됐다 — 팝업은 이제 셸 탭이 되어 탭
+  // 전환으로 돌아올 수 있으므로, 이동이 다른 탭을 닫으면 안 된다.
+  test('팝업 타깃이 있어도 닫지 않고 보이는 탭으로만 이동한다', async () => {
     const sock = new FakeSocket((msg, emit) => {
       if (msg.method === 'Target.getTargets') {
         emit({ id: msg.id, result: { targetInfos: [
@@ -212,19 +214,12 @@ describe('navigateSession — 키오스크 팝업 정리 (2026-11-14)', () => {
       } else if (msg.method === 'Page.navigate') {
         emit({ id: msg.id, result: {} })
       }
-      // closeTarget 응답은 없어도 된다 (발사 후 망각)
     })
     const r = await navigateSession(WS_URL, TARGET, async () => sock as CdpSocket)
     expect(r).toEqual({ ok: true, stage: 'ok' })
-    const closes = sock.sent.filter((m) => m.method === 'Target.closeTarget')
-    expect(closes.map((m) => m.params.targetId).sort()).toEqual(['popup-1', 'popup-2'])
+    expect(sock.sent.some((m) => m.method === 'Target.closeTarget')).toBe(false)
     const nav = sock.sent.find((m) => m.method === 'Page.navigate')
     expect(nav?.sessionId).toBe('sess-page-1')
-    // 닫기는 스캔(attach) 뒤에 나가지만 navigate보다는 먼저 나간다.
-    const closeIdx = sock.sent.findIndex((m) => m.method === 'Target.closeTarget')
-    const navIdx = sock.sent.findIndex((m) => m.method === 'Page.navigate')
-    expect(closeIdx).toBeGreaterThan(-1)
-    expect(closeIdx).toBeLessThan(navIdx)
   })
 
   test('페이지 타깃이 하나면 closeTarget을 보내지 않는다', async () => {
@@ -261,7 +256,9 @@ describe('navigateSession — 활성 탭 이동 (2026-11-16 QA 4차)', () => {
     }
   }
 
-  test('첫 탭이 hidden이고 두 번째가 visible이면 두 번째 탭을 이동시키고 첫 탭을 닫는다', async () => {
+  // 2026-11-19: 이동 시 다른 탭을 닫던 동작은 폐기됐다 — 팝업이 셸 탭이
+  // 되어 돌아올 수 있으므로, 이동은 보이는 탭만 옮기고 닫기는 보내지 않는다.
+  test('첫 탭이 hidden이고 두 번째가 visible이면 두 번째 탭을 이동시키고 첫 탭을 닫지 않는다', async () => {
     const sock = new FakeSocket(makeNavigateHandler([
       { targetId: 'page-1', visibility: 'hidden' },
       { targetId: 'page-2', visibility: 'visible' },
@@ -271,14 +268,10 @@ describe('navigateSession — 활성 탭 이동 (2026-11-16 QA 4차)', () => {
     const nav = sock.sent.find((m) => m.method === 'Page.navigate')
     expect(nav?.sessionId).toBe('sess-page-2')
     expect(nav?.params).toEqual({ url: TARGET })
-    const closes = sock.sent.filter((m) => m.method === 'Target.closeTarget')
-    expect(closes.map((m) => m.params.targetId)).toEqual(['page-1'])
-    const closeIdx = sock.sent.findIndex((m) => m.method === 'Target.closeTarget')
-    const navIdx = sock.sent.findIndex((m) => m.method === 'Page.navigate')
-    expect(closeIdx).toBeLessThan(navIdx)
+    expect(sock.sent.some((m) => m.method === 'Target.closeTarget')).toBe(false)
   })
 
-  test('전부 hidden이면 첫 탭으로 폴백해 이동시키고 나머지를 닫는다', async () => {
+  test('전부 hidden이면 첫 탭으로 폴백해 이동시키고 나머지를 닫지 않는다', async () => {
     const sock = new FakeSocket(makeNavigateHandler([
       { targetId: 'page-1', visibility: 'hidden' },
       { targetId: 'page-2', visibility: 'hidden' },
@@ -287,8 +280,7 @@ describe('navigateSession — 활성 탭 이동 (2026-11-16 QA 4차)', () => {
     expect(r).toEqual({ ok: true, stage: 'ok' })
     const nav = sock.sent.find((m) => m.method === 'Page.navigate')
     expect(nav?.sessionId).toBe('sess-page-1')
-    const closes = sock.sent.filter((m) => m.method === 'Target.closeTarget')
-    expect(closes.map((m) => m.params.targetId)).toEqual(['page-2'])
+    expect(sock.sent.some((m) => m.method === 'Target.closeTarget')).toBe(false)
   })
 
   test('탭이 하나면 그 탭을 이동시키고 닫기를 보내지 않는다', async () => {
@@ -311,8 +303,7 @@ describe('navigateSession — 활성 탭 이동 (2026-11-16 QA 4차)', () => {
     expect(r).toEqual({ ok: true, stage: 'ok' })
     const nav = sock.sent.find((m) => m.method === 'Page.navigate')
     expect(nav?.sessionId).toBe('sess-page-2')
-    const closes = sock.sent.filter((m) => m.method === 'Target.closeTarget')
-    expect(closes.map((m) => m.params.targetId)).toEqual(['page-1'])
+    expect(sock.sent.some((m) => m.method === 'Target.closeTarget')).toBe(false)
   })
 })
 

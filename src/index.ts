@@ -40,6 +40,10 @@ app.use(async (c, next) => {
       // 못 보내므로 전역 미들웨어를 우회하고 모듈 안에서 인증한다
       // (ORIGIN_SECRET Bearer — modules/craft/relay.ts의 relayAuth).
       path.startsWith('/api/craft/relay/') ||
+      // 브라우저 다운로드 수신 (POST /api/browse/downloads): 사이드카는
+      // 세션 쿠키를 못 보내므로 전역 미들웨어를 우회하고 모듈 안에서
+      // ORIGIN_SECRET Bearer로 인증한다 (modules/browse/downloads.ts).
+      path === '/api/browse/downloads' ||
       // MCP 엔드포인트 (POST /api/mcp): MCP 클라이언트는 세션 쿠키를 못 보내므로
       // 전역 미들웨어를 우회하고 모듈 안에서 인증한다 (세션 쿠키 또는 Bearer
       // MCP 토큰 — routes.ts의 authenticateMcpRequest). 정확한 경로만 허용한다:
