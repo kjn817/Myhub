@@ -30,7 +30,17 @@
  * - 재시작 후 URL이 없는 팝업 탭(진짜 닫힘)은 여전히 지워진다.
  * - 같은 URL의 셸 탭이 두 개면 복원 탭 하나에 하나만 묶이고
  *   나머지는 지워진다 (1:1 — 한 타깃에 두 탭이 안 묶인다).
- * 카나리아: 동기화·중계·가드·재바인딩을 빼면 해당 테스트가 실패한다.
+ * - 재시작 후 원격이 새 탭뿐이면 모든 셸 탭이 지워지지 않고 연결만
+ *   끊긴다 (2026-11-21 셸 주도 복원 — 옛 가드는 라이브 탭만 살리고
+ *   나머지 탭을 전부 지워 저장된 탭이 날아갔다). 다음 폴링에서
+ *   라이브 탭은 새 메인 타깃에 다시 묶인다.
+ * - 재시작 감지 시 라이브 탭 URL로 한 번만 다시 이동한다 (플래그
+ *   소비 — 두 번째 폴링에서는 이동하지 않는다).
+ * - chrome:// 상태 URL이 http(s) 탭 URL을 덮지 않는다 (재이동 전
+ *   폴링이 먼저 와도 라이브 탭 URL이 보존된다).
+ * - 팝업 닫힘(활성 타깃 소유자 존재)에는 재시작 플래그가 안 서고
+ *   재이동하지 않는다.
+ * 카나리아: 동기화·중계·가드·재바인딩·재시작 플래그를 빼면 해당 테스트가 실패한다.
  */
 import * as fs from 'fs'
 import * as path from 'path'
@@ -162,6 +172,7 @@ interface Harness {
   remote: RemoteState
   setRemote: (s: RemoteState) => void
   tabPosts: TabPost[]
+  navigateCalls: string[]
 }
 
 function makeApp(): Harness {
@@ -195,6 +206,7 @@ function makeApp(): Harness {
       })
     },
   }
+  const navigateCalls: string[] = []
   const h: Harness = {
     app: null as any,
     remote: mainOnlyState(),
@@ -202,13 +214,17 @@ function makeApp(): Harness {
       h.remote = s
     },
     tabPosts,
+    navigateCalls,
   }
   const app = api.createApp({
     doc,
     win: fakeWin,
     storage: new MemoryStorage(),
     liveDeps: {
-      navigate: () => Promise.resolve({ status: 200, body: { ok: true, nav: 'ok', navStage: 'ok' } }),
+      navigate: (url: string) => {
+        navigateCalls.push(url)
+        return Promise.resolve({ status: 200, body: { ok: true, nav: 'ok', navStage: 'ok' } })
+      },
       applyViewport: () => Promise.resolve({ status: 200, body: { ok: true, stage: 'ok' } }),
       checkUnlock: () => Promise.resolve({ status: 0, body: null }),
       fetchState: () => Promise.resolve({ status: 200, body: { ok: true, ...h.remote } }),
@@ -510,6 +526,63 @@ describe('browser 새 창→새 탭 연동', () => {
     // 두 탭이 묶이지 않는다).
     expect(after).toHaveLength(1)
     expect(after[0].remoteTargetId).toBe('page-9')
+    await h.app.live.endLive()
+  })
+
+  test('재시작 후 원격이 새 탭뿐이면 모든 셸 탭이 보존되고 라이브 탭 URL로 한 번만 이동한다', async () => {
+    const h = makeApp()
+    await startLive(h)
+    h.setRemote(popupState())
+    await poll(h)
+    expect(h.app.getTabs()).toHaveLength(2)
+    // 시작 내비게이션 기록을 비운다 — 재시작 재이동만 본다.
+    h.navigateCalls.length = 0
+    // 크로뮴 재시작: 원격은 새 탭 하나뿐, 어떤 URL도 안 맞는다.
+    // 네이티브 복원은 이 빌드에서 동작하지 않는다 (Session 미기록).
+    const fresh: RemoteState = {
+      url: 'chrome://newtab/',
+      title: '',
+      canGoBack: false,
+      canGoForward: false,
+      tabs: [{ targetId: 'page-9', url: 'chrome://newtab/', title: '', openerId: null }],
+      activeTargetId: 'page-9',
+      mainTargetId: 'page-9',
+    }
+    h.setRemote(fresh)
+    await poll(h)
+    // 두 탭 모두 지워지지 않고 연결만 끊긴다 (옛 가드는 라이브
+    // 탭만 살리고 나머지를 지웠다 — 여기서 라이브 탭은 팝업이라
+    // 메인 탭이 지워졌다).
+    const afterFirst = h.app.getTabs()
+    expect(afterFirst).toHaveLength(2)
+    expect(afterFirst.every((t: any) => t.remoteTargetId === null)).toBe(true)
+    expect(afterFirst.find((t: any) => t.live).url).toBe('https://news.naver.com/article/123')
+    // 라이브 탭(팝업, 뉴스) URL로 한 번 이동한다.
+    expect(h.navigateCalls).toEqual(['https://news.naver.com/article/123'])
+    // 두 번째 폴링: 라이브 탭이 새 메인에 묶이고, chrome:// 상태가
+    // http URL을 덮지 않으며, 재이동은 반복되지 않는다.
+    await poll(h)
+    const afterSecond = h.app.getTabs()
+    expect(afterSecond).toHaveLength(2)
+    const liveTab = afterSecond.find((t: any) => t.live)
+    expect(liveTab.remoteTargetId).toBe('page-9')
+    expect(liveTab.url).toBe('https://news.naver.com/article/123')
+    expect(afterSecond.find((t: any) => !t.live).remoteTargetId).toBeNull()
+    expect(h.navigateCalls).toHaveLength(1)
+    await h.app.live.endLive()
+  })
+
+  test('팝업 닫힘에는 재시작 플래그가 안 서고 재이동하지 않는다', async () => {
+    const h = makeApp()
+    await startLive(h)
+    h.setRemote(popupState())
+    await poll(h)
+    expect(h.app.getTabs()).toHaveLength(2)
+    h.navigateCalls.length = 0
+    h.setRemote(mainOnlyState())
+    await poll(h)
+    expect(h.app.getTabs()).toHaveLength(1)
+    expect(h.navigateCalls).toHaveLength(0)
     await h.app.live.endLive()
   })
 })

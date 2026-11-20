@@ -2133,6 +2133,26 @@
     }
     window.addEventListener('message', onBrowserNavMessage);
 
+    // 빈 탭 포커스 요청 (2026-11-20 QA 결함: 새 탭 직후 키 입력이
+    // 주소창에 안 들어감). browser.js가 새 탭 생성·빈 탭 전환 때
+    // 명시적으로 보낸다. 위 플래그 방식과 별개로 동작한다 — 플래그는
+    // 상태 게시 서명 중복(연속 빈 탭)이나 메뉴 경로에서는 안 먹혔기
+    // 때문이다. 플래그는 그대로 둔다 (구 browser.js 캐시와의 호환·
+    // 이중 보장). 빈 탭 여부는 발신 측이 보장하므로 여기서는 검증
+    // 없이 포커스한다. 출처는 셸 창 iframe으로 검증한다.
+    function onBrowserNavFocusMessage(e) {
+      var d = sameOriginData(e);
+      if (!d || d.type !== 'myhub:browser-nav-focus') return;
+      var found = findWinIdBySource(e.source);
+      if (!found) return;
+      var rec = entries.get(found);
+      if (!rec) return;
+      var box = rec.el.querySelector('.myhub-win-bnav');
+      var input = box && box.querySelector('.myhub-bnav-input');
+      if (input) input.focus();
+    }
+    window.addEventListener('message', onBrowserNavFocusMessage);
+
     var assistantByWin = new Map();
     var assistantListeners = new Set();
     var assistantSig = '';

@@ -19,8 +19,14 @@
  *   해당 항목이 체크된다.
  * - "여기서 시작" 버튼은 세션 종료가 아니라 화면 이동이라 표기한다
  *   (실제 동작은 소유권 이동 — 원격 세션은 끝나지 않는다).
+ * - 이동 메뉴의 시작 항목은 라이브 상태에 따라 토글된다 (2026-11-21
+ *   QA 발견): 꺼져 있을 때는 '브라우저 시작', 켜져 있을 때는
+ *   '브라우저 종료'가 되고 누르면 라이브가 꺼진다. 옛 코드는 켜진
+ *   상태에서 항목을 비활성화만 해서 앱 창을 닫아야만 끌 수 있었다.
  * 카나리아: reload가 navigate를 부르거나, 실패 시 안내를 안 띄우거나,
- * 화질 선택이 저장을 안 하면 해당 테스트가 실패한다.
+ * 화질 선택이 저장을 안 하면 해당 테스트가 실패한다. 시작/종료
+ * 토글을 빼면(항상 '브라우저 시작' + 켜지면 비활성화) 토글 테스트가
+ * 실패한다.
  */
 import * as fs from 'fs'
 import * as path from 'path'
@@ -209,6 +215,27 @@ describe('브라우저 4단계 — 새로고침·화질·일시 안내', () => {
     expect(h.reloadCalls).toBe(1)
     expect(h.navigateCalls).toEqual(['https://www.naver.com'])
     await h.app.live.endLive()
+  })
+
+  test('이동 메뉴의 시작 항목은 라이브 상태에 따라 시작/종료로 토글된다', async () => {
+    const h = makeApp()
+    // 꺼져 있을 때: '브라우저 시작'이 보이고 비활성화가 아니다.
+    let items = moveMenuItems(getWin())
+    expect(items.find((i: any) => i.label === '브라우저 시작')).toBeDefined()
+    expect(items.find((i: any) => i.label === '브라우저 시작').disabled).not.toBe(true)
+    expect(items.find((i: any) => i.label === '브라우저 종료')).toBeUndefined()
+    // 켜져 있을 때: '브라우저 종료'가 되고, 누르면 라이브가 꺼진다.
+    h.app.go('https://www.naver.com')
+    await flush()
+    expect(h.app.live.state()).toBe('on')
+    items = moveMenuItems(getWin())
+    const endItem = items.find((i: any) => i.label === '브라우저 종료')
+    expect(endItem).toBeDefined()
+    expect(endItem.disabled).not.toBe(true)
+    expect(items.find((i: any) => i.label === '브라우저 시작')).toBeUndefined()
+    endItem.run()
+    await flush()
+    expect(h.app.live.state()).toBe('off')
   })
 
   test('reload 실패 시 재이동 폴백 없이 안내 카드가 뜨고 라이브 화면은 그대로다', async () => {

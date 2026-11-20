@@ -1,0 +1,22 @@
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>navkey-live top (maximized shell stand-in)</title>
+<style>html,body{margin:0;height:100%}#appFrame{width:100vw;height:100vh;border:0;display:block}</style>
+</head>
+<body>
+<!-- 최대화 브라우저: 앱 프레임이 뷰포트 전체를 차지하고, 타이틀바 클릭
+     같은 셸 상호작용 없이 라이브 프레임 안의 입력 칸에만 포커스를 둔다. -->
+<iframe id="appFrame" src="/navkey-live/app.html"></iframe>
+<script>
+// windows.js onNavKeyMessage와 같은 수신 조건: myhub:desktop-nav-key이며
+// 출처가 셸 창 iframe(앱 프레임)인 경우에만 받는다.
+window.__receivedKeys = [];
+window.addEventListener('message', function (ev) {
+  var d = ev.data;
+  if (!d || d.type !== 'myhub:desktop-nav-key') return;
+  if (ev.source !== document.getElementById('appFrame').contentWindow) return;
+  window.__receivedKeys.push(d.key);
+});
+</script>
+</body>
+</html>

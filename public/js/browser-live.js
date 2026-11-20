@@ -22,6 +22,12 @@
  * Chromium이 페이지 줌을 바꾼다 (네이버 90% 사고). iframe이 동일
  * 출처(/api/browse/view/)라 contentWindow에 캡처 단계 wheel 리스너를
  * 걸어 Ctrl+휠만 막는다 — 일반 휠은 그대로 통과한다.
+ * nav 키 중계 (2026-11-20): 같은 자리에서 Ctrl+←/→/↑를 캡처 단계로
+ * 가로채 셸에 myhub:desktop-nav-key로 올려보낸다 (미션컨트롤 전환).
+ * 무조건 전달한다 (사용자 선택 — 단어 이동 손실 감수). Selkies의
+ * 캡처 리스너가 먼저 등록되므로 원격이 키를 보는 것까지 막지는
+ * 못한다 — 그 차단은 서버 재시작 후 적용되는 사이드카 주입
+ * 스크립트가 맡고, 그쪽이 우선하면 이 리스너는 돌지 않는다.
  * 상태: 'off' | 'on' | 'notice' | 'locked'
  * (notice = 503 등 시작 실패 안내 카드를 띄운 상태,
  *  locked = LUKS 볼륨이 잠겨 암호 입력 카드를 띄운 상태).
@@ -1133,6 +1139,58 @@
       }
     }
 
+    /* 라이브 프레임 Ctrl+←/→/↑ 중계 (2026-11-20, 사용자 보고:
+       브라우저 최대화 시 미션컨트롤 전환이 안 먹힘). 셸 단축키
+       (windows.js onKeydown)는 셸 문서에만 걸려 있고, 라이브
+       프레임(Selkies 화면, 별도 문서)에 포커스가 있으면 키가 원격
+       크롬으로만 간다. 핀치 가드와 같은 자리에서 캡처 단계로
+       가로채 셸에 myhub:desktop-nav-key로 올려보낸다 (nav.js 중계와
+       같은 메시지, 셸은 출처 프레임을 검증한다). 무조건 전달한다 —
+       원격 화면은 영상 스트림이라 텍스트 필드 포커스 여부를 알 수
+       없어 조건부 전달이 안 되고, 사용자가 macOS 시스템 단축키
+       우선(단어 이동 손실 감수)을 선택했다.
+       등록 순서 한계: Selkies 클라이언트의 캡처 리스너(모듈 실행
+       시 등록)가 load 때 거는 이 리스너보다 먼저 돌므로, 이
+       리스너는 원격이 키를 보는 것을 막지 못한다 — 셸 전환만
+       보장한다. 사이드카 주입 스크립트(서버 재시작 후 적용)가
+       <head>에서 먼저 등록돼 stopImmediatePropagation으로 끊으면
+       그쪽이 우선하고 이 리스너는 돌지 않으므로 중복 전달이
+       생기지 않는다. */
+    function onFrameNavKey(ev) {
+      if (!ev || !ev.ctrlKey) return;
+      if (ev.key !== 'ArrowLeft' && ev.key !== 'ArrowRight' && ev.key !== 'ArrowUp') return;
+      if (typeof ev.preventDefault === 'function') ev.preventDefault();
+      if (typeof ev.stopPropagation === 'function') ev.stopPropagation();
+      try {
+        window.parent.postMessage(
+          { type: 'myhub:desktop-nav-key', key: ev.key },
+          window.location.origin,
+        );
+      } catch (e) {
+        // 중계 실패가 브라우저를 막지 않는다 — 원인을 콘솔에 남긴다
+        // (관문 23: 빈 catch 금지).
+        if (typeof console !== 'undefined' && typeof console.warn === 'function') {
+          console.warn('[browser-live] nav 키 중계 실패', e);
+        }
+      }
+    }
+
+    /* iframe 로드마다 contentWindow에 nav 키 중계를 건다 (핀치 가드와
+       같은 이유 — src가 바뀔 때마다 contentWindow가 새 객체가 된다).
+       동일 리스너 재등록은 브라우저가 중복 제거하므로 load가 다시
+       와도 중계가 두 번 나가지 않는다. */
+    function attachNavKeyRelay() {
+      try {
+        var win = liveFrame && liveFrame.contentWindow;
+        if (!win || typeof win.addEventListener !== 'function') return;
+        win.addEventListener('keydown', onFrameNavKey, { capture: true });
+      } catch (e) {
+        if (typeof console !== 'undefined' && typeof console.warn === 'function') {
+          console.warn('[browser-live] nav 키 중계 부착 실패', e);
+        }
+      }
+    }
+
     /* iframe을 켜고 url이 있으면 이동한다. enterLive의 잠금 검사 통과 후.
        url이 없어도 뷰포트는 맞춘다 (2026-11-15: 세션 복원 뒤 navigate가
        없으면 override가 적용되지 않아 원격이 절반 크기로 보였다). */
@@ -1270,6 +1328,7 @@
     }
     if (liveFrame) {
       liveFrame.addEventListener('load', attachPinchGuard);
+      liveFrame.addEventListener('load', attachNavKeyRelay);
     }
 
     return {

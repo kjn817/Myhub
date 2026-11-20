@@ -217,3 +217,52 @@ describe('셸 새 탭 버튼 — 포커스 경합', () => {
     expect(doc.activeElement).not.toBe(input)
   })
 })
+
+/**
+ * 셸 빈 탭 포커스 요청 (2026-11-20 QA 결함: 새 탭 직후 키 입력이
+ * 주소창에 안 들어감).
+ *
+ * 배경: browser.js가 새 탭 생성·빈 탭 전환 때 명시적으로
+ * myhub:browser-nav-focus를 보낸다. 위 플래그 방식은 연속 빈 탭의
+ * 서명 중복이나 메뉴 경로에서는 안 먹혔기 때문이다.
+ *
+ * 검증 성질 (깨지면 실패해야 한다):
+ * - 포커스 요청이 오면 주소창에 포커스된다 (현재 상태와 무관하게 —
+ *   빈 탭 여부는 발신 측이 보장한다).
+ * - 발신 창이 셸 창 iframe이 아니면 포커스하지 않는다.
+ * - 출처가 다르면 포커스하지 않는다.
+ */
+describe('셸 빈 탭 포커스 요청', () => {
+  function postFocus(win: any, source: any, origin?: string): void {
+    const ev = new win.MessageEvent('message', {
+      data: { type: 'myhub:browser-nav-focus' },
+      origin: origin ?? win.location.origin,
+      source,
+    })
+    win.dispatchEvent(ev)
+  }
+
+  test('포커스 요청이 오면 주소창에 포커스된다', () => {
+    const { doc, win, frame, box } = setupNav()
+    const input = box.querySelector('.myhub-bnav-input') as any
+    expect(doc.activeElement).not.toBe(input)
+    postFocus(win, frame.contentWindow)
+    expect(doc.activeElement).toBe(input)
+    // 포커스 핸들러가 현재 상태로 값을 채운다 (네이버 상태 저장 중).
+    expect(input.value).toBe('https://www.naver.com')
+  })
+
+  test('발신 창이 셸 창 iframe이 아니면 포커스하지 않는다', () => {
+    const { doc, win, box } = setupNav()
+    const input = box.querySelector('.myhub-bnav-input') as any
+    postFocus(win, win)
+    expect(doc.activeElement).not.toBe(input)
+  })
+
+  test('출처가 다르면 포커스하지 않는다', () => {
+    const { doc, win, frame, box } = setupNav()
+    const input = box.querySelector('.myhub-bnav-input') as any
+    postFocus(win, frame.contentWindow, 'https://evil.test')
+    expect(doc.activeElement).not.toBe(input)
+  })
+})

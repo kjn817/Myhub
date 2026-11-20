@@ -180,6 +180,13 @@
     var activeTabId = null;
     var liveTabId = null; // 원격 뷰를 소유한 탭 (한 번에 한 탭에만 보임)
     var mainTargetId = null; // 원격 메인 타깃 id (상태 폴링이 알려준다)
+    // 원격 재시작 감지 플래그 (2026-11-21 셸 주도 탭 복원): 원격이
+    // 새 탭뿐인 상태로 돌아오면 syncRemoteTabs가 세우고,
+    // applyRemoteState가 라이브 탭 URL로 한 번 이동한 뒤 내린다.
+    // 네이티브 세션 복원은 이 빌드에서 동작하지 않는다 (Session
+    // 파일이 절대 안 써짐 — 3회 실험으로 확정). 셸이 탭을 지우지
+    // 않고 다시 이동시키는 것이 복원 메커니즘이다.
+    var remoteRestarted = false;
     var tabSeq = 0;
     function makeTab(url) {
       tabSeq += 1;
@@ -318,6 +325,22 @@
       // 사라졌으면 메인 탭으로 뷰가 돌아간다. URL 반영은 그 뒤에 해야
       // 팝업 URL이 예전 라이브 탭에 찍히는 일이 없다.
       syncRemoteTabs(state);
+      // 재시작 복원 (2026-11-21): 원격이 새 탭뿐으로 돌아왔으면
+      // 라이브 탭 URL로 한 번 이동한다. 플래그는 여기서 소비한다 —
+      // 이동 실패 시 재시도하지 않는다 (매 폴링마다 재시도하면
+      // 내비게이션이 스팸이 된다). 탭 자체는 보존돼 있어 수동
+      // 이동으로도 복구할 수 있다.
+      if (remoteRestarted && live.isActive()) {
+        remoteRestarted = false;
+        var restoreTab = null;
+        tabs.forEach(function (t) {
+          if (t.id === liveTabId) restoreTab = t;
+        });
+        if (!restoreTab) restoreTab = activeTab();
+        if (restoreTab && restoreTab.url) {
+          live.enterLive(restoreTab.url);
+        }
+      }
       // URL·탐색 상태는 원격 활성 타깃을 가진 탭에 반영한다. tabs가 없는
       // 폴백에서는 라이브 탭에 반영한다. 활성 타깃 소유자가 없으면
       // (비서 임시 탭이 활성) 이번 폴링은 반영하지 않는다.
@@ -336,10 +359,18 @@
       if (!owner) return;
       var changed = false;
       if (owner.url !== state.url) {
-        owner.url = state.url;
-        changed = true;
-        // 원격 내 링크 이동도 방문 기록에 남긴다 (upsert라 중복 행 없음).
-        recordHistory(state.url);
+        // chrome:// URL은 '페이지 없음'이라 기존 http(s) URL을 덮지
+        // 않는다 — 재시작 직후 재이동 전에 폴링이 먼저 오면 라이브
+        // 탭 URL이 새 탭 주소로 날아가고 기록에도 남는다 (2026-11-21).
+        var isChromeUrl = state.url.indexOf('chrome://') === 0;
+        var ownerHasPage =
+          typeof owner.url === 'string' && owner.url.indexOf('http') === 0;
+        if (!isChromeUrl || !ownerHasPage) {
+          owner.url = state.url;
+          changed = true;
+          // 원격 내 링크 이동도 방문 기록에 남긴다 (upsert라 중복 행 없음).
+          recordHistory(state.url);
+        }
       }
       // 실제 페이지 제목을 탭에 반영한다 (없으면 호스트 폴백 — tabTitle).
       var newTitle =
@@ -399,18 +430,28 @@
        - tabs가 없으면(직접 CDP 폴백) 건드리지 않는다 — 없는 목록으로
          팝업 탭을 지워버리면 안 된다.
        - openerId가 있는 타깃만 새 탭으로 만든다 (메인·비서 임시 탭 제외).
-       - 사라진 원격 탭의 셸 탭은 지운다. 단, 마지막 탭이거나 라이브 탭의
-         타깃이 사라졌는데 활성 타깃 소유자가 없으면(크로뮴 재시작)
-         연결만 끊고 다음 폴링에서 다시 묶는다. 라이브 팝업이 닫혀 활성
-         타깃 소유자(메인 탭)가 있으면 팝업 탭을 지우고 뷰를 넘긴다.
+       - 사라진 원격 탭의 셸 탭은 지운다. 단, 활성 타깃 소유자가
+         없으면(크로뮴 재시작 — 원격이 새 탭뿐이라 어떤 셸 탭도
+         활성 타깃을 안 가짐) 모든 탭의 연결만 끊고 지우지 않는다.
+         옛 가드(isLive && !activeOwner)는 라이브 탭만 살리고
+         나머지 탭을 전부 지워버렸다 — 재시작 때마다 저장된 탭이
+         날아가는 데이터 손실이었다 (2026-11-21). 원격이 새 탭
+         하나뿐이면 재시작 플래그를 세워 라이브 탭 URL로 다시
+         이동한다 (셸 주도 복원). 마지막 탭도 연결만 끊는다.
+         라이브 팝업이 닫혀 활성 타깃 소유자(메인 탭)가 있으면
+         팝업 탭을 지우고 뷰를 넘긴다.
        - 팝업이 열리면 그 탭으로 전환하고 뷰 소유권도 옮긴다 — 원격
          화면이 이미 팝업이므로 주소창·탭 줄이 화면과 맞아야 한다.
        - 재시작 재바인딩 (2026-11-20 5단계, 0c): 크로뮴 재시작 후에는
-         원격 타깃 id가 전부 바뀌지만 URL은 같다 (--restore-last-session
-         으로 복원된 탭). 낡은 id에 묶인 셸 탭을 URL이 같은 아직 안 묶인
-         원격 탭에 다시 묶는다 — 1번(새 팝업 생성)보다 먼저 해야
-         복원된 팝업이 중복 탭으로 생기지 않는다. URL이 같은 원격 탭이
-         없으면(진짜 닫힘) 그대로 두고 2번이 처리한다. */
+         원격 타깃 id가 전부 바뀌지만, 원격에 URL이 같은 탭이
+         있으면(비서가 다시 열었거나 내비게이션으로 복원된 경우)
+         낡은 id에 묶인 셸 탭을 URL이 같은 아직 안 묶인 원격 탭에
+         다시 묶는다 — 1번(새 팝업 생성)보다 먼저 해야 복원된
+         팝업이 중복 탭으로 생기지 않는다. URL이 같은 원격 탭이
+         없으면(진짜 닫힘) 그대로 두고 2번이 처리한다. 네이티브
+         세션 복원은 이 빌드에서 동작하지 않는다 (Session 파일이
+         절대 안 써짐 — 2026-11-21 3회 실험 확정). 재시작 복원은
+         연결 해제 + 라이브 탭 재이동이 맡는다. */
     function syncRemoteTabs(state) {
       if (!state || !Array.isArray(state.tabs)) return;
       if (typeof state.mainTargetId === 'string' || state.mainTargetId === null) {
@@ -503,9 +544,13 @@
             if (x.id !== t.id && x.remoteTargetId === state.activeTargetId) activeOwner = x;
           });
         }
-        if (tabs.length <= 1 || (isLive && !activeOwner)) {
+        if (tabs.length <= 1 || !activeOwner) {
           t.remoteTargetId = null;
           changed = true;
+          // 원격이 새 탭 하나뿐이면 재시작이다 — 플래그를 세워
+          // applyRemoteState가 라이브 탭 URL로 다시 이동하게 한다.
+          // 비서 임시 탭이 활성일 때는 원격 탭이 여러 개라 안 선다.
+          if (!activeOwner && state.tabs.length <= 1) remoteRestarted = true;
           continue;
         }
         if (t.id === activeTabId) removedActive = true;
@@ -1063,6 +1108,28 @@
         console.warn('[browser] 창 바 내비 게시 실패 (무시):', err);
       }
     }
+    // 빈 탭 포커스 요청 (2026-11-20 QA 결함: 새 탭 직후 키 입력이
+    // 주소창에 안 들어감). 셸 + 버튼의 일회성 플래그 방식은 ① 연속
+    // 빈 탭이면 상태 서명이 같아 게시 자체가 안 되고 ② 메뉴 등 +
+    // 버튼이 아닌 경로에는 플래그가 없어서 포커스가 안 됐다. 상태
+    // 게시와 별도 메시지라 서명 중복에 안 걸리고, 모든 newTab·
+    // 빈 탭 전환 경로에서 나간다. 호스팅 모드에서만 보낸다 — 단독
+    // 모드에서는 iframe 주소창이 보이고 newTab이 직접 포커스한다.
+    // syncChrome 뒤에 보내므로 상태 게시가 먼저 도착하고, 상태가
+    // 중복돼 게시가 안 된 경우에도 셸 상태는 이미 빈 탭과 같다.
+    function postNavFocus() {
+      if (!toolbarHosted) return;
+      if (!appWin || !appWin.parent || appWin.parent === appWin) return;
+      try {
+        appWin.parent.postMessage(
+          { type: 'myhub:browser-nav-focus' },
+          appWin.location.origin,
+        );
+      } catch (err) {
+        // 부모 통신 실패는 무시한다 (다음 탭 전환 때 다시 요청된다)
+        console.warn('[browser] 창 바 포커스 요청 실패 (무시):', err);
+      }
+    }
     function setNavLoading(value) {
       if (navLoading === value) return;
       navLoading = value;
@@ -1471,6 +1538,11 @@
       }
       saveTabs();
       syncChrome();
+      // 빈 탭으로 전환되면 셸 주소창에 포커스를 요청한다 — 빈 탭
+      // 선택 직후 타이핑이 주소창에 안 들어가던 QA 결함 (activateTab
+      // 은 어떤 경로로도 포커스를 요청하지 않았다). URL 탭은 요청
+      // 하지 않는다 (페이지와 상호작용하는 쪽이 자연스럽다).
+      if (tab && !tab.url) postNavFocus();
     }
 
     function newTab() {
@@ -1488,6 +1560,10 @@
         urlInput.focus();
         urlInput.select();
       }
+      // 호스팅 모드에서는 셸 주소창이 진짜 주소창이다 — iframe
+      // 주소창 포커스는 툴바가 숨겨져 있어 안 먹히므로 셸에
+      // 명시적으로 요청한다 (메뉴·셸 + 버튼 모든 경로).
+      postNavFocus();
     }
 
     function closeTab(id) {
@@ -1524,11 +1600,22 @@
       }
       tabs.splice(idx, 1);
       if (!tabs.length) tabs.push(makeTab(null));
-      if (activeTabId === id) {
+      var wasActive = activeTabId === id;
+      if (wasActive) {
         activeTabId = tabs[Math.min(idx, tabs.length - 1)].id;
       }
       saveTabs();
       syncChrome();
+      // 닫힌 탭이 활성 탭이었고 이웃이 빈 탭이면 셸 주소창에 포커스를
+      // 요청한다 — closeTab은 activateTab을 거치지 않아 빈 탭으로
+      // 넘어가도 포커스 요청이 없었다 (새 탭 포커스 결함과 같은 구멍).
+      if (wasActive) {
+        var next = null;
+        tabs.forEach(function (t) {
+          if (t.id === activeTabId) next = t;
+        });
+        if (next && !next.url) postNavFocus();
+      }
     }
 
     /* 이 탭에서 원격 뷰 시작: 소유권을 활성 탭으로 먼저 못 박는다.
@@ -2192,10 +2279,17 @@
                 run: goHome,
               },
               {
-                label: '브라우저 시작',
-                disabled: st === 'on',
+                // 시작/종료 토글 (2026-11-21 QA 발견): 옛 코드는 켜진
+                // 상태에서 항목을 비활성화만 해서 라이브를 끄려면 앱
+                // 창을 닫아야만 했다. 켜진 동안 시작 페이지는 숨어
+                // 카드 버튼이 안 보이므로 메뉴가 유일한 종료 경로다.
+                label: st === 'on' ? '브라우저 종료' : '브라우저 시작',
                 run: function () {
-                  if (startBtns[0]) startBtns[0].click();
+                  if (st === 'on') {
+                    live.endLive();
+                  } else if (startBtns[0]) {
+                    startBtns[0].click();
+                  }
                 },
               },
             ];

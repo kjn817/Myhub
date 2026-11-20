@@ -48,7 +48,10 @@ describe('F-L11 menu-items 래퍼', () => {
   test('windows.js의 메시지 서두가 sameOriginData 1곳으로 합쳐졌다', () => {
     const src = read('public/js/desktop/windows.js')
     expect(src.match(/function sameOriginData\(e\)/g)).toHaveLength(1)
-    expect(src.match(/var d = sameOriginData\(e\);/g)?.length).toBe(11)
+    // 호출처 12개: 기존 11개 + 빈 탭 포커스 요청 핸들러
+    // (onBrowserNavFocusMessage, 2026-11-20 새 탭 포커스 결함 수정).
+    // 핸들러를 추가할 때는 이 개수를 함께 올린다.
+    expect(src.match(/var d = sameOriginData\(e\);/g)?.length).toBe(12)
     expect(src.match(/e\.origin !== window\.location\.origin/g)?.length).toBe(1)
   })
 
