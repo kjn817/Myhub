@@ -10,9 +10,13 @@ import type { Env } from '../../types'
 import { registerOracleProxyRoutes } from './oracle-proxy'
 import { registerUnlockRoutes } from './unlock'
 import { registerDownloadRoutes } from './downloads'
+import { registerBookmarkRoutes } from './bookmarks'
+import { registerFaviconRoutes } from './favicon'
 
 export const browseApp = new Hono<{ Bindings: Env }>()
 
 registerOracleProxyRoutes(browseApp)
 registerUnlockRoutes(browseApp)
 registerDownloadRoutes(browseApp)
+registerBookmarkRoutes(browseApp)
+registerFaviconRoutes(browseApp)

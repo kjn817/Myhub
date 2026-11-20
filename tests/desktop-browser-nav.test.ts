@@ -227,11 +227,25 @@ describe('창 바 브라우저 내비 — 동작', () => {
     })
   })
 
-  test('새 탭 버튼은 주소 입력에 포커스를 준다', () => {
-    const { doc, box } = setupNav(NAVER)
+  test('새 탭 버튼은 상태 도착 뒤에 주소 입력에 포커스를 준다 (즉시 포커스는 이전 URL을 채우는 결함)', () => {
+    const { doc, win, frame, box } = setupNav(NAVER)
     const input = box.querySelector('.myhub-bnav-input') as any
     ;(box.querySelector('.myhub-bnav-new') as any).click()
+    // 클릭 직후에는 포커스하지 않는다 (아직 이전 탭 상태).
+    expect(doc.activeElement).not.toBe(input)
+    // 새 탭 상태가 도착하면 비어 있는 주소창에 포커스된다.
+    postNav(win, frame, {
+      url: '',
+      title: '',
+      fav: '',
+      canBack: false,
+      canFwd: false,
+      loading: false,
+    })
+    expect(input.value).toBe('')
     expect(doc.activeElement).toBe(input)
+    // 경합의 나머지 성질(플래그 소멸·2초 만료)은
+    // tests/desktop-browser-newtab.test.ts에서 다룬다.
   })
 
   test('내비 상태를 받으면 iframe에 adopt를 보내 툴바 호스팅을 알린다', () => {

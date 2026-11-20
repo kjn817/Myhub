@@ -111,6 +111,24 @@ function createServer(opts = {}) {
           return;
         }
         // 기본 스텁
+        if (p === '/api/browse/bookmarks' && req.method === 'GET') {
+          // 브라우저 1단계(2026-11-20): 시작 페이지 타일은 API에서 온다.
+          // 스텁이 없으면 타일이 안 그려져 .bw-fav 클릭 시나리오가 실패한다.
+          // onApi가 먼저 처리하므로 개별 시나리오에서 덮어쓸 수 있다.
+          sendJson(200, { ok: true, bookmarks: [
+            { id: 1, url: 'https://www.naver.com', title: 'NAVER', pinned: true, position: 0 },
+            { id: 2, url: 'https://www.google.com', title: 'Google', pinned: true, position: 1 },
+            { id: 3, url: 'https://www.youtube.com', title: 'YouTube', pinned: true, position: 2 },
+            { id: 4, url: 'https://chatgpt.com', title: 'ChatGPT', pinned: true, position: 3 },
+            { id: 5, url: 'https://github.com', title: 'GitHub', pinned: true, position: 4 },
+            { id: 6, url: 'https://ko.wikipedia.org', title: '위키백과', pinned: true, position: 5 },
+          ] });
+          return;
+        }
+        if (p === '/api/browse/history' && req.method === 'POST') {
+          sendJson(200, { ok: true, history: null });
+          return;
+        }
         if (p === '/api/artifact') {
           // 실측 지연 재현: 부팅이 artifact를 기다리던 시절의 1.5s.
           setTimeout(() => sendJson(200, { data: [] }), 1500);

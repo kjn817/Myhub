@@ -43,7 +43,7 @@ class MockDb {
 
 // 목 batch 결과는 코드가 읽는 테이블 수와 같아야 한다 (실제 D1 batch는
 // 문장 수만큼 결과를 돌려준다). 개수 자체의 핀은 backup-scope와 아래
-// 리터럴 단언(35)이 맡는다.
+// 리터럴 단언(37)이 맡는다.
 const TABLE_COUNT = BACKUP_TABLES.length
 
 /** BACKUP_TABLES 전체분의 batch 결과 생성. rowsByIndex[i] = 해당 테이블 행 배열 */
@@ -213,7 +213,7 @@ describe('POST /encrypted — 성공', () => {
     expect(j.algorithm).toBe('AES-256-GCM')
     expect(j.kdf).toBe('PBKDF2-SHA256')
     expect(j.iterations).toBe(100000)
-    expect(j.table_count).toBe(35)
+    expect(j.table_count).toBe(37)
     expect(j.total_rows).toBe(2)
     expect(j.salt).toBeTruthy()
     expect(j.iv).toBeTruthy()
@@ -248,7 +248,7 @@ describe('POST /encrypted — 성공', () => {
     expect(plain.method).toBe('db.batch-transaction')
     expect(plain.tables.memos.rows[0].text).toBe('한글 메모 🎉')
     expect(plain.tables.todos.rows[0].title).toBe('todo')
-    expect(plain.integrity.table_count).toBe(35)
+    expect(plain.integrity.table_count).toBe(37)
     expect(plain.integrity.total_rows).toBe(2)
     expect(typeof plain.integrity.duration_ms).toBe('number')
   })
@@ -333,12 +333,12 @@ describe('POST / — 평문 백업', () => {
     expect(j.version).toBe(3)
     expect(j.method).toBe('db.batch-transaction')
     expect(j.created_at).toBeTruthy()
-    expect(Object.keys(j.tables)).toHaveLength(35)
+    expect(Object.keys(j.tables)).toHaveLength(37)
     expect(j.tables.memos.row_count).toBe(2)
     expect(j.tables.memos.rows).toHaveLength(2)
     expect(j.tables.files.row_count).toBe(1)
     expect(j.tables.schedules.row_count).toBe(0)
-    expect(j.integrity.table_count).toBe(35)
+    expect(j.integrity.table_count).toBe(37)
     expect(j.integrity.total_rows).toBe(3)
     expect(typeof j.integrity.duration_ms).toBe('number')
     // 캐시 방지 헤더 (평문은 Content-Disposition 없음)
@@ -347,14 +347,14 @@ describe('POST / — 평문 백업', () => {
     expect(res.headers.get('Content-Disposition')).toBeNull()
   })
 
-  test('35개 테이블 whitelist 순서대로 SELECT * 로 조회', async () => {
+  test('37개 테이블 whitelist 순서대로 SELECT * 로 조회', async () => {
     const db = new MockDb()
     db.batchQueue.push(makeBatchResults())
     const { json } = makeApp({ environment: 'staging', db })
     await json('/', 'POST')
     // step-up 게이트(트랙 1)가 auth_pins를 먼저 조회하므로, 백업 테이블
     // 조회(SELECT * FROM ...)만 추려 순서·집합을 검증한다.
-    expect(db.calls).toContain('batch:35')
+    expect(db.calls).toContain('batch:37')
     // 조회 목록은 BACKUP_TABLES의 순서·집합 그대로여야 한다 (목록 자체의
     // 내용 핀은 backup-scope 테스트가 맡는다).
     expect(db.prepares.filter((s) => s.startsWith('SELECT * FROM'))).toEqual(
@@ -497,10 +497,10 @@ describe('백업 발급 step-up 게이트', () => {
     expect(j.format_version).toBe(1)
     expect(j.algorithm).toBe('AES-256-GCM')
     expect(j.kdf).toBe('PBKDF2-SHA256')
-    expect(j.table_count).toBe(35)
+    expect(j.table_count).toBe(37)
     expect(j.total_rows).toBe(1)
     const plain = await decryptBackup(j, 'password123')
-    expect(Object.keys(plain.tables)).toHaveLength(35)
+    expect(Object.keys(plain.tables)).toHaveLength(37)
     expect(plain.tables.memos.rows[0].text).toBe('hello')
     expect(plain.tables.auth_pins).toBeUndefined()
   })
@@ -529,7 +529,7 @@ describe('백업 발급 step-up 게이트', () => {
     expect(res.status).toBe(200)
     const j = await body(res)
     expect(j.version).toBe(3)
-    expect(Object.keys(j.tables)).toHaveLength(35)
+    expect(Object.keys(j.tables)).toHaveLength(37)
     expect(j.integrity.total_rows).toBe(1)
   })
 })

@@ -61,12 +61,13 @@ function loadLive(): any {
 
 interface QualityStubs {
   setQualityImpl?: (payload: unknown) => Promise<unknown>
+  fetchStateImpl?: () => Promise<unknown>
 }
 
 function makeLive(stubs: QualityStubs = {}) {
   const calls = { quality: [] as unknown[] }
   const api = loadLive()
-  const live = api.createLive({
+  const deps: Record<string, unknown> = {
     doc: getDoc(),
     navigate: () => Promise.resolve({ status: 200, body: { ok: true, nav: 'ok', navStage: 'ok' } }),
     checkUnlock: () => Promise.resolve({ status: 200, body: { configured: true, unlocked: true } }),
@@ -78,8 +79,21 @@ function makeLive(stubs: QualityStubs = {}) {
     },
     pollDelayMs: 10,
     onChange: () => live.syncChrome(),
-  })
+  }
+  if (stubs.fetchStateImpl) deps.fetchState = stubs.fetchStateImpl
+  const live = api.createLive(deps)
   return { live, calls }
+}
+
+async function flush(n = 30): Promise<void> {
+  for (let i = 0; i < n; i++) await Promise.resolve()
+}
+
+function okState(): Promise<unknown> {
+  return Promise.resolve({
+    status: 200,
+    body: { ok: true, url: 'https://example.com', title: 't', canGoBack: false, canGoForward: false },
+  })
 }
 
 function el(id: string): any {
@@ -114,7 +128,7 @@ describe('browser-live 화질 설정', () => {
   })
 
   test('잘못된 저장값은 무시하고 자동 모드로 시작한다', async () => {
-    for (const saved of ['100', '9000', 'fast', '0', '-5', '18.5x']) {
+    for (const saved of ['100', '15001', 'fast', '0', '-5', '18.5x']) {
       setupFixture()
       storage().setItem('myhub-bw-quality', saved)
       const { live } = makeLive()
@@ -146,7 +160,7 @@ describe('browser-live 화질 설정', () => {
   test('무효 입력은 요청을 보내지 않고 false를 돌려준다', async () => {
     setupFixture()
     const { live, calls } = makeLive()
-    for (const bad of [100, 9000, 0, -1, NaN, Infinity, 'fast', null, undefined, {}, true]) {
+    for (const bad of [100, 15001, 0, -1, NaN, Infinity, 'fast', null, undefined, {}, true]) {
       const ok = await live.setQuality(bad)
       expect(ok).toBe(false)
     }
@@ -173,5 +187,81 @@ describe('browser-live 화질 설정', () => {
     expect(ok).toBe(true)
     expect(calls.quality).toEqual([{ bitrate: 1801 }])
     expect(storage().getItem('myhub-bw-quality')).toBe('1801')
+  })
+
+  test('현행 기본값 12000과 상한 15000은 허용되고 저장된다 (2026-11-20 4단계)', async () => {
+    setupFixture()
+    const { live, calls } = makeLive()
+    expect(await live.setQuality(12000)).toBe(true)
+    expect(calls.quality).toEqual([{ bitrate: 12000 }])
+    expect(storage().getItem('myhub-bw-quality')).toBe('12000')
+    expect(await live.setQuality(15000)).toBe(true)
+    expect(storage().getItem('myhub-bw-quality')).toBe('15000')
+  })
+
+  test('저장된 수동 화질은 시작 후 폴링 성공 시 POST로 다시 적용된다', async () => {
+    storage().setItem('myhub-bw-quality', '8000')
+    setupFixture()
+    const { live, calls } = makeLive({ fetchStateImpl: okState })
+    await live.enterLive(null)
+    await flush()
+    // ?vb= 쿼리는 사이드카가 떼어 버리므로 POST 재적용이 정본 경로다.
+    expect(calls.quality).toEqual([{ bitrate: 8000 }])
+    // 적용이 끝나면 다음 폴링에서 다시 보내지 않는다.
+    await live.refreshState()
+    await flush()
+    expect(calls.quality).toEqual([{ bitrate: 8000 }])
+    live.endLive()
+  })
+
+  test('재적용 시 연결이 없으면(connections: 0) 다음 폴링 때 다시 시도한다', async () => {
+    storage().setItem('myhub-bw-quality', '8000')
+    setupFixture()
+    let attempts = 0
+    const { live, calls } = makeLive({
+      fetchStateImpl: okState,
+      setQualityImpl: () => {
+        attempts += 1
+        // 첫 시도는 화면 WS가 아직 안 붙었다고 답한다.
+        const connections = attempts === 1 ? 0 : 1
+        return Promise.resolve({ status: 200, body: { ok: true, mode: 'manual', connections } })
+      },
+    })
+    await live.enterLive(null)
+    await flush()
+    expect(calls.quality).toEqual([{ bitrate: 8000 }])
+    await live.refreshState()
+    await flush()
+    expect(calls.quality).toEqual([{ bitrate: 8000 }, { bitrate: 8000 }])
+    // 두 번째 시도에서 적용됐으므로 그 뒤로는 안 보낸다.
+    await live.refreshState()
+    await flush()
+    expect(calls.quality).toHaveLength(2)
+    live.endLive()
+  })
+
+  test('저장값이 auto면 시작 시 화질 POST를 보내지 않는다 (기본값 유지)', async () => {
+    storage().setItem('myhub-bw-quality', 'auto')
+    setupFixture()
+    const { live, calls } = makeLive({ fetchStateImpl: okState })
+    await live.enterLive(null)
+    await flush()
+    await live.refreshState()
+    await flush()
+    expect(calls.quality).toHaveLength(0)
+    live.endLive()
+  })
+
+  test('getQuality는 저장값을 그대로 돌려준다 (메뉴 체크 표시용)', async () => {
+    storage().setItem('myhub-bw-quality', '8000')
+    setupFixture()
+    const { live } = makeLive()
+    expect(live.getQuality()).toEqual({ mode: 'manual', bitrate: 8000 })
+    live.endLive()
+    storage().setItem('myhub-bw-quality', 'auto')
+    setupFixture()
+    const second = makeLive()
+    expect(second.live.getQuality()).toEqual({ mode: 'auto' })
+    second.live.endLive()
   })
 })

@@ -90,8 +90,8 @@ describe('백업 범위 분류', () => {
     expect(reason).toContain('재설정')
   })
 
-  test('백업 범위는 포함 35개·제외 24개이다', () => {
-    expect(BACKUP_TABLES).toHaveLength(35)
+  test('백업 범위는 포함 37개·제외 24개이다', () => {
+    expect(BACKUP_TABLES).toHaveLength(37)
     expect(Object.keys(BACKUP_EXCLUDED_TABLES)).toHaveLength(24)
   })
 })

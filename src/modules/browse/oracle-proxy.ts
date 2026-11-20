@@ -29,7 +29,7 @@
 import { Hono } from 'hono'
 import type { Env } from '../../types'
 import { validatePublicUrlAsync } from './assistant-read'
-import { defaultCdpConnect, fetchSidecarBrowserState, getBrowserState, goBackSession, goForwardSession, navigateSession, toDirectCdpWsUrl, type ViewportSize } from './cdp'
+import { defaultCdpConnect, fetchSidecarBrowserState, getBrowserState, goBackSession, goForwardSession, navigateSession, reloadSession, toDirectCdpWsUrl, type ViewportSize } from './cdp'
 import { isBrowserLocked } from './unlock'
 
 export const ORACLE_VIEW_PORT = 8080
@@ -508,13 +508,37 @@ export function registerOracleProxyRoutes(app: Hono<{ Bindings: Env }>): void {
     return c.json({ ok: r.ok, stage: r.stage })
   })
 
+  // 원격 새로고침 (2026-11-20 브라우저 4단계): CDP Page.reload로
+  // 활성 탭을 진짜로 새로고침한다. 같은 URL로 다시 이동하는 옛
+  // 방식은 스크롤을 맨 위로 되돌린다 (실측 — 기록은 같은 URL이라
+  // 둘 다 안 쌓인다). 실패해도 200 + ok:false로 보고한다 (/back과
+  // 같은 모양) — 호출자는 재이동으로 조용히 폴백하지 않고
+  // 사용자에게 알린다.
+  app.post('/reload', async (c) => {
+    const cfg = oracleConfigOf(c.env)
+    if (!cfg) return c.json({ ok: false, error: 'ORACLE_NOT_CONFIGURED' }, 503)
+    const ran = await runCdpWithVersionRetry(
+      c,
+      cfg,
+      (gate) =>
+        reloadSession(gate.directWs, defaultCdpConnect, {
+          headers: gate.secretHeaders,
+        }),
+      (r) => !r.ok && r.stage === 'connect',
+    )
+    if (!ran.ok) return ran.response
+    const r = ran.result
+    return c.json({ ok: r.ok, stage: r.stage })
+  })
+
   // 화질 수동 전환 (2026-11-15): 사이드카 /control/quality로 중계한다.
   // { bitrate: <kbps> }는 수동 고정(한 번만 vb를 보낸다),
   // { mode: 'auto' }는 수동 고정을 풀고 Selkies 혼잡 제어로 되돌린다
   // (2026-11-17 적응 폐지 — 사이드카 자동 조절은 없다). 비트레이트
-  // 범위는 500~8000kbps (사이드카 BITRATE_FLOOR/CEILING과 동일). 세션 게이트
-  // 뒤에 있다 (전역 /api/* 미들웨어). 사이드카 응답(상태·본문)을
-  // 그대로 돌려준다.
+  // 범위는 500~15000kbps (사이드카 BITRATE_FLOOR/CEILING과 동일 —
+  // 2026-11-20 4단계에서 8000 상한을 15000으로 정정했다. 8000이면
+  // 현행 기본값 12000조차 선택할 수 없었다). 세션 게이트 뒤에 있다
+  // (전역 /api/* 미들웨어). 사이드카 응답(상태·본문)을 그대로 돌려준다.
   app.post('/quality', async (c) => {
     const cfg = oracleConfigOf(c.env)
     if (!cfg) return c.json({ ok: false, error: 'ORACLE_NOT_CONFIGURED' }, 503)
@@ -533,7 +557,7 @@ export function registerOracleProxyRoutes(app: Hono<{ Bindings: Env }>): void {
       Number.isFinite(body.bitrate)
     ) {
       const kbps = Math.round(body.bitrate)
-      if (kbps < 500 || kbps > 8000) return c.json({ ok: false, error: 'INVALID_QUALITY' }, 400)
+      if (kbps < 500 || kbps > 15000) return c.json({ ok: false, error: 'INVALID_QUALITY' }, 400)
       payload = { bitrate: kbps }
     } else {
       return c.json({ ok: false, error: 'INVALID_QUALITY' }, 400)
@@ -546,6 +570,35 @@ export function registerOracleProxyRoutes(app: Hono<{ Bindings: Env }>): void {
           'x-origin-secret': cfg.originSecret,
         },
         body: JSON.stringify(payload),
+      })
+      const text = await res.text()
+      return new Response(text, {
+        status: res.status,
+        headers: { 'content-type': 'application/json' },
+      })
+    } catch {
+      return c.json({ ok: false, error: 'ORACLE_UPSTREAM' }, 502)
+    }
+  })
+
+  // 페이지 내 찾기 (2026-11-20 브라우저 5단계): 사이드카 /control/find로
+  // 중계한다. 사이드카가 활성 화면 WS 연결에 Selkies 키 메시지
+  // kd,65507 → kd,102 → ku,102 → ku,65507 (Ctrl+F)를 주입해 원격
+  // Chromium의 네이티브 찾기 막대를 연다. CDP Input.dispatchKeyEvent는
+  // 렌더러로만 가서 브라우저 단축키를 못 연다 (실브라우저 3방 실측) —
+  // 그래서 CDP가 아니라 Selkies 키 주입이 정본 경로다. 활성 연결이
+  // 없으면 사이드카가 503 no_active_connection을 돌려준다. 세션 게이트
+  // 뒤에 있다 (전역 /api/* 미들웨어). 사이드카 응답(상태·본문)을 그대로
+  // 돌려준다 (/quality와 같은 모양).
+  app.post('/find', async (c) => {
+    const cfg = oracleConfigOf(c.env)
+    if (!cfg) return c.json({ ok: false, error: 'ORACLE_NOT_CONFIGURED' }, 503)
+    try {
+      const res = await fetch(`https://${cfg.host}:${ORACLE_VIEW_PORT}/control/find`, {
+        method: 'POST',
+        headers: {
+          'x-origin-secret': cfg.originSecret,
+        },
       })
       const text = await res.text()
       return new Response(text, {

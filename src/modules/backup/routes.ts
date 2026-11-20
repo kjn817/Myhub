@@ -61,6 +61,9 @@ export const BACKUP_TABLES = [
   'drive_folders', // 보관함 폴더 구조 (사용자 데이터)
   'drive_files', // 메타데이터만 (실물은 Cloudinary)
   'reminders',
+  // 브라우저 (0080): 북마크·방문 기록은 사용자 데이터라 백업 대상
+  'browser_bookmarks',
+  'browser_history',
   // AI 대화·기억
   'ai_conversations',
   'ai_chats',

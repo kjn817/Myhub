@@ -322,6 +322,7 @@
         renderWinActions(win.id);
         browserNavByWin.delete(win.id);
         browserNavSig.delete(win.id);
+        browserNavFocusNewTab.delete(win.id);
         renderBrowserNav(win.id);
         assistantByWin.delete(win.id);
         if (state.activeId === mod.id) {
@@ -769,6 +770,7 @@
           winActionsSig.delete(id);
           browserNavByWin.delete(id);
           browserNavSig.delete(id);
+          browserNavFocusNewTab.delete(id);
           assistantByWin.delete(id);
         }
       });
@@ -1910,6 +1912,13 @@
 
     var browserNavByWin = new Map();
     var browserNavSig = new Map();
+    // 새 탭 버튼을 누른 뒤 첫 내비 상태 게시 때 주소창에 포커스를 건다
+    // (winId -> 누른 시각). 상태 도착 전에 포커스하면 이전 탭 URL이
+    // 선택된 채로 남는다 — 포커스 핸들러가 낡은 상태로 값을 채우고,
+    // 새 상태가 와도 "입력 중이면 값을 건드리지 않는다" 가드가 막기
+    // 때문이다 (2026-11-20 3단계). 2초를 넘기면 포커스하지 않는다
+    // (그 사이 사용자가 다른 곳을 눌렀을 수 있다).
+    var browserNavFocusNewTab = new Map();
     function normalizeBrowserNav(d) {
       if (!d || typeof d !== 'object') return null;
       return {
@@ -2041,8 +2050,9 @@
       var newBtn = iconBtn('myhub-bnav-btn myhub-bnav-new', 'plus', '새 탭');
       newBtn.addEventListener('click', function () {
         postBrowserNavAction(winId, 'newtab');
-        // 새 탭은 주소 입력부터 시작한다 (사파리와 같은 동작).
-        input.focus();
+        // 새 탭은 주소 입력부터 시작한다 (사파리와 같은 동작). 포커스는
+        // 새 탭 상태가 도착한 뒤 onBrowserNavMessage에서 건다.
+        browserNavFocusNewTab.set(winId, Date.now());
       });
       var overviewBtn = iconBtn('myhub-bnav-btn myhub-bnav-overview', 'copy', '탭 개요');
       overviewBtn.addEventListener('click', function () {
@@ -2108,6 +2118,18 @@
       else browserNavByWin.delete(found);
       renderBrowserNav(found);
       if (st) postToModule(found, { type: 'myhub:browser-nav-adopt' });
+      // 새 탭 버튼을 누른 뒤 첫 상태 게시: 새 탭(url 없음)이 확인되면
+      // 주소창에 포커스를 건다. 값은 renderBrowserNav가 이미 비웠고,
+      // 포커스 핸들러는 새 상태로 값을 채우므로 이전 URL이 남지 않는다.
+      if (browserNavFocusNewTab.has(found)) {
+        var since = Date.now() - (browserNavFocusNewTab.get(found) || 0);
+        browserNavFocusNewTab.delete(found);
+        if (st && !st.url && since < 2000) {
+          var box = rec.el.querySelector('.myhub-win-bnav');
+          var input = box && box.querySelector('.myhub-bnav-input');
+          if (input) input.focus();
+        }
+      }
     }
     window.addEventListener('message', onBrowserNavMessage);
 
@@ -2531,6 +2553,34 @@
       openModule('finder');
       deliverFinderView();
     }
+    // 앱이 특정 파일을 파인더에서 열어달라는 요청 (2026-11-20 브라우저
+    // 다운로드 목록). 데스크톱 아이콘 경로(main.js pendingFinderOpen)와
+    // 같은 핸드셰이크: 파인더가 ready를 보내면 open-file을 전달하고,
+    // ack가 오면 pending을 비운다. 오피스 ack은 app이 있어 구분된다.
+    var finderFilePending = null;
+    function deliverFinderFile() {
+      if (!finderFilePending || !finderViewReady) return;
+      postToModule('finder', {
+        type: 'myhub:open-file',
+        folderId: finderFilePending.folderId,
+        folderName: finderFilePending.folderName || '',
+        fileId: finderFilePending.fileId,
+        name: finderFilePending.name || '',
+        mime: finderFilePending.mime || '',
+      });
+    }
+    function openFileInFinder(d) {
+      if (!d || typeof d.fileId !== 'number') return;
+      finderFilePending = {
+        folderId: typeof d.folderId === 'number' ? d.folderId : null,
+        folderName: d.folderName || '',
+        fileId: d.fileId,
+        name: d.name || '',
+        mime: d.mime || '',
+      };
+      openModule('finder');
+      deliverFinderFile();
+    }
     var officeOpenPending = {};
     var officeReady = {};
     function deliverOfficeOpen(app) {
@@ -2560,6 +2610,8 @@
         openInApp(d);
       } else if (d.type === 'myhub:open-module') {
         if (d.module && findModule(d.module)) openModule(d.module);
+      } else if (d.type === 'myhub:open-file-in-finder') {
+        openFileInFinder(d);
       } else if (d.type === 'myhub:request-apps') {
         postToModule('finder', {
           type: 'myhub:apps',
@@ -2577,9 +2629,13 @@
       } else if (d.type === 'myhub:open-file-ack') {
         var pending = d.app ? officeOpenPending[d.app] : null;
         if (pending && pending.fileId === d.fileId) delete officeOpenPending[d.app];
+        if (!d.app && finderFilePending && finderFilePending.fileId === d.fileId) {
+          finderFilePending = null;
+        }
       } else if (d.type === 'myhub:finder-ready') {
         finderViewReady = true;
         deliverFinderView();
+        deliverFinderFile();
       } else if (d.type === 'myhub:open-view-ack') {
         if (d.view === finderViewPending) finderViewPending = null;
       } else if (d.type === 'myhub:icon-trash-restore') {

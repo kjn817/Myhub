@@ -186,8 +186,7 @@ function ipBlocked(ip: string): boolean {
 
 /** 동기 검사 + DoH 해석 IP 검사. 리터럴 IP 호스트는 동기 검사로 충분해
  *  DNS 조회를 건너뛴다. 조회 실패·미해결(NXDOMAIN·빈 응답)은 fail-closed로
- *  차단한다. /navigate 경로(oracle-proxy.ts)도 이 함수를 쓰도록 이관해야
- *  한다 — 해당 파일은 별도 작업 범위로, 여기서는 내보내기만 한다. */
+ *  차단한다. /navigate 경로(oracle-proxy.ts)도 이 함수를 쓴다. */
 export async function validatePublicUrlAsync(
   raw: unknown,
   fetchFn: typeof fetch = fetch,

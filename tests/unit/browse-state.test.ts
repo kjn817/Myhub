@@ -638,6 +638,62 @@ describe('POST /back · POST /forward — 원격 뒤로/앞으로', () => {
   })
 })
 
+describe('POST /reload — 원격 새로고침 (2026-11-20 브라우저 4단계)', () => {
+  function reloadHandler(reloadError = false): (msg: Record<string, any>, emit: (m: unknown) => void) => void {
+    return (msg, emit) => {
+      if (msg.method === 'Target.getTargets') {
+        emit({ id: msg.id, result: { targetInfos: [{ type: 'page', targetId: 'page-1' }] } })
+      } else if (msg.method === 'Target.attachToTarget') {
+        emit({ id: msg.id, result: { sessionId: 'sess-1' } })
+      } else if (msg.method === 'Runtime.evaluate') {
+        emit({
+          id: msg.id,
+          result: {
+            result: {
+              type: 'string',
+              value: JSON.stringify({ visibility: 'visible', url: 'https://example.com', title: 't' }),
+            },
+          },
+        })
+      } else if (msg.method === 'Page.reload') {
+        if (reloadError) emit({ id: msg.id, error: { message: 'cannot reload' } })
+        else emit({ id: msg.id, result: {} })
+      }
+    }
+  }
+
+  test('설정이 없으면 503이고 fetch를 부르지 않는다', async () => {
+    stubFetch(async () => {
+      throw new Error('must not be called')
+    })
+    const res = await app.request('/api/browse/reload', { method: 'POST' }, {} as never)
+    expect(res.status).toBe(503)
+    expect(await res.json()).toEqual({ ok: false, error: 'ORACLE_NOT_CONFIGURED' })
+    expect(fetchCalls).toHaveLength(0)
+  })
+
+  test('/reload는 Page.reload를 보내고 200 + ok:true로 보고한다 (navigate는 안 보낸다)', async () => {
+    const sock = new FakeSocket(reloadHandler())
+    stubCdp(sock)
+    const res = await app.request('/api/browse/reload', { method: 'POST' }, ENV as never)
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ ok: true, stage: 'ok' })
+    const reload = sock.sent.find((m) => m.method === 'Page.reload')
+    expect(reload).toBeDefined()
+    expect(reload.params).toEqual({ ignoreCache: false })
+    expect(reload.sessionId).toBe('sess-1')
+    expect(sock.sent.find((m) => m.method === 'Page.navigate')).toBeUndefined()
+  })
+
+  test('Page.reload 실패는 200 + ok:false/stage=reload로 보고한다', async () => {
+    const sock = new FakeSocket(reloadHandler(true))
+    stubCdp(sock)
+    const res = await app.request('/api/browse/reload', { method: 'POST' }, ENV as never)
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ ok: false, stage: 'reload' })
+  })
+})
+
 describe('POST /viewport — 사이드카 영구 override 경유 (2026-11-16 QA 12차)', () => {
   test('사이드카가 두 탭에 적용하면 applied=2, total=2, verified=2로 보고한다', async () => {
     let postedBody: unknown = null

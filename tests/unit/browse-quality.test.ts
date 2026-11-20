@@ -113,12 +113,22 @@ describe('POST /api/browse/quality', () => {
 
   test('범위 밖 bitrate는 400이고 fetch를 부르지 않는다', async () => {
     stubFetch(async () => jsonResponse({ ok: true }))
-    for (const bad of [0, 499, 8001, 100000]) {
+    for (const bad of [0, 499, 15001, 100000]) {
       fetchCalls = []
       const res = await postQuality(ENV, { bitrate: bad })
       expect(res.status).toBe(400)
       expect(await res.json()).toEqual({ ok: false, error: 'INVALID_QUALITY' })
       expect(fetchCalls).toHaveLength(0)
+    }
+  })
+
+  test('현행 기본값 12000과 상한 15000은 허용된다 (2026-11-20 4단계: 8000 상한 정정)', async () => {
+    stubFetch(async () => jsonResponse({ ok: true }))
+    for (const good of [12000, 15000]) {
+      fetchCalls = []
+      const res = await postQuality(ENV, { bitrate: good })
+      expect(res.status).toBe(200)
+      expect(JSON.parse(fetchCalls[0].body as string)).toEqual({ bitrate: good })
     }
   })
 

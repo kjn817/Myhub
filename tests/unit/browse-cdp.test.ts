@@ -57,7 +57,7 @@
  *   평가로 읽는 폴백이 있어 동작이 동일하다.
  * 카나리아: 단계 보고(stage)나 폴백 조건을 깨면 해당 테스트가 실패한다.
  */
-import { fetchSidecarBrowserState, getBrowserState, goBackSession, goForwardSession, navigateSession, REMOTE_DISPLAY_SCALE, viewportDsf, wsToHttpUrl, type CdpSocket } from '../../src/modules/browse/cdp'
+import { fetchSidecarBrowserState, getBrowserState, goBackSession, goForwardSession, navigateSession, reloadSession, REMOTE_DISPLAY_SCALE, viewportDsf, wsToHttpUrl, type CdpSocket } from '../../src/modules/browse/cdp'
 
 type Listener = (ev: { data: unknown }) => void
 
@@ -707,6 +707,69 @@ describe('goBackSession/goForwardSession — 원격 뒤로/앞으로 (2026-11-15
       stage: 'attach',
     })
     await expect(goBackSession(WS_URL, async () => null)).resolves.toEqual({
+      ok: false,
+      stage: 'connect',
+    })
+  })
+})
+
+describe('reloadSession — 원격 새로고침 (2026-11-20 브라우저 4단계)', () => {
+  // 같은 URL 재이동(Page.navigate)이 아니라 Page.reload를 써야 한다 —
+  // navigate는 기록을 쌓고 폼·스크롤을 잃는다.
+  function reloadHandler(reloadError = false): (msg: Record<string, any>, emit: (m: unknown) => void) => void {
+    return (msg, emit) => {
+      if (msg.method === 'Target.getTargets') {
+        emit({ id: msg.id, result: { targetInfos: [{ type: 'page', targetId: 'page-1' }] } })
+      } else if (msg.method === 'Target.attachToTarget') {
+        emit({ id: msg.id, result: { sessionId: 'sess-1' } })
+      } else if (msg.method === 'Runtime.evaluate') {
+        emit({ id: msg.id, ...probeResult('visible') })
+      } else if (msg.method === 'Page.reload') {
+        if (reloadError) emit({ id: msg.id, error: { message: 'cannot reload' } })
+        else emit({ id: msg.id, result: {} })
+      }
+    }
+  }
+
+  test('Page.reload를 활성 세션에 보내고 ok로 보고한다 (navigate는 안 보낸다)', async () => {
+    const sock = new FakeSocket(reloadHandler())
+    const r = await reloadSession(WS_URL, async () => sock as CdpSocket)
+    expect(r).toEqual({ ok: true, stage: 'ok' })
+    const reload = sock.sent.find((m) => m.method === 'Page.reload')
+    expect(reload).toBeDefined()
+    expect(reload.params).toEqual({ ignoreCache: false })
+    expect(reload.sessionId).toBe('sess-1')
+    // 같은 URL 재이동이면 안 된다 — 기록이 쌓이고 폼·스크롤을 잃는다.
+    expect(sock.sent.find((m) => m.method === 'Page.navigate')).toBeUndefined()
+    expect(sock.closed).toBe(true)
+  })
+
+  test('Page.reload 실패는 stage=reload', async () => {
+    const sock = new FakeSocket(reloadHandler(true))
+    const r = await reloadSession(WS_URL, async () => sock as CdpSocket)
+    expect(r).toEqual({ ok: false, stage: 'reload' })
+  })
+
+  test('타깃 없음은 stage=targets, attach 실패는 stage=attach, connect 실패는 stage=connect', async () => {
+    const noTarget = new FakeSocket((msg, emit) => {
+      if (msg.method === 'Target.getTargets') emit({ id: msg.id, result: { targetInfos: [] } })
+    })
+    await expect(reloadSession(WS_URL, async () => noTarget as CdpSocket)).resolves.toEqual({
+      ok: false,
+      stage: 'targets',
+    })
+    const noAttach = new FakeSocket((msg, emit) => {
+      if (msg.method === 'Target.getTargets') {
+        emit({ id: msg.id, result: { targetInfos: [{ type: 'page', targetId: 'page-1' }] } })
+      } else if (msg.method === 'Target.attachToTarget') {
+        emit({ id: msg.id, error: { message: 'nope' } })
+      }
+    })
+    await expect(reloadSession(WS_URL, async () => noAttach as CdpSocket)).resolves.toEqual({
+      ok: false,
+      stage: 'attach',
+    })
+    await expect(reloadSession(WS_URL, async () => null)).resolves.toEqual({
       ok: false,
       stage: 'connect',
     })

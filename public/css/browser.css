@@ -58,6 +58,21 @@
 .bw-tab:hover { background: rgba(15, 23, 42, 0.09); }
 .bw-tab.is-active { background: #fff; color: #111827; font-weight: 600; }
 .bw-tab.is-active:hover { background: #fff; }
+/* 고정 탭 (2026-11-20 3단계): 파비콘만 작게, 이름·닫기 없음. */
+.bw-tab.is-pinned {
+  flex: none;
+  min-width: 0;
+  width: 36px;
+  padding: 0;
+  justify-content: center;
+}
+/* 드래그 중 탭: 형제는 건드리지 않고 잡은 탭만 떠서 따라온다. */
+.bw-tab.is-dragging {
+  opacity: 0.85;
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.18);
+  z-index: 5;
+  cursor: grabbing;
+}
 .bw-tab-fav {
   flex: none;
   width: 18px;
@@ -72,6 +87,7 @@
   color: #374151;
 }
 .bw-tab-fav svg { width: 11px; height: 11px; }
+.bw-tab-fav img { width: 14px; height: 14px; object-fit: contain; border-radius: 3px; display: block; }
 .bw-tab-name {
   flex: 0 1 auto;
   min-width: 0;
@@ -130,6 +146,30 @@
 }
 .bw-tabs-menu-item:hover { background: rgba(15, 23, 42, 0.06); }
 .bw-tabs-menu-item.is-active { font-weight: 700; }
+/* 탭 우클릭 메뉴 (Finder finder-ctx와 같은 모양) */
+.bw-tab-ctx {
+  position: fixed;
+  z-index: 90;
+  min-width: 160px;
+  background: #fff;
+  border-radius: 10px;
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.18);
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+}
+.bw-tab-ctx-item {
+  border: none;
+  background: none;
+  text-align: left;
+  font-size: 13px;
+  font-family: inherit;
+  color: #1f2937;
+  padding: 7px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.bw-tab-ctx-item:hover { background: rgba(15, 23, 42, 0.06); }
 .bw-newtab, .bw-tabs-overflow { align-self: center; }
 /* .bw-icon-btn이 display:flex라 UA의 [hidden] 규칙이 안 먹히므로
    명시한다. 없으면 오버플로 버튼이 접히지 않고 계속 보인다. */
@@ -318,6 +358,96 @@
 .bw-fav-gpt { background: #111111; color: #fff; }
 .bw-fav-github { background: #24292f; color: #fff; }
 .bw-fav-wiki { background: #fff; color: #202124; font-family: Georgia, 'Times New Roman', serif; }
+.bw-fav-default { background: #f1f3f4; color: #5f6368; }
+/* 즐겨찾기 편집 (2026-11-20 1단계): 평소에는 편집 UI가 없고,
+   편집 모드에서만 삭제 배지·추가 타일·폼이 보인다 (Safari식 미니멀). */
+.bw-section-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin: 0 0 14px;
+}
+.bw-section-head .bw-section-title { margin: 0; }
+.bw-section-edit {
+  border: none;
+  background: none;
+  font-family: inherit;
+  font-size: 13px;
+  color: #1971c2;
+  cursor: pointer;
+  padding: 2px 4px;
+}
+.bw-section-edit:hover { text-decoration: underline; }
+.bw-fav { position: relative; }
+.bw-fav-del {
+  position: absolute;
+  top: -6px;
+  right: 2px;
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  background: #fff;
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.25);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #5f6368;
+  cursor: pointer;
+}
+.bw-fav-del svg { width: 12px; height: 12px; }
+.bw-fav-add-tile {
+  background: none;
+  border: 1.5px dashed #dadce0;
+  box-shadow: none;
+  color: #9aa0a6;
+}
+.bw-fav-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.9);
+  border-radius: 14px;
+  padding: 14px;
+  margin-bottom: 30px;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.08);
+}
+.bw-fav-form[hidden] { display: none; }
+.bw-fav-form input {
+  font-family: inherit;
+  font-size: 14px;
+  color: #202124;
+  border: 1px solid #dadce0;
+  border-radius: 10px;
+  padding: 9px 12px;
+  outline: none;
+  background: #fff;
+}
+.bw-fav-form input:focus { border-color: #1971c2; }
+.bw-fav-form input:disabled { background: #f1f3f4; color: #80868b; }
+.bw-fav-form-msg { font-size: 13px; color: #d93025; margin: 0; }
+.bw-fav-form-msg[hidden] { display: none; }
+.bw-fav-form-btns { display: flex; gap: 8px; justify-content: flex-end; }
+.bw-fav-form-save {
+  border: none;
+  border-radius: 999px;
+  background: #1971c2;
+  color: #fff;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 7px 16px;
+  cursor: pointer;
+}
+.bw-fav-form-cancel {
+  border: none;
+  border-radius: 999px;
+  background: #f1f3f4;
+  color: #3c4043;
+  font-family: inherit;
+  font-size: 13px;
+  padding: 7px 16px;
+  cursor: pointer;
+}
 .bw-recents { display: flex; flex-direction: column; gap: 8px; }
 .bw-recent {
   display: flex;
@@ -552,11 +682,18 @@
   color: #374151;
 }
 .bw-side-fav svg { width: 12px; height: 12px; }
+.bw-side-fav img { width: 16px; height: 16px; object-fit: contain; border-radius: 3px; display: block; }
 .bw-side-name {
   flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.bw-side-meta {
+  flex: none;
+  font-size: 11px;
+  color: #9aa0a6;
   white-space: nowrap;
 }
 .bw-side-live {
@@ -566,6 +703,50 @@
   border-radius: 999px;
   background: #51cf66;
 }
+.bw-side-del {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #9aa0a6;
+  cursor: pointer;
+}
+.bw-side-del:hover { background: rgba(15, 23, 42, 0.08); color: #3c4043; }
+.bw-side-del svg { width: 12px; height: 12px; }
+.bw-sidebar-section-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin: 0 0 6px 8px;
+}
+.bw-sidebar-section-head .bw-sidebar-section-title { margin: 0; }
+.bw-sidebar-clear {
+  border: none;
+  background: none;
+  font-family: inherit;
+  font-size: 12px;
+  color: #9aa0a6;
+  cursor: pointer;
+  padding: 0;
+}
+.bw-sidebar-clear:hover { color: #d93025; }
+.bw-sidebar-search {
+  width: 100%;
+  box-sizing: border-box;
+  font-family: inherit;
+  font-size: 13px;
+  color: #202124;
+  border: 1px solid #dadce0;
+  border-radius: 999px;
+  padding: 7px 12px;
+  margin: 0 0 6px;
+  outline: none;
+  background: #fff;
+}
+.bw-sidebar-search:focus { border-color: #1971c2; }
 /* 탭 개요 (사파리식 탭 그리드): 원격 탭 썸네일은 없으므로
    파비콘+제목 카드만 그린다. 카드를 누르면 전환, ×는 닫기,
    빈 곳을 누르거나 Esc로 닫는다. */
@@ -587,6 +768,30 @@
   margin: 0 auto 18px;
 }
 .bw-overview-title { font-size: 20px; font-weight: 700; color: #202124; margin: 0; }
+.bw-overview-search {
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 320px;
+  margin: 0 16px;
+  height: 34px;
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  border-radius: 999px;
+  background: #fff;
+  padding: 0 14px;
+  font-size: 13px;
+  font-family: inherit;
+  color: #1f2937;
+  outline: none;
+  box-sizing: border-box;
+}
+.bw-overview-search:focus { border-color: #4dabf7; }
+.bw-overview-empty {
+  grid-column: 1 / -1;
+  text-align: center;
+  padding: 48px 0;
+  font-size: 13.5px;
+  color: #9aa0a6;
+}
 .bw-overview-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
@@ -626,6 +831,7 @@
   color: #374151;
 }
 .bw-ov-fav svg { width: 17px; height: 17px; }
+.bw-ov-fav img { width: 26px; height: 26px; object-fit: contain; border-radius: 5px; display: block; }
 .bw-ov-name {
   font-size: 13.5px;
   font-weight: 600;

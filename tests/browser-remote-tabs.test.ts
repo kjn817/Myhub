@@ -21,8 +21,16 @@
  * - 팝업 탭 닫기는 원격 close를 부르고 뷰를 메인 탭으로 옮긴다
  *   (라이브를 끄지 않는다). 메인 탭 닫기는 원격 close를 안 부른다.
  * - 라이브 탭의 원격 타깃이 사라지면(크로뮴 재시작) 탭은 안 지워지고
- *   연결만 끊긴 뒤 다음 폴링에서 새 메인 타깃에 다시 묶인다.
- * 카나리아: 동기화·중계·가드를 빼면 해당 테스트가 실패한다.
+ *   URL이 같은 복원 탭에 즉시 다시 묶인다 (2026-11-20 5단계 — 옛
+ *   동작은 연결만 끊고 다음 폴링에서 메인 타깃에 묶었다). URL이
+ *   맞는 복원 탭이 없으면 옛 동작대로 연결만 끊고 다음 폴링에서
+ *   다시 묶인다.
+ * - 재시작 후 팝업 탭도 URL로 다시 묶여 지워지지 않고, 복원된 팝업이
+ *   새 셸 탭으로 중복 생성되지 않는다 (2026-11-20 5단계).
+ * - 재시작 후 URL이 없는 팝업 탭(진짜 닫힘)은 여전히 지워진다.
+ * - 같은 URL의 셸 탭이 두 개면 복원 탭 하나에 하나만 묶이고
+ *   나머지는 지워진다 (1:1 — 한 타깃에 두 탭이 안 묶인다).
+ * 카나리아: 동기화·중계·가드·재바인딩을 빼면 해당 테스트가 실패한다.
  */
 import * as fs from 'fs'
 import * as path from 'path'
@@ -166,15 +174,25 @@ function makeApp(): Harness {
     location: { origin: 'https://myhub.test' },
     addEventListener: () => {},
     fetch: (url: string, init?: { body?: string }) => {
-      const action = String(url).split('/').pop() ?? ''
-      let targetId = ''
-      try {
-        targetId = JSON.parse(init?.body ?? '{}').targetId ?? ''
-      } catch {
-        targetId = ''
+      const u = String(url)
+      // 탭 제어(/api/browse/tab)만 tabPosts로 기록한다 — 북마크·기록
+      // API는 탭 제어가 아니므로 (2026-11-20 브라우저 1단계로 추가됨)
+      // 여기서 기록하면 'activate를 부르지 않는다' 단언이 오탐한다.
+      if (u.startsWith('/api/browse/tab')) {
+        const action = u.split('/').pop() ?? ''
+        let targetId = ''
+        try {
+          targetId = JSON.parse(init?.body ?? '{}').targetId ?? ''
+        } catch {
+          targetId = ''
+        }
+        tabPosts.push({ action, targetId })
+        return Promise.resolve({ ok: true })
       }
-      tabPosts.push({ action, targetId })
-      return Promise.resolve({ ok: true })
+      return Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve({ ok: true, bookmarks: [], history: [] }),
+      })
     },
   }
   const h: Harness = {
@@ -343,11 +361,13 @@ describe('browser 새 창→새 탭 연동', () => {
     await h.app.live.endLive()
   })
 
-  test('라이브 탭의 원격 타깃이 사라지면 탭은 유지되고 다음 폴링에서 다시 묶인다', async () => {
+  test('재시작 후 라이브 탭은 URL이 같은 복원 탭에 즉시 다시 묶인다 (5단계)', async () => {
     const h = makeApp()
     await startLive(h)
     expect(h.app.getTabs()[0].remoteTargetId).toBe('page-1')
     // 크로뮴 재시작: 모든 타깃 id가 바뀌고 새 메인(page-9)만 남는다.
+    // URL이 같으므로 첫 폴링에서 바로 다시 묶인다 (옛 동작은 첫 폴링에서
+    // 연결만 끊고 null이 됐다가 다음 폴링에서 묶었다).
     const restarted: RemoteState = {
       url: 'https://www.naver.com/',
       title: 'NAVER',
@@ -361,9 +381,135 @@ describe('browser 새 창→새 탭 연동', () => {
     await poll(h)
     const afterFirst = h.app.getTabs()
     expect(afterFirst).toHaveLength(1)
+    expect(afterFirst[0].remoteTargetId).toBe('page-9')
+    await poll(h)
+    expect(h.app.getTabs()[0].remoteTargetId).toBe('page-9')
+    await h.app.live.endLive()
+  })
+
+  test('재시작 후 URL이 안 맞는 라이브 탭은 연결만 끊고 다음 폴링에서 다시 묶인다', async () => {
+    const h = makeApp()
+    await startLive(h)
+    expect(h.app.getTabs()[0].remoteTargetId).toBe('page-1')
+    // 크로뮴 재시작: 복원된 탭이 다른 URL(example.com)이라 재바인딩 불가.
+    const restarted: RemoteState = {
+      url: 'https://example.com/',
+      title: 'Example',
+      canGoBack: false,
+      canGoForward: false,
+      tabs: [{ targetId: 'page-9', url: 'https://example.com/', title: 'Example', openerId: null }],
+      activeTargetId: 'page-9',
+      mainTargetId: 'page-9',
+    }
+    h.setRemote(restarted)
+    await poll(h)
+    const afterFirst = h.app.getTabs()
+    expect(afterFirst).toHaveLength(1)
     expect(afterFirst[0].remoteTargetId).toBeNull()
     await poll(h)
     expect(h.app.getTabs()[0].remoteTargetId).toBe('page-9')
+    await h.app.live.endLive()
+  })
+
+  test('재시작 후 팝업 탭이 URL로 다시 묶이고 중복 생성되지 않는다 (5단계)', async () => {
+    const h = makeApp()
+    await startLive(h)
+    h.setRemote(popupState())
+    await poll(h)
+    const before = h.app.getTabs()
+    expect(before).toHaveLength(2)
+    const popupId = before.find((t: any) => t.remoteTargetId === 'page-2').id
+    const mainId = before.find((t: any) => t.remoteTargetId === 'page-1').id
+    // 크로뮴 재시작: 타깃 id가 전부 바뀌지만 URL은 그대로 복원된다.
+    // 팝업은 openerId도 복원된 상태 (page-9가 새 메인).
+    const restarted: RemoteState = {
+      url: 'https://news.naver.com/article/123',
+      title: '뉴스 기사',
+      canGoBack: true,
+      canGoForward: false,
+      tabs: [
+        { targetId: 'page-9', url: 'https://www.naver.com/', title: 'NAVER', openerId: null },
+        { targetId: 'page-10', url: 'https://news.naver.com/article/123', title: '뉴스 기사', openerId: 'page-9' },
+      ],
+      activeTargetId: 'page-10',
+      mainTargetId: 'page-9',
+    }
+    h.setRemote(restarted)
+    await poll(h)
+    const after = h.app.getTabs()
+    // 기존 셸 탭 2개가 그대로 다시 묶인다 — 삭제도, 중복 생성도 없다.
+    expect(after).toHaveLength(2)
+    const popup = after.find((t: any) => t.id === popupId)
+    const main = after.find((t: any) => t.id === mainId)
+    expect(popup.remoteTargetId).toBe('page-10')
+    expect(main.remoteTargetId).toBe('page-9')
+    expect(popup.url).toBe('https://news.naver.com/article/123')
+    expect(popup.active).toBe(true)
+    expect(popup.live).toBe(true)
+    await h.app.live.endLive()
+  })
+
+  test('재시작 후 URL이 없는 팝업 탭은 여전히 지워진다 (5단계)', async () => {
+    const h = makeApp()
+    await startLive(h)
+    h.setRemote(popupState())
+    await poll(h)
+    expect(h.app.getTabs()).toHaveLength(2)
+    // 크로뮴 재시작: 메인만 복원되고 팝업은 복원되지 않았다 (진짜 닫힘).
+    const restarted: RemoteState = {
+      url: 'https://www.naver.com/',
+      title: 'NAVER',
+      canGoBack: false,
+      canGoForward: false,
+      tabs: [{ targetId: 'page-9', url: 'https://www.naver.com/', title: 'NAVER', openerId: null }],
+      activeTargetId: 'page-9',
+      mainTargetId: 'page-9',
+    }
+    h.setRemote(restarted)
+    await poll(h)
+    const after = h.app.getTabs()
+    expect(after).toHaveLength(1)
+    expect(after[0].remoteTargetId).toBe('page-9')
+    expect(after[0].active).toBe(true)
+    expect(after[0].live).toBe(true)
+    await h.app.live.endLive()
+  })
+
+  test('같은 URL의 셸 탭이 두 개면 복원 탭 하나에 하나만 묶인다 (5단계)', async () => {
+    const h = makeApp()
+    await startLive(h)
+    // 같은 URL의 팝업이 떠서 셸 탭이 2개가 된다 (둘 다 naver URL).
+    const dupPopup: RemoteState = {
+      url: 'https://www.naver.com/',
+      title: 'NAVER',
+      canGoBack: false,
+      canGoForward: false,
+      tabs: [
+        MAIN_TAB,
+        { targetId: 'page-2', url: 'https://www.naver.com/', title: 'NAVER', openerId: 'page-1' },
+      ],
+      activeTargetId: 'page-2',
+      mainTargetId: 'page-1',
+    }
+    h.setRemote(dupPopup)
+    await poll(h)
+    expect(h.app.getTabs()).toHaveLength(2)
+    // 크로뮴 재시작: naver 탭 하나만 복원된다.
+    h.setRemote({
+      url: 'https://www.naver.com/',
+      title: 'NAVER',
+      canGoBack: false,
+      canGoForward: false,
+      tabs: [{ targetId: 'page-9', url: 'https://www.naver.com/', title: 'NAVER', openerId: null }],
+      activeTargetId: 'page-9',
+      mainTargetId: 'page-9',
+    })
+    await poll(h)
+    const after = h.app.getTabs()
+    // 복원 탭은 하나뿐이라 하나의 셸 탭만 남는다 (1:1 — 한 타깃에
+    // 두 탭이 묶이지 않는다).
+    expect(after).toHaveLength(1)
+    expect(after[0].remoteTargetId).toBe('page-9')
     await h.app.live.endLive()
   })
 })

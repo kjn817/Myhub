@@ -40,11 +40,15 @@
   var VIEW_URL = '/api/browse/view/';
 
   /* 화질 설정 저장 키 (localStorage). 값은 'auto' 또는 kbps 숫자 문자열.
-     수동 값이면 iframe 시작 시 ?vb=<kbps>로 초기 비트레이트를 정하고,
-     자동이면 사이드카 적응 제어가 알아서 조절한다 (2026-11-15). */
+     수동 값이면 시작 시 POST /api/browse/quality로 다시 적용한다
+     (applyStoredQuality — 사이드카가 ?vb= 쿼리를 떼어 버리므로 쿼리만으
+     로는 재적용이 안 된다, 2026-11-20 4단계). 자동이면 아무것도 보내지
+     않아 Selkies 혼잡 제어가 맡는다. 범위는 사이드카
+     BITRATE_FLOOR/CEILING(500~15000)과 동일 — 8000 상한은 현행
+     기본값 12000조차 막아 2026-11-20 4단계에서 정정했다. */
   var QUALITY_KEY = 'myhub-bw-quality';
   var QUALITY_MIN_KBPS = 500;
-  var QUALITY_MAX_KBPS = 8000;
+  var QUALITY_MAX_KBPS = 15000;
 
   /* 상태 폴링·뒤로/앞으로·뷰포트 적용 fetch의 타임아웃 (ms). 서버가
      응답 없이 걸리면 이 시간 뒤에 중단해 호출자가 {status: 0}으로
@@ -296,6 +300,26 @@
       });
   }
 
+  /* 원격 새로고침: POST /api/browse/reload (CDP Page.reload).
+     Promise<{ status, body }> — history와 같은 모양. 10초 타임아웃. */
+  function defaultReload() {
+    if (typeof fetch !== 'function') return Promise.resolve({ status: 0, body: null });
+    return fetchWithTimeout('/api/browse/reload', { method: 'POST' }, FETCH_TIMEOUT_MS)
+      .then(function (r) {
+        return r
+          .json()
+          .catch(function () {
+            return null;
+          })
+          .then(function (body) {
+            return { status: r.status, body: body };
+          });
+      })
+      .catch(function () {
+        return { status: 0, body: null };
+      });
+  }
+
   /* 원격 뒤로/앞으로 이동: direction 'back' | 'forward'.
      Promise<{ status, body }> — navigate와 같은 모양. 10초 타임아웃. */
   function defaultHistory(direction) {
@@ -318,7 +342,7 @@
   }
 
   /**
-   * deps = { doc, navigate, applyViewport, onChange, checkUnlock, submitUnlock, setQuality, pollDelayMs, fetchState, history, onState, statePollMs, reportMouseOffset, mouseOffsetPollMs }
+   * deps = { doc, navigate, applyViewport, onChange, checkUnlock, submitUnlock, setQuality, pollDelayMs, fetchState, history, reload, onState, statePollMs, reportMouseOffset, mouseOffsetPollMs }
    * doc에서 #bwLiveFrame/#bwNoticeCard/#bwNoticeMsg/#bwNoticeClose와
    * #bwLockCard/#bwLockForm/#bwLockPassword/#bwLockConfirm/#bwLockMsg/
    * #bwLockSubmit/#bwLockClose/#bwLockTitle/#bwLockDesc를 찾는다 (없으면
@@ -327,8 +351,9 @@
    * (2026-11-15, 같은 모양의 테스트 주입 지난). checkUnlock()·
    * submitUnlock(mode, password)·setQuality(payload)도 같은 모양의
    * 테스트 주입 지난. pollDelayMs는 제출 후 상태 폴링 간격(기본 5초).
-   * fetchState()·history(direction)도 같은 모양의 테스트 주입 지난
-   * (2026-11-15 원격 상태 폴링·뒤로/앞으로). onState(body)는 폴링이
+   * fetchState()·history(direction)·reload()도 같은 모양의 테스트 주입
+   * 지난 (2026-11-15 원격 상태 폴링·뒤로/앞으로, 2026-11-20 4단계
+   * 새로고침). onState(body)는 폴링이
    * 받은 원격 상태를 주인에게 알리는 콜백, statePollMs는 폴링 간격
    * (기본 2000ms). reportMouseOffset(offset)은 iframe 화면 위치 보고
    * (2026-11-18, 같은 모양의 테스트 주입 지난), mouseOffsetPollMs는
@@ -358,6 +383,7 @@
       typeof deps.fetchState === 'function' ? deps.fetchState : defaultFetchState;
     var historyFetch =
       typeof deps.history === 'function' ? deps.history : defaultHistory;
+    var reloadFetch = typeof deps.reload === 'function' ? deps.reload : defaultReload;
     var reportMouseOffsetFetch =
       typeof deps.reportMouseOffset === 'function'
         ? deps.reportMouseOffset
@@ -417,6 +443,21 @@
     var statePolling = false;
     var statePollPromise = null;
     var statePollFailed = false; // 직전 폴링 실패 여부 — 복구 시 마우스 오프셋 재전송 트리거
+    /* 일시 안내 (2026-11-20 4단계): 새로고침 실패 같은 일시 알림을
+       안내 카드에 띄운다. liveState를 'notice'로 바꾸면 iframe이
+       숨겨지므로 상태 기계는 건드리지 않고 별도 플래그로만 표시한다.
+       6초 뒤 자동으로 사라지고, 닫기 버튼으로도 닫힌다. */
+    var transientNotice = false;
+    var transientNoticeTimer = null;
+    var TRANSIENT_NOTICE_MS = 6000;
+    /* 저장된 화질 재적용 (2026-11-20 4단계): 시작 시 저장된 수동
+       비트레이트를 POST로 다시 적용한다. 화면 WS가 아직 안 붙었으면
+       connections: 0이라 적용이 안 되므로 다음 폴링 때 다시 시도한다
+       (최대 10회 ≈ 20초). 자동 저장값이면 null이라 아무것도 안 보낸다. */
+    var qualityPending = null;
+    var qualityAttempts = 0;
+    var qualityApplying = false;
+    var QUALITY_REAPPLY_MAX_ATTEMPTS = 10;
     function sameViewport(a, b) {
       if (!a || !b) return false;
       return (
@@ -658,6 +699,9 @@
               lastReportedMouseOffset = null;
             }
             onState(body);
+            // 저장된 수동 화질이 아직 적용 전이면 여기서 다시 시도한다
+            // (첫 폴링 때는 화면 WS가 안 붙어 connections: 0일 수 있다).
+            if (qualityPending !== null) applyStoredQuality();
             return true;
           }
           statePollFailed = true;
@@ -704,8 +748,54 @@
       );
     }
 
+    /* 원격 새로고침 (2026-11-20 4단계): live가 켜져 있을 때만
+       /reload를 부르고 성공 여부를 boolean으로 돌려준다. 실패하면
+       호출자가 안내한다 — 재이동으로 조용히 폴백하지 않는다. */
+    function reload() {
+      if (liveState !== 'on') return Promise.resolve(false);
+      return reloadFetch().then(
+        function (res) {
+          var body = res && res.body;
+          return !!(res && res.status === 200 && body && body.ok);
+        },
+        function () {
+          return false;
+        },
+      );
+    }
+
+    /* 현재 화질 설정 (메뉴 체크 표시용): {mode:'auto'} 또는
+       {mode:'manual', bitrate}. 저장값이 없으면 'auto'다 — 시작 시
+       아무것도 보내지 않아 현행 기본값이 그대로 유지된다. */
+    function getQuality() {
+      return readQualityPreference();
+    }
+
     function setNotice(text) {
       if (noticeMsg) noticeMsg.textContent = text;
+    }
+
+    /* 일시 안내를 띄운다 (2026-11-20 4단계): 새로고침 실패 같은
+       일시 알림. 상태 기계는 건드리지 않으므로 라이브 화면은 그대로
+       보이고, 카드는 6초 뒤 자동으로 사라진다. */
+    function showNotice(text) {
+      setNotice(text);
+      transientNotice = true;
+      if (transientNoticeTimer) clearTimeout(transientNoticeTimer);
+      transientNoticeTimer = setTimeout(function () {
+        hideTransientNotice();
+      }, TRANSIENT_NOTICE_MS);
+      syncChrome();
+    }
+
+    function hideTransientNotice() {
+      if (!transientNotice) return;
+      transientNotice = false;
+      if (transientNoticeTimer) {
+        clearTimeout(transientNoticeTimer);
+        transientNoticeTimer = null;
+      }
+      syncChrome();
     }
 
     function setLockMsg(text) {
@@ -739,7 +829,7 @@
     function syncChrome() {
       var liveOn = liveState === 'on';
       if (liveFrame) liveFrame.hidden = !liveOn;
-      if (noticeCard) noticeCard.hidden = liveState !== 'notice';
+      if (noticeCard) noticeCard.hidden = liveState !== 'notice' && !transientNotice;
       if (lockCard) lockCard.hidden = liveState !== 'locked';
     }
 
@@ -939,13 +1029,52 @@
       });
     }
 
-    /* 화질 설정에 맞는 뷰 URL: 수동 값이면 초기 비트레이트를 쿼리로
-       실어 사이드카가 연결 직후 주입하게 하고, 자동이면 쿼리 없이
-       사이드카 적응 제어에 맡긴다. */
+    /* 화질 설정에 맞는 뷰 URL: 수동 값이면 ?vb= 쿼리를 붙인다
+       (옛 경로 — 사이드카는 WS URL에서 이 쿼리를 떼어 버리므로
+       재적용은 applyStoredQuality의 POST가 맡는다. 쿼리는 해가
+       없어 그대로 둔다). 자동이면 쿼리 없이 시작한다. */
     function viewUrlForQuality() {
       var pref = readQualityPreference();
       if (pref.mode === 'manual') return VIEW_URL + '?vb=' + pref.bitrate;
       return VIEW_URL;
+    }
+
+    /* 저장된 화질을 다시 적용한다 (2026-11-20 4단계): 시작 시 저장된
+       수동 비트레이트를 POST한다. 화면 WS가 아직 안 붙었으면
+       connections: 0이라 적용이 안 되므로 보류하고 다음 폴링 때 다시
+       시도한다 (최대 10회). 저장값을 다시 쓰지는 않는다 — 이미 저장된
+       값이다. */
+    function applyStoredQuality() {
+      if (qualityPending === null || qualityApplying) return;
+      qualityApplying = true;
+      var kbps = qualityPending;
+      setQualityFetch({ bitrate: kbps }).then(
+        function (res) {
+          qualityApplying = false;
+          var body = res && res.body;
+          if (res && res.status === 200 && body && body.ok && (body.connections | 0) > 0) {
+            qualityPending = null;
+            return;
+          }
+          qualityAttempts += 1;
+          if (qualityAttempts >= QUALITY_REAPPLY_MAX_ATTEMPTS) {
+            qualityPending = null;
+            if (typeof console !== 'undefined' && console.warn) {
+              console.warn('[browser-live] 저장된 화질 재적용 실패 (10회 시도) — 메뉴에서 다시 선택해 주세요.');
+            }
+          }
+        },
+        function () {
+          qualityApplying = false;
+          qualityAttempts += 1;
+          if (qualityAttempts >= QUALITY_REAPPLY_MAX_ATTEMPTS) {
+            qualityPending = null;
+            if (typeof console !== 'undefined' && console.warn) {
+              console.warn('[browser-live] 저장된 화질 재적용 실패 (10회 시도) — 메뉴에서 다시 선택해 주세요.');
+            }
+          }
+        },
+      );
     }
 
     /* 화질 전환: mode 'auto' 또는 kbps 숫자. 성공하면 설정을 저장해
@@ -1010,6 +1139,12 @@
     function startLive(url, gen) {
       var viewport = measureViewport();
       liveState = 'on';
+      // 저장된 수동 화질이 있으면 폴링 성공 시 POST로 다시 적용한다
+      // (?vb= 쿼리는 사이드카가 떼어 버려 재적용이 안 된다). 자동이면
+      // 아무것도 보내지 않아 현행 기본값이 그대로 유지된다.
+      var storedPref = readQualityPreference();
+      qualityPending = storedPref.mode === 'manual' ? storedPref.bitrate : null;
+      qualityAttempts = 0;
       if (liveFrame) liveFrame.src = viewUrlForQuality();
       onChange();
       startStageObserver();
@@ -1079,6 +1214,13 @@
       stopStageObserver();
       stopStatePolling();
       stopMouseOffsetPolling();
+      qualityPending = null;
+      qualityApplying = false;
+      if (transientNoticeTimer) {
+        clearTimeout(transientNoticeTimer);
+        transientNoticeTimer = null;
+      }
+      transientNotice = false;
       lastAppliedViewport = null;
       lastFailedViewport = null;
       viewportRetryCount = 0;
@@ -1088,8 +1230,13 @@
       return Promise.resolve();
     }
 
-    /* 안내 카드를 닫는다 */
+    /* 안내 카드를 닫는다. 일시 안내면 플래그만 끄고 라이브는 그대로
+       두고, 시작 실패 안내면 상태를 끈다. */
     function dismissNotice() {
+      if (transientNotice) {
+        hideTransientNotice();
+        return;
+      }
       if (liveState !== 'notice') return;
       liveState = 'off';
       onChange();
@@ -1137,6 +1284,8 @@
       dismissNotice: dismissNotice,
       dismissLock: dismissLock,
       setQuality: setQuality,
+      getQuality: getQuality,
+      showNotice: showNotice,
       syncChrome: syncChrome,
       goBack: function () {
         return goHistory('back');
@@ -1144,6 +1293,7 @@
       goForward: function () {
         return goHistory('forward');
       },
+      reload: reload,
       refreshState: pollStateOnce,
     };
   }

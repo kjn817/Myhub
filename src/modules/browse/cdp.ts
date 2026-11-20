@@ -54,17 +54,19 @@ export const defaultCdpConnect: CdpConnectFn = async (wsUrl, headers) => {
 }
 
 /**
- * 원격 디스플레이 출력 배율 (2026-11-16 QA 7차: 항상 1.0).
- * 사이드카가 클라이언트 SETTINGS의 scaling_dpi를 96으로 고정하므로
- * Selkies 출력 scale은 항상 1.0이다 (diag 실측: "scale 1.00").
- * 뷰포트 override의 DSF는 이 값과 같아야 한다 — 실측에서 역산하는
- * 옛 방식(디스플레이/스테이지 비율)은 리사이즈 중 Selkies 출력이
- * 아직 안 줄었을 때 옛 크기 ÷ 새 스테이지를 계산해 1.5 같은 잘못된
- * 배율을 만들고, 그 배율이 후보가 돼 자기 일치를 이뤄 고정이 안
- * 됐다 (창은 안 줄고 내용만 1.5배로 커져 넘치는 QA 7차 결함).
- * 낡은 1.75 렌더러 탭에도 1.0이 맞다 — 출력이 이미 1.0이라 1.75를
- * 걸면 물리 1.75배로 래스터링해 창을 넘친다. DPI 고정을 끄는
- * 날에는 이 상수와 뷰포트 로직을 함께 재검토할 것.
+ * 뷰포트 override DSF의 기본값 (1.0) — 클라이언트 DPR을 모를 때만
+ * 쓴다. 실제 DSF는 viewportDsf()가 클라이언트 DPR에서 정한다
+ * (2026-11-19 맥 레티나: 크기는 CSS px, DSF=DPR라야 레이아웃은
+ * 네이티브와 같고 래스터만 디스플레이를 채운다).
+ *
+ * 옛 설명(2026-11-16 QA 7차)은 폐기됐다: "사이드카가 scaling_dpi를
+ * 96으로 고정해 출력 scale이 항상 1.0"이라는 전제는 2026-11-20에
+ * 깨졌다 — DPI 96 고정이 DSF=DPR 체제에서 출력 스케일을 1.0으로
+ * 묶어 맥 화면이 절반만 보이는 원인이 돼, 사이드카와 compose 양쪽에서
+ * 제거됐다. 출력 스케일은 이제 클라이언트 DPR을 따른다.
+ * DSF를 실측에서 역산(디스플레이/스테이지 비율)하는 옛 방식은
+ * 리사이즈 중 잘못된 배율이 자기 일치를 이뤄 고정이 안 되는
+ * QA 7차 결함이라 금지 — 역산이 아니라 클라이언트 실측 DPR만 쓴다.
  */
 export const REMOTE_DISPLAY_SCALE = 1
 
@@ -735,4 +737,46 @@ export async function goForwardSession(
   opts: { headers?: Record<string, string>; timeoutMs?: number } = {}
 ): Promise<HistoryResult> {
   return goHistorySession(webSocketDebuggerUrl, 'forward', connect, opts)
+}
+
+export type ReloadStage = 'ok' | 'connect' | 'targets' | 'attach' | 'reload'
+export interface ReloadResult {
+  ok: boolean
+  stage: ReloadStage
+}
+
+/**
+ * 활성 탭을 진짜로 새로고침한다 (2026-11-20 브라우저 4단계).
+ * 같은 URL로 다시 이동(Page.navigate)하는 옛 방식이 아니다 —
+ * 실측(헤드리스·헤드풀·CDP·Playwright 4종): reload는 스크롤을
+ * 유지하고(1500→1500), navigate는 맨 위로 되돌린다(1500→0).
+ * 같은 URL이라 기록은 둘 다 안 쌓이고, 폼 값은 둘 다 이 크롬에서
+ * 복원되지 않는다 — 스크롤 유지가 reload의 실측된 이득이다.
+ * Page.reload는 브라우저 새로고침 버튼과 같은 동작이다
+ * (ignoreCache: false — 캐시를 쓴다).
+ */
+export async function reloadSession(
+  webSocketDebuggerUrl: string,
+  connect: CdpConnectFn = defaultCdpConnect,
+  opts: { headers?: Record<string, string>; timeoutMs?: number } = {}
+): Promise<ReloadResult> {
+  let phase: ReloadStage = 'targets'
+  return runCdpScript(
+    webSocketDebuggerUrl,
+    connect,
+    opts,
+    async (call) => {
+      const attached = await attachActivePage(call)
+      if (!attached.ok) return { ok: false, stage: attached.stage as ReloadStage }
+      phase = 'reload'
+      const reloadReply = await call('Page.reload', { ignoreCache: false }, attached.sessionId)
+      return reloadReply.error
+        ? { ok: false, stage: 'reload' as const }
+        : { ok: true, stage: 'ok' as const }
+    },
+    {
+      connect: { ok: false, stage: 'connect' as const },
+      timeout: () => ({ ok: false, stage: phase }),
+    },
+  )
 }
