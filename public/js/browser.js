@@ -1316,6 +1316,14 @@
           // 따라오는 클릭이 없었다는 뜻이므로, 다음 진짜 클릭을
           // 삼키면 안 된다.
           suppressTabClick = false;
+          // 닫기 버튼을 누른 건 드래그가 아니다 — 여기서 캡처를 걸면
+          // pointerup이 탭 버튼으로 다시 겨냥돼 click 타깃이 닫기
+          // span이 아니라 탭 버튼이 되고, 닫기 리스너가 안 뜬 채 탭만
+          // 활성화된다 (사용자 보고 2026-11-20, 실브라우저 재현).
+          // 드래그 추적·캡처를 건너뛰면 click이 span에 그대로 닿는다.
+          if (e.target && e.target.closest && e.target.closest('.bw-tab-close')) {
+            return;
+          }
           drag = {
             pointerId: e.pointerId,
             startX: e.clientX,

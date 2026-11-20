@@ -1,0 +1,18 @@
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>navkey top (shell stand-in)</title></head>
+<body>
+<iframe id="appFrame" src="/navkey/app.html" style="width:800px;height:600px;border:0"></iframe>
+<script>
+// windows.js onNavKeyMessage와 같은 수신 조건: myhub:desktop-nav-key이며
+// 출처가 셸 창 iframe(앱 프레임)인 경우에만 받는다.
+window.__receivedKeys = [];
+window.addEventListener('message', function (ev) {
+  var d = ev.data;
+  if (!d || d.type !== 'myhub:desktop-nav-key') return;
+  if (ev.source !== document.getElementById('appFrame').contentWindow) return;
+  window.__receivedKeys.push(d.key);
+});
+</script>
+</body>
+</html>

@@ -8,6 +8,8 @@
  * 검증 성질 (깨지면 실패해야 한다):
  * - 탭을 드래그하면 순서가 바뀌고 localStorage에도 같은 순서로 저장된다.
  * - 드래그 직후 클릭은 억제되고(탭 전환 안 됨), 그 다음 클릭부터 전환된다.
+ * - 닫기 버튼을 누르면 드래그가 시작되지 않고, 클릭하면 탭이 닫힌다
+ *   (포인터 캡처가 click을 탭 버튼으로 재겨냥해 닫기가 안 되던 결함).
  * - 고정하면 탭이 파비콘만 작게 맨 앞에 모이고 닫기 버튼이 없으며,
  *   localStorage를 거쳐 다시 열어도 고정이 유지된다.
  * - 고정 탭이 있으면 고정되지 않은 탭은 그 앞으로 못 간다 (구역 클램프).
@@ -273,6 +275,38 @@ describe('browser 탭 관리 (3단계)', () => {
     googleEl.dispatchEvent(new (getWin().MouseEvent)('click', { bubbles: true }))
     // 두 번째 클릭부터는 전환된다 (억제는 1회성).
     expect(h.app.getTabs().find((t: any) => t.active).url).toBe('https://www.google.com/')
+  })
+
+  test('닫기 버튼을 누르면 드래그가 시작되지 않고 클릭하면 탭이 닫힌다', async () => {
+    const h = makeApp()
+    await openThreeTabs(h)
+    const els = tabEls()
+    els.forEach((el, i) => stubRectAt(el, i * 150, 150, 30))
+    // 닫기 버튼에서 pointerdown + 임계값을 넘는 이동 + pointerup.
+    // 가드 없이 드래그가 시작되면 구글 탭이 맨 앞으로 이동한다.
+    const closeBtn = els[1].querySelector('.bw-tab-close')
+    closeBtn.dispatchEvent(pointerEvent('pointerdown', 225))
+    els[1].dispatchEvent(pointerEvent('pointermove', 60))
+    els[1].dispatchEvent(pointerEvent('pointerup', 60))
+    expect(tabUrls(h)).toEqual([
+      'https://www.naver.com/',
+      'https://www.google.com/',
+      'https://github.com/',
+    ])
+    expect(tabEls()[1].classList.contains('is-dragging')).toBe(false)
+    expect((tabEls()[1] as any).style.transform).toBe('')
+    // 닫기 버튼 클릭 — 구글 탭이 닫힌다. jsdom은 포인터 캡처의 click
+    // 재겨냥을 재현하지 못하므로, 실제 클릭이 span에 닿는지는
+    // tests/e2e/browser-tab-close.e2e.cjs가 실브라우저로 검증한다.
+    tabEls()[1]
+      .querySelector('.bw-tab-close')
+      .dispatchEvent(new (getWin().MouseEvent)('click', { bubbles: true }))
+    expect(tabUrls(h)).toEqual(['https://www.naver.com/', 'https://github.com/'])
+    const saved = JSON.parse(h.storage.getItem('myhub.browser.tabs.v1') ?? '{"tabs":[]}')
+    expect(saved.tabs.map((t: any) => t.url)).toEqual([
+      'https://www.naver.com/',
+      'https://github.com/',
+    ])
   })
 
   test('고정하면 파비콘만 작게 맨 앞에 모이고 다시 열어도 유지된다', async () => {
