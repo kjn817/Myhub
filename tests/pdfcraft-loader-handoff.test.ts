@@ -70,4 +70,31 @@ describe('pdfcraft 로더 게이트 핸드오프', () => {
       expect(src).toContain('} catch (e) {');
     }
   });
+
+  test('글루는 try 안에서 동적 import한다 (정적 import 실패는 보고가 안 된다)', () => {
+    // 정적 import 실패(손상된 캐시 글루·404)는 모듈 로딩 단계에서 죽어
+    // try/catch에 안 잡히고 보고도 없어 45초 워치독만 터졌다 (사용자
+    // 실화면 '엔진 시작 시간 초과'). 동적 import면 실패가 보고된다.
+    for (const src of [TEMPLATE, LOADER]) {
+      expect(src).not.toContain('import init, * as bindings from');
+      expect(src).toMatch(/const bindings = await import\('\.\//);
+      // 동적 import가 try 블록 안에 있어야 catch가 잡는다. 템플릿 파일
+      // (build-pdfcraft-package.mjs)에는 로더 외의 try/catch도 있어
+      // import 기준으로 앞뒤를 잡는다.
+      const importIdx = src.indexOf('await import(');
+      const tryIdx = src.lastIndexOf('try {', importIdx);
+      const catchIdx = src.indexOf('} catch (e) {', importIdx);
+      expect(importIdx).toBeGreaterThanOrEqual(0);
+      expect(tryIdx).toBeGreaterThanOrEqual(0);
+      expect(tryIdx).toBeLessThan(importIdx);
+      expect(catchIdx).toBeGreaterThan(importIdx);
+    }
+  });
+
+  test('동적 import한 글루의 default를 init으로 쓴다', () => {
+    for (const src of [TEMPLATE, LOADER]) {
+      expect(src).toContain('bindings.default({ module_or_path: bytes })');
+      expect(src).toContain('window.wasmBindings = bindings;');
+    }
+  });
 });

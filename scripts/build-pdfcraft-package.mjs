@@ -57,7 +57,12 @@ const loader = `// pdfcraft 로더 (build-pdfcraft.mjs 재구성): 분할된 WAS
 // 23MB 조각은 HTTP 캐시에 남지 않아(2026-11-15 실측: 동일 문서 재-fetch도
 // 전문 재다운로드) 게이트만으로는 엔진이 47MB를 다시 받기 때문이다.
 // 쿼리가 없으면 기존 상대경로로 받는다 (직접 열기·구 호스트 하위호환).
-import init, * as bindings from './${glue}';
+// 글루는 정적 import가 아니라 try 안에서 동적 import한다 (2026-11-21):
+// 정적 import 실패(손상된 캐시 글루·404)는 모듈 로딩 단계에서 죽어
+// try/catch에 안 잡히고 보고도 없어 45초 워치독만 터졌다. 동적이면
+// 실패가 reportFailure로 부모에 전달돼 배너에 원인이 뜬다.
+// (글루 파일명 자체가 콘텐츠 해시라 URL에 ?v=를 붙이지 않는다 —
+// asset-url.js의 의도적 미버전 설계와 동일. 해시가 바뀌면 URL이 바뀐다.)
 
 // 실패 보고 (2026-11-21): fetch/init 실패를 부모에 pdfcraft:failed로
 // 알린다 — 보고 없이는 호스트가 45초 워치독까지 기다렸다가 원인도
@@ -92,7 +97,8 @@ const bytes = new Uint8Array(total);
 let at = 0;
 for (const c of chunks) { bytes.set(c, at); at += c.length; }
 
-const wasm = await init({ module_or_path: bytes });
+const bindings = await import('./${glue}');
+const wasm = await bindings.default({ module_or_path: bytes });
 window.wasmBindings = bindings;
 dispatchEvent(new CustomEvent('TrunkApplicationStarted', { detail: { wasm } }));
 } catch (e) {
@@ -102,6 +108,14 @@ dispatchEvent(new CustomEvent('TrunkApplicationStarted', { detail: { wasm } }));
 `;
 writeFileSync(join(OUT, 'loader.js'), loader);
 
+// 셸의 로더 script는 절대 경로로 둔다 (2026-11-21): loader.js는 콘텐츠
+// 해시가 없는 파일명이라 배포 버전(?v=)이 유일한 캐시 무효화 수단인데,
+// 배포 버전 부착기(createVersioner)는 절대 경로 참조에만 ?v=를 붙이고
+// ./loader.js 같은 상대 경로는 건드리지 않는다. 상대 경로 시절에는
+// 손상·구버전 loader.js가 immutable 캐시에 영원히 고정돼 사용자
+// 브라우저에서만 편집기가 조용히 안 뜨는 사고가 났다 (배너 '엔진 시작
+// 시간 초과'). 이 index.html은 static-assets.json의 versioned에 들어
+// 있어 배포 때 /vendor/pdfcraft/loader.js?v=<AV>로 재작성된다.
 const shell = `<!doctype html>
 <html lang="en">
   <head>
@@ -114,7 +128,7 @@ const shell = `<!doctype html>
       canvas { width: 100%; height: 100%; display: block; outline: none; }
       @media (prefers-color-scheme: dark) { html, body { background: #19191c; } }
     </style>
-    <script type="module" src="./loader.js"></script>
+    <script type="module" src="/vendor/pdfcraft/loader.js"></script>
   </head>
   <body>
     <canvas id="pdfcraft"></canvas>

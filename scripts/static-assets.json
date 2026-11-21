@@ -575,6 +575,7 @@
     "/sheet-fortune.html",
     "/sheet.html",
     "/todo.html",
-    "/trace.html"
+    "/trace.html",
+    "/vendor/pdfcraft/index.html"
   ]
 }

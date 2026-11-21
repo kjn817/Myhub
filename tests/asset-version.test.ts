@@ -106,3 +106,39 @@ describe('deploy_full.py NODE_GEN 배선', () => {
     expect(deploy).not.toContain('avatars\\/[\\w-]+\\.webp')
   })
 })
+
+describe('pdfcraft 셸의 loader.js 버전 부착 (2026-11-21)', () => {
+  // 사고: loader.js는 콘텐츠 해시가 없는 파일명인데 셸(index.html)이
+  // versioned에 없어 배포 버전(?v=)이 붙지 않았고, 상대 경로(./loader.js)
+  // 라서 버전 부착기 정규식(절대 경로만)에도 안 걸렸다. 손상·구버전
+  // loader.js가 immutable 캐시에 영원히 고정돼 사용자 브라우저에서만
+  // 편집기가 조용히 안 뜨고 배너 '엔진 시작 시간 초과'만 떴다.
+  const INDEX = fs.readFileSync(
+    path.join(ROOT, 'public/vendor/pdfcraft/index.html'),
+    'utf-8',
+  )
+  const ver = createVersioner(ASSET_LIST, VER)
+
+  test('셸 index.html이 versioned에 있어 배포 때 본문이 재작성된다', () => {
+    expect(ASSET_LIST.versioned).toContain('/vendor/pdfcraft/index.html')
+  })
+
+  test('셸의 로더 script가 절대 경로라 버전 부착기가 ?v=를 붙인다', () => {
+    expect(INDEX).toContain('<script type="module" src="/vendor/pdfcraft/loader.js">')
+    expect(INDEX).not.toContain('src="./loader.js"')
+    expect(ver(INDEX)).toContain(
+      '<script type="module" src="/vendor/pdfcraft/loader.js?v=testv123">',
+    )
+  })
+
+  test('템플릿의 셸도 절대 경로를 쓴다 (다음 패키징 때 상대 경로로 회귀 방지)', () => {
+    const build = fs.readFileSync(
+      path.join(ROOT, 'scripts/build-pdfcraft-package.mjs'),
+      'utf-8',
+    )
+    expect(build).toContain(
+      '<script type="module" src="/vendor/pdfcraft/loader.js">',
+    )
+    expect(build).not.toContain("src=\"./loader.js\"")
+  })
+})
