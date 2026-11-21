@@ -161,7 +161,17 @@
       var mod = findModule(el.dataset.module);
       var titleEl = el.querySelector('.dt-title-text');
       var dotEl = el.querySelector('.dt-title-dot');
-      if (titleEl) titleEl.textContent = info && info.name ? info.name : mod ? mod.title : '';
+      // PDF: 편집기가 펼쳐져 있으면 엔진이 자체 문서 탭 줄에 문서명을
+      // 표시하므로 제목 줄의 문서명은 중복이다 (사용자 캡처 2026-11-21
+      // — 흰 제목 줄과 회색 탭 줄이 같은 이름을 두 번 보여 부자연스럽다).
+      // 접힌 상태(뷰어 — 탭 줄이 없다)나 접기 상태를 아직 모를 때만
+      // 제목을 표시한다. 저장 안 된 변경 점은 그대로 둔다.
+      var fold = officeFoldByWin.get(id);
+      var hideTitle =
+        el.dataset.module === 'pdf' &&
+        !!fold && fold.available && !fold.folded;
+      var name = info && info.name ? info.name : mod ? mod.title : '';
+      if (titleEl) titleEl.textContent = hideTitle ? '' : name;
       if (dotEl) dotEl.hidden = !(info && info.dirty);
     }
     function applyDocTitle(id) {
@@ -1835,6 +1845,9 @@
         officeFoldByWin.delete(found);
       }
       renderOfficeQuick(found);
+      // 접기 상태가 바뀌면 PDF 제목 표시 여부도 바뀐다 (펼침=탭 줄에
+      // 문서명이 있어 제목 줄은 비우고, 접힘=뷰어라 제목 줄이 보여준다).
+      applyDocTitle(found);
     }
     window.addEventListener('message', onOfficeFoldMessage);
 

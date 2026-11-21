@@ -561,6 +561,18 @@ body.dt-fullscreen .settings-btn { color: #fff; }
   background: #ffffff;
 }
 
+/* PDF: 엔진이 자체 문서 탭 줄(회색 #e9e9eb, 사용자 캡처 2026-11-21
+   실측)을 그린다. 흰 제목 줄이 얹히면 흰-회-흰 3단 띠가 돼
+   부자연스럽다 — 제목 줄을 탭 줄과 같은 회색으로 두면 두 줄이 하나의
+   탭 바 영역으로 읽히고, 흰 선택 탭이 아래 흰 메뉴 줄과 이어진다
+   (크롬 탭 방식). 활성·비활성 동일 — 비활성 표기는 신호등이 맡는다
+   (.dt-light 비활성 회색). 다른 오피스 앱은 엔진 탭 줄이 없어
+   흰 제목 줄(위 규칙)이 그대로 맞다. */
+.dt-window.dt-win-office[data-module="pdf"] .dt-titlebar,
+.dt-window.dt-win-office[data-module="pdf"].is-active .dt-titlebar {
+  background: #e9e9eb;
+}
+
 /* Finder: 바 좌측 208px는 사이드바 머티리얼이 바 높이까지 차오르고,
    세로 헤어라인만 이음매로 남는다. 폭은 사이드바의 border-box 폭
    (208px, 우측 테두리 1px 포함)과 같아야 한다.
