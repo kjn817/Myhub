@@ -225,3 +225,75 @@ describe('PDF 편집기 부팅 강건화', () => {
     expect(panelButton('다시 시도')).not.toBeNull()
   })
 })
+
+describe('PDF 오피스 호스트 메뉴 게시 (2026-11-21 공식 레이아웃 결정)', () => {
+  let setState: any
+  let setQuick: any
+
+  beforeEach(() => {
+    doc.body.innerHTML = ''
+    capturedDeps.length = 0
+    jest.clearAllMocks()
+    setState = jest.fn()
+    setQuick = jest.fn()
+    win.MyHubOfficeTabs = {
+      setState,
+      setQuick,
+      onCommand: jest.fn(),
+      onQuick: jest.fn(),
+      provideMenuItems: jest.fn(),
+    }
+  })
+
+  afterEach(() => {
+    delete win.MyHubOfficeTabs
+  })
+
+  test('편집기가 떠도 셸에 메뉴·탭을 게시하지 않고 인쇄 빠른 실행만 둔다', async () => {
+    const bodyEl = doc.createElement('div')
+    doc.body.appendChild(bodyEl)
+    const ctx: any = {
+      doc,
+      body: bodyEl,
+      file: { fileId: 5, name: '문서.pdf' },
+      minimalChrome: true,
+      chromeFold: null,
+      saveBtn: doc.createElement('button'),
+      clearBody: () => { bodyEl.innerHTML = '' },
+      contentUrl: () => '/api/drive/files/5/content',
+      fetchContent: jest.fn(() => Promise.resolve(new ArrayBuffer(0))),
+      fetchRaw: jest.fn(() => Promise.resolve({ ok: true })),
+      isCurrent: () => true,
+      isFolded: () => false,
+      setNote: jest.fn(),
+      setStatus: jest.fn(),
+      markDirty: jest.fn(),
+      setSaveHandler: jest.fn(),
+      onFoldChange: jest.fn(),
+      requestOpen: jest.fn(),
+      putContent: jest.fn(() => Promise.resolve(true)),
+      saveAsContent: jest.fn(() => Promise.resolve(true)),
+      showMessage: jest.fn(),
+    }
+    await pdfFormat.handlePdf(ctx)
+    const frame = bodyEl.querySelector('iframe.fv-pdf-frame')
+    win.dispatchEvent(
+      new win.MessageEvent('message', {
+        data: { type: 'myhub-pdf:ready', pages: 3 },
+        origin: win.location.origin,
+        source: frame.contentWindow,
+      }),
+    )
+    await new Promise((r) => setTimeout(r, 10))
+    expect(createHost).toHaveBeenCalledTimes(1)
+    // 엔진이 메뉴 바·모드 탭을 직접 그리므로 호스트는 셸에 게시하지 않는다.
+    // (예전 코드는 menus-state를 받아 setState로 메뉴를 올렸다.)
+    capturedDeps[0].onReady()
+    await new Promise((r) => setTimeout(r, 10))
+    // 제목 줄 인쇄 빠른 실행이 켜졌다는 것이 편집기 표면이 떴다는
+    // 증거다 (surface==='craft' && craftReady일 때만 on이 된다).
+    // tabsHost 모드에서는 상태 요소(.fv-pdf-state) 자체가 안 생긴다.
+    expect(setQuick).toHaveBeenCalledWith('pdf', { print: true })
+    expect(setState).not.toHaveBeenCalled()
+  })
+})

@@ -173,6 +173,7 @@ interface Harness {
   setRemote: (s: RemoteState) => void
   tabPosts: TabPost[]
   navigateCalls: string[]
+  navigateTargets: (string | null)[]
 }
 
 function makeApp(): Harness {
@@ -207,6 +208,7 @@ function makeApp(): Harness {
     },
   }
   const navigateCalls: string[] = []
+  const navigateTargets: (string | null)[] = []
   const h: Harness = {
     app: null as any,
     remote: mainOnlyState(),
@@ -215,14 +217,16 @@ function makeApp(): Harness {
     },
     tabPosts,
     navigateCalls,
+    navigateTargets,
   }
   const app = api.createApp({
     doc,
     win: fakeWin,
     storage: new MemoryStorage(),
     liveDeps: {
-      navigate: (url: string) => {
+      navigate: (url: string, _viewport: unknown, targetId?: string) => {
         navigateCalls.push(url)
+        navigateTargets.push(typeof targetId === 'string' && targetId ? targetId : null)
         return Promise.resolve({ status: 200, body: { ok: true, nav: 'ok', navStage: 'ok' } })
       },
       applyViewport: () => Promise.resolve({ status: 200, body: { ok: true, stage: 'ok' } }),
@@ -375,6 +379,64 @@ describe('browser 새 창→새 탭 연동', () => {
     await flush()
     expect(h.tabPosts).toHaveLength(0)
     await h.app.live.endLive()
+  })
+
+  test('라이브인 메인 탭을 닫으면 뷰가 팝업 탭으로 옮겨간다 (꺼지지 않는다, 2026-11-21)', async () => {
+    const h = makeApp()
+    await startLive(h)
+    h.setRemote(popupState())
+    await poll(h)
+    const tabs = h.app.getTabs()
+    const main = tabs.find((t: any) => t.remoteTargetId === 'page-1')
+    const popup = tabs.find((t: any) => t.remoteTargetId === 'page-2')
+    // 메인 탭을 활성화한 뒤 닫는다 — 옛 코드는 라이브를 통째로 껐다
+    h.app.activateTab(main.id)
+    await flush()
+    expect(h.app.getTabs().find((t: any) => t.id === main.id).live).toBe(true)
+    h.tabPosts.length = 0
+    h.app.closeTab(main.id)
+    await flush()
+    // 원격 close는 안 부른다 (메인 타깃은 영구 브라우저)
+    expect(h.tabPosts.filter((p) => p.action === 'close')).toHaveLength(0)
+    // 뷰는 팝업 탭으로 옮겨지고 라이브는 유지된다
+    expect(h.tabPosts).toContainEqual({ action: 'activate', targetId: 'page-2' })
+    const after = h.app.getTabs()
+    expect(after).toHaveLength(1)
+    expect(after[0].id).toBe(popup.id)
+    expect(after[0].live).toBe(true)
+    expect(h.app.live.isActive()).toBe(true)
+    await h.app.live.endLive()
+  })
+
+  test('팝업이 라이브일 때 go()는 팝업 타깃 id를 navigate에 싣는다 (2026-11-21)', async () => {
+    const h = makeApp()
+    await startLive(h)
+    h.setRemote(popupState())
+    await poll(h)
+    // 팝업이 라이브·활성 탭이다 (원격 활성이 page-2).
+    const liveTab = h.app.getTabs().find((t: any) => t.live)
+    expect(liveTab.remoteTargetId).toBe('page-2')
+    h.navigateCalls.length = 0
+    h.navigateTargets.length = 0
+    h.app.go('https://example.com/')
+    await flush()
+    // 이동이 활성 탭이 아니라 조작 중인 팝업 탭으로 간다 — 옛 코드는
+    // 타깃을 안 실어 서버가 활성 탭으로 갔고, 뉴스 팝업이 naver.com으로
+    // 덮어씌워졌다 (CDP 내역 [news, naver.com]으로 확정).
+    expect(h.navigateCalls).toEqual(['https://example.com/'])
+    expect(h.navigateTargets).toEqual(['page-2'])
+    await h.app.live.endLive()
+  })
+
+  test('라이브 탭을 닫을 때 이웃 탭이 없으면 뷰가 꺼진다', async () => {
+    const h = makeApp()
+    await startLive(h)
+    const main = h.app.getTabs()[0]
+    h.app.closeTab(main.id)
+    await flush()
+    expect(h.app.getTabs()).toHaveLength(1)
+    expect(h.app.getTabs()[0].url).toBeNull()
+    expect(h.app.live.isActive()).toBe(false)
   })
 
   test('재시작 후 라이브 탭은 URL이 같은 복원 탭에 즉시 다시 묶인다 (5단계)', async () => {
@@ -537,6 +599,7 @@ describe('browser 새 창→새 탭 연동', () => {
     expect(h.app.getTabs()).toHaveLength(2)
     // 시작 내비게이션 기록을 비운다 — 재시작 재이동만 본다.
     h.navigateCalls.length = 0
+    h.navigateTargets.length = 0
     // 크로뮴 재시작: 원격은 새 탭 하나뿐, 어떤 URL도 안 맞는다.
     // 네이티브 복원은 이 빌드에서 동작하지 않는다 (Session 미기록).
     const fresh: RemoteState = {
@@ -557,8 +620,10 @@ describe('browser 새 창→새 탭 연동', () => {
     expect(afterFirst).toHaveLength(2)
     expect(afterFirst.every((t: any) => t.remoteTargetId === null)).toBe(true)
     expect(afterFirst.find((t: any) => t.live).url).toBe('https://news.naver.com/article/123')
-    // 라이브 탭(팝업, 뉴스) URL로 한 번 이동한다.
+    // 라이브 탭(팝업, 뉴스) URL로 한 번 이동한다. 재시작 직후라
+    // 탭이 묶여 있지 않아 targetId는 null — 서버가 활성 탭으로 간다.
     expect(h.navigateCalls).toEqual(['https://news.naver.com/article/123'])
+    expect(h.navigateTargets).toEqual([null])
     // 두 번째 폴링: 라이브 탭이 새 메인에 묶이고, chrome:// 상태가
     // http URL을 덮지 않으며, 재이동은 반복되지 않는다.
     await poll(h)

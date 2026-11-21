@@ -115,6 +115,18 @@ function makeHost(api: any, doc: any, win: any, extra: any = {}) {
   return { host, onFallback, onBootProgress, fetchFn };
 }
 
+describe('pdfcraft 호스트 URL', () => {
+  test('APP_URL_HOSTED는 chrome 벗김 없이 APP_URL과 같다 (2026-11-21 공식 레이아웃 결정)', () => {
+    const { api } = loadPdf();
+    // 오피스도 Finder와 같은 전체 레이아웃을 쓴다 — 모드 탭·메뉴 바·
+    // 모든 도구 사이드바를 엔진이 직접 그린다. chrome 플래그를 다시
+    // 붙이면 오피스 PDF가 벗겨진 화면으로 돌아간다.
+    expect(api.APP_URL_HOSTED).toBe(api.APP_URL);
+    expect(api.APP_URL_HOSTED).not.toContain('chrome=');
+    expect(api.APP_URL_HOSTED).toContain('host=parent');
+  });
+});
+
 describe('pdfcraft 부팅 게이트 프리패치', () => {
   test('프리패치가 끝나기 전에는 src가 비어 있고 완료 후에 붙는다', async () => {
     const { win, doc, api } = loadPdf();

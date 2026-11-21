@@ -214,6 +214,44 @@ describe('데스크톱 셸 — 창 생성과 keep-alive', () => {
     expect(win.h).toBe(620)
   })
 
+  test('브라우저를 작게 줄여 닫았다 다시 열면 최대화되지 않고 닫기 전 크기로 열린다 (2026-11-21)', () => {
+    const storage = new MemoryStorage()
+    const m = makeManager(storage)
+    m.openModule('browser')
+    expect(m.getState().windows[0].mode).toBe('full')
+
+    // 최대화 해제 → 이전 크기(1080×700)로 돌아간다
+    m.toggleMaximize('browser')
+    const small = m.getState().windows.find((w: any) => w.module === 'browser')
+    expect(small.mode).toBeNull()
+    expect(small.w).toBe(1080)
+    expect(small.h).toBe(700)
+
+    winEl('browser').querySelector('.dt-btn-close').click()
+    expect(m.getState().windows).toHaveLength(0)
+
+    // 다시 열면 닫기 전 크기로 열리고, 최대화가 강제되지 않는다
+    m.openModule('browser')
+    const reopened = m.getState().windows.find((w: any) => w.module === 'browser')
+    expect(reopened.mode).toBeNull()
+    expect(reopened.w).toBe(1080)
+    expect(reopened.h).toBe(700)
+  })
+
+  test('브라우저를 최대화 상태로 닫았다 다시 열면 최대화로 복원된다 (2026-11-21)', () => {
+    const storage = new MemoryStorage()
+    const m = makeManager(storage)
+    m.openModule('browser')
+    expect(m.getState().windows[0].mode).toBe('full')
+
+    winEl('browser').querySelector('.dt-btn-close').click()
+    m.openModule('browser')
+
+    const reopened = m.getState().windows.find((w: any) => w.module === 'browser')
+    expect(reopened.mode).toBe('full')
+    expect(reopened.w).toBe(VIEWPORT.w)
+  })
+
   test('keep-alive: 이미 열린 모듈을 다시 열어도 iframe이 교체·재생성되지 않는다', () => {
     const storage = new MemoryStorage()
     const m = makeManager(storage)

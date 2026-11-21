@@ -338,7 +338,7 @@
         });
         if (!restoreTab) restoreTab = activeTab();
         if (restoreTab && restoreTab.url) {
-          live.enterLive(restoreTab.url);
+          live.enterLive(restoreTab.url, restoreTab.remoteTargetId || null);
         }
       }
       // URL·탐색 상태는 원격 활성 타깃을 가진 탭에 반영한다. tabs가 없는
@@ -1576,19 +1576,25 @@
       // 원격 팝업 탭이면 원격도 닫는다 (메인 타깃은 닫지 않는다 — 영구 브라우저).
       var isPopup = !!(tab.remoteTargetId && tab.remoteTargetId !== mainTargetId);
       if (isPopup && live.isActive()) closeRemoteTab(tab.remoteTargetId);
-      // 뷰를 소유한 탭을 접으면 뷰도 꺼진다 — 단, 팝업 탭이면 메인 탭으로
-      // 뷰를 옮긴다 (팝업을 닫고 원래 페이지로 돌아가는 것이 자연스럽다).
+      // 뷰를 소유한 탭을 접으면 뷰를 이웃 탭으로 옮긴다 — 팝업 탭이면
+      // 메인 탭으로, 메인 탭이면 원격에 묶인 이웃 탭으로 (팝업을 닫고
+      // 원래 페이지로 돌아가는 것이 자연스럽다). 이웃이 없을 때만
+      // 뷰를 끈다. 옛 코드는 팝업 탭 닫기에만 폴백이 있어, 라이브인
+      // 메인 탭을 닫으면 뉴스 탭이 남아 있어도 화면이 통째로 꺼졌다
+      // (2026-11-21 사용자 보고 — jsdom 시퀀스 3 재현).
       if (id === liveTabId && live.isActive()) {
         var fallback = null;
-        if (isPopup) {
+        tabs.forEach(function (t) {
+          // remoteTargetId가 null인 탭은 제외한다 — mainTargetId도
+          // 아직 null(상태 폴링 전)이면 null === null이 되어 묶이지
+          // 않은 빈 탭을 폴백으로 잡아버린다 (2026-11-21 jest 1건
+          // 실패로 발견: 빈 탭 포커스 요청이 안 나갔다).
+          if (t.id !== id && t.remoteTargetId && t.remoteTargetId === mainTargetId) fallback = t;
+        });
+        if (!fallback) {
           tabs.forEach(function (t) {
-            if (t.id !== id && t.remoteTargetId === mainTargetId) fallback = t;
+            if (t.id !== id && t.remoteTargetId) fallback = t;
           });
-          if (!fallback) {
-            tabs.forEach(function (t) {
-              if (t.id !== id && t.remoteTargetId) fallback = t;
-            });
-          }
         }
         if (fallback) {
           liveTabId = fallback.id;
@@ -1628,12 +1634,17 @@
       // 원격 탭에서 다시 켤 때는 그 타깃을 먼저 앞으로 불러온 뒤 이동한다
       // (안 그러면 이동이 지금 보이는 다른 탭에 가버린다).
       var tab = activeTab();
+      // 이동 대상은 조작 중인 활성 탭의 타깃으로 명시한다 — 서버가
+      // 활성 탭으로만 가면 뉴스 팝업이 떠 있을 때 엉뚱한 탭을
+      // 덮어버린다 (2026-11-21 사용자 보고: 뉴스 탭이 naver.com으로
+      // 재이동됨, CDP 내역으로 확정).
+      var targetId = tab && tab.remoteTargetId ? tab.remoteTargetId : null;
       if (tab && tab.remoteTargetId && !live.isActive()) {
         return activateRemoteTab(tab.remoteTargetId).then(function () {
-          return live.enterLive(url);
+          return live.enterLive(url, targetId);
         });
       }
-      return live.enterLive(url);
+      return live.enterLive(url, targetId);
     }
 
     /* 주소로 이동: 영구 브라우저라 켜져 있으면 이동만 지시하고, 꺼져

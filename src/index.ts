@@ -253,12 +253,17 @@ const LOGIN_CSP =
 // 있어 script-src/default-src는 걸 수 없지만, 스크립트와 무관한
 // fetch 지시자는 전부 제한한다. 실측 근거 (2026-11-15):
 // - img-src blob:: 메모가 붙여넣은 이미지를 blob URL로 띄운다.
-// - connect-src 'self': 세 페이지의 fetch는 전부 /api/* (외부 호출 0건).
+// - connect-src 'self' blob:: 이름 없는 .html도 이 CSP를 받는데, 그중
+//   /vendor/* 크래프트 엔진 페이지는 부팅 게이트가 Blob URL로 넘긴
+//   WASM 조각을 fetch로 받는다. blob:이 없으면 로더가 "Failed to fetch"로
+//   죽어 ready가 안 오고 45초 워치독이 배너를 띄운다 (2026-11-21 PDF
+//   편집기 미표시 사고 — 로컬 하네스는 CSP가 없어 재현이 안 됐다).
+//   blob: URL은 동일 출처에서만 만들 수 있어 외부 유출 경로가 아니다.
 // - frame-src 'self': agent의 iframe은 src 없는 미리보기 틀(about:blank).
 // - style-src 'unsafe-inline': 인라인 스타일 속성·블록을 쓰므로 유지하고
 //   외부 스타일시트만 차단한다.
 const GENERAL_HTML_CSP =
-  "img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; media-src 'self' blob:; frame-src 'self'; worker-src 'self'; manifest-src 'self'; style-src 'self' 'unsafe-inline'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'self'; upgrade-insecure-requests"
+  "img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' blob:; media-src 'self' blob:; frame-src 'self'; worker-src 'self'; manifest-src 'self'; style-src 'self' 'unsafe-inline'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'self'; upgrade-insecure-requests"
 // 파일럿 enforce는 /desktop.html만: 인라인 스크립트 0·속성형 핸들러 0·
 // <style> 블록 0 (실측). 자기 출처 + lucide CDN 외 스크립트 실행을 차단한다.
 // - style-src-attr 'unsafe-inline': 정적 style 속성 1곳(브랜드 로고 img) 때문.

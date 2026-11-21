@@ -93,6 +93,9 @@
       zCounter: 0,
       spaces: [1],
       activeSpace: 1,
+      // 닫은 창 rect 기억 (2026-11-21): moduleId -> {x,y,w,h,mode,prev}.
+      // 닫을 때 닫기 전 크기를 남겨 다시 열면 같은 크기로 복원한다.
+      closedRects: {},
     };
   }
 
@@ -127,6 +130,38 @@
     return windows.map(cloneWindow);
   }
 
+  /** 닫힌 창 rect 항목 1개를 검증·복제한다 (무효하면 null). */
+  function cloneClosedRect(entry) {
+    if (!entry || typeof entry !== 'object') return null;
+    if (
+      !isFiniteNumber(entry.x) ||
+      !isFiniteNumber(entry.y) ||
+      !isFiniteNumber(entry.w) ||
+      !isFiniteNumber(entry.h)
+    ) {
+      return null;
+    }
+    return {
+      x: entry.x,
+      y: entry.y,
+      w: entry.w,
+      h: entry.h,
+      mode: entry.mode === 'full' || entry.mode === 'zoom' ? entry.mode : null,
+      prev: clonePrev(entry.prev),
+    };
+  }
+
+  /** 닫힌 창 rect 맵 전체를 검증·복제한다 (무효 항목은 버린다). */
+  function cloneClosedRects(map) {
+    var out = {};
+    if (!map || typeof map !== 'object') return out;
+    Object.keys(map).forEach(function (k) {
+      var c = cloneClosedRect(map[k]);
+      if (c) out[k] = c;
+    });
+    return out;
+  }
+
   /** state 골격(창 앱 필드)의 유지한 채 windows만 변경한 앱 state. */
   function withWindows(state, windows, activeId, zCounter) {
     return {
@@ -136,6 +171,7 @@
       zCounter: typeof zCounter === 'number' ? zCounter : state.zCounter,
       spaces: state.spaces.slice(),
       activeSpace: state.activeSpace,
+      closedRects: cloneClosedRects(state.closedRects),
     };
   }
 
@@ -220,15 +256,29 @@
     }
 
     var offset = state.windows.length * CASCADE_STEP;
-    var rect = clampRect(
-      {
-        x: (viewport.w - mod.defW) / 2 + offset,
-        y: (viewport.h - mod.defH) / 2 + offset,
-        w: mod.defW,
-        h: mod.defH,
-      },
-      viewport
-    );
+    // 닫기 전 크기를 기억해 다시 연다 (2026-11-21 사용자 지적: 작게
+    // 줄여 닫아도 다시 열면 항상 최대화였다). 기억이 없으면 기본
+    // 크기·중앙 배치. 뷰포트가 바뀐 환경(모니터 교체)에서도 clamp로
+    // 맞추므로 어떤 환경에서도 동작한다.
+    var closed = state.closedRects ? cloneClosedRect(state.closedRects[moduleId]) : null;
+    var rect;
+    var mode = null;
+    var prev = null;
+    if (closed) {
+      rect = clampRect({ x: closed.x, y: closed.y, w: closed.w, h: closed.h }, viewport);
+      mode = closed.mode;
+      prev = clonePrev(closed.prev);
+    } else {
+      rect = clampRect(
+        {
+          x: (viewport.w - mod.defW) / 2 + offset,
+          y: (viewport.h - mod.defH) / 2 + offset,
+          w: mod.defW,
+          h: mod.defH,
+        },
+        viewport
+      );
+    }
     var zCounter = state.zCounter + 1;
     var win = {
       id: mod.id,
@@ -240,8 +290,8 @@
       z: zCounter,
       minimized: false,
       space: state.activeSpace,
-      mode: null,
-      prev: null,
+      mode: mode,
+      prev: prev,
     };
     return withWindows(state, cloneWindows(state.windows).concat([win]), win.id, zCounter);
   }
@@ -344,12 +394,27 @@
   function closeWindow(state, id) {
     var idx = findWindowIndex(state, id);
     if (idx < 0) return state;
+    var closing = state.windows[idx];
     var windows = cloneWindows(state.windows).filter(function (w) {
       return w.id !== id;
     });
     var activeId = state.activeId;
     if (activeId === id) activeId = pickActiveId(windows, state.activeSpace);
-    return withWindows(state, windows, activeId);
+    var next = withWindows(state, windows, activeId);
+    // 닫기 전 rect·모드를 기억한다 — 다시 열 때 같은 크기로 복원한다
+    // (2026-11-21). withWindows가 옛 closedRects를 보존하므로 새 맵을
+    // 만들어 덮는다 (입력 state는 건드리지 않는다 — 불변성 유지).
+    var closedRects = cloneClosedRects(state.closedRects);
+    closedRects[closing.module] = {
+      x: closing.x,
+      y: closing.y,
+      w: closing.w,
+      h: closing.h,
+      mode: closing.mode === 'full' || closing.mode === 'zoom' ? closing.mode : null,
+      prev: clonePrev(closing.prev),
+    };
+    next.closedRects = closedRects;
+    return next;
   }
 
   function moveWindow(state, id, x, y, viewport) {
@@ -529,6 +594,16 @@
     }
     if (!activeOk) activeId = pickActiveId(windows, activeSpace);
 
+    // 닫은 창 rect 기억 복원 (2026-11-21): 모르는 모듈·무효 항목은
+    // 버린다. 필드가 없는 옛 저장 상태(v2 초기)는 빈 맵으로 시작한다.
+    var rawClosed = raw.closedRects && typeof raw.closedRects === 'object' ? raw.closedRects : {};
+    var closedRects = {};
+    Object.keys(rawClosed).forEach(function (k) {
+      if (!findModule(k)) return;
+      var c = cloneClosedRect(rawClosed[k]);
+      if (c) closedRects[k] = c;
+    });
+
     return {
       version: VERSION,
       windows: windows,
@@ -536,6 +611,7 @@
       zCounter: zCounter,
       spaces: spaces,
       activeSpace: activeSpace,
+      closedRects: closedRects,
     };
   }
 

@@ -84,6 +84,7 @@ describe('상수와 모듈 정의 (설계 4절)', () => {
 
   test('emptyState는 빈 창 목록·activeId null·zCounter 0·스페이스 1개다', () => {
     // 운영 원본: 스페이스는 객체가 아니라 번호 목록이다.
+    // closedRects: 닫은 창 크기 기억 (2026-11-21) — 빈 맵으로 시작한다.
     expect(S.emptyState()).toEqual({
       version: 2,
       windows: [],
@@ -91,6 +92,7 @@ describe('상수와 모듈 정의 (설계 4절)', () => {
       zCounter: 0,
       spaces: [1],
       activeSpace: 1,
+      closedRects: {},
     })
   })
 })
@@ -523,5 +525,103 @@ describe('restoreWindows — 늦은 창 복원 (성능 5라운드, 부팅 init �
       next = R.restoreWindows(s, wins, VP)
     }).not.toThrow()
     expect(next.windows).toHaveLength(2)
+  })
+})
+
+describe('닫은 창 크기 기억 — 닫았다 다시 열면 같은 크기 (2026-11-21)', () => {
+  test('닫은 창의 rect·위치를 기억해 다시 열면 그대로 복원한다', () => {
+    let s = S.openModule(S.emptyState(), 'memo', VP)
+    s = S.resizeWindow(s, 'memo', { x: 50, y: 60, w: 900, h: 500 }, VP)
+    s = S.closeWindow(s, 'memo')
+    expect(s.windows).toHaveLength(0)
+    expect(s.closedRects.memo).toEqual({ x: 50, y: 60, w: 900, h: 500, mode: null, prev: null })
+
+    s = S.openModule(s, 'memo', VP)
+    const win = s.windows[0]
+    expect(win.x).toBe(50)
+    expect(win.y).toBe(60)
+    expect(win.w).toBe(900)
+    expect(win.h).toBe(500)
+    expect(win.mode).toBeNull()
+  })
+
+  test('최대화 상태로 닫으면 다시 열 때도 최대화 상태로 복원한다', () => {
+    let s = S.openModule(S.emptyState(), 'browser', VP)
+    // 최대화 진입: prev에 닫기 전 크기를 남기고 full rect로
+    s = S.setWindowMode(s, 'browser', 'full', { x: 100, y: 100, w: 1080, h: 700 })
+    s = S.resizeWindow(s, 'browser', { x: 0, y: 0, w: 1440, h: 900 }, VP)
+    s = S.closeWindow(s, 'browser')
+    expect(s.closedRects.browser.mode).toBe('full')
+    expect(s.closedRects.browser.prev).toEqual({ x: 100, y: 100, w: 1080, h: 700 })
+
+    s = S.openModule(s, 'browser', VP)
+    const win = s.windows[0]
+    expect(win.mode).toBe('full')
+    expect(win.w).toBe(1440)
+    expect(win.prev).toEqual({ x: 100, y: 100, w: 1080, h: 700 })
+  })
+
+  test('기억이 없으면 기본 크기·중앙 배치로 열린다', () => {
+    const s = S.openModule(S.emptyState(), 'memo', VP)
+    const win = s.windows[0]
+    expect(win.w).toBe(880)
+    expect(win.h).toBe(620)
+    expect(win.mode).toBeNull()
+  })
+
+  test('기억된 크기는 뷰포트가 바뀌어도 clamp로 맞춘다', () => {
+    let s = S.openModule(S.emptyState(), 'memo', VP)
+    s = S.resizeWindow(s, 'memo', { x: 50, y: 60, w: 1200, h: 800 }, VP)
+    s = S.closeWindow(s, 'memo')
+    // 작은 모니터(뷰포트 800×600)에서 다시 열면 뷰포트 안에 들어간다
+    s = S.openModule(s, 'memo', { w: 800, h: 600 })
+    const win = s.windows[0]
+    expect(win.w).toBe(800)
+    expect(win.h).toBe(600)
+  })
+
+  test('serialize → parse 왕복에서 닫은 창 기억이 보존된다', () => {
+    let s = S.openModule(S.emptyState(), 'memo', VP)
+    s = S.resizeWindow(s, 'memo', { x: 50, y: 60, w: 900, h: 500 }, VP)
+    s = S.closeWindow(s, 'memo')
+    const restored = S.parse(S.serialize(s), VP)
+    expect(restored.closedRects.memo).toEqual({ x: 50, y: 60, w: 900, h: 500, mode: null, prev: null })
+    // 복원된 상태에서도 다시 열면 같은 크기다
+    const reopened = S.openModule(restored, 'memo', VP)
+    expect(reopened.windows[0].w).toBe(900)
+    expect(reopened.windows[0].h).toBe(500)
+  })
+
+  test('parse는 무효한 닫은 창 기억을 버리고 필드가 없으면 빈 맵으로 시작한다', () => {
+    const raw = JSON.stringify({
+      version: 2,
+      windows: [],
+      activeId: null,
+      zCounter: 0,
+      spaces: [1],
+      activeSpace: 1,
+      closedRects: {
+        memo: { x: 50, y: 60, w: 900, h: 500, mode: null, prev: null },
+        ghost: { x: 0, y: 0, w: 100, h: 100, mode: null, prev: null },
+        todo: { x: NaN, y: 0, w: 100, h: 100, mode: null, prev: null },
+      },
+    })
+    const parsed = S.parse(raw, VP)
+    expect(Object.keys(parsed.closedRects)).toEqual(['memo'])
+
+    const legacy = S.parse(
+      JSON.stringify({ version: 2, windows: [], activeId: null, zCounter: 0, spaces: [1], activeSpace: 1 }),
+      VP
+    )
+    expect(legacy.closedRects).toEqual({})
+  })
+
+  test('closeWindow는 입력을 변형하지 않는다 (기억 맵도 새로 만든다)', () => {
+    const s = S.openModule(S.emptyState(), 'memo', VP)
+    const snapshot = JSON.parse(JSON.stringify(s))
+    const next = S.closeWindow(s, 'memo')
+    expect(s).toEqual(snapshot)
+    expect(next.closedRects).not.toBe(s.closedRects)
+    expect(next.closedRects.memo).toBeDefined()
   })
 })

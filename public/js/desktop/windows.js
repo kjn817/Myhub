@@ -3288,11 +3288,16 @@
         commit(stateApi.setActiveSpace(state, before.space));
       }
       var isNew = !before;
+      // 닫기 전 크기를 기억한 모듈은 그 크기로 복원한다 — 기본 전체화면
+      // 최대화는 기억이 없을 때(처음 여는 경우)에만 적용한다 (2026-11-21
+      // 사용자 지적: 작게 줄여 닫아도 다시 열면 항상 최대화였다).
+      // 기억은 openModule 전에 읽는다 (열기가 state를 바꾸므로).
+      var hadClosed = !!(state.closedRects && state.closedRects[id]);
       commit(stateApi.openModule(state, id, getViewport()));
       // 기본 전체화면 모듈(브라우저)은 새로 열 때 바로 최대화한다
       // (2026-11-12 사용자 지적: 브라우저가 작게 열려 원격 화면이 짤림).
       // 이미 열려 있는 창을 다시 여는 경우(복원)는 건드리지 않는다.
-      if (isNew) {
+      if (isNew && !hadClosed) {
         var mod = findModule(id);
         if (mod && mod.defMode === 'full') {
           var vp = getViewport();

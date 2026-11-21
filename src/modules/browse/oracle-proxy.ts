@@ -294,9 +294,9 @@ export function registerOracleProxyRoutes(app: Hono<{ Bindings: Env }>): void {
   app.post('/navigate', async (c) => {
     const cfg = oracleConfigOf(c.env)
     if (!cfg) return c.json({ ok: false, error: 'ORACLE_NOT_CONFIGURED' }, 503)
-    let body: { url?: unknown; viewport?: unknown } = {}
+    let body: { url?: unknown; viewport?: unknown; targetId?: unknown } = {}
     try {
-      body = (await c.req.json()) as { url?: unknown; viewport?: unknown }
+      body = (await c.req.json()) as { url?: unknown; viewport?: unknown; targetId?: unknown }
     } catch {
       return c.json({ ok: false, error: 'INVALID_URL' }, 400)
     }
@@ -311,6 +311,13 @@ export function registerOracleProxyRoutes(app: Hono<{ Bindings: Env }>): void {
     if (!validated.ok) return c.json({ ok: false, error: 'INVALID_URL' }, 400)
     const targetUrl = validated.url
     const viewport = parseViewport(body.viewport)
+    // 이동시킬 탭 — 셸이 조작 중인 라이브 탭의 원격 타깃 id. 문자열만
+    // 받으며, navigateSession이 getTargets 목록 안에서만 찾으므로
+    // 목록 밖의 id는 활성 탭 폴백으로 간다 (임의 타깃 지정 불가).
+    const targetId =
+      typeof body.targetId === 'string' && body.targetId.length > 0 && body.targetId.length <= 128
+        ? body.targetId
+        : undefined
     const ran = await runCdpWithVersionRetry(
       c,
       cfg,
@@ -318,6 +325,7 @@ export function registerOracleProxyRoutes(app: Hono<{ Bindings: Env }>): void {
         navigateSession(gate.directWs, targetUrl, defaultCdpConnect, {
           headers: gate.secretHeaders,
           viewport,
+          targetId,
         }),
       (nav) => !nav.ok && nav.stage === 'connect',
     )

@@ -345,7 +345,11 @@ export function viewportDsf(viewport: ViewportSize | undefined): number {
 
 /**
  * 세션의 페이지 타깃에 targetUrl 이동을 지시한다.
- * 이동 대상은 사용자가 보고 있는 활성(visible) 탭이다 (2026-11-16
+ * 이동 대상은 opts.targetId가 가리키는 탭이다 (2026-11-21: 셸이
+ * 조작 중인 라이브 탭의 타깃을 명시한다 — 뉴스 팝업이 떠 있는
+ * 상태에서 복원 이동이 활성 탭으로 가서 뉴스 탭을 naver.com으로
+ * 바꿔버린 사고의 수정). targetId가 없거나 목록에 없으면 기존
+ * 동작대로 사용자가 보고 있는 활성(visible) 탭으로 간다 (2026-11-16
  * QA 4차: 첫 타깃을 이동시키던 기존 코드는 숨은 DuckDuckGo 탭을
  * 이동시키고 보던 naver.com 탭을 닫아버려, 뒤로가기가 naver.com이
  * 아니라 DuckDuckGo로 갔다). /state·뒤로/앞으로와 같은 attachActivePage를
@@ -360,7 +364,14 @@ export async function navigateSession(
   webSocketDebuggerUrl: string,
   targetUrl: string,
   connect: CdpConnectFn = defaultCdpConnect,
-  opts: { headers?: Record<string, string>; timeoutMs?: number; viewport?: ViewportSize } = {}
+  opts: {
+    headers?: Record<string, string>
+    timeoutMs?: number
+    viewport?: ViewportSize
+    /** 이동시킬 페이지 타깃 id — 셸이 조작 중인 라이브 탭의 타깃.
+     *  목록에 있으면 그 탭으로, 없으면 활성 탭 폴백이다. */
+    targetId?: string
+  } = {}
 ): Promise<NavigateResult> {
   const viewport = opts.viewport
   let phase: NavigateStage = 'targets'
@@ -412,9 +423,28 @@ export async function navigateSession(
       let sessionId: string
       if (pages.length > 0) {
         phase = 'attach'
-        const attached = await attachActivePage(call, pages)
-        if (!attached.ok) return directNavigate('attach')
-        sessionId = attached.sessionId
+        // targetId가 목록에 있으면 그 탭으로 직접 붙는다 — 활성 탭
+        // 프로브를 거치지 않는다 (뉴스 팝업이 떠 있을 때 복원 이동이
+        // 활성 탭으로 가서 뉴스 탭을 덮어버린 사고의 수정, 2026-11-21).
+        // 목록에 없으면 기존 활성 탭 폴백이다.
+        const wanted = opts.targetId ? pages.find((t) => t.targetId === opts.targetId) : undefined
+        if (wanted) {
+          let attachReply: CdpReply
+          try {
+            attachReply = await call('Target.attachToTarget', { targetId: wanted.targetId, flatten: true })
+          } catch {
+            return directNavigate('attach')
+          }
+          const direct = !attachReply.error
+            ? ((attachReply.result as { sessionId?: unknown } | undefined)?.sessionId as string | undefined) ?? null
+            : null
+          if (!direct) return directNavigate('attach')
+          sessionId = direct
+        } else {
+          const attached = await attachActivePage(call, pages)
+          if (!attached.ok) return directNavigate('attach')
+          sessionId = attached.sessionId
+        }
         // 다른 페이지 타깃은 닫지 않는다 (2026-11-19 변경 — 2026-11-14의
         // 일괄 닫기는 폐기). 팝업은 이제 셸 탭이 되어 탭 전환으로 돌아올
         // 수 있으므로 주소창이 탈출구일 필요가 없다. 비서 읽기용 임시 탭은

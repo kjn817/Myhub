@@ -179,10 +179,14 @@
   }
 
   /* 영구 탭 이동: Promise<{ status, body }> (테스트 주입 지난과 같은 모양) */
-  function defaultNavigate(url, viewport) {
+  function defaultNavigate(url, viewport, targetId) {
     if (typeof fetch !== 'function') return Promise.resolve({ status: 0, body: null });
     var init = { method: 'POST', headers: { 'Content-Type': 'application/json' } };
     var payload = { url: url };
+    // 이동시킬 탭 — 셸이 조작 중인 라이브 탭의 원격 타깃 id. 없으면
+    // 서버가 활성 탭으로 간다 (뉴스 팝업이 떠 있을 때 복원 이동이
+    // 활성 탭으로 가서 뉴스 탭을 덮어버린 사고의 수정, 2026-11-21).
+    if (typeof targetId === 'string' && targetId) payload.targetId = targetId;
     // stage 크기를 보내 원격 뷰포트를 맞춘다 (2026-11-12: 기본
     // 1280x720이 창보다 넓으면 원격 화면이 짤린다).
     if (viewport && viewport.width > 0 && viewport.height > 0) {
@@ -352,8 +356,10 @@
    * doc에서 #bwLiveFrame/#bwNoticeCard/#bwNoticeMsg/#bwNoticeClose와
    * #bwLockCard/#bwLockForm/#bwLockPassword/#bwLockConfirm/#bwLockMsg/
    * #bwLockSubmit/#bwLockClose/#bwLockTitle/#bwLockDesc를 찾는다 (없으면
-   * 해당 요소만 비활성). navigate(url, viewport)는 Promise<{status, body}>
-   * 테스트 주입 지난. applyViewport(viewport)는 이동 없는 뷰포트 적용
+   * 해당 요소만 비활성). navigate(url, viewport, targetId?)는
+   * Promise<{status, body}> 테스트 주입 지난 — targetId는 이동시킬
+   * 원격 타깃 id (없으면 서버가 활성 탭으로 간다).
+   * applyViewport(viewport)는 이동 없는 뷰포트 적용
    * (2026-11-15, 같은 모양의 테스트 주입 지난). checkUnlock()·
    * submitUnlock(mode, password)·setQuality(payload)도 같은 모양의
    * 테스트 주입 지난. pollDelayMs는 제출 후 상태 폴링 간격(기본 5초).
@@ -428,6 +434,7 @@
     var liveGen = 0; // 이동 응답이 늦게 도착해 종료 후에 상태를 건드리지 않기 위한 지난 번호
     var lockMode = 'unlock'; // 'unlock' | 'setup' — 카드가 보여주는 모드
     var pendingUrl = null; // 잠금 때문에 못 간 주소 (풀리면 이동한다)
+    var pendingTargetId = null; // pendingUrl과 함께 갈 이동 대상 타깃 id
     var lockBusy = false; // 제출 진행 중 (중복 제출 방지)
     /* 뷰포트 적용 상태 (2026-11-15): 마지막으로 적용된 크기·리사이즈
        디바운스 타이머·백오프 재시도 타이머·stage 관찰자. */
@@ -925,8 +932,10 @@
           if (res && res.status === 200 && body && body.configured && body.unlocked) {
             setLockBusy(false);
             var url = pendingUrl;
+            var tid = pendingTargetId;
             pendingUrl = null;
-            enterLive(url);
+            pendingTargetId = null;
+            enterLive(url, tid);
             return;
           }
           pollUnlocked(gen, tries + 1);
@@ -961,8 +970,10 @@
           // iframe을 킨다).
           setLockBusy(false);
           var url = pendingUrl;
+          var tid = pendingTargetId;
           pendingUrl = null;
-          enterLive(url);
+          pendingTargetId = null;
+          enterLive(url, tid);
           return;
         }
         if (res && res.status === 423) {
@@ -992,6 +1003,7 @@
       liveGen += 1; // 진행 중인 폴링·제출 응답을 무효화한다
       liveState = 'off';
       pendingUrl = null;
+      pendingTargetId = null;
       clearLockInputs();
       setLockBusy(false);
       onChange();
@@ -1001,18 +1013,19 @@
        (url이 있으면 이동까지 성공했다) 때만 true. 주인(browser.js)의
        최근 방문 기록처럼 "성공한 이동"만 붙는 위젯인 등 값으로
        (가른다 실패한 주소를 방문 기록에 않기 위해서다). */
-    function enterLive(url) {
+    function enterLive(url, targetId) {
       var alreadyOn = liveState === 'on';
       if (alreadyOn) {
         if (!url) return Promise.resolve(true);
         var viewport = measureViewport();
         var gen = liveGen;
-        return navigate(url, viewport).then(function (res) {
+        return navigate(url, viewport, targetId).then(function (res) {
           if (gen !== liveGen) return false;
           return handleNavigateResult(res, viewport, gen);
         });
       }
       pendingUrl = url || null;
+      pendingTargetId = typeof targetId === 'string' && targetId ? targetId : null;
       var startGen = ++liveGen;
       // LUKS 잠금 확인 (2026-11-15): 볼륨이 잠겨 있으면 iframe을 켜지
       // 않고 암호 카드를 띄운다. 언록됨·미구성(503)·조회 실패는 기존
@@ -1031,7 +1044,7 @@
             return false;
           }
         }
-        return startLive(url, startGen);
+        return startLive(url, startGen, pendingTargetId);
       });
     }
 
@@ -1194,7 +1207,7 @@
     /* iframe을 켜고 url이 있으면 이동한다. enterLive의 잠금 검사 통과 후.
        url이 없어도 뷰포트는 맞춘다 (2026-11-15: 세션 복원 뒤 navigate가
        없으면 override가 적용되지 않아 원격이 절반 크기로 보였다). */
-    function startLive(url, gen) {
+    function startLive(url, gen, targetId) {
       var viewport = measureViewport();
       liveState = 'on';
       // 저장된 수동 화질이 있으면 폴링 성공 시 POST로 다시 적용한다
@@ -1214,7 +1227,7 @@
         if (viewport) applyViewportNow(viewport);
         return Promise.resolve(true);
       }
-      return navigate(url, viewport).then(function (res) {
+      return navigate(url, viewport, targetId).then(function (res) {
         if (gen !== liveGen) return false;
         return handleNavigateResult(res, viewport, gen);
       });

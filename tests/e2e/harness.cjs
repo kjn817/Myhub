@@ -69,8 +69,9 @@ function assertNear(actual, expected, tol, msg) {
 //     null을 반환하면 기본 스텁으로 폴백한다.
 //   fixtures: { '/probe/blank.hwpx': '<절대 경로>' } — 정적 파일 별칭
 //   driveFiles: /api/drive/list?folder_id=... 에 실을 파일 목록
+//   extraHeaders: 정적·fixture 응답에 덧붙일 헤더 (예: 배포 CSP 재현)
 function createServer(opts = {}) {
-  const { onApi, fixtures = {}, driveFiles = [] } = opts;
+  const { onApi, fixtures = {}, driveFiles = [], extraHeaders = {} } = opts;
   const server = http.createServer((req, res) => {
     const [urlPath, query = ''] = req.url.split('?');
     const p = decodeURIComponent(urlPath);
@@ -83,7 +84,7 @@ function createServer(opts = {}) {
     if (fixtures[p]) {
       const file = fixtures[p];
       if (!fs.existsSync(file)) { res.writeHead(404); res.end(); return; }
-      res.writeHead(200, { 'Content-Type': MIME[path.extname(file)] || 'application/octet-stream' });
+      res.writeHead(200, { 'Content-Type': MIME[path.extname(file)] || 'application/octet-stream', ...extraHeaders });
       fs.createReadStream(file).pipe(res);
       return;
     }
@@ -179,7 +180,7 @@ function createServer(opts = {}) {
     // 자산은 immutable — 프리패치가 데운 캐시를 iframe이 재사용하는
     // 부팅 강건화 흐름을 하네스에서도 검증하려면 필요하다. 헤더가
     // 없으면 브라우저가 매번 다시 받아 프리패치가 무의미해진다.
-    const headers = { 'Content-Type': MIME[ext] || 'application/octet-stream' };
+    const headers = { 'Content-Type': MIME[ext] || 'application/octet-stream', ...extraHeaders };
     if (ext === '.html' || ext === '.htm') {
       headers['Cache-Control'] = 'no-store';
     } else {

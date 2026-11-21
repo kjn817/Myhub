@@ -261,28 +261,32 @@ describe('시트 호스트 OfficeTabs 메뉴 미게시', () => {
 
 /* ================= 한글·PDF 메뉴는 유지 (작동 확인됨) ================= */
 describe('한글·PDF 호스트 메뉴 게시 유지', () => {
-  it('한글·PDF 호스트는 엔진 메뉴를 상단바에 계속 게시한다 (2026-11-12 실증)', () => {
-    // Excel 메뉴만 제거 대상이다. 한글·PDF 메뉴는 실브라우저로
-    // 드롭다운 열림·항목 실행(한글 줌 100%→110%·환경 설정 다이얼로그,
-    // PDF menu-exec 디스패치)까지 확인했으므로 게시를 유지한다.
-    // 이 테스트는 "오피스 메뉴 전부 제거" 같은 과잉 정리를 막는 가드다.
+  it('한글 호스트는 엔진 메뉴를 상단바에 계속 게시한다 (2026-11-12 실증)', () => {
+    // Excel 메뉴만 제거 대상이다. 한글 메뉴는 실브라우저로
+    // 드롭다운 열림·항목 실행(줌 100%→110%·환경 설정 다이얼로그)까지
+    // 확인했으므로 게시를 유지한다. 이 테스트는 "오피스 메뉴 전부
+    // 제거" 같은 과잉 정리를 막는 가드다. PDF는 2026-11-21 사용자
+    // 결정으로 공식 레이아웃(엔진 자체 메뉴 바)으로 바뀌어 게시를
+    // 폐기했으므로 아래 테스트가 그쪽을 핀한다.
     const hwp = read('js/finder-format-hwp.js')
     expect(hwp).toContain("setState('hangul'")
     expect(hwp).toContain("kind: 'menu'")
-    const pdf = read('js/finder-format-pdf.js')
-    expect(pdf).toContain("provideMenuItems('pdf'")
-    expect(pdf).toContain('shellMenuNodes')
   })
 
-  it('PDF 모드 탭은 게시하지 않는다 — 엔진 사이드바와 중복 (2026-11-12 사용자 지적)', () => {
-    // 실브라우저 실증: 모드 탭 "모든 도구"와 엔진 사이드바 패널 제목
-    // "모든 도구"가 똑같이 나란히 보이고, "편집" 탭을 누르면 패널 제목도
-    // "편집"으로 바뀐다. 엔진 사이드바가 유일한 모드 네비게이션이다.
-    // 메뉴 탭만 게시하면 셸 채택 뒤 탭 행은 그릴 것이 없어 숨겨진다.
+  it('PDF는 메뉴·모드 탭을 게시하지 않는다 — 엔진이 직접 그린다 (2026-11-21 사용자 결정)', () => {
+    // 2026-11-12에는 모드 탭만 빼고 메뉴는 셸 상단바로 흡수했으나,
+    // 사용자가 공식 사이트 레이아웃(모드 탭·메뉴 바·모든 도구
+    // 사이드바)을 그대로 원해 2026-11-21에 흡수를 폐기했다. 엔진이
+    // 메뉴 바를 직접 그리므로 호스트가 셸에 게시하면 중복된다.
     const pdf = read('js/finder-format-pdf.js')
+    expect(pdf).not.toContain("provideMenuItems('pdf'")
+    expect(pdf).not.toContain("setState('pdf'")
+    expect(pdf).not.toContain('publishModeTabs')
     expect(pdf).not.toContain('tabs.concat(MODE_TABS)')
     expect(pdf).not.toContain("tabs.push({ id: 'sep:menus-modes'")
-    // 메뉴 게시는 유지한다 (위 테스트와 같은 가드).
-    expect(pdf).toContain("provideMenuItems('pdf'")
+    // 설계 결정 문구가 파일에 남아야 한다.
+    expect(pdf).toContain('공식 레이아웃 그대로 (2026-11-21 사용자 결정)')
+    // 제목 줄 인쇄 빠른 실행은 그대로 둔다.
+    expect(pdf).toContain("setQuick('pdf'")
   })
 })

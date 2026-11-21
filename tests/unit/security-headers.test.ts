@@ -134,7 +134,9 @@ describe('정적 HTML 보안 헤더', () => {
     // 메모가 blob URL 이미지를 쓰므로 img-src에 blob:이 필요하다.
     expect(csp).toContain("img-src 'self' data: blob:")
     expect(csp).toContain("font-src 'self' data:")
-    expect(csp).toContain("connect-src 'self'")
+    // 크래프트 엔진이 Blob URL로 넘긴 WASM 조각을 fetch하므로
+    // connect-src에 blob:이 필요하다 (2026-11-21 PDF 편집기 사고).
+    expect(csp).toContain("connect-src 'self' blob:")
     expect(csp).toContain("media-src 'self' blob:")
     expect(csp).toContain("frame-src 'self'")
     expect(csp).toContain("worker-src 'self'")
@@ -142,6 +144,21 @@ describe('정적 HTML 보안 헤더', () => {
     // 인라인 스타일은 쓰므로 unsafe-inline을 유지하고 외부 스타일만 차단한다.
     expect(csp).toContain("style-src 'self' 'unsafe-inline'")
     expect(csp).toContain('upgrade-insecure-requests')
+  })
+
+  test('/vendor/pdfcraft/index.html은 connect-src blob:이 있는 일반 CSP를 받는다', async () => {
+    const env = makeEnv()
+    env.ASSETS.fetch.mockResolvedValue(
+      new Response('<html>pdfcraft</html>', { headers: { 'Content-Type': 'text/html' } })
+    )
+    const res = await get('/vendor/pdfcraft/index.html', env, { Cookie: 'myhub_session=t' })
+    expect(res.status).toBe(200)
+    const csp = res.headers.get('Content-Security-Policy') ?? ''
+    // 이름 없는 .html이라 일반 CSP를 받는다 — 엔진 로더가 Blob URL
+    // WASM 조각을 fetch하므로 blob:이 없으면 부팅이 45초 워치독에서
+    // 실패한다 (2026-11-21 실브라우저 재현).
+    expect(csp).toContain("connect-src 'self' blob:")
+    expect(csp).toContain("frame-ancestors 'self'")
   })
 
   test('/sheet-fortune.html은 enforce CSP를 받는다 (new Function 때문에 unsafe-eval 포함)', async () => {

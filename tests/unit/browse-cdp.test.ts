@@ -230,6 +230,47 @@ describe('navigateSession — 다른 탭을 닫지 않는다 (2026-11-19 새 창
   })
 })
 
+describe('navigateSession — targetId 지정 이동 (2026-11-21)', () => {
+  // 뉴스 팝업이 떠 있을 때 복원 이동이 활성 탭으로 가서 뉴스 탭을
+  // naver.com으로 덮어버린 사고의 수정 — 셸이 조작 중인 라이브 탭의
+  // 타깃 id를 실으면 그 탭으로, 없거나 목록 밖이면 활성 탭 폴백이다.
+  function twoTabHandler(msg: Record<string, any>, emit: (m: unknown) => void): void {
+    if (msg.method === 'Target.getTargets') {
+      emit({ id: msg.id, result: { targetInfos: [
+        { type: 'page', targetId: 'page-1' },
+        { type: 'page', targetId: 'popup-1' },
+      ] } })
+    } else if (msg.method === 'Target.attachToTarget') {
+      emit({ id: msg.id, result: { sessionId: `sess-${msg.params.targetId}` } })
+    } else if (msg.method === 'Runtime.evaluate') {
+      // 영구 탭만 visible, 팝업은 hidden이다.
+      const vis = String(msg.sessionId ?? '').endsWith('page-1') ? 'visible' : 'hidden'
+      emit({ id: msg.id, ...probeResult(vis as 'visible' | 'hidden') })
+    } else if (msg.method === 'Page.navigate') {
+      emit({ id: msg.id, result: {} })
+    }
+  }
+
+  test('targetId가 있으면 보이는 탭이 아니라 그 탭으로 이동하고 프로브를 안 한다', async () => {
+    const sock = new FakeSocket(twoTabHandler)
+    const r = await navigateSession(WS_URL, TARGET, async () => sock as CdpSocket, { targetId: 'popup-1' })
+    expect(r).toEqual({ ok: true, stage: 'ok' })
+    const nav = sock.sent.find((m) => m.method === 'Page.navigate')
+    expect(nav?.sessionId).toBe('sess-popup-1')
+    // 직접 attach라 visibility 프로브(Runtime.evaluate)가 나가지 않는다.
+    expect(sock.sent.some((m) => m.method === 'Runtime.evaluate')).toBe(false)
+    expect(sock.sent.filter((m) => m.method === 'Target.attachToTarget')).toHaveLength(1)
+  })
+
+  test('targetId가 목록에 없으면 보이는 탭으로 폴백한다', async () => {
+    const sock = new FakeSocket(twoTabHandler)
+    const r = await navigateSession(WS_URL, TARGET, async () => sock as CdpSocket, { targetId: 'gone' })
+    expect(r).toEqual({ ok: true, stage: 'ok' })
+    const nav = sock.sent.find((m) => m.method === 'Page.navigate')
+    expect(nav?.sessionId).toBe('sess-page-1')
+  })
+})
+
 describe('navigateSession — 활성 탭 이동 (2026-11-16 QA 4차)', () => {
   // 첫 타깃을 이동시키던 기존 코드는 숨은 DuckDuckGo 탭을 이동시키고
   // 보던 naver.com 탭을 닫아버려 뒤로가기가 naver.com이 아니라
