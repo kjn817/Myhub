@@ -5,8 +5,10 @@
 // 45초 워치독 → "전용 편집기를 불러오지 못했습니다" 배너). 로컬 하네스는
 // CSP 헤더를 안 붙여서 이 결함을 재현하지 못했다 — 그래서 이 테스트는
 // 배포 CSP(GENERAL_HTML_CSP, src/index.ts에서 직접 읽음)를 붙여 서빙하고
-// 실제 부팅이 READY까지 가는지 확인한다. CSP에서 blob:을 빼면 FALLBACK
-// timeout으로 실패한다 (카나리아 확인).
+// 실제 부팅이 READY까지 가는지 확인한다. blob:이 없어도 Blob-less 재시도
+// (2026-11-21, pdfcraft-blob-retry.e2e.cjs)가 네트워크 경로로 부팅하므로
+// FALLBACK은 안 뜬다 — 이 테스트의 blob: 카나리아는 CSP 위반 단언이다
+// (blob:을 빼면 Blob fetch CSP 위반이 기록돼 이 테스트가 실패한다).
 'use strict';
 
 const fs = require('fs');

@@ -59,6 +59,22 @@ const loader = `// pdfcraft 로더 (build-pdfcraft.mjs 재구성): 분할된 WAS
 // 쿼리가 없으면 기존 상대경로로 받는다 (직접 열기·구 호스트 하위호환).
 import init, * as bindings from './${glue}';
 
+// 실패 보고 (2026-11-21): fetch/init 실패를 부모에 pdfcraft:failed로
+// 알린다 — 보고 없이는 호스트가 45초 워치독까지 기다렸다가 원인도
+// 모른 채 폴백만 했다 (사용자 실화면: 다운로드 완료 후 45초 뒤 배너).
+// 호스트는 보고를 받으면 Blob 핸드오프 없이 네트워크 경로로 1회 재시도한다.
+function reportFailure(err) {
+  try {
+    var msg = err && err.message ? String(err.message) : String(err);
+    if (typeof parent !== 'undefined' && parent && parent !== window) {
+      parent.postMessage({ type: 'pdfcraft:failed', error: msg }, location.origin);
+    }
+  } catch (e) {
+    // 보고 실패는 무시한다 — 워치독이 폴백을 맡는다.
+  }
+}
+
+try {
 const PART_PARAMS = new URLSearchParams(location.search);
 const PARTS = [
   PART_PARAMS.get('wasmPart0') || './${part0}',
@@ -79,6 +95,10 @@ for (const c of chunks) { bytes.set(c, at); at += c.length; }
 const wasm = await init({ module_or_path: bytes });
 window.wasmBindings = bindings;
 dispatchEvent(new CustomEvent('TrunkApplicationStarted', { detail: { wasm } }));
+} catch (e) {
+  reportFailure(e);
+  throw e;
+}
 `;
 writeFileSync(join(OUT, 'loader.js'), loader);
 

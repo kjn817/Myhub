@@ -145,14 +145,17 @@ describe('PDF 뷰어 대체 화면·지연 로딩', () => {
     expect(bodyEl.querySelectorAll('iframe').length).toBe(1)
   })
 
-  test('폰트 풀과 편집기는 마운트 때 시작하지 않고 ready 뒤에야 시작한다', async () => {
+  test('폰트 풀과 편집기는 마운트 때 바로 시작한다 (2026-11-21 편집기 직접 진입)', async () => {
     folded = false // 펼친 상태 — 편집기 시작 조건 충족
     const ctx = makeCtx()
     await pdfFormat.handlePdf(ctx)
     expect(viewerFrame()).not.toBeNull()
-    // 마운트 직후에는 둘 다 시작하지 않는다 (뷰어와 대역폭 경합 방지).
-    expect(fontsLoad).not.toHaveBeenCalled()
-    expect(createHost).not.toHaveBeenCalled()
+    // 직접 진입: 뷰어 ready를 기다리지 않고 마운트 때 바로 시작한다.
+    // 예전에는 뷰어와 대역폭 경합을 피해 ready 뒤에 시작했으나, 이제는
+    // 뷰어가 먼저 보이지 않으므로(로딩 화면) 빨리 시작하는 게 맞다.
+    expect(fontsLoad).toHaveBeenCalledTimes(1)
+    expect(createHost).toHaveBeenCalledTimes(1)
+    // ready 뒤에 다시 시작하지 않는다 (중복 부팅 방지).
     sendReady(viewerFrame())
     await flush(10)
     expect(fontsLoad).toHaveBeenCalledTimes(1)

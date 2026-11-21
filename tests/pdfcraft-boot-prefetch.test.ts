@@ -381,6 +381,128 @@ describe('pdfcraft 부팅 게이트 프리패치', () => {
   });
 });
 
+describe('pdfcraft Blob-less 재시도 (2026-11-21)', () => {
+  // 배경: 사용자 크롬에서 다운로드 완료(45.3MB) 후 45초 뒤 폴백이 떴다 —
+  // 로더의 Blob URL fetch가 막힌 환경에서 조용히 멈춘 것이다. 로더가
+  // pdfcraft:failed를 보고하면 호스트는 Blob 없이 네트워크 경로로 1회
+  // 재부팅하고, 보고 없이 멈췄을 때도 워치독 타임아웃에서 재시도한다.
+  function blobBootHost(api: any, doc: any, win: any, extra: any = {}) {
+    const createObjectURL = jest
+      .fn()
+      .mockReturnValueOnce('blob:part0')
+      .mockReturnValueOnce('blob:part1');
+    const revokeObjectURL = jest.fn();
+    const prefetchForBoot = jest.fn(() =>
+      Promise.resolve({
+        done: [],
+        failed: [],
+        stalled: [],
+        receivedBytes: 0,
+        partBytes: [new Uint8Array([1]), new Uint8Array([2])],
+      }),
+    );
+    const made = makeHost(api, doc, win, {
+      prefetchForBoot,
+      createObjectURL,
+      revokeObjectURL,
+      readyTimeoutMs: 60,
+      ...extra,
+    });
+    return { ...made, createObjectURL, revokeObjectURL };
+  }
+
+  function sendFailed(win: any, error: string) {
+    win.dispatchEvent(
+      new win.MessageEvent('message', {
+        data: { type: 'pdfcraft:failed', error },
+        origin: win.location.origin,
+      }),
+    );
+  }
+
+  test('pdfcraft:failed가 오면 Blob 없이 재시도하고 폴백은 안 불린다', async () => {
+    const { win, doc, api } = loadPdf();
+    const { host, onFallback, revokeObjectURL } = blobBootHost(api, doc, win);
+    try {
+      const attached = await waitFor(() => !!host.frame.getAttribute('src'));
+      expect(attached).toBe(true);
+      expect(host.frame.getAttribute('src')).toContain('wasmPart0=');
+      sendFailed(win, 'Failed to fetch');
+      await flush(10);
+      expect(onFallback).not.toHaveBeenCalled();
+      const src = host.frame.getAttribute('src');
+      expect(src).not.toContain('wasmPart0=');
+      expect(src).not.toContain('wasmPart1=');
+      expect(src).toContain('host=parent');
+      expect(revokeObjectURL).toHaveBeenCalledWith('blob:part0');
+      expect(revokeObjectURL).toHaveBeenCalledWith('blob:part1');
+    } finally {
+      host.destroy();
+    }
+  });
+
+  test('재시도도 pdfcraft:failed를 보내면 폴백이 불린다 (상세 포함)', async () => {
+    const { win, doc, api } = loadPdf();
+    const { host, onFallback } = blobBootHost(api, doc, win);
+    try {
+      const attached = await waitFor(() => !!host.frame.getAttribute('src'));
+      expect(attached).toBe(true);
+      sendFailed(win, 'Failed to fetch');
+      await flush(10);
+      expect(onFallback).not.toHaveBeenCalled();
+      sendFailed(win, 'Failed to fetch');
+      await flush(10);
+      expect(onFallback).toHaveBeenCalledTimes(1);
+      expect(onFallback).toHaveBeenCalledWith('failed: Failed to fetch');
+    } finally {
+      host.destroy();
+    }
+  });
+
+  test('워치독 타임아웃도 Blob 없이 1회 재시도하고, 재시도도 멈추면 폴백한다', async () => {
+    const { win, doc, api } = loadPdf();
+    const { host, onFallback } = blobBootHost(api, doc, win);
+    try {
+      const attached = await waitFor(() => !!host.frame.getAttribute('src'));
+      expect(attached).toBe(true);
+      expect(host.frame.getAttribute('src')).toContain('wasmPart0=');
+      // 첫 워치독(60ms)이 터지면 재시도 — src에서 wasmPart가 빠진다.
+      const retried = await waitFor(() => {
+        const s = host.frame.getAttribute('src') || '';
+        return s !== '' && !s.includes('wasmPart0=');
+      });
+      expect(retried).toBe(true);
+      expect(onFallback).not.toHaveBeenCalled();
+      // 재시도 워치독(60ms)이 터지면 그때 폴백한다.
+      const fired = await waitFor(() => onFallback.mock.calls.length > 0);
+      expect(fired).toBe(true);
+      expect(onFallback).toHaveBeenCalledWith('timeout');
+    } finally {
+      host.destroy();
+    }
+  });
+
+  test('Blob 없이 뜬 부팅은 pdfcraft:failed가 오면 바로 폴백한다', async () => {
+    const { win, doc, api } = loadPdf();
+    // partBytes 없이 부팅 — src에 wasmPart 쿼리가 없다.
+    const prefetchForBoot = jest.fn(() =>
+      Promise.resolve({ done: [], failed: [], stalled: [], receivedBytes: 0 }),
+    );
+    const { host, onFallback } = makeHost(api, doc, win, { prefetchForBoot, readyTimeoutMs: 60 });
+    try {
+      const attached = await waitFor(() => !!host.frame.getAttribute('src'));
+      expect(attached).toBe(true);
+      expect(host.frame.getAttribute('src')).not.toContain('wasmPart');
+      sendFailed(win, 'Failed to fetch');
+      await flush(10);
+      expect(onFallback).toHaveBeenCalledTimes(1);
+      expect(onFallback).toHaveBeenCalledWith('failed: Failed to fetch');
+    } finally {
+      host.destroy();
+    }
+  });
+});
+
 describe('pdfcraft 모듈 prefetchForBoot', () => {
   function textStreamRes(text: string): any {
     const bytes = new TextEncoder().encode(text);

@@ -215,11 +215,12 @@
         state.ready = true;
         state.pages = d.pages || state.pages;
         clearTimeout(readyTimer);
-        if (state.surface === 'viewer') ctx.setNote(NOTE);
+        // 부팅 중(로딩 화면)에는 뷰어 노트를 띄우지 않는다.
+        if (state.surface === 'viewer' && !state.craft) ctx.setNote(NOTE);
         updateStateLabel();
-        // 뷰어가 뜬 뒤에야 편집기(WASM)를 백그라운드로 시작한다.
-        // 마운트 때 같이 시작하면 WASM이 뷰어와 대역폭·CPU를 나눠
-        // 가져가 첫 페이지가 늦어진다 (2026-11-15 로딩 지연 원인).
+        // 편집기는 마운트 때 이미 시작한다 (아래 마운트 말미 참조) —
+        // 여기의 startCraft는 마운트 때 접혀 있던 경우 등의 안전망이다
+        // (이미 시작했으면 no-op).
         startCraft();
       } else if (d.type === 'myhub-pdf:state') {
         state.page = d.page || state.page;
@@ -311,8 +312,45 @@
       frame.style.visibility = '';
     }
 
+    // 편집기 직접 진입 로딩 화면 (2026-11-21 사용자 지시): 편집기를 쓸 수
+    // 있는 문서는 뷰어를 먼저 보여주지 않고 이 로딩 화면을 띄운 뒤 편집기가
+    // 준비되면 바로 편집기로 들어간다. 뷰어는 편집기 부팅 실패 때(폴백)나
+    // 접힌 상태에서만 보인다. 한글 로딩(.fv-hwp-loading)과 같은 모양이다.
+    var loadingEl = null;
+    function showLoading() {
+      if (loadingEl) return;
+      loadingEl = doc.createElement('div');
+      loadingEl.className = 'fv-pdf-loading';
+      var title = doc.createElement('div');
+      title.className = 'fv-pdf-loading-title';
+      title.textContent = 'PDF';
+      var spin = doc.createElement('div');
+      spin.className = 'fv-pdf-loading-spin';
+      var status = doc.createElement('div');
+      status.className = 'fv-pdf-loading-status';
+      status.textContent = '전용 편집기를 불러오는 중…';
+      var detail = doc.createElement('div');
+      detail.className = 'fv-pdf-loading-detail';
+      loadingEl.appendChild(title);
+      loadingEl.appendChild(spin);
+      loadingEl.appendChild(status);
+      loadingEl.appendChild(detail);
+      ctx.body.appendChild(loadingEl);
+    }
+    function hideLoading() {
+      if (!loadingEl) return;
+      if (loadingEl.parentNode) loadingEl.parentNode.removeChild(loadingEl);
+      loadingEl = null;
+    }
+    function setLoadingDetail(text) {
+      if (!loadingEl) return;
+      var el = loadingEl.querySelector('.fv-pdf-loading-detail');
+      if (el) el.textContent = text;
+    }
+
     function showCraft() {
       if (!state.craft) return;
+      hideLoading();
       parkViewerFrame();
       state.craft.frame.style.display = '';
       state.surface = 'craft';
@@ -323,6 +361,7 @@
 
     function showViewer() {
       if (state.craft) state.craft.frame.style.display = 'none';
+      hideLoading();
       unparkViewerFrame();
       state.surface = 'viewer';
       updateStateLabel();
@@ -345,20 +384,52 @@
       if (state.ready) postToViewer('myhub-pdf:reload');
     }
 
+    // 편집기 부팅 실패 원인 문구 (2026-11-21): 브리지가 넘긴 reason을
+    // 그대로 버리지 않고 사용자에게 보여준다 — 'failed: <상세>'는 로더가
+    // 보고한 실제 오류(Failed to fetch 등)라 진단의 단서가 된다.
+    function craftFailureText(reason) {
+      if (!reason) return '';
+      if (reason === 'prefetch-failed') return '엔진 다운로드 실패';
+      if (reason === 'timeout') return '엔진 시작 시간 초과';
+      if (reason.indexOf('failed') === 0) {
+        var detail = reason.slice('failed'.length).replace(/^:\s*/, '');
+        return detail ? '엔진 시작 실패: ' + detail : '엔진 시작 실패';
+      }
+      return reason;
+    }
+
     // 편집기 부팅 실패 시 다시 시도 패널: 페이지 조작 확인 패널과
     // 같은 fv-pdf-panel을 재사용한다. 다른 확인이 떠 있으면 덮지
     // 않는다 (패널은 하나뿐이라 확인을 날리면 안 된다).
-    function showCraftRetry() {
+    // [캐시 지우고 다시 시도]는 손상된 WASM 파트 캐시를 비우고 다시
+    // 받는다 — 길이 검증으로 못 잡는 내용 손상의 복구 경로다.
+    function showCraftRetry(reason) {
       if (!panel || !panel.hidden) return;
       panel.innerHTML = '';
       var msg = doc.createElement('span');
       msg.className = 'fv-pdf-panel-msg';
-      msg.textContent = '전용 편집기를 불러오지 못했습니다';
+      var why = craftFailureText(reason);
+      msg.textContent = why
+        ? '전용 편집기를 불러오지 못했습니다 (' + why + ')'
+        : '전용 편집기를 불러오지 못했습니다';
       panel.appendChild(msg);
       panel.appendChild(
         mkBtn('다시 시도', function () {
           closePanel();
           if (ctx.isCurrent()) startCraft();
+        }),
+      );
+      panel.appendChild(
+        mkBtn('캐시 지우고 다시 시도', function () {
+          closePanel();
+          if (!ctx.isCurrent()) return;
+          if (pdfCraft && typeof pdfCraft.clearPartCache === 'function') {
+            pdfCraft.clearPartCache().then(function () {
+              if (ctx.isCurrent()) startCraft();
+            });
+          } else {
+            startCraft();
+          }
         }),
       );
       panel.appendChild(
@@ -371,6 +442,10 @@
 
     function startCraft() {
       if (state.craft || !wantCraft()) return;
+      // 편집기 직접 진입: 로딩 화면을 띄우고 뷰어 프레임은 뒤에 숨긴다.
+      // 뷰어는 백그라운드에서 계속 로딩돼 폴백 때 즉시 보인다.
+      showLoading();
+      parkViewerFrame();
       // 편집기가 쓰는 폰트 풀은 여기서 받는다 (뷰어 로딩과 겹치지 않게).
       var fonts = typeof window !== 'undefined' ? window.MyHubFonts : null;
       if (fonts && typeof fonts.load === 'function') fonts.load();
@@ -398,6 +473,7 @@
           var msg = 'PDF 엔진 받는 중… ' + mb + 'MB';
           if (p.attempt > 1) msg += ' (다시 시도 ' + p.attempt + '/' + p.maxAttempts + ')';
           ctx.setStatus(msg);
+          setLoadingDetail(msg);
         },
         onReady: function () {
           if (!ctx.isCurrent()) {
@@ -447,22 +523,25 @@
             ctx.putContent(blob).then(done);
           }
         },
-        onFallback: function () {
+        onFallback: function (reason) {
           if (!ctx.isCurrent()) return;
-          var wasCraft = state.surface === 'craft';
           stopCraft();
           if (state.viewerDead) {
             fallback(true);
             return;
           }
-          if (wasCraft) showViewer();
-          // 부팅 전부 실패(프리패치 3회·ready 타임아웃·엔진 실패):
-          // 뷰어는 살아 있으니 화면을 갈지 않고, 실패를 알리고 다시
-          // 시도를 제공한다. 다시 시도는 startCraft부터 — 프리패치
-          // 게이트를 다시 돈다 (1dc37bf 한글 에러 카드의 PDF 대응:
-          // 뷰어가 이미 문서를 보여주므로 카드는 패널에 단다).
-          ctx.setNote('전용 편집기를 불러오지 못해 기본 뷰어로 표시합니다');
-          showCraftRetry();
+          // 부팅 전부 실패(프리패치 3회·ready 타임아웃·엔진 실패 +
+          // Blob-less 재시도까지 실패): 로딩 화면을 내리고 뷰어를
+          // 보여준다 (부팅 중에는 뷰어 프레임이 가려져 있으므로
+          // showViewer로 반드시 다시 펴야 한다).
+          showViewer();
+          var why = craftFailureText(reason);
+          ctx.setNote(
+            why
+              ? '전용 편집기를 불러오지 못해 기본 뷰어로 표시합니다 (' + why + ')'
+              : '전용 편집기를 불러오지 못해 기본 뷰어로 표시합니다',
+          );
+          showCraftRetry(reason);
         },
       });
       if (!host) return;
@@ -476,6 +555,11 @@
       if (!ctx.isCurrent() || state.fellBack) return;
       if (ctx.isFolded()) {
         if (state.surface === 'craft' && !state.dirty) settleBackToViewer();
+        else if (state.craft && !state.craftReady) {
+          // 부팅 중(로딩 화면) 접으면 부팅을 멈추고 뷰어를 보여준다.
+          stopCraft();
+          showViewer();
+        }
         // dirty인 동안 편집기 실행 유지하는 등 dirty가 등리 등
         // onDirty/onSave가 전환은 마감한다.
       } else if (state.surface === 'viewer') {
@@ -546,10 +630,13 @@
       if (ctx.saveBtn) ctx.saveBtn.hidden = false;
       ctx.setSaveHandler(doSave);
     }
-    // 전용 편집기는 뷰어 ready 뒤에 백그라운드로 시작한다
-    // ('myhub-pdf:ready' 핸들러 참조). 마운트 때 시작하면 WASM이
-    // 뷰어 로딩과 대역폭을 나눠 첫 페이지가 늦어진다 (2026-11-15).
+    // 편집기 직접 진입 (2026-11-21 사용자 지시): 편집기를 쓸 수 있는
+    // 문서는 마운트 때 바로 부팅을 시작하고 로딩 화면을 띄운다 —
+    // 뷰어 ready를 기다리지 않는다. 예전에는 뷰어가 먼저 뜨고 편집기가
+    // 준비되면 전환돼 "뭔가 떴다가 바뀐다"는 지적이 됐다. 뷰어는
+    // 백그라운드에서 로딩되고 폴백·접힌 상태에서만 보인다.
     // 펼치기(syncSurfaceToFold)도 startCraft를 부른다.
+    if (wantCraft()) startCraft();
 
     // ---------- 페이지 조작 ----------
     function closePanel() {

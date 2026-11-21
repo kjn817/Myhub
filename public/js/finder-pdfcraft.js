@@ -115,7 +115,10 @@
    * 취소하면 아무것도 보내지 않는다.
    * onFallback은 ready 워치독 초과('timeout')와 pdfcraft:failed에서
    * 최대 두 번만 부른다 이 호스트는 그때 이 세션을 destroy하고 pdf.js
-   * 표면으로 남으면 된다 (폴백 보존의 계약).
+   * 표면으로 남으면 된다 (폴백 보존의 계약). 단, Blob 핸드오프로 뜬
+   * 부팅이 실패하면 네트워크 경로(쿼리 없음)로 1회 재시도한 뒤에
+   * 폴백한다 (2026-11-21 Blob-less 재시도) — 재시도도 실패해야
+   * onFallback이 불린다.
    * @returns {{ frame, open(name, buffer), sendMode(mode), sendMenuCommand(command, params?), destroy(), isReady() }}
    */
   function createHost(deps) {
@@ -232,6 +235,24 @@
       });
     }
 
+    // Blob 핸드오프 재시도 (2026-11-21): 로더가 Blob URL fetch·init에
+    // 실패하면(pdfcraft:failed 보고 또는 워치독 타임아웃) Blob 없이
+    // 네트워크 경로로 1회 재부팅한다 — 로더는 쿼리가 없으면 상대경로로
+    // 파트를 직접 받는다 (느리지만 동작한다). Blob fetch가 막힌
+    // 브라우저(확장·정책)에서도 편집기가 뜬다. 재시도도 실패하면
+    // 그때 폴백한다.
+    var blobHandoffUsed = false;
+    var blobFallbackTried = false;
+    function retryWithoutBlobs() {
+      if (dead || ready || blobFallbackTried) return false;
+      blobFallbackTried = true;
+      blobHandoffUsed = false;
+      revokePartBlobs();
+      frame.src = deps.url || APP_URL;
+      startWatchdog();
+      return true;
+    }
+
     // ready 워치독은 iframe src를 붙인 시점부터 돈다 — 프리패치
     // 시간은 워치독에 안 잡힌다 (Blob URL은 메모리에서 바로 읽히므로
     // ready가 수 초 안에 온다).
@@ -239,7 +260,11 @@
     function startWatchdog() {
       if (timer) clearTimeout(timer);
       timer = setTimeout(function () {
-        if (!ready) fireFallback('timeout');
+        if (ready) return;
+        // Blob 핸드오프로 뜬 부팅이 멈췄으면 네트워크 경로로 1회
+        // 재시도하고, 재시도도 멈췄을 때만 폴백한다.
+        if (blobHandoffUsed && retryWithoutBlobs()) return;
+        fireFallback('timeout');
       }, readyTimeoutMs);
     }
 
@@ -283,6 +308,7 @@
         .then(function (r) {
           if (dead) return;
           var src = deps.url || APP_URL;
+          blobHandoffUsed = false;
           if (r && Array.isArray(r.partBytes) && r.partBytes.length && createObjectURL && BlobCtor) {
             try {
               partBlobUrls = r.partBytes.map(function (b) {
@@ -296,6 +322,7 @@
                     return 'wasmPart' + i + '=' + encodeURIComponent(u);
                   })
                   .join('&');
+              blobHandoffUsed = partBlobUrls.length > 0;
             } catch (e) {
               // Blob URL 생성 실패 시 쿼리 없이 기존 경로로 부팅한다 —
               // 로더가 네트워크에서 받으므로 느리지만 동작한다.
@@ -362,6 +389,10 @@
           });
         }
       } else if (d.type === 'pdfcraft:failed') {
+        // Blob 핸드오프 부팅이 실패 보고를 보내면 네트워크 경로로
+        // 1회 재시도한다 (Blob fetch가 막힌 환경의 복구 경로).
+        // 재시도도 실패 보고를 보내면 그때 폴백한다.
+        if (blobHandoffUsed && retryWithoutBlobs()) return;
         fireFallback('failed' + (d.error ? ': ' + String(d.error) : ''));
       }
     }
@@ -486,6 +517,21 @@
 
   // 현재 버전의 조각이 아닌 캐시 항목(오래된 버전의 고아)을 치운다.
   // 실패해도 게이트는 계속된다.
+  // WASM 파트 캐시 전체 삭제 (2026-11-21): [캐시 지우고 다시 시도]가
+  // 쓴다 — 길이 검증으로 못 잡는 내용 손상의 복구 경로. 삭제 실패는
+  // false로 보고하고 부팅을 막지 않는다 (다음 부팅이 네트워크로 받는다).
+  function clearPartCache(cachesObj) {
+    var c = cachesObj || getCaches({});
+    if (!c || typeof c.delete !== 'function') return Promise.resolve(false);
+    return Promise.resolve()
+      .then(function () {
+        return c.delete(PART_CACHE_NAME);
+      })
+      .catch(function () {
+        return false;
+      });
+  }
+
   function prunePartCache(cachesObj, keepAbsolutes) {
     return Promise.resolve()
       .then(function () {
@@ -837,6 +883,7 @@
     createHost: createHost,
     prefetch: prefetch,
     prefetchForBoot: prefetchForBoot,
+    clearPartCache: clearPartCache,
     normalizeBytes: normalizeBytes,
     internals: internals,
     APP_URL: APP_URL,

@@ -15,6 +15,9 @@
  *   다음 리베이스·패키징 때 수정이 한쪽에서만 사라진다.
  * - 쿼리가 없으면 상대경로 파트 URL로 폴백한다 (직접 열기·구 호스트
  *   하위호환 — 쿼리 없이는 엔진이 안 뜨면 안 된다).
+ * - fetch/init 실패를 부모에 pdfcraft:failed로 보고한다 (2026-11-21):
+ *   보고 없이는 호스트가 45초 워치독까지 기다렸다가 원인도 모른 채
+ *   폴백만 했다. 보고를 받으면 호스트가 Blob 없이 재시도한다.
  *
  * 로더 자체의 동작(Blob URL fetch → init)은 실브라우저 e2e
  * (tests/e2e/pdf-boot-throttled.e2e.cjs)가 검증한다 — 로더는
@@ -57,5 +60,14 @@ describe('pdfcraft 로더 게이트 핸드오프', () => {
     expect(LOADER).toMatch(
       /get\('wasmPart1'\) \|\| '\.\/pdfcraft-web-.*_bg\.wasm\.part1'/,
     );
+  });
+
+  test('템플릿과 벤더본이 fetch/init 실패를 pdfcraft:failed로 보고한다', () => {
+    // 보고가 한쪽에서만 빠지면 다음 패키징 때 사라진다 — 둘 다 본다.
+    for (const src of [TEMPLATE, LOADER]) {
+      expect(src).toContain('reportFailure');
+      expect(src).toContain("parent.postMessage({ type: 'pdfcraft:failed'");
+      expect(src).toContain('} catch (e) {');
+    }
   });
 });

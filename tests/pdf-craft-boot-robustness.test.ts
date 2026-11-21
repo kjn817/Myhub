@@ -51,7 +51,8 @@ const createHost = jest.fn((deps: any) => {
     sendMenuCommand: jest.fn(() => true),
   }
 })
-win.MyHubFinderPdfCraft = { createHost }
+const clearPartCache = jest.fn(() => Promise.resolve(true))
+win.MyHubFinderPdfCraft = { createHost, clearPartCache }
 const fontsLoad = jest.fn()
 win.MyHubFonts = { load: fontsLoad }
 
@@ -223,6 +224,164 @@ describe('PDF 편집기 부팅 강건화', () => {
     expect(bodyEl.querySelector('.fv-pdf-state').textContent).toBe('1 / 3 페이지')
     expect(retryPanel().hidden).toBe(false)
     expect(panelButton('다시 시도')).not.toBeNull()
+  })
+})
+
+describe('PDF 편집기 직접 진입 (2026-11-21 사용자 지시)', () => {
+  // 배경: 뷰어가 먼저 뜨고 편집기가 준비되면 전환되는 게 "뭔가 떴다가
+  // 바뀐다"는 지적을 받았다. 이제 마운트 때 바로 부팅을 시작하고 로딩
+  // 화면을 띄우며, 편집기가 준비되면 바로 편집기로 들어간다. 뷰어는
+  // 폴백·접힌 상태에서만 보인다.
+  let bodyEl: any
+  let notes: string[]
+  let teardowns: Array<() => void>
+
+  function makeCtx(opts: any = {}) {
+    bodyEl = doc.createElement('div')
+    doc.body.appendChild(bodyEl)
+    let alive = true
+    let folded = !!opts.folded
+    teardowns.push(() => { alive = false })
+    return {
+      doc,
+      body: bodyEl,
+      file: { fileId: 5, name: '문서.pdf' },
+      minimalChrome: false,
+      chromeFold: opts.chromeFold || null,
+      saveBtn: doc.createElement('button'),
+      clearBody: () => { bodyEl.innerHTML = '' },
+      contentUrl: () => '/api/drive/files/5/content',
+      fetchContent: jest.fn(() => Promise.resolve(new ArrayBuffer(0))),
+      fetchRaw: jest.fn(() => Promise.resolve({ ok: true })),
+      isCurrent: () => alive,
+      isFolded: () => folded,
+      setFolded: (v: boolean) => { folded = v },
+      setNote: (m: string) => notes.push(m),
+      setStatus: jest.fn(),
+      markDirty: jest.fn(),
+      setSaveHandler: jest.fn(),
+      onFoldChange: jest.fn(),
+      requestOpen: jest.fn(),
+      putContent: jest.fn(() => Promise.resolve(true)),
+      saveAsContent: jest.fn(() => Promise.resolve(true)),
+      showMessage: jest.fn(),
+    }
+  }
+
+  function viewerFrame() {
+    return bodyEl.querySelector('iframe.fv-pdf-frame')
+  }
+
+  function loadingEl() {
+    return bodyEl.querySelector('.fv-pdf-loading')
+  }
+
+  function retryPanel() {
+    return bodyEl.querySelector('.fv-pdf-panel')
+  }
+
+  function panelButton(label: string) {
+    const panel = retryPanel()
+    if (!panel) return null
+    return [...panel.querySelectorAll('button')].find(
+      (b: any) => (b.textContent || '') === label,
+    ) as any
+  }
+
+  beforeEach(() => {
+    doc.body.innerHTML = ''
+    notes = []
+    teardowns = []
+    capturedDeps.length = 0
+    jest.clearAllMocks()
+  })
+
+  afterEach(() => {
+    teardowns.forEach((fn) => fn())
+  })
+
+  test('마운트 때 로딩 화면이 뜨고 뷰어가 가려지며 부팅이 바로 시작된다', async () => {
+    const ctx: any = makeCtx()
+    await pdfFormat.handlePdf(ctx)
+    // 뷰어 ready를 기다리지 않고 마운트 때 바로 부팅이 시작된다.
+    expect(createHost).toHaveBeenCalledTimes(1)
+    const loading = loadingEl()
+    expect(loading).not.toBeNull()
+    expect(loading.textContent).toContain('전용 편집기를 불러오는 중')
+    const frame = viewerFrame()
+    expect(frame.style.height).toBe('0px')
+    expect(frame.style.visibility).toBe('hidden')
+  })
+
+  test('onReady가 되면 로딩이 사라지고 편집기가 뜬다', async () => {
+    const ctx: any = makeCtx()
+    await pdfFormat.handlePdf(ctx)
+    expect(loadingEl()).not.toBeNull()
+    capturedDeps[0].onReady()
+    await flush(10)
+    expect(loadingEl()).toBeNull()
+    expect(bodyEl.querySelector('.fv-pdf-state').textContent).toBe('전용 편집기')
+    // 편집기 표면에서는 뷰어 프레임이 계속 가려져 있다.
+    expect(viewerFrame().style.height).toBe('0px')
+  })
+
+  test('onBootProgress가 로딩 화면 상세에도 MB 진행을 띄운다', async () => {
+    await pdfFormat.handlePdf(makeCtx())
+    capturedDeps[0].onBootProgress({ receivedBytes: 45 * 1048576, attempt: 1, maxAttempts: 3 })
+    const detail = loadingEl().querySelector('.fv-pdf-loading-detail')
+    expect(detail.textContent).toBe('PDF 엔진 받는 중… 45.0MB')
+  })
+
+  test('폴백이 되면 로딩이 사라지고 뷰어가 펴지며 원인이 패널에 뜬다', async () => {
+    const ctx: any = makeCtx()
+    await pdfFormat.handlePdf(ctx)
+    capturedDeps[0].onFallback('failed: Failed to fetch')
+    expect(loadingEl()).toBeNull()
+    expect(viewerFrame().style.height).toBe('')
+    expect(viewerFrame().style.visibility).toBe('')
+    expect(retryPanel().hidden).toBe(false)
+    expect(retryPanel().textContent).toContain('엔진 시작 실패: Failed to fetch')
+    expect(notes.join(' ')).toContain('엔진 시작 실패: Failed to fetch')
+  })
+
+  test('timeout 폴백이면 원인 문구가 시간 초과로 뜬다', async () => {
+    await pdfFormat.handlePdf(makeCtx())
+    capturedDeps[0].onFallback('timeout')
+    expect(retryPanel().textContent).toContain('엔진 시작 시간 초과')
+  })
+
+  test('[캐시 지우고 다시 시도]는 캐시를 비우고 부팅을 다시 돈다', async () => {
+    await pdfFormat.handlePdf(makeCtx())
+    capturedDeps[0].onFallback('failed: Failed to fetch')
+    const btn = panelButton('캐시 지우고 다시 시도')
+    expect(btn).not.toBeNull()
+    btn.click()
+    await flush(10)
+    expect(clearPartCache).toHaveBeenCalledTimes(1)
+    expect(createHost).toHaveBeenCalledTimes(2)
+    expect(retryPanel().hidden).toBe(true)
+  })
+
+  test('부팅 중 접으면 부팅이 멈추고 뷰어가 보인다', async () => {
+    const ctx: any = makeCtx({ chromeFold: true })
+    await pdfFormat.handlePdf(ctx)
+    expect(createHost).toHaveBeenCalledTimes(1)
+    expect(loadingEl()).not.toBeNull()
+    const foldCb = ctx.onFoldChange.mock.calls[0][0]
+    const hostInstance = (createHost as any).mock.results[0].value
+    ctx.setFolded(true)
+    foldCb()
+    expect(hostInstance.destroy).toHaveBeenCalled()
+    expect(loadingEl()).toBeNull()
+    expect(viewerFrame().style.height).toBe('')
+  })
+
+  test('접힌 상태로 열면 뷰어가 바로 보이고 부팅은 시작하지 않는다', async () => {
+    const ctx: any = makeCtx({ folded: true })
+    await pdfFormat.handlePdf(ctx)
+    expect(createHost).not.toHaveBeenCalled()
+    expect(loadingEl()).toBeNull()
+    expect(viewerFrame().style.height).toBe('')
   })
 })
 
