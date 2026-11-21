@@ -511,7 +511,7 @@
   // 로드를 URL별로 공유한다 (백그라운드 프리패치와 부팅 게이트가 같은
   // 문서에서 겹치는 경우). 완료·실패 후에는 항목을 지운다.
   var partInFlight = {};
-  function loadPartBytes(core, fetchFn, cachesObj, url, win, opts, onFileProgress) {
+  function loadPartBytes(core, fetchFn, cachesObj, url, win, opts, onFileProgress, expectedBytes) {
     var absolute = absUrl(url, win);
     if (partInFlight[absolute]) {
       return partInFlight[absolute].then(function (bytes) {
@@ -521,7 +521,7 @@
         return bytes;
       });
     }
-    var p = loadPartBytesOnce(core, fetchFn, cachesObj, url, absolute, opts, onFileProgress);
+    var p = loadPartBytesOnce(core, fetchFn, cachesObj, url, absolute, opts, onFileProgress, expectedBytes);
     partInFlight[absolute] = p;
     var cleanup = function () {
       if (partInFlight[absolute] === p) delete partInFlight[absolute];
@@ -530,7 +530,13 @@
     return p;
   }
 
-  function loadPartBytesOnce(core, fetchFn, cachesObj, url, absolute, opts, onFileProgress) {
+  // expectedBytes: 매니페스트 wasmPartBytes의 해당 파트 기대 길이
+  // (없으면 검증 안 함 — 구 매니페스트 하위호환). 길이 검증
+  // (2026-11-21): 캐시·네트워크 어느 쪽에서 오든 기대 길이와 다른
+  // 파트는 쓰지 않는다. 검증 없이 쓰면 잘린 WASM이 조립돼 로더의
+  // init이 조용히 죽고 ready가 안 와 45초 뒤 타임아웃 폴백만 뜬다 —
+  // 다시 시도도 같은 손상 캐시를 읽어 영구 실패한다 (사용자 실화면).
+  function loadPartBytesOnce(core, fetchFn, cachesObj, url, absolute, opts, onFileProgress, expectedBytes) {
     function fromNetwork() {
       return core
         .fetchWithProgress(fetchFn, url, {
@@ -546,6 +552,12 @@
         })
         .then(function (r) {
           var bytes = r.body || new Uint8Array(0);
+          // 잘린 본문은 저장하지 않고 거절한다 — 부팅 루프가
+          // 재시도하고, 전부 실패하면 폴백이 뜬다 (조용한 손상보다
+          // 시끄러운 실패가 낫다).
+          if (typeof expectedBytes === 'number' && bytes.byteLength !== expectedBytes) {
+            throw new Error('PdfCraft 자산을 받지 못했습니다 (길이 불일치: ' + url + ')');
+          }
           if (!cachesObj) return bytes;
           // 저장이 끝나야 바이트를 넘긴다 — 그래야 게이트가 끝난
           // 직후의 다음 부팅도 캐시를 탄다.
@@ -558,15 +570,37 @@
       // 캐시 조회 자체는 절대 거절하지 않는다 — 실패하면 null로
       // 네트워크 폴백한다 (fromNetwork의 거절은 그대로 전파돼야 한다).
       if (!cachesObj) return Promise.resolve(null);
+      var cacheRef = null;
       return Promise.resolve()
         .then(function () {
           return cachesObj.open(PART_CACHE_NAME);
         })
         .then(function (cache) {
+          cacheRef = cache;
           return cache.match(absolute);
         })
         .then(function (res) {
           return res ? res.arrayBuffer() : null;
+        })
+        .then(function (buf) {
+          if (!buf) return null;
+          // 기대 길이와 다르면 손상된 캐시 — 지우고 네트워크로
+          // 다시 받는다 (null 반환이 fromNetwork 폴백이다).
+          if (typeof expectedBytes === 'number' && buf.byteLength !== expectedBytes) {
+            return Promise.resolve()
+              .then(function () {
+                return cacheRef && typeof cacheRef.delete === 'function'
+                  ? cacheRef.delete(absolute)
+                  : undefined;
+              })
+              .catch(function () {
+                return undefined;
+              })
+              .then(function () {
+                return null;
+              });
+          }
+          return buf;
         })
         .catch(function () {
           return null;
@@ -628,7 +662,10 @@
   // 본문을 버리고 받기만 한다 (작은 파일은 HTTP 캐시가 잡는다).
   // 멈춘 파일이 남으면 reject한다. 백그라운드 프리패치와 달리 once
   // 플래그를 타지 않는다 — 백그라운드가 중간에 실패했어도 부팅 때는
-  // 다시 받아야 한다.
+  // 다시 받아야 한다. 파트 길이는 매니페스트 wasmPartBytes와 대조한다
+  // (2026-11-21): 캐시가 잘렸으면 지우고 다시 받고, 네트워크 본문이
+  // 잘렸으면 저장하지 않고 거절한다 — 검증 없는 파트는 로더 init을
+  // 조용히 죽여 타임아웃 폴백만 만든다.
   // deps = { fetchFn, win, caches, onProgress, stallTimeoutMs,
   //          maxAttempts, retryDelayMs, setTimeoutFn, clearTimeoutFn }.
   // @returns {Promise<{done, failed, stalled, receivedBytes, partBytes}>}
@@ -685,6 +722,13 @@
         partUrls.forEach(function (u) {
           partSet[u] = true;
         });
+        // wasmPartBytes는 wasmParts와 같은 순서의 기대 길이 — 손상된
+        // 캐시·잘린 본문을 가려내는 유일한 기준이다 (없으면 검증 안 함).
+        var partLens = Array.isArray(man.wasmPartBytes) ? man.wasmPartBytes : [];
+        var partExpected = {};
+        partUrls.forEach(function (u, i) {
+          if (typeof partLens[i] === 'number') partExpected[u] = partLens[i];
+        });
         var onProgress = deps.onProgress;
         var filesTotal = urls.length;
         var receivedTotal = 0;
@@ -708,7 +752,7 @@
             if (partSet[u]) {
               return loadPartBytes(core, fetchFn, cachesObj, u, win, opts, function (fileReceived) {
                 report(u, fileReceived);
-              })
+              }, partExpected[u])
                 .then(function (bytes) {
                   partBytesByUrl[u] = bytes;
                   done.push(u);

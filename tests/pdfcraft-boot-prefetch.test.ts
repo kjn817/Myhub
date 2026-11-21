@@ -619,6 +619,112 @@ describe('pdfcraft 모듈 prefetchForBoot', () => {
     expect(Array.from(r.partBytes[0])).toEqual([1, 2, 3, 4]);
   });
 
+  test('길이가 안 맞는 캐시 파트는 지우고 네트워크에서 다시 받는다 (2026-11-21 손상 캐시)', async () => {
+    const { win, api } = loadPdf(true);
+    const restore = installFakeResponse();
+    try {
+      const caches = makeFakeCaches();
+      // part0은 잘린 2바이트로 심고(기대 4), part1은 올바른 3바이트로 심는다.
+      const part0Url = new URL('/vendor/pdfcraft/pdfcraft-web-abc_bg.wasm.part0', win.location.href).href;
+      const part1Url = new URL('/vendor/pdfcraft/pdfcraft-web-abc_bg.wasm.part1', win.location.href).href;
+      const store = await caches.open('myhub-pdfcraft-parts');
+      await store.put(part0Url, new FakeResponse(new Uint8Array([1, 2])));
+      await store.put(part1Url, new FakeResponse(new Uint8Array([5, 6, 7])));
+      const putBefore = caches.calls.put;
+      const manifest = {
+        js: 'pdfcraft-web-abc.js',
+        wasm: 'pdfcraft-web-abc_bg.wasm',
+        wasmParts: ['pdfcraft-web-abc_bg.wasm.part0', 'pdfcraft-web-abc_bg.wasm.part1'],
+        wasmPartBytes: [4, 3],
+      };
+      let part0Fetches = 0;
+      let part1Fetches = 0;
+      const fetchFn = jest.fn(async (url: string) => {
+        if (String(url).includes('manifest.json')) return textStreamRes(JSON.stringify(manifest));
+        if (String(url).endsWith('.wasm.part0')) {
+          part0Fetches += 1;
+          return chunkedRes(new Uint8Array([1, 2, 3, 4]));
+        }
+        if (String(url).endsWith('.wasm.part1')) {
+          part1Fetches += 1;
+          return chunkedRes(new Uint8Array([5, 6, 7]));
+        }
+        return binaryRes(100);
+      });
+      const r = await api.prefetchForBoot({ fetchFn, win, caches });
+      expect(r.partBytes).toHaveLength(2);
+      expect(Array.from(r.partBytes[0])).toEqual([1, 2, 3, 4]);
+      expect(Array.from(r.partBytes[1])).toEqual([5, 6, 7]);
+      // 잘린 part0만 네트워크를 타고, 올바른 part1은 캐시를 탄다.
+      expect(part0Fetches).toBe(1);
+      expect(part1Fetches).toBe(0);
+      // 손상 항목은 삭제되고 올바른 바이트로 다시 저장된다.
+      expect(caches.calls.delete).toBe(1);
+      expect(caches.calls.put - putBefore).toBe(1);
+      const cached0 = await (await caches.open('myhub-pdfcraft-parts')).match(part0Url);
+      expect(new Uint8Array(await cached0.arrayBuffer())).toEqual(new Uint8Array([1, 2, 3, 4]));
+    } finally {
+      restore();
+    }
+  });
+
+  test('네트워크 본문이 잘렸으면 저장하지 않고 거절한다', async () => {
+    const { win, api } = loadPdf(true);
+    const restore = installFakeResponse();
+    try {
+      const caches = makeFakeCaches();
+      const manifest = {
+        js: 'pdfcraft-web-abc.js',
+        wasm: 'pdfcraft-web-abc_bg.wasm',
+        wasmParts: ['pdfcraft-web-abc_bg.wasm.part0', 'pdfcraft-web-abc_bg.wasm.part1'],
+        wasmPartBytes: [4, 3],
+      };
+      const fetchFn = jest.fn(async (url: string) => {
+        if (String(url).includes('manifest.json')) return textStreamRes(JSON.stringify(manifest));
+        if (String(url).endsWith('.wasm.part0')) return chunkedRes(new Uint8Array([1, 2]));
+        if (String(url).endsWith('.wasm.part1')) return chunkedRes(new Uint8Array([5, 6, 7]));
+        return binaryRes(100);
+      });
+      await expect(api.prefetchForBoot({ fetchFn, win, caches })).rejects.toThrow('길이 불일치');
+      // 잘린 파트가 캐시에 남으면 다음 부팅도 망가진다 — 저장 자체가 안 돼야 한다.
+      expect(caches.calls.put).toBe(0);
+    } finally {
+      restore();
+    }
+  });
+
+  test('매니페스트에 wasmPartBytes가 없으면 길이 검증을 건너뛴다 (구 매니페스트 하위호환)', async () => {
+    const { win, api } = loadPdf(true);
+    const restore = installFakeResponse();
+    try {
+      const caches = makeFakeCaches();
+      const part0Url = new URL('/vendor/pdfcraft/pdfcraft-web-abc_bg.wasm.part0', win.location.href).href;
+      const store = await caches.open('myhub-pdfcraft-parts');
+      await store.put(part0Url, new FakeResponse(new Uint8Array([1, 2])));
+      const manifest = {
+        js: 'pdfcraft-web-abc.js',
+        wasm: 'pdfcraft-web-abc_bg.wasm',
+        wasmParts: ['pdfcraft-web-abc_bg.wasm.part0', 'pdfcraft-web-abc_bg.wasm.part1'],
+      };
+      let part0Fetches = 0;
+      const fetchFn = jest.fn(async (url: string) => {
+        if (String(url).includes('manifest.json')) return textStreamRes(JSON.stringify(manifest));
+        if (String(url).endsWith('.wasm.part0')) {
+          part0Fetches += 1;
+          return chunkedRes(new Uint8Array([1, 2, 3, 4]));
+        }
+        if (String(url).endsWith('.wasm.part1')) return chunkedRes(new Uint8Array([5, 6, 7]));
+        return binaryRes(100);
+      });
+      const r = await api.prefetchForBoot({ fetchFn, win, caches });
+      expect(Array.from(r.partBytes[0])).toEqual([1, 2]);
+      expect(part0Fetches).toBe(0);
+      expect(caches.calls.delete).toBe(0);
+    } finally {
+      restore();
+    }
+  });
+
   test('오래된 버전의 파트는 CacheStorage에서 치운다', async () => {
     const { win, api } = loadPdf(true);
     const restore = installFakeResponse();
