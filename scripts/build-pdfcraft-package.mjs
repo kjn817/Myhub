@@ -12,7 +12,7 @@ import { join } from 'node:path';
 const DIST = new URL('./pdfcraft/dist/web/', import.meta.url).pathname;
 const OUT = process.argv[2]; // 배치 대상 디렉터리
 if (!OUT) throw new Error('usage: node package-pdfcraft.mjs <outdir>');
-const SOURCE_COMMIT = '665db6524dfe241e5a9b2e78b278fdd8c77f43ba'; // myhub-v0.21.1 HEAD
+const SOURCE_COMMIT = '040091eeefb14b914738836ad31141355e7feabc'; // myhub-v0.21.1 HEAD (tab connect + drop duplicate print/save)
 const VERSION = '0.21.1';
 
 const files = readdirSync(DIST);

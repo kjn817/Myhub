@@ -19,6 +19,9 @@
  * - 편집기가 펼쳐져 있을 때(엔진 탭 줄이 문서명을 표시) 제목 줄의
  *   문서명을 비운다 — 접힌 상태(뷰어, 탭 줄 없음)나 접기 상태를
  *   아직 모를 때는 제목을 표시한다. 저장 안 된 변경 점은 그대로 둔다.
+ * - PDF 창에는 접기 버튼을 그리지 않는다 (2026-11-21 사용자 지시):
+ *   접으면 이전 엔진(뷰어)이 나와 이상하다 — PDF는 편집기만 쓴다.
+ *   접기 상태 자체는 유지한다 (폴백 때 제목 표시 판단에 쓴다).
  *
  * 검증 성질:
  * - desktop.css에 PDF 전용 제목 줄 규칙이 있고 배경이 #e9e9eb이며,
@@ -259,5 +262,61 @@ describe('PDF 제목 줄 — 펼침 때 문서명 중복 제거 (windows.js)', (
       folded: false,
     })
     expect(titleText('excel')).toBe('예산.xlsx')
+  })
+})
+
+describe('PDF 창 — 접기 버튼 없음 (windows.js)', () => {
+  function foldButton(id: string): any {
+    return winEl(id).querySelector('.myhub-win-fold')
+  }
+  function quickActions(id: string): string[] {
+    return Array.from(
+      winEl(id).querySelectorAll('.myhub-win-quick .myhub-oq-btn[data-oq-action]'),
+    ).map((b: any) => b.getAttribute('data-oq-action'))
+  }
+
+  test('PDF 창은 접기 가능 통지가 와도 접기 버튼을 그리지 않는다', () => {
+    const m = makeManager(new MemoryStorage())
+    m.openModule('pdf')
+    const frame = winEl('pdf').querySelector('iframe.dt-frame')
+    postToFrame(frame, {
+      type: 'myhub:office-fold',
+      app: 'pdf',
+      available: true,
+      folded: false,
+    })
+    expect(foldButton('pdf')).toBeNull()
+  })
+
+  test('PDF 창은 접기 버튼 없이 저장·인쇄 빠른 실행은 그대로 그린다', () => {
+    const m = makeManager(new MemoryStorage())
+    m.openModule('pdf')
+    const frame = winEl('pdf').querySelector('iframe.dt-frame')
+    postToFrame(frame, {
+      type: 'myhub:office-fold',
+      app: 'pdf',
+      available: true,
+      folded: false,
+    })
+    postToFrame(frame, {
+      type: 'myhub:office-quick',
+      quick: { save: true, print: true },
+    })
+    expect(foldButton('pdf')).toBeNull()
+    expect(quickActions('pdf')).toEqual(['save', 'print'])
+  })
+
+  test('Excel 창은 접기 버튼이 그대로 그려진다 (PDF 전용)', () => {
+    const m = makeManager(new MemoryStorage())
+    m.openModule('excel')
+    const frame = winEl('excel').querySelector('iframe.dt-frame')
+    postToFrame(frame, {
+      type: 'myhub:office-fold',
+      app: 'excel',
+      available: true,
+      folded: false,
+    })
+    expect(foldButton('excel')).not.toBeNull()
+    expect(foldButton('excel').getAttribute('data-fold-state')).toBe('open')
   })
 })

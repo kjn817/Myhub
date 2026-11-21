@@ -1738,7 +1738,11 @@
       officeQuickSig.set(winId, sig);
       box.innerHTML = '';
       var foldSt = officeFoldByWin.get(winId) || null;
-      if (foldSt && foldSt.available) {
+      // PDF는 접기 버튼을 그리지 않는다 (2026-11-21 사용자 지시): 접으면
+      // 이전 엔진(뷰어)이 나와 이상하다 — PDF는 편집기만 쓴다. 접기 상태
+      // 자체는 유지한다 (폴백 때 제목 표시 판단에 쓴다).
+      var noFold = rec.el.dataset.module === 'pdf';
+      if (foldSt && foldSt.available && !noFold) {
         var fb = document.createElement('button');
         fb.type = 'button';
         fb.className = 'myhub-oq-btn myhub-win-fold';

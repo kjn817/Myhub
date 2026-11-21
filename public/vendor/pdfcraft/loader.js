@@ -31,8 +31,8 @@ function reportFailure(err) {
 try {
 const PART_PARAMS = new URLSearchParams(location.search);
 const PARTS = [
-  PART_PARAMS.get('wasmPart0') || './pdfcraft-web-9b55b29e05639517_bg.wasm.part0',
-  PART_PARAMS.get('wasmPart1') || './pdfcraft-web-9b55b29e05639517_bg.wasm.part1',
+  PART_PARAMS.get('wasmPart0') || './pdfcraft-web-af056de64eb50d74_bg.wasm.part0',
+  PART_PARAMS.get('wasmPart1') || './pdfcraft-web-af056de64eb50d74_bg.wasm.part1',
 ];
 const chunks = await Promise.all(
   PARTS.map(async (p) => {
@@ -46,7 +46,7 @@ const bytes = new Uint8Array(total);
 let at = 0;
 for (const c of chunks) { bytes.set(c, at); at += c.length; }
 
-const bindings = await import('./pdfcraft-web-9b55b29e05639517.js');
+const bindings = await import('./pdfcraft-web-af056de64eb50d74.js');
 const wasm = await bindings.default({ module_or_path: bytes });
 window.wasmBindings = bindings;
 dispatchEvent(new CustomEvent('TrunkApplicationStarted', { detail: { wasm } }));
