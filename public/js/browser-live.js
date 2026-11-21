@@ -1224,14 +1224,15 @@
     function handleNavigateResult(res, viewport, gen) {
       var body = res && res.body;
       if (res && res.status === 200 && body && body.ok) {
-        // navigate도 뷰포트를 적용했으므로 기록해 둔다 (리사이즈 관찰자가
-        // 같은 크기를 다시 보내지 않게 한다).
+        // navigate의 뷰포트는 임시 CDP 세션에 걸린 것이라 세션을 닫으면
+        // 5초 안에 풀리고 사이드카 영구 세션의 낡은 값(다른 기기 크기)이
+        // 다시 드러난다 — navigate 성공을 기록으로 삼으면 정합이 영원히
+        // 안 돌아간다 (2026-11-21 맥 쏠림: 1918 override가 1470 창에
+        // 남아 네이버가 216px 오른쪽으로 쏠렸다). 성공을 믿고 기록하지
+        // 않고 /viewport POST(영구 세션)로 다시 적용한다 — POST가
+        // 성공해야 lastApplied가 채워지고, 실패면 백오프 재시도가 돈다.
         if (viewport && viewport.width > 0 && viewport.height > 0) {
-          lastAppliedViewport = {
-            width: Math.round(viewport.width),
-            height: Math.round(viewport.height),
-            dpr: viewport.dpr || 1,
-          };
+          applyViewportNow(viewport);
         }
         // 진단: 보낸 뷰포트와 서버의 CDP 이동 결과(nav/navStage)를
         // 남겨 원격 뷰포트 적용 여부를 콘솔에서 확인할 수 있게 한다.

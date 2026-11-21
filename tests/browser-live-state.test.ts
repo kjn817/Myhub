@@ -338,15 +338,18 @@ describe('browser-live 뷰포트 주기 재적용 폐지 (2026-11-17 P1)', () =>
   test('enterLive 후 30초가 지나도 applyViewport를 다시 부르지 않는다', async () => {
     // 10초 주기 재적용(QA 2차)은 사이드카 영구 CDP가 새 탭에도
     // 뷰포트를 즉시 적용하므로 폐지됐다 — 다시 넣으면 이 테스트가
-    // 실패한다. URL 진입은 navigate가 뷰포트를 적용하므로 호출 0회.
+    // 실패한다. URL 진입은 navigate 뒤 /viewport POST(영구 세션)가
+    // 1회 나가고(2026-11-21: navigate 임시 세션만 믿으면 낡은
+    // override가 남아 쏠림이 생긴다), 이후 30초 폴링은 추가 호출이
+    // 없어야 한다.
     setupFixture()
     const h = makeLive()
     await h.live.enterLive('https://www.naver.com')
     await flush()
-    expect(h.viewportCalls).toBe(0)
+    expect(h.viewportCalls).toBe(1)
     jest.advanceTimersByTime(30000)
     await flush()
-    expect(h.viewportCalls).toBe(0)
+    expect(h.viewportCalls).toBe(1)
     await h.live.endLive()
   })
 

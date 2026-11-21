@@ -531,17 +531,42 @@ describe('browser-live 뷰포트 DPR (2026-11-19 맥 레티나)', () => {
   })
 
   test('navigate 뒤에는 같은 크기·DPR을 폴링이 다시 보내지 않는다', async () => {
-    // handleNavigateResult가 lastApplied에 dpr을 안 남기면 정합이 매번
-    // 다르다고 보고 2초마다 재전송한다 — 이 테스트가 그 회귀를 잡는다.
+    // navigate 성공 뒤 /viewport POST(영구 세션)가 1회 나가고, 그
+    // 성공으로 lastApplied가 채워지면 폴링은 다시 보내지 않는다.
+    // (2026-11-21 수정 전에는 navigate 성공만으로 기록해 POST가
+    // 0회였고, 임시 세션이 풀리면 낡은 override가 드러나도 정합이
+    // 안 돌아가 맥에서 216px 쏠림이 생겼다.)
     stubDpr(2)
     setupFixture({ w: 1470, h: 847 }, { w: 0, h: 0 })
     const { live, vpCalls } = makeLive()
     await live.enterLive('https://www.naver.com')
     await flush()
-    expect(vpCalls).toHaveLength(0)
+    expect(vpCalls).toEqual([{ viewport: { width: 1470, height: 847, dpr: 2 } }])
     jest.advanceTimersByTime(10000)
     await flush()
-    expect(vpCalls).toHaveLength(0)
+    expect(vpCalls).toHaveLength(1)
+    live.endLive()
+  })
+
+  test('navigate 성공 뒤 /viewport POST가 실패하면 기록하지 않고 백오프 재시도한다', async () => {
+    // navigate 성공만으로 lastApplied를 채우던 옛 코드는 POST 실패
+    // 여부를 알 수 없어 낡은 override를 영원히 방치했다. 이제는
+    // POST가 실패하면 기록이 안 남고 2초·5초 간격으로 다시 시도한다.
+    stubDpr(2)
+    setupFixture({ w: 1470, h: 847 }, { w: 0, h: 0 })
+    const { live, vpCalls } = makeLive(undefined, () =>
+      Promise.resolve({ status: 502, body: null }),
+    )
+    await live.enterLive('https://www.naver.com')
+    await flush()
+    expect(vpCalls).toHaveLength(1)
+    jest.advanceTimersByTime(2000)
+    await flush()
+    expect(vpCalls).toHaveLength(2)
+    jest.advanceTimersByTime(5000)
+    await flush()
+    expect(vpCalls).toHaveLength(3)
+    expect(vpCalls[2]).toEqual({ viewport: { width: 1470, height: 847, dpr: 2 } })
     live.endLive()
   })
 
