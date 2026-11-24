@@ -9,7 +9,7 @@ import type { Env } from '../../types'
 import { storageUpload, storageDestroy } from '../../services/storage'
 import { deleteOracleFile, fetchOracleFile, putOracleFile } from '../../services/oracle-files'
 import { searchDriveItems } from './search'
-import { nextOracleVersion, saveDriveFile } from './upload'
+import { mimeFromFilename, nextOracleVersion, saveDriveFile } from './upload'
 
 export const driveApp = new Hono<{ Bindings: Env }>()
 
@@ -302,7 +302,12 @@ driveApp.get('/files/:id/content', async (c) => {
   }
   if (!up.ok) return c.json({ ok: false, error: 'upstream failed' }, 502)
   const headers = new Headers()
-  headers.set('Content-Type', row.mime || 'application/octet-stream')
+  // Content-Type은 파일명 확장자 allowlist로만 정한다 (2026-11-25):
+  // 저장된 row.mime은 업로드 시 클라이언트가 보낸 file.type 그대로라
+  // 믿을 수 없다 — HTML 바이트인 .pdf 파일을 text/html로 서빙하면
+  // 샌드박스 없는 폴백 iframe에서 Stored XSS가 된다. allowlist에 없는
+  // 확장자(html·svg·js 등)는 octet-stream으로 떨어진다.
+  headers.set('Content-Type', mimeFromFilename(row.filename) || 'application/octet-stream')
   // MIME 스니핑 차단 (2026-11-15): PDF 대체 화면이 샌드박스 없는
   // iframe으로 콘텐츠를 띄우므로, 바이트가 HTML로 둔갑해 같은 출처
   // 스크립트로 실행되는 경로를 막는다.

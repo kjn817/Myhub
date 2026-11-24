@@ -195,3 +195,35 @@ describe('pdf.js 뷰어 글루', () => {
     expect(app.open).not.toHaveBeenCalled()
   })
 })
+
+describe('pdf.js 뷰어 locale.json (2026-11-25)', () => {
+  const LOCALE_DIR = path.join(ROOT, 'public', 'pdf-viewer', 'web', 'locale')
+  const LOCALE_JSON = path.join(LOCALE_DIR, 'locale.json')
+
+  test('locale.json이 있고 viewer.mjs GenericL10n이 기대하는 형태이다', () => {
+    // viewer.html의 <link rel="resource" type="application/l10n">이
+    // locale.json을 가리키는데 파일이 없어 PDF를 열 때마다 404가 났고,
+    // L10n 번들이 전부 null이 돼 뷰어 UI가 영어 폴백만 나왔다.
+    expect(fs.existsSync(LOCALE_JSON)).toBe(true)
+    const map = JSON.parse(fs.readFileSync(LOCALE_JSON, 'utf-8'))
+    // 키는 소문자여야 한다 — #fixupLangCode가 lang을 소문자로 정규화해
+    // 조회한다. 값은 locale.json 기준 상대 경로의 .ftl 파일이어야 한다.
+    for (const key of Object.keys(map)) {
+      expect(key).toBe(key.toLowerCase())
+      expect(typeof map[key]).toBe('string')
+      expect(map[key].endsWith('.ftl')).toBe(true)
+      expect(fs.existsSync(path.join(LOCALE_DIR, map[key]))).toBe(true)
+    }
+    expect(map['ko']).toBeDefined()
+    expect(map['en-us']).toBeDefined()
+  })
+
+  test('locale.json이 정적 에셋 집합에 등록돼 있다 (없으면 배포에서 빠진다)', () => {
+    // pdf-viewer는 엔진 디렉토리라 참조 스캔에서 제외되므로, 등록
+    // 누락을 잡는 검사는 이 명시 단언뿐이다.
+    const assets = JSON.parse(
+      fs.readFileSync(path.join(ROOT, 'scripts', 'static-assets.json'), 'utf-8'),
+    )
+    expect(assets.files).toContain('/pdf-viewer/web/locale/locale.json')
+  })
+})

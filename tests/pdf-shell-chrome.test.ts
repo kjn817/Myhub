@@ -430,4 +430,44 @@ describe('PDF 호스트 메뉴·모드 게시 (2026-11-22)', () => {
     expect(setState).not.toHaveBeenCalled()
     expect(setQuick).not.toHaveBeenCalled()
   })
+
+  test('정보·팔레트 빠른 실행 후 엔진 캔버스까지 포커스가 간다 (2026-11-25)', async () => {
+    // 포커스가 셸 버튼에 남아 있으면 Escape이 엔진에 안 닿아 대화상자가
+    // 닫히지 않는다 — 대화상자·팔레트를 여는 명령 뒤에는 엔진 캔버스까지
+    // 포커스를 옮겨야 한다. iframe만 포커스하면 엔진 문서의 activeElement가
+    // body라 키가 엔진에 안 닿는다 (실브라우저 실측). 저장·인쇄는 팝업을
+    // 안 열므로 옮기지 않는다.
+    await mountReady()
+    const host = createHost.mock.results[0].value
+    const focusSpy = jest.spyOn(host.frame, 'focus')
+    const canvasFocus = jest.fn()
+    Object.defineProperty(host.frame, 'contentDocument', {
+      value: { querySelector: () => ({ focus: canvasFocus }) },
+      configurable: true,
+    })
+    expect(quickHandler('info')).toBe(true)
+    expect(focusSpy).toHaveBeenCalledTimes(1)
+    expect(canvasFocus).toHaveBeenCalledTimes(1)
+    expect(quickHandler('palette')).toBe(true)
+    expect(focusSpy).toHaveBeenCalledTimes(2)
+    expect(canvasFocus).toHaveBeenCalledTimes(2)
+    expect(quickHandler('save')).toBe(true)
+    expect(quickHandler('print')).toBe(true)
+    expect(focusSpy).toHaveBeenCalledTimes(2)
+    expect(canvasFocus).toHaveBeenCalledTimes(2)
+  })
+
+  test('craft 표면에서는 Finder 저장 버튼이 숨고 뷰어로 돌아오면 다시 보인다 (2026-11-25)', async () => {
+    // 엔진에 저장 요청 채널이 없어 craft 표면의 Finder 저장 버튼은 안내만
+    // 하고 저장을 못 한다 — craft 표면일 때는 숨기는 임시 조치다.
+    const ctx = makeCtx(true)
+    await pdfFormat.handlePdf(ctx)
+    expect(ctx.saveBtn.hidden).toBe(false)
+    craftOpts.onReady()
+    await flush(10)
+    expect(ctx.saveBtn.hidden).toBe(true)
+    craftOpts.onFallback('timeout')
+    await flush(10)
+    expect(ctx.saveBtn.hidden).toBe(false)
+  })
 })

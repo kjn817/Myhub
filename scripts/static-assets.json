@@ -393,6 +393,7 @@
     "/pdf-viewer/web/images/toolbarButton-zoomOut.svg",
     "/pdf-viewer/web/images/treeitem-collapsed.svg",
     "/pdf-viewer/web/images/treeitem-expanded.svg",
+    "/pdf-viewer/web/locale/locale.json",
     "/pdf-viewer/web/locale/en-US/viewer.ftl",
     "/pdf-viewer/web/locale/ko/viewer.ftl",
     "/pdf-viewer/web/myhub-glue.mjs",

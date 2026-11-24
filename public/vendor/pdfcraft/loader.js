@@ -30,10 +30,19 @@ function reportFailure(err) {
 
 try {
 const PART_PARAMS = new URLSearchParams(location.search);
+// 쿼리로 받은 파트 URL은 blob:만 허용한다 — 호스트가 부팅 게이트에서
+// 넘기는 Blob URL이 유일한 정당한 쿼리 값이다 (blob: URL은 만든
+// 출처에서만 fetch된다). 다른 스킴·경로가 들어오면 상대 경로 파트로
+// 폴백한다.
+function partFromQuery(i, fallback) {
+  var v = PART_PARAMS.get('wasmPart' + i);
+  if (typeof v === 'string' && v.indexOf('blob:') === 0) return v;
+  return fallback;
+}
 const PARTS = [
-  PART_PARAMS.get('wasmPart0') || './pdfcraft-web-a63fea2b9a0762bf_bg.wasm.part0',
-  PART_PARAMS.get('wasmPart1') || './pdfcraft-web-a63fea2b9a0762bf_bg.wasm.part1',
-  PART_PARAMS.get('wasmPart2') || './pdfcraft-web-a63fea2b9a0762bf_bg.wasm.part2',
+  partFromQuery(0, './pdfcraft-web-a63fea2b9a0762bf_bg.wasm.part0'),
+  partFromQuery(1, './pdfcraft-web-a63fea2b9a0762bf_bg.wasm.part1'),
+  partFromQuery(2, './pdfcraft-web-a63fea2b9a0762bf_bg.wasm.part2'),
 ];
 const chunks = await Promise.all(
   PARTS.map(async (p) => {

@@ -31,19 +31,19 @@
   var SAVE_LIMIT = 10 * 1024 * 1024;
   var VIEWER_PAGE = '/pdf-viewer/web/viewer.html';
   var NOTE =
-    '전용 뷰어등 찾기 돋보기 주석양식 입력은. 합니다 본문그림 직접 편집과 XFA 양식 제한합니다';
+    '전용 뷰어에서는 찾기·돋보기·주석·양식 입력을 할 수 있습니다. 본문·그림 직접 편집과 XFA 양식은 제한됩니다.';
 
-  // 테스트가 주요한 등 있는 다음만 (회사 경로의 기본값 그림으로)
+  // 테스트에서 주입하는 내부 값들 (기본값은 프로덕션 동작과 같다)
   var internals = {
     readyTimeoutMs: 20000,
     saveTimeoutMs: 30000,
-    libLoader: null, // null이 면 pdf-lib본다 지연 import
+    libLoader: null, // null이면 pdf-lib을 지연 import한다
     pickerFactory: null, // null이면 window.MyHubOfficePicker 사용
   };
 
-  // 동적 로딩 URL과 공용 헬퍼(asset-url.js)가 배포 버전을 붙인다
-  // (N-06 등 버전 없는 URL과 immutable 캐시를 고정할 등 있다).
-  // 헬퍼가 없는 환경(테스트 등)에서는 원본 URL 그림이다.
+  // 동적 로딩 URL에 공용 헬퍼(asset-url.js)가 배포 버전을 붙인다
+  // (버전 없는 URL은 immutable 캐시에 고정될 수 있다).
+  // 헬퍼가 없는 환경(테스트 등)에서는 원본 URL을 그대로 쓴다.
   function versionedAssetUrl(url) {
     var h = typeof window !== 'undefined' ? window.MyHubAssetUrl : null;
     return typeof h === 'function' ? h(url) : url;
@@ -223,6 +223,29 @@
         }
       });
     }
+    // 엔진 캔버스에 포커스를 옮긴다 (대화상자·팔레트 열기 뒤).
+    // 포커스 실패는 대화상자 열기 자체를 망가뜨리지 않으므로 warn만
+    // 남긴다 (관문 23: 빈 catch 금지 — 실행 문장이 있어야 한다).
+    function focusCraftCanvas() {
+      if (!state.craft) return;
+      try {
+        var cframe = state.craft.frame;
+        if (cframe && typeof cframe.focus === 'function') {
+          cframe.focus();
+        }
+        // 같은 출처라 엔진 문서에 닿는다 — 캔버스까지 포커스한다.
+        var cdoc = cframe && cframe.contentDocument;
+        var canvas = cdoc ? cdoc.querySelector('canvas') : null;
+        if (canvas && typeof canvas.focus === 'function') {
+          canvas.focus();
+        }
+      } catch (e) {
+        if (typeof console !== 'undefined' && console.warn) {
+          console.warn('[pdf] craft canvas focus failed', e);
+        }
+      }
+    }
+
     if (tabsHost && typeof window.MyHubOfficeTabs.onQuick === 'function') {
       window.MyHubOfficeTabs.onQuick('pdf', function (action) {
         if (!ctx.isCurrent() || state.surface !== 'craft' || !state.craft) {
@@ -230,8 +253,23 @@
         }
         if (action === 'print') return state.craft.sendMenuCommand('print.dialog');
         if (action === 'save') return state.craft.sendMenuCommand('file.save');
-        if (action === 'info') return state.craft.sendMenuCommand('file.properties');
-        if (action === 'palette') return state.craft.sendMenuCommand('view.palette');
+        // 대화상자·팔레트를 여는 명령 뒤에는 엔진 캔버스까지 포커스를
+        // 옮긴다 — 안 그러면 포커스가 셸 버튼에 남아 Escape이 엔진에
+        // 안 닿고 대화상자가 닫히지 않는다 (2026-11-25). iframe만
+        // 포커스하면 엔진 문서의 activeElement가 body라 키가 엔진에
+        // 안 닿는다 — 엔진은 키를 캔버스에서 듣는다. 캔버스를 직접
+        // 클릭하면 닫히는 것과 같은 경로다 (실브라우저 실측).
+        // 명령 호출은 리터럴로 둔다 — F2 표면 계약이 이 문자열들을 핀한다.
+        if (action === 'info') {
+          var okInfo = state.craft.sendMenuCommand('file.properties');
+          focusCraftCanvas();
+          return okInfo;
+        }
+        if (action === 'palette') {
+          var okPalette = state.craft.sendMenuCommand('view.palette');
+          focusCraftCanvas();
+          return okPalette;
+        }
         return false;
       });
     }
@@ -389,7 +427,7 @@
       native.src = ctx.contentUrl();
       frame.replaceWith(native);
       frame = native;
-      ctx.setNote('전용 뷰어를 불러오지 못해 기본 미리보기로 표시합니다 (주석 조작등 합니다)');
+      ctx.setNote('전용 뷰어를 불러오지 못해 기본 미리보기로 표시합니다 (주석 조작은 할 수 없습니다)');
     }
 
     // ---------- PdfCraft 편집기 실행 (finder-pdfcraft.js 브리지) ----------
@@ -400,7 +438,7 @@
     // ready가 실패 없으면(위치ailed) 편집기만 조용히 닮고 뷰어의
     // 온다 (대관 보존, 주요 화면 금지).
     var CRAFT_NOTE =
-      '전용 편집기등 페이지 정리주석 양식 입력은 합니다. 본문 그림 직접 편집은 제한합니다';
+      '전용 편집기에서는 페이지 정리·주석·양식 입력을 할 수 있습니다. 본문·그림 직접 편집은 제한됩니다.';
 
     function wantCraft() {
       return editable && !!pdfCraft && !ctx.isFolded();
@@ -462,6 +500,17 @@
       if (el) el.textContent = text;
     }
 
+    // Finder 저장 버튼은 뷰어 표면에서만 보인다 (2026-11-25 임시 조치):
+    // craft 표면+dirty일 때 이 버튼은 안내만 하고 저장을 못 한다 — 엔진에
+    // save-request 채널이 없어 doSave가 안내만 반환하기 때문이다. 기본
+    // 미리보기(fellBack)에서는 저장 자체가 안 되므로 역시 숨긴다. 엔진에
+    // 저장 채널이 생기면 이 숨김을 걷고 doSave를 연결한다.
+    function syncSaveBtn() {
+      if (!ctx.saveBtn) return;
+      ctx.saveBtn.hidden =
+        !editable || state.fellBack || state.surface !== 'viewer';
+    }
+
     function showCraft() {
       if (!state.craft) return;
       hideLoading();
@@ -472,6 +521,7 @@
       if (stateEl) stateEl.textContent = '전용 편집기';
       publishModeTabs();
       publishQuick();
+      syncSaveBtn();
     }
 
     function showViewer() {
@@ -482,6 +532,7 @@
       updateStateLabel();
       publishModeTabs();
       publishQuick();
+      syncSaveBtn();
     }
 
     function stopCraft() {
@@ -705,8 +756,10 @@
 
     function doSave() {
       if (state.surface === 'craft') {
-        // 브리지나 호스트가 길이를 요청한 메시지가가 없는 등 길이
-        // 편집기 앉힌 파일 동작인 pdfcraft:save로 올려 본다 만 실패한다.
+        // 엔진에 저장 요청 채널이 없어 호스트가 저장을 직접 할 수
+        // 없다 — 편집기 안에서 저장하도록 안내만 한다. craft 표면에서는
+        // Finder 저장 버튼 자체를 숨기므로 (syncSaveBtn) 이 경로는
+        // 단축키 등 우회로만 도달한다.
         if (state.dirty) {
           ctx.setStatus('편집기 화면에서 저장하세요 (편집기의 파일 또는 Ctrl+S)');
           return Promise.resolve(false);
@@ -754,7 +807,7 @@
     }
 
     if (editable) {
-      if (ctx.saveBtn) ctx.saveBtn.hidden = false;
+      syncSaveBtn();
       ctx.setSaveHandler(doSave);
     }
     // 편집기 직접 진입 (2026-11-21 사용자 지시): 편집기를 쓸 수 있는

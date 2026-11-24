@@ -69,7 +69,10 @@ copyTree(join(DIST, 'snippets'), join(OUT, 'snippets'));
 
 // 로더의 파트 목록은 패키징 시점에 리터럴로 박는다 — 로더는 매니페스트를
 // 안 읽으므로 개수를 런타임에 알 수 없다. 줄 수는 parts 배열에서 나온다.
-const partLines = parts.map((p, i) => `  PART_PARAMS.get('wasmPart${i}') || './${p}',`).join('\n');
+// 쿼리 값은 partFromQuery가 blob:만 받아들이고 나머지는 상대 경로로
+// 폴백한다 (2026-11-25) — 임의 URL을 fetch해 공격자 WASM이 같은 출처
+// iframe에서 실행되는 경로를 막는다.
+const partLines = parts.map((p, i) => `  partFromQuery(${i}, './${p}'),`).join('\n');
 
 const loader = `// pdfcraft 로더 (build-pdfcraft.mjs 재구성): 분할된 WASM 조각을 fetch로
 // 이어 붙여 wasm-bindgen 글루의 init에 바이트로 전달한다. fetch arrayBuffer는 전송
@@ -103,6 +106,15 @@ function reportFailure(err) {
 
 try {
 const PART_PARAMS = new URLSearchParams(location.search);
+// 쿼리로 받은 파트 URL은 blob:만 허용한다 — 호스트가 부팅 게이트에서
+// 넘기는 Blob URL이 유일한 정당한 쿼리 값이다 (blob: URL은 만든
+// 출처에서만 fetch된다). 다른 스킴·경로가 들어오면 상대 경로 파트로
+// 폴백한다.
+function partFromQuery(i, fallback) {
+  var v = PART_PARAMS.get('wasmPart' + i);
+  if (typeof v === 'string' && v.indexOf('blob:') === 0) return v;
+  return fallback;
+}
 const PARTS = [
 ${partLines}
 ];

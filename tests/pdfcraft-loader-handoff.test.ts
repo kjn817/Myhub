@@ -56,8 +56,13 @@ describe('pdfcraft 로더 게이트 핸드오프', () => {
   test('패키징 템플릿이 파트마다 wasmPart 쿼리 줄을 생성한다', () => {
     expect(TEMPLATE).toContain('new URLSearchParams(location.search)');
     // 파트 줄은 parts 배열에서 생성된다 — 리터럴 2줄 고정이 아니다.
-    expect(TEMPLATE).toContain("PART_PARAMS.get('wasmPart${i}')");
+    // 쿼리 값은 partFromQuery가 blob:만 받아들이고 나머지는 상대
+    // 경로로 폴백한다 (2026-11-25) — 임의 URL fetch로 공격자 WASM이
+    // 같은 출처 iframe에서 실행되는 경로를 막는다.
+    expect(TEMPLATE).toContain("partFromQuery(${i}, './${p}')");
     expect(TEMPLATE).toContain('partLines');
+    expect(TEMPLATE).toContain('function partFromQuery');
+    expect(TEMPLATE).toContain("v.indexOf('blob:') === 0");
     // 파트당 상한이 있어 한도를 넘는 벤더가 조용히 안 만들어진다.
     expect(TEMPLATE).toContain('MAX_PART_BYTES');
   });
@@ -65,8 +70,11 @@ describe('pdfcraft 로더 게이트 핸드오프', () => {
   test('벤더본 loader.js가 매니페스트의 모든 파트에 핸드오프를 한다', () => {
     expect(PART_NAMES.length).toBeGreaterThanOrEqual(2);
     expect(LOADER).toContain('new URLSearchParams(location.search)');
+    expect(LOADER).toContain('function partFromQuery');
     for (let i = 0; i < PART_NAMES.length; i++) {
-      expect(LOADER).toContain(`PART_PARAMS.get('wasmPart${i}')`);
+      expect(LOADER).toContain(
+        `partFromQuery(${i}, './${PART_NAMES[i]}')`,
+      );
     }
   });
 
@@ -74,9 +82,22 @@ describe('pdfcraft 로더 게이트 핸드오프', () => {
     for (let i = 0; i < PART_NAMES.length; i++) {
       const name = PART_NAMES[i].replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       expect(LOADER).toMatch(
-        new RegExp(`get\\('wasmPart${i}'\\) \\|\\| '\\./${name}'`),
+        new RegExp(`partFromQuery\\(${i}, '\\./${name}'\\)`),
       );
     }
+  });
+
+  test('쿼리 파트 URL은 blob:만 허용하고 그 외는 폴백한다', () => {
+    // 가드 로직이 템플릿·벤더본 양쪽에 있어야 다음 패키징 때 사라지지
+    // 않는다. 쿼리 값을 직접 읽는 곳은 헬퍼 안 단 한 곳이어야 한다 —
+    // 다른 곳에서 PART_PARAMS.get을 쓰면 가드를 우회한다.
+    for (const src of [TEMPLATE, LOADER]) {
+      expect(src).toContain("v.indexOf('blob:') === 0");
+      expect(src).toContain("PART_PARAMS.get('wasmPart' + i)");
+      expect(src.match(/PART_PARAMS\.get\(/g)?.length).toBe(1);
+    }
+    // 동작 검증은 실브라우저 e2e(tests/e2e/pdfcraft-loader-query-guard.e2e.cjs)가
+    // 맡는다 — 악성 쿼리를 넣고 부팅해도 상대 경로 파트로 떠야 한다.
   });
 
   test('매니페스트 파트 길이가 25MB 한도 아래다', () => {

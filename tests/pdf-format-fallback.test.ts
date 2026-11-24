@@ -172,3 +172,103 @@ describe('PDF 뷰어 대체 화면·지연 로딩', () => {
     expect(fontsLoad).not.toHaveBeenCalled()
   })
 })
+
+describe('PDF 안내 문구 — 깨진 한국어 재작성 (2026-11-25)', () => {
+  let bodyEl: any
+  let current = true
+  let folded = true
+  const notes: string[] = []
+
+  function makeCtx() {
+    bodyEl = fbDoc.createElement('div')
+    fbDoc.body.appendChild(bodyEl)
+    return {
+      doc: fbDoc,
+      body: bodyEl,
+      file: { fileId: 5, name: '문서.pdf' },
+      minimalChrome: false,
+      chromeFold: null,
+      saveBtn: fbDoc.createElement('button'),
+      clearBody: () => { bodyEl.innerHTML = '' },
+      contentUrl: () => '/api/drive/files/5/content',
+      fetchContent: jest.fn(() => Promise.resolve(new ArrayBuffer(0))),
+      fetchRaw: jest.fn(() => Promise.resolve({ ok: true })),
+      isCurrent: () => current,
+      isFolded: () => folded,
+      setNote: (m: string) => notes.push(m),
+      setStatus: jest.fn(),
+      markDirty: jest.fn(),
+      setSaveHandler: jest.fn(),
+      onFoldChange: jest.fn(),
+      requestOpen: jest.fn(),
+      putContent: jest.fn(() => Promise.resolve(true)),
+      saveAsContent: jest.fn(() => Promise.resolve(true)),
+      showMessage: jest.fn(),
+    }
+  }
+
+  beforeEach(() => {
+    fbDoc.body.innerHTML = ''
+    current = true
+    folded = true
+    notes.length = 0
+    jest.clearAllMocks()
+  })
+
+  afterEach(() => {
+    current = false
+    pdfFormat.internals.readyTimeoutMs = 20000
+  })
+
+  function viewerFrame() {
+    return bodyEl.querySelector('iframe.fv-pdf-frame')
+  }
+
+  function sendReady(frame: any, pages = 3) {
+    fbWin.dispatchEvent(
+      new fbWin.MessageEvent('message', {
+        data: { type: 'myhub-pdf:ready', pages },
+        origin: fbWin.location.origin,
+        source: frame.contentWindow,
+      }),
+    )
+  }
+
+  test('뷰어 안내(NOTE)는 자연스러운 한국어 문장이다', async () => {
+    const ctx = makeCtx()
+    await pdfFormat.handlePdf(ctx)
+    sendReady(viewerFrame())
+    await flush(10)
+    expect(notes).toContain(
+      '전용 뷰어에서는 찾기·돋보기·주석·양식 입력을 할 수 있습니다. 본문·그림 직접 편집과 XFA 양식은 제한됩니다.',
+    )
+    // 복원 당시 깨진 형태('등 찾기 돋보기', '는. 합니다')가 없어야 한다.
+    expect(notes.join(' ')).not.toContain('등 찾기')
+    expect(notes.join(' ')).not.toContain('는. 합니다')
+  })
+
+  test('편집기 안내(CRAFT_NOTE)는 자연스러운 한국어 문장이다', async () => {
+    folded = false
+    const ctx = makeCtx()
+    await pdfFormat.handlePdf(ctx)
+    expect(createHost).toHaveBeenCalledTimes(1)
+    const opts: any = (createHost.mock.calls as any)[0][0]
+    opts.onReady()
+    await flush(10)
+    expect(notes).toContain(
+      '전용 편집기에서는 페이지 정리·주석·양식 입력을 할 수 있습니다. 본문·그림 직접 편집은 제한됩니다.',
+    )
+    expect(notes.join(' ')).not.toContain('등 페이지')
+  })
+
+  test('대체 화면 안내도 자연스러운 한국어 문장이다', async () => {
+    pdfFormat.internals.readyTimeoutMs = 50
+    const ctx = makeCtx()
+    await pdfFormat.handlePdf(ctx)
+    await flush(120)
+    expect(notes).toContain(
+      '전용 뷰어를 불러오지 못해 기본 미리보기로 표시합니다 (주석 조작은 할 수 없습니다)',
+    )
+    expect(notes.join(' ')).not.toContain('조작등 합니다')
+  })
+})

@@ -452,4 +452,79 @@ describe('PDF 창 — JN 상단바 모드 탭·메뉴 (windows.js, 2026-11-22)',
       id: 'convert',
     })
   })
+
+  test('탭 라벨에 HTML이 들어와도 텍스트로만 그려진다 (innerHTML 삽입 금지, 2026-11-25)', () => {
+    const m = makeManager(new MemoryStorage())
+    m.openModule('pdf')
+    const frame = winEl('pdf').querySelector('iframe.dt-frame')
+    postToFrame(frame, {
+      type: 'myhub:office-tabs',
+      app: 'pdf',
+      tabs: [
+        { id: 'all', label: '<img src=x onerror=alert(1)>', kind: 'tab' },
+        { id: 'edit', label: '<b>굵게</b>', kind: 'tab' },
+      ],
+      activeId: 'all',
+      collapsed: false,
+      canCollapse: false,
+      menuShell: false,
+      menuLocal: false,
+    })
+    const btns = officeTabButtons()
+    expect(btns.length).toBe(2)
+    const label0 = btns[0].querySelector('.dt-office-tab-label')
+    expect(label0.textContent).toBe('<img src=x onerror=alert(1)>')
+    expect(btns[0].querySelector('img')).toBeNull()
+    const label1 = btns[1].querySelector('.dt-office-tab-label')
+    expect(label1.textContent).toBe('<b>굵게</b>')
+    expect(label1.querySelector('b')).toBeNull()
+  })
+
+  test('메뉴를 열고 닫아도 탭 버튼의 기본 클래스가 남는다 (2026-11-25)', () => {
+    // 이전 코드(markOfficeMenuBtnClosed)가 닫을 때 dt-office-tab을 지워
+    // 버튼이 스타일을 잃었다. 열림 표시는 is-expanded로만 한다
+    // (windows.js 미션 계약이 is-open 문자열을 금지한다).
+    const m = makeManager(new MemoryStorage())
+    m.openModule('pdf')
+    const frame = winEl('pdf').querySelector('iframe.dt-frame')
+    postTabs(frame)
+    const btn = getDoc().querySelector(
+      '#dt-office-tabs .dt-office-tab[data-tab="menu:file"]',
+    )
+    expect(btn.classList.contains('dt-office-tab')).toBe(true)
+    expect(btn.classList.contains('has-menu')).toBe(true)
+    const posts: any[] = []
+    const cw: any = frame.contentWindow
+    const orig = cw.postMessage
+    cw.postMessage = (msg: any) => {
+      posts.push(msg)
+    }
+    try {
+      btn.click()
+    } finally {
+      cw.postMessage = orig
+    }
+    const req = posts.find(
+      (p: any) => p.type === 'myhub:office-tabs-menu-request',
+    )
+    expect(req).toBeDefined()
+    postToFrame(frame, {
+      type: 'myhub:office-tabs-menu-items',
+      app: 'pdf',
+      id: 'menu:file',
+      seq: req.seq,
+      items: [{ label: '저장', disabled: false, path: [0], command: 'file.save' }],
+    })
+    // 열린 동안에는 is-expanded가 붙고 기본 클래스는 그대로다.
+    expect(btn.classList.contains('is-expanded')).toBe(true)
+    expect(btn.classList.contains('dt-office-tab')).toBe(true)
+    expect(btn.getAttribute('aria-expanded')).toBe('true')
+    // 같은 메뉴 버튼을 다시 클릭하면 토글로 닫힌다 (menu.close → onClose).
+    btn.click()
+    // 닫힌 뒤에는 is-expanded만 사라지고 기본 클래스는 남는다.
+    expect(btn.classList.contains('is-expanded')).toBe(false)
+    expect(btn.classList.contains('dt-office-tab')).toBe(true)
+    expect(btn.classList.contains('has-menu')).toBe(true)
+    expect(btn.getAttribute('aria-expanded')).toBe('false')
+  })
 })

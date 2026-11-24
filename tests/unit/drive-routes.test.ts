@@ -118,10 +118,10 @@ async function seedFolder(db: any, name: string, parentId: number | null = null,
   return Number(r.meta.last_row_id)
 }
 
-async function seedFile(db: any, filename: string, folderId: number | null = null, opts: { deleted?: boolean; key?: string; size?: number } = {}): Promise<number> {
+async function seedFile(db: any, filename: string, folderId: number | null = null, opts: { deleted?: boolean; key?: string; size?: number; mime?: string } = {}): Promise<number> {
   const r = await db.prepare(
     'INSERT INTO drive_files (folder_id, storage_key, filename, mime, size, url, resource_type, deleted_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-  ).bind(folderId, opts.key ?? `key/${filename}`, filename, 'text/plain', opts.size ?? 10, `https://cdn.example/${filename}`, 'raw', opts.deleted ? '2026-01-01T00:00:00Z' : null).run()
+  ).bind(folderId, opts.key ?? `key/${filename}`, filename, opts.mime ?? 'text/plain', opts.size ?? 10, `https://cdn.example/${filename}`, 'raw', opts.deleted ? '2026-01-01T00:00:00Z' : null).run()
   return Number(r.meta.last_row_id)
 }
 
@@ -416,6 +416,37 @@ describe('파일 업로드·조회·교체', () => {
     // 콘텐츠를 띄우므로, 바이트가 HTML로 둔갑해 같은 출처 스크립트로
     // 실행되는 경로를 막는다.
     expect(r.headers.get('x-content-type-options')).toBe('nosniff')
+  })
+
+  test('content Content-Type은 저장 MIME이 아니라 파일명 확장자 allowlist로 정한다 (2026-11-25)', async () => {
+    // 저장된 mime은 업로드 시 클라이언트가 보낸 file.type 그대로라 믿을
+    // 수 없다 — HTML 바이트인 파일을 text/html로 서빙하면 샌드박스 없는
+    // 폴백 iframe에서 Stored XSS가 된다.
+    const db = makeDb()
+    const env = envOf(db)
+    contentHandler = async () => new Response('<script>alert(1)</script>', { status: 200 })
+    // 저장 MIME이 text/html이어도 .pdf는 application/pdf로 서빙한다.
+    const pdf = await seedFile(db, '문서.pdf', null, { mime: 'text/html' })
+    const r1 = await driveApp.request(`/files/${pdf}/content`, {}, env)
+    expect(r1.status).toBe(200)
+    expect(r1.headers.get('content-type')).toBe('application/pdf')
+    // allowlist에 없는 확장자(.html)는 저장 MIME과 무관하게 octet-stream이다.
+    const html = await seedFile(db, '페이지.html', null, { mime: 'text/html' })
+    const r2 = await driveApp.request(`/files/${html}/content`, {}, env)
+    expect(r2.headers.get('content-type')).toBe('application/octet-stream')
+    // 이미지·오피스 문서는 확장자대로 서빙한다 (정상 동작 유지).
+    const png = await seedFile(db, '그림.png', null, { mime: 'text/html' })
+    const r3 = await driveApp.request(`/files/${png}/content`, {}, env)
+    expect(r3.headers.get('content-type')).toBe('image/png')
+    const xlsx = await seedFile(db, '표.xlsx', null, { mime: 'text/html' })
+    const r4 = await driveApp.request(`/files/${xlsx}/content`, {}, env)
+    expect(r4.headers.get('content-type')).toBe(
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    )
+    // 확장자가 없으면 octet-stream이다.
+    const noext = await seedFile(db, '이름없음', null, { mime: 'text/html' })
+    const r5 = await driveApp.request(`/files/${noext}/content`, {}, env)
+    expect(r5.headers.get('content-type')).toBe('application/octet-stream')
   })
 
   test('content Range 요청은 206과 구간 헤더를 그대로 중계하고, 위쪽 실패는 502', async () => {

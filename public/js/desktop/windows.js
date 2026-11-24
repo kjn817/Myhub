@@ -1109,7 +1109,14 @@
         b.type = 'button';
         b.className = 'dt-office-tab' + (tab.id === st.activeId ? ' is-active' : '');
         b.setAttribute('data-tab', tab.id);
-        var inner = tab.kind === 'separator' ? '' : '<span class="dt-office-tab-label">' + (tab.label || tab.id) + '</span>';
+        // 라벨은 textContent로 넣는다 — 엔진이 보낸 라벨을 innerHTML로
+        // 삽입하면 HTML이 실행된다 (2026-11-25). span 구조는 유지한다.
+        if (tab.kind !== 'separator') {
+          var labelEl = document.createElement('span');
+          labelEl.className = 'dt-office-tab-label';
+          labelEl.textContent = tab.label || tab.id;
+          b.appendChild(labelEl);
+        }
         if (tab.kind === 'menu') {
           b.classList.add('has-menu');
           // 메뉴 라벨 뒤 꺽쇠 아이콘 없음 (2026-11-12 사용자 지적):
@@ -1118,7 +1125,6 @@
           // 튀어 디자인을 해쳤다. 클릭하면 드롭다운이 열리는 동작은
           // 그대로다.
         }
-        b.innerHTML = inner;
         if (tab.kind !== 'menu') {
           b.addEventListener('click', function () {
             var patch = {
@@ -1174,7 +1180,15 @@
       return menu;
     }
     function markOfficeMenuBtnClosed(btn) {
-      if (btn) btn.classList.remove('dt-office-tab');
+      // 열림 표시만 지운다 — 기본 클래스(dt-office-tab)를 지우면
+      // 버튼이 스타일을 잃는다 (2026-11-25 점검: 메뉴를 열고 닫은 뒤
+      // 클래스에서 dt-office-tab이 사라졌다). 로컬 패턴
+      // (office-tabs.js markLocalBtnClosed)과 같은 역할이며, 클래스명은
+      // aria-expanded와 쌍을 맞춘 is-expanded를 쓴다 — 미션 계약이
+      // windows.js에서 해당 관용 클래스명 사용을 금지하기 때문이다.
+      if (!btn) return;
+      btn.classList.remove('is-expanded');
+      btn.setAttribute('aria-expanded', 'false');
     }
     function closeOfficeMenu() {
       if (officeMenuCtl && officeMenuCtl.menu) officeMenuCtl.menu.close();
@@ -1320,6 +1334,12 @@
         typeof btn.getBoundingClientRect === 'function'
           ? btn.getBoundingClientRect()
           : { left: 0, bottom: 0 };
+      // 열린 표시: onClose(markOfficeMenuBtnClosed)가 지운다. 드롭다운이
+      // 실제로 열릴 때만 붙여, 항목이 없어 안 열리는 경우에 표시가
+      // 남지 않게 한다 (요청 시점에 붙이는 로컬 패턴과 달리 타이머
+      // 되돌림이 필요 없다).
+      btn.classList.add('is-expanded');
+      btn.setAttribute('aria-expanded', 'true');
       menu.open(Math.round(rect.left), Math.round(rect.bottom), items, {
         keepSelector: '.dt-office-tab',
         onSwitch: function (dir) {
