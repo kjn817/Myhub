@@ -23,24 +23,26 @@
   'use strict';
 
   var APP_URL = '/vendor/pdfcraft/index.html?host=parent';
-  // 오피스 호스트 URL (2026-11-21 사용자 결정: 공식 레이아웃 그대로).
-  // 예전에는 chrome=nomodetabs,nomenubar,nomodebar,notabstrip으로
-  // 엔진 껍데기를 벗기고 메뉴·모드를 셸 상단바로 흡수했으나, 사용자가
-  // 공식 사이트 레이아웃(모드 탭·메뉴 바·모든 도구 사이드바)을 그대로
-  // 원해 벗기기를 폐기했다. 실측한 플래그 역할 (2026-11-21, 파싱이
-  // WASM 안에 있어 스크린샷 대조로만 확인됨):
+  // 오피스 호스트 URL (2026-11-22 사용자 결정: 메뉴 줄 정리).
+  // 창에는 제목 줄+탭 줄만 남기고, 엔진 모드바 행(둘째 줄)은 통째로
+  // 없앤다. 모드 탭·메뉴는 셸 JN 상단바로, 검색·정보 버튼은 제목
+  // 줄로 옮긴다 (finder-format-pdf.js가 게시·실행한다). 실측한
+  // 플래그 역할 (2026-11-21, 파싱이 WASM 안에 있어 스크린샷 대조로만
+  // 확인됨):
   // - nomodetabs: 모드 탭(모든 도구·편집·변환·전자 서명)만 숨긴다.
   // - nomenubar: 메뉴 항목(파일·편집·보기·서명·창·도움말)만 숨긴다.
-  // - nomodebar: 둘째 줄(메뉴+모드 탭) 전체를 숨긴다.
+  // - nomodebar: 둘째 줄(메뉴+모드 탭) 전체를 숨긴다. 모드바 행이
+  //   아예 그려지지 않으므로 nomodetabs·nomenubar는 따로 안 붙인다.
+  // - noabsorb: nomodebar의 탭 스트립 흡수(검색 상자·정보 버튼)를
+  //   끈다 — 흡수된 것들은 제목 줄에 가므로 탭 줄에는 문서 탭만 남는다.
   // - notabstrip: 이 빌드에서 무효 (있으나 없으나 바이트 동일).
-  // 4종 전부 = nomodebar 단독과 바이트 동일. 탭 스트립(문서 탭)은
-  // chrome으로 못 숨긴다 — 숨기려면 엔진 다운스트림 패치+리빌드가
-  // 필요하다. APP_URL_HOSTED는 APP_URL과 같은 값을 유지한다
-  // (호출처·e2e 픽스처가 이 이름을 쓴다). 전환은 pdfcraft:mode,
-  // 상태는 pdfcraft:mode-state, 메뉴 정의·상태는
+  // 탭 스트립(문서 탭)은 chrome으로 못 숨긴다 — 숨기려면 엔진
+  // 다운스트림 패치+리빌드가 필요하다 (지금은 남기는 것이 설계다).
+  // 전환은 pdfcraft:mode, 상태는 pdfcraft:mode-state, 메뉴 정의·상태는
   // pdfcraft:menus-state, 메뉴 선택 실행은 pdfcraft:menu-command —
-  // 전부 앱 엔진(c966e689)의 다운스트림 패치가 제공하는 표면이다.
-  var APP_URL_HOSTED = '/vendor/pdfcraft/index.html?host=parent';
+  // 전부 앱 엔진의 다운스트림 패치가 제공하는 표면이다.
+  var APP_URL_HOSTED =
+    '/vendor/pdfcraft/index.html?host=parent&chrome=nomodebar,noabsorb';
   var MANIFEST_URL = '/vendor/pdfcraft/manifest.json';
 
   // 동적 로딩 URL은 공용 핼퍼(asset-url.js)가 배포 버전을 붙인다

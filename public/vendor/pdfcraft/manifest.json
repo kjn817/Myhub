@@ -1,24 +1,26 @@
 {
   "app": "pdfcraft",
-  "version": "0.21.1",
-  "sourceCommit": "040091eeefb14b914738836ad31141355e7feabc",
+  "version": "0.22.0",
+  "sourceCommit": "86e5b4cc1b7dde6adb8fd3f95cf21e13cad01fe9",
   "entry": "index.html",
   "html": "index.html",
-  "js": "pdfcraft-web-af056de64eb50d74.js",
-  "wasm": "pdfcraft-web-af056de64eb50d74_bg.wasm",
-  "wasmBytes": 47265978,
+  "js": "pdfcraft-web-a63fea2b9a0762bf.js",
+  "wasm": "pdfcraft-web-a63fea2b9a0762bf_bg.wasm",
+  "wasmBytes": 54216855,
   "wasmParts": [
-    "pdfcraft-web-af056de64eb50d74_bg.wasm.part0",
-    "pdfcraft-web-af056de64eb50d74_bg.wasm.part1"
+    "pdfcraft-web-a63fea2b9a0762bf_bg.wasm.part0",
+    "pdfcraft-web-a63fea2b9a0762bf_bg.wasm.part1",
+    "pdfcraft-web-a63fea2b9a0762bf_bg.wasm.part2"
   ],
   "wasmPartBytes": [
-    23632989,
-    23632989
+    18072285,
+    18072285,
+    18072285
   ],
   "ocrWorker": {
-    "js": "pdfcraft-ocr-worker-6d7970b1a6cd0ddb.js",
-    "wasm": "pdfcraft-ocr-worker-6d7970b1a6cd0ddb_bg.wasm",
-    "loader": "pdfcraft-ocr-worker-6d7970b1a6cd0ddb_loader.js"
+    "js": "pdfcraft-ocr-worker-84c82eac3b5071fb.js",
+    "wasm": "pdfcraft-ocr-worker-84c82eac3b5071fb_bg.wasm",
+    "loader": "pdfcraft-ocr-worker-84c82eac3b5071fb_loader.js"
   },
   "files": [
     "LICENSE-APACHE",
@@ -26,12 +28,13 @@
     "NOTICE",
     "index.html",
     "loader.js",
-    "pdfcraft-web-af056de64eb50d74.js",
-    "pdfcraft-ocr-worker-6d7970b1a6cd0ddb.js",
-    "pdfcraft-ocr-worker-6d7970b1a6cd0ddb_bg.wasm",
-    "pdfcraft-ocr-worker-6d7970b1a6cd0ddb_loader.js",
-    "pdfcraft-web-af056de64eb50d74_bg.wasm.part0",
-    "pdfcraft-web-af056de64eb50d74_bg.wasm.part1",
+    "pdfcraft-web-a63fea2b9a0762bf.js",
+    "pdfcraft-ocr-worker-84c82eac3b5071fb.js",
+    "pdfcraft-ocr-worker-84c82eac3b5071fb_bg.wasm",
+    "pdfcraft-ocr-worker-84c82eac3b5071fb_loader.js",
+    "pdfcraft-web-a63fea2b9a0762bf_bg.wasm.part0",
+    "pdfcraft-web-a63fea2b9a0762bf_bg.wasm.part1",
+    "pdfcraft-web-a63fea2b9a0762bf_bg.wasm.part2",
     "snippets/eframe-d31a8450ea12dfc1/inline0.js"
   ]
 }

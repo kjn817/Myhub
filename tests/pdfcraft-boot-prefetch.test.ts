@@ -116,14 +116,15 @@ function makeHost(api: any, doc: any, win: any, extra: any = {}) {
 }
 
 describe('pdfcraft 호스트 URL', () => {
-  test('APP_URL_HOSTED는 chrome 벗김 없이 APP_URL과 같다 (2026-11-21 공식 레이아웃 결정)', () => {
+  test('APP_URL_HOSTED는 모드바 행을 없애고 탭 스트립 흡수도 끈다 (2026-11-22 메뉴 줄 정리)', () => {
     const { api } = loadPdf();
-    // 오피스도 Finder와 같은 전체 레이아웃을 쓴다 — 모드 탭·메뉴 바·
-    // 모든 도구 사이드바를 엔진이 직접 그린다. chrome 플래그를 다시
-    // 붙이면 오피스 PDF가 벗겨진 화면으로 돌아간다.
-    expect(api.APP_URL_HOSTED).toBe(api.APP_URL);
-    expect(api.APP_URL_HOSTED).not.toContain('chrome=');
+    // 오피스 PDF는 창에 제목 줄+탭 줄만 남긴다. 모드 탭·메뉴는 셸
+    // JN 상단바로, 검색·정보는 제목 줄로 옮기므로 엔진 모드바 행은
+    // 통째로 없애고(nomodebar), 흡수된 검색·정보가 탭 줄에 남지
+    // 않게(noabsorb) 끈다. Finder는 APP_URL(전체 레이아웃) 그대로다.
     expect(api.APP_URL_HOSTED).toContain('host=parent');
+    expect(api.APP_URL_HOSTED).toContain('chrome=nomodebar,noabsorb');
+    expect(api.APP_URL_HOSTED).not.toBe(api.APP_URL);
   });
 });
 

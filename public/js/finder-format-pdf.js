@@ -89,36 +89,150 @@
     var editable = hasServerFile || !!ctx.file.bytes;
     var state = { ready: false, fellBack: false, dirty: false, page: 1, pages: 0, busy: false, saveWaiter: null, surface: 'viewer', craft: null, craftReady: false, viewerDead: false };
 
-    // 공식 레이아웃 그대로 (2026-11-21 사용자 결정): 엔진이 모드 탭·
-    // 메뉴 바·모든 도구 사이드바를 직접 그린다. 예전에는 chrome
-    // 플래그로 껍데기를 벗기고 엔진 메뉴를 셸 상단바로 흡수했으나
-    // (menuShell/menuLocal), 사용자가 공식 사이트 레이아웃을 그대로
-    // 원해 폐기했다. 호스트는 메뉴·모드를 게시하지 않는다 — 셸
-    // 상단바에 엔진 메뉴가 중복으로 뜨는 것을 막기 위함이다.
-    // 제목 줄 빠른 실행(인쇄)은 office-tabs setQuick으로 그대로 둔다.
+    // 메뉴 줄 정리 (2026-11-22 사용자 결정): 창에는 제목 줄+탭 줄만
+    // 남기고 엔진 모드바 행은 통째로 없앤다(chrome=nomodebar,noabsorb).
+    // 모드 탭(모든 도구·편집·변환·전자 서명)과 전통 메뉴(파일·편집·
+    // 보기·서명·창·도움말)는 셸 JN 상단바로 게시하고(office-tabs
+    // tabsToShell 계약), 검색(도구 및 명령 찾기)·정보(문서 속성)는
+    // 제목 줄 빠른 실행으로 옮긴다. 2026-11-21에는 공식 레이아웃
+    // 그대로(엔진 자체 메뉴 바)를 택해 흡수를 폐기했으나, 사용자가
+    // 2026-11-22에 "타이틀바 탭바만 남고 메뉴는 JN 상단바로" 통합을
+    // 확정해 흡수를 되살렸다. 모드 탭을 게시하지 않았던 2026-11-12
+    // 결정(엔진 사이드바와 중복)은 모드바 행이 사라진 지금은
+    // 해당하지 않는다 — 상단바 모드 탭이 유일한 모드 전환기다.
     var tabsHost = !!(
       ctx.minimalChrome &&
       typeof window !== 'undefined' &&
       window.MyHubOfficeTabs
     );
-    // 차 반 인쇄 (교정 파일 등): 인쇄 엔진 메 뉴의 print.dialog
-    // 명령을 어떻게 등 메뉴 명령 채널로 그림으로 실행한다. 편집기 실행은
-    // 주인 공이라 본다 (뷰어 실행에서는 엔진 인쇄 경로가 없다).
-    function publishPrintQuick() {
+    var MODE_TABS = [
+      { id: 'all', label: '모든 도구', kind: 'tab' },
+      { id: 'edit', label: '편집', kind: 'tab' },
+      { id: 'convert', label: '변환', kind: 'tab' },
+      { id: 'sign', label: '전자 서명', kind: 'tab' },
+    ];
+    var lastMode = null;
+    var lastMenus = null;
+    function menuTabs() {
+      if (!Array.isArray(lastMenus)) return [];
+      var out = [];
+      lastMenus.forEach(function (m) {
+        if (!m || typeof m.id !== 'string' || typeof m.label !== 'string') return;
+        out.push({ id: 'menu:' + m.id, label: m.label, kind: 'menu' });
+      });
+      return out;
+    }
+    var providedMenu = null;
+    function shellMenuNodes(nodes, base) {
+      var out = [];
+      (Array.isArray(nodes) ? nodes : []).forEach(function (n) {
+        if (!n || typeof n !== 'object') return;
+        var path = base.concat(out.length);
+        if (n.separator) {
+          out.push({ separator: true, path: path });
+          return;
+        }
+        if (typeof n.label !== 'string' || !n.label) return;
+        var node = { label: n.label, disabled: !!n.disabled, path: path };
+        if (typeof n.shortcut === 'string' && n.shortcut) {
+          node.shortcut = n.shortcut;
+        }
+        if (typeof n.checked === 'boolean') node.checked = n.checked;
+        if (Array.isArray(n.items) && n.items.length) {
+          node.children = shellMenuNodes(n.items, path);
+        } else if (typeof n.command === 'string' && n.command) {
+          node.command = n.command;
+          if (n.params && typeof n.params === 'object') node.params = n.params;
+        }
+        out.push(node);
+      });
+      return out;
+    }
+    function provideMenu(id, seq) {
+      var api = typeof window !== 'undefined' ? window.MyHubOfficeTabs : null;
+      if (!api || typeof api.provideMenuItems !== 'function') return;
+      var engineId =
+        typeof id === 'string' && id.indexOf('menu:') === 0 ? id.slice(5) : id;
+      var menu = null;
+      (Array.isArray(lastMenus) ? lastMenus : []).forEach(function (m) {
+        if (m && m.id === engineId) menu = m;
+      });
+      var nodes = menu ? shellMenuNodes(menu.items, []) : [];
+      providedMenu = { id: id, nodes: nodes };
+      api.provideMenuItems('pdf', id, nodes, seq);
+    }
+    function execMenu(id, path) {
+      if (!providedMenu || providedMenu.id !== id) return;
+      if (!Array.isArray(path) || !path.length || !state.craft) return;
+      var nodes = providedMenu.nodes;
+      var node = null;
+      for (var i = 0; i < path.length; i++) {
+        node = nodes ? nodes[path[i]] : null;
+        if (!node) return;
+        nodes = node.children;
+      }
+      if (node && typeof node.command === 'string' && node.command) {
+        state.craft.sendMenuCommand(node.command, node.params);
+      }
+    }
+    function publishModeTabs() {
+      if (!tabsHost || typeof window.MyHubOfficeTabs.setState !== 'function') return;
+      if (state.surface !== 'craft' || !state.craft) {
+        window.MyHubOfficeTabs.setState('pdf', null);
+        return;
+      }
+      // 상단바 순서: 엔진 모드바와 같은 왼쪽→오른쪽 순서로 메뉴 묶음,
+      // 구분선, 모드 탭 묶음. activeId는 현재 모드로 — 'read' 모드는
+      // 탭이 없어 어느 탭도 활성화되지 않는다 (엔진과 동일).
+      var menus = menuTabs();
+      var tabs = menus.slice();
+      if (menus.length > 0) {
+        tabs.push({ id: 'sep:menus-modes', label: '', kind: 'separator' });
+      }
+      tabs = tabs.concat(MODE_TABS);
+      window.MyHubOfficeTabs.setState('pdf', {
+        tabs: tabs,
+        activeId: lastMode,
+        collapsed: false,
+        canCollapse: false,
+        menuShell: menus.length > 0,
+        menuLocal: menus.length > 0,
+        tabsToShell: true,
+      });
+    }
+    // 제목 줄 빠른 실행: 인쇄·저장·정보·검색(팔레트). 편집기 실행일
+    // 때만 켠다 (뷰어 실행에서는 엔진 명령 경로가 없다). 각 동작은
+    // 엔진 메뉴 명령 채널로 실행한다 (아래 onQuick).
+    function publishQuick() {
       if (!tabsHost || typeof window.MyHubOfficeTabs.setQuick !== 'function') return;
       var on = state.surface === 'craft' && state.craftReady && !!state.craft;
-      window.MyHubOfficeTabs.setQuick('pdf', { print: on });
+      window.MyHubOfficeTabs.setQuick('pdf', { print: on, save: on, info: on, palette: on });
     }
-    // onCommand(탭 선택·메뉴 요청·메뉴 실행)는 게시하는 탭·메뉴가
-    // 없어졌으므로 등록하지 않는다 — 엔진이 모드 탭·메뉴 바를 직접
-    // 그린다 (2026-11-21). 제목 줄 인쇄 빠른 실행만 남긴다.
+    if (tabsHost && typeof window.MyHubOfficeTabs.onCommand === 'function') {
+      window.MyHubOfficeTabs.onCommand('pdf', function (cmd) {
+        if (!ctx.isCurrent() || !state.craft) return;
+        if (cmd.type === 'select') {
+          // 메뉴 탭은 드롭다운 경로(menu-request)이므로 select에서
+          // 모드로 보내지 않는다. 구분선 클릭도 모드가 아니다.
+          if (typeof cmd.id === 'string' && (cmd.id.indexOf('menu:') === 0 || cmd.id.indexOf('sep:') === 0)) return;
+          state.craft.sendMode(cmd.id);
+        } else if (cmd.type === 'menu-request') {
+          provideMenu(cmd.id, cmd.seq);
+        } else if (cmd.type === 'menu-exec') {
+          execMenu(cmd.id, cmd.path);
+        }
+      });
+    }
     if (tabsHost && typeof window.MyHubOfficeTabs.onQuick === 'function') {
       window.MyHubOfficeTabs.onQuick('pdf', function (action) {
-        if (action !== 'print') return false;
         if (!ctx.isCurrent() || state.surface !== 'craft' || !state.craft) {
           return false;
         }
-        return state.craft.sendMenuCommand('print.dialog');
+        if (action === 'print') return state.craft.sendMenuCommand('print.dialog');
+        if (action === 'save') return state.craft.sendMenuCommand('file.save');
+        if (action === 'info') return state.craft.sendMenuCommand('file.properties');
+        if (action === 'palette') return state.craft.sendMenuCommand('view.palette');
+        return false;
       });
     }
 
@@ -356,7 +470,8 @@
       state.surface = 'craft';
       ctx.setNote(CRAFT_NOTE);
       if (stateEl) stateEl.textContent = '전용 편집기';
-      publishPrintQuick();
+      publishModeTabs();
+      publishQuick();
     }
 
     function showViewer() {
@@ -365,7 +480,8 @@
       unparkViewerFrame();
       state.surface = 'viewer';
       updateStateLabel();
-      publishPrintQuick();
+      publishModeTabs();
+      publishQuick();
     }
 
     function stopCraft() {
@@ -373,7 +489,8 @@
       state.craft.destroy();
       state.craft = null;
       state.craftReady = false;
-      publishPrintQuick();
+      publishModeTabs();
+      publishQuick();
     }
 
     // 접근 상태로 파한 때의 공통 마감은: 편집기를 닮고 뷰어를 최신
@@ -454,10 +571,20 @@
         win: window,
         parentEl: ctx.body,
         name: ctx.file.name,
-        // 오피스·Finder 모두 같은 전체 레이아웃 URL을 쓴다
-        // (2026-11-21: chrome 벗기기 폐기 — finder-pdfcraft.js 참조).
-        // 모드·메뉴 상태 콜백은 게시할 곳이 없어 받지 않는다.
+        // 오피스에서는 chrome 벗긴 URL(APP_URL_HOSTED)을 쓴다 — 모드바
+        // 행이 없고 모드·메뉴는 셸 상단바가 그린다 (2026-11-22).
+        // Finder는 전체 레이아웃 URL(APP_URL) 그대로다.
         url: tabsHost && pdfCraft.APP_URL_HOSTED ? pdfCraft.APP_URL_HOSTED : undefined,
+        onModeState: function (mode) {
+          if (!ctx.isCurrent()) return;
+          lastMode = mode;
+          publishModeTabs();
+        },
+        onMenusState: function (menus) {
+          if (!ctx.isCurrent()) return;
+          lastMenus = menus;
+          publishModeTabs();
+        },
         onRequestOpen: function () {
           // 엔진 자체 숨긴 위임: 고정 PDF의 호스트 숨긴 경로로
           // 다시 가져온 실행 계속까지 등 파일로 가져왔다 (시트의 같은

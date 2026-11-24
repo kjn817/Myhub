@@ -2,9 +2,9 @@
 // 이어 붙여 wasm-bindgen 글루의 init에 바이트로 전달한다. fetch arrayBuffer는 전송
 // 인코딩과 무관하게 원본 바이트를 돌려주므로 엣지 재인코딩 영향을 받지 않는다.
 // 게이트 핸드오프 (2026-11-15): 호스트가 부팅 게이트에서 받은 조각 바이트를
-// Blob URL로 넘기면(쿼리 wasmPart0/wasmPart1) 네트워크 대신 그 URL을 받는다.
-// 23MB 조각은 HTTP 캐시에 남지 않아(2026-11-15 실측: 동일 문서 재-fetch도
-// 전문 재다운로드) 게이트만으로는 엔진이 47MB를 다시 받기 때문이다.
+// Blob URL로 넘기면(쿼리 wasmPart0..wasmPartN) 네트워크 대신 그 URL을 받는다.
+// 큰 조각은 HTTP 캐시에 남지 않아(2026-11-15 실측: 동일 문서 재-fetch도
+// 전문 재다운로드) 게이트만으로는 엔진이 WASM 전문을 다시 받기 때문이다.
 // 쿼리가 없으면 기존 상대경로로 받는다 (직접 열기·구 호스트 하위호환).
 // 글루는 정적 import가 아니라 try 안에서 동적 import한다 (2026-11-21):
 // 정적 import 실패(손상된 캐시 글루·404)는 모듈 로딩 단계에서 죽어
@@ -31,8 +31,9 @@ function reportFailure(err) {
 try {
 const PART_PARAMS = new URLSearchParams(location.search);
 const PARTS = [
-  PART_PARAMS.get('wasmPart0') || './pdfcraft-web-af056de64eb50d74_bg.wasm.part0',
-  PART_PARAMS.get('wasmPart1') || './pdfcraft-web-af056de64eb50d74_bg.wasm.part1',
+  PART_PARAMS.get('wasmPart0') || './pdfcraft-web-a63fea2b9a0762bf_bg.wasm.part0',
+  PART_PARAMS.get('wasmPart1') || './pdfcraft-web-a63fea2b9a0762bf_bg.wasm.part1',
+  PART_PARAMS.get('wasmPart2') || './pdfcraft-web-a63fea2b9a0762bf_bg.wasm.part2',
 ];
 const chunks = await Promise.all(
   PARTS.map(async (p) => {
@@ -46,7 +47,7 @@ const bytes = new Uint8Array(total);
 let at = 0;
 for (const c of chunks) { bytes.set(c, at); at += c.length; }
 
-const bindings = await import('./pdfcraft-web-af056de64eb50d74.js');
+const bindings = await import('./pdfcraft-web-a63fea2b9a0762bf.js');
 const wasm = await bindings.default({ module_or_path: bytes });
 window.wasmBindings = bindings;
 dispatchEvent(new CustomEvent('TrunkApplicationStarted', { detail: { wasm } }));

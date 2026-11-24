@@ -385,7 +385,7 @@ describe('PDF 편집기 직접 진입 (2026-11-21 사용자 지시)', () => {
   })
 })
 
-describe('PDF 오피스 호스트 메뉴 게시 (2026-11-21 공식 레이아웃 결정)', () => {
+describe('PDF 오피스 호스트 메뉴 게시 (2026-11-22 JN 상단바 통합 결정 — 2026-11-21 공식 레이아웃 결정 대체)', () => {
   let setState: any
   let setQuick: any
 
@@ -408,7 +408,7 @@ describe('PDF 오피스 호스트 메뉴 게시 (2026-11-21 공식 레이아웃 
     delete win.MyHubOfficeTabs
   })
 
-  test('편집기가 떠도 셸에 메뉴·탭을 게시하지 않고 인쇄 빠른 실행만 둔다', async () => {
+  test('편집기가 뜨면 모드 탭을 셸에 게시하고 인쇄·저장·정보·검색 빠른 실행을 둔다', async () => {
     const bodyEl = doc.createElement('div')
     doc.body.appendChild(bodyEl)
     const ctx: any = {
@@ -445,14 +445,33 @@ describe('PDF 오피스 호스트 메뉴 게시 (2026-11-21 공식 레이아웃 
     )
     await new Promise((r) => setTimeout(r, 10))
     expect(createHost).toHaveBeenCalledTimes(1)
-    // 엔진이 메뉴 바·모드 탭을 직접 그리므로 호스트는 셸에 게시하지 않는다.
-    // (예전 코드는 menus-state를 받아 setState로 메뉴를 올렸다.)
+    // 엔진은 모드바 행이 없다(nomodebar,noabsorb) — 모드 탭·메뉴는
+    // 호스트가 셸 JN 상단바에 게시한다. menus-state가 오기 전에는
+    // 모드 탭만, 구분선·메뉴 없음 (menuShell/menuLocal false).
     capturedDeps[0].onReady()
     await new Promise((r) => setTimeout(r, 10))
-    // 제목 줄 인쇄 빠른 실행이 켜졌다는 것이 편집기 표면이 떴다는
-    // 증거다 (surface==='craft' && craftReady일 때만 on이 된다).
+    // 제목 줄 빠른 실행이 켜졌다는 것이 편집기 표면이 떴다는 증거다
+    // (surface==='craft' && craftReady일 때만 on이 된다).
     // tabsHost 모드에서는 상태 요소(.fv-pdf-state) 자체가 안 생긴다.
-    expect(setQuick).toHaveBeenCalledWith('pdf', { print: true })
-    expect(setState).not.toHaveBeenCalled()
+    expect(setQuick).toHaveBeenCalledWith('pdf', {
+      print: true,
+      save: true,
+      info: true,
+      palette: true,
+    })
+    expect(setState).toHaveBeenCalledWith('pdf', {
+      tabs: [
+        { id: 'all', label: '모든 도구', kind: 'tab' },
+        { id: 'edit', label: '편집', kind: 'tab' },
+        { id: 'convert', label: '변환', kind: 'tab' },
+        { id: 'sign', label: '전자 서명', kind: 'tab' },
+      ],
+      activeId: null,
+      collapsed: false,
+      canCollapse: false,
+      menuShell: false,
+      menuLocal: false,
+      tabsToShell: true,
+    })
   })
 })

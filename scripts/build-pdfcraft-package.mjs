@@ -2,9 +2,12 @@
 // 원본 scripts/build-*.mjs는 소실됐고, 이 파일이 그 레시피의 정본이다. 상세 레시피: scripts/ENGINE-BUILD-RECIPES.md
 // build-pdfcraft.mjs 재구성 (패키징 단계)
 // 원본 계약 (2026-11-03~05 기록 + AGENTS.md 교훈):
-//  - 25MB 단일 파일 한도 때문에 WASM을 raw 조각 2개로 분할하고, 페이지가 fetch로
+//  - 25MB 단일 파일 한도 때문에 WASM을 raw 조각으로 분할하고, 페이지가 fetch로
 //    이어 붙여 부팅하는 커스텀 셸(index.html)+로더(loader.js)를 생성한다.
 //    (Worker가 Content-Encoding을 직접 찍는 방식은 엣지 재인코딩 사고로 전면 제거됨)
+//    파트 개수는 가변이다 — 파트당 24MB 상한으로 정한다 (v0.22.0부터 WASM이
+//    54MB라 2분할로는 한도를 넘는다). 호스트는 매니페스트 wasmParts 배열
+//    순서대로 받으므로 개수와 무관하게 동작한다.
 //  - manifest.json에 wasmParts와 sourceCommit을 기록한다.
 import { readFileSync, writeFileSync, mkdirSync, copyFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
@@ -12,8 +15,8 @@ import { join } from 'node:path';
 const DIST = new URL('./pdfcraft/dist/web/', import.meta.url).pathname;
 const OUT = process.argv[2]; // 배치 대상 디렉터리
 if (!OUT) throw new Error('usage: node package-pdfcraft.mjs <outdir>');
-const SOURCE_COMMIT = '040091eeefb14b914738836ad31141355e7feabc'; // myhub-v0.21.1 HEAD (tab connect + drop duplicate print/save)
-const VERSION = '0.21.1';
+const SOURCE_COMMIT = '86e5b4cc1b7dde6adb8fd3f95cf21e13cad01fe9'; // myhub-v0.22.0 HEAD (chrome noabsorb for shell-hosted menus)
+const VERSION = '0.22.0';
 
 const files = readdirSync(DIST);
 // v0.21.1 adds an OCR worker (pdfcraft-ocr-worker-*.js/_bg.wasm/_loader.js):
@@ -27,13 +30,28 @@ if (!glue || !wasmName) throw new Error('dist/web에서 글루/WASM을 찾지 �
 if (!ocrJs || !ocrWasm || !ocrLoader) throw new Error('dist/web에서 OCR 워커 파일을 찾지 못함');
 
 const wasm = readFileSync(join(DIST, wasmName));
-const HALF = Math.ceil(wasm.length / 2);
-const part0 = `${wasmName}.part0`;
-const part1 = `${wasmName}.part1`;
+// 파트당 24MB 상한 (25MB 한도 아래 여유): 개수는 WASM 크기에서 정한다.
+// v0.22.0 54MB → 3개 × 약 18MB. 상한을 넘는 파트가 나오면 패키징이
+// 실패해야 한다 — 조용히 한도를 넘는 벤더를 만들면 배포에서 터진다.
+const MAX_PART_BYTES = 24_000_000;
+const PART_COUNT = Math.max(1, Math.ceil(wasm.length / MAX_PART_BYTES));
+const PART_LEN = Math.ceil(wasm.length / PART_COUNT);
+const parts = [];
+const partBytes = [];
+for (let i = 0; i < PART_COUNT; i++) {
+  const start = i * PART_LEN;
+  const end = Math.min(start + PART_LEN, wasm.length);
+  parts.push(`${wasmName}.part${i}`);
+  partBytes.push(end - start);
+}
+if (partBytes.some((n) => n >= 25_000_000)) {
+  throw new Error(`WASM 파트가 25MB 한도를 넘는다: ${partBytes.join(', ')}`);
+}
 
 mkdirSync(OUT, { recursive: true });
-writeFileSync(join(OUT, part0), wasm.subarray(0, HALF));
-writeFileSync(join(OUT, part1), wasm.subarray(HALF));
+for (let i = 0; i < PART_COUNT; i++) {
+  writeFileSync(join(OUT, parts[i]), wasm.subarray(i * PART_LEN, i * PART_LEN + partBytes[i]));
+}
 copyFileSync(join(DIST, glue), join(OUT, glue));
 // OCR 워커 파일군 (v0.21.1 신규): 앱이 <meta name="pdfcraft-ocr-worker">로 찾는다.
 copyFileSync(join(DIST, ocrJs), join(OUT, ocrJs));
@@ -49,13 +67,17 @@ const copyTree = (src, dst) => {
 };
 copyTree(join(DIST, 'snippets'), join(OUT, 'snippets'));
 
+// 로더의 파트 목록은 패키징 시점에 리터럴로 박는다 — 로더는 매니페스트를
+// 안 읽으므로 개수를 런타임에 알 수 없다. 줄 수는 parts 배열에서 나온다.
+const partLines = parts.map((p, i) => `  PART_PARAMS.get('wasmPart${i}') || './${p}',`).join('\n');
+
 const loader = `// pdfcraft 로더 (build-pdfcraft.mjs 재구성): 분할된 WASM 조각을 fetch로
 // 이어 붙여 wasm-bindgen 글루의 init에 바이트로 전달한다. fetch arrayBuffer는 전송
 // 인코딩과 무관하게 원본 바이트를 돌려주므로 엣지 재인코딩 영향을 받지 않는다.
 // 게이트 핸드오프 (2026-11-15): 호스트가 부팅 게이트에서 받은 조각 바이트를
-// Blob URL로 넘기면(쿼리 wasmPart0/wasmPart1) 네트워크 대신 그 URL을 받는다.
-// 23MB 조각은 HTTP 캐시에 남지 않아(2026-11-15 실측: 동일 문서 재-fetch도
-// 전문 재다운로드) 게이트만으로는 엔진이 47MB를 다시 받기 때문이다.
+// Blob URL로 넘기면(쿼리 wasmPart0..wasmPartN) 네트워크 대신 그 URL을 받는다.
+// 큰 조각은 HTTP 캐시에 남지 않아(2026-11-15 실측: 동일 문서 재-fetch도
+// 전문 재다운로드) 게이트만으로는 엔진이 WASM 전문을 다시 받기 때문이다.
 // 쿼리가 없으면 기존 상대경로로 받는다 (직접 열기·구 호스트 하위호환).
 // 글루는 정적 import가 아니라 try 안에서 동적 import한다 (2026-11-21):
 // 정적 import 실패(손상된 캐시 글루·404)는 모듈 로딩 단계에서 죽어
@@ -82,8 +104,7 @@ function reportFailure(err) {
 try {
 const PART_PARAMS = new URLSearchParams(location.search);
 const PARTS = [
-  PART_PARAMS.get('wasmPart0') || './${part0}',
-  PART_PARAMS.get('wasmPart1') || './${part1}',
+${partLines}
 ];
 const chunks = await Promise.all(
   PARTS.map(async (p) => {
@@ -156,8 +177,8 @@ const manifest = {
   js: glue,
   wasm: wasmName,
   wasmBytes: wasm.length,
-  wasmParts: [part0, part1],
-  wasmPartBytes: [HALF, wasm.length - HALF],
+  wasmParts: parts,
+  wasmPartBytes: partBytes,
   ocrWorker: { js: ocrJs, wasm: ocrWasm, loader: ocrLoader },
   files: [
     'LICENSE-APACHE',
@@ -169,13 +190,12 @@ const manifest = {
     ocrJs,
     ocrWasm,
     ocrLoader,
-    part0,
-    part1,
+    ...parts,
     ...snippetFiles,
   ],
 };
 writeFileSync(join(OUT, 'manifest.json'), JSON.stringify(manifest, null, 2));
 console.log('packaged:', Object.keys(manifest).length, 'meta');
-for (const f of [part0, part1, glue, ocrWasm, 'loader.js', 'index.html', 'manifest.json']) {
+for (const f of [...parts, glue, ocrWasm, 'loader.js', 'index.html', 'manifest.json']) {
   console.log(f, statSync(join(OUT, f)).size);
 }

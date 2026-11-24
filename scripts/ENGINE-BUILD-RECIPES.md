@@ -11,13 +11,13 @@
   - gridcraft: 패치 9커밋 + 미커밋 워크트리 패치 1건, base 7bb397a3..a5772e98
   - pdfcraft: 패치 6커밋, 빌드 핀 ca64a31c (ca64a31c6ccc61d326970cc576e00043671d3f57)
   - deckcraft: 패치 29커밋, 핀 61528c50
-- **2026-11-12 최신 리베이스 (myhub-v* 브랜치, ~/workspace/craft-upstream/):**
-  - pdfcraft **v0.21.1**, HEAD `665db6524dfe241e5a9b2e78b278fdd8c77f43ba` (패치 6커밋, myhub-v0.21.1)
+- **2026-11-24 최신 리베이스 (myhub-v* 브랜치, ~/workspace/craft-upstream/):**
+  - pdfcraft **v0.22.0**, HEAD `86e5b4cc1b7dde6adb8fd3f95cf21e13cad01fe9` (패치 8커밋, myhub-v0.22.0)
   - gridcraft **v0.19.1**, HEAD `6e97dca1` (패치 11커밋, myhub-v0.19.1)
   - deckcraft **v0.18.1**, HEAD `5e533be92c17c08fad306c35aa565927f6dc2ddd` (패치 31커밋, myhub-v0.18.1)
-  - craft-i18n 한국어 보강 브랜치 `myhub-ko` (`bc91a797`) — pdfcraft 빌드 시
-    `CRAFT_I18N_DIR=$HOME/workspace/craft-upstream/craft-i18n` + `CRAFT_I18N_REQUIRED=1` 필수
-    (myhub-ko 체크아웃 상태여야 함).
+  - craft-i18n 한국어 보강 브랜치 `myhub-ko` (`062be2f0`, 866aff71 위 1커밋 — 한국어
+    메뉴 6개 키 보강) — pdfcraft 빌드 시 `CRAFT_I18N_DIR=$HOME/workspace/craft-upstream/craft-i18n` +
+    `CRAFT_I18N_REQUIRED=1` 필수 (myhub-ko 체크아웃 상태여야 함).
   - 업스트림이 호스트 브릿지를 `craft-web-host` 크레이트로 리팩터링함 — MyHub 전용
     메시지는 craft-web-host를 우회하는 작은 직접 postMessage 리스너로 구현
     (js_string/js_object/post_to_parent 헬퍼, 각 host 모듈에 있음).
@@ -39,8 +39,10 @@
 
 ### pdfcraft 패키징
 
-- 25MB 단일 파일 한도 때문에 raw WASM을 `.wasm.part0`/`.wasm.part1` 2조각으로
-  쪼개고, 커스텀 셸(index.html)+로더(loader.js)가 fetch로 이어 붙여 부팅한다.
+- 25MB 단일 파일 한도 때문에 raw WASM을 파트당 24MB 상한으로 조각
+  (`.wasm.part0`~)으로 쪼개고, 커스텀 셸(index.html)+로더(loader.js)가 fetch로
+  이어 붙여 부팅한다. 파트 개수는 WASM 크기에서 정해진다 (v0.22.0부터 3개 —
+  호스트는 매니페스트 wasmParts 배열 순서대로 받으므로 개수와 무관).
   (Worker가 Content-Encoding을 직접 찍는 방식은 엣지 재인코딩 사고로 전면 제거됨 —
   AGENTS.md 교훈 참조.)
 - **게이트 핸드오프 (2026-11-15)**: 23MB 조각은 HTTP 캐시에 남지 않아(실측:
@@ -60,9 +62,10 @@
   `<meta name="pdfcraft-ocr-worker" content="./..._loader.js">`를 넣는다 (없으면 OCR이
   조용히 안 뜸). 글루/WASM 매칭은 `pdfcraft-web-` 접두사로 한다 (접미사만으로는
   OCR 워커 파일을 잘못 잡는다).
-- WASM 크기 추이: v0.18.0 36,070,191B → **v0.21.1 47,266,981B** (+31%, 업스트림 기능
-  추가분). 조각은 각 ~23.6MB로 25MB 한도 안. gridcraft v0.19.1 18,061,738B
-  (이전 17,259,748B, +4.6%), deckcraft v0.18.1 21,840,746B (이전 21,565,556B, +1.3%).
+- WASM 크기 추이: v0.18.0 36,070,191B → v0.21.1 47,266,194B (+31%, 업스트림 기능
+  추가분) → **v0.22.0 54,216,855B** (+14.7%). 조각은 3개 × ~18.1MB로 25MB 한도 안.
+  gridcraft v0.19.1 18,061,738B (이전 17,259,748B, +4.6%), deckcraft v0.18.1
+  21,840,746B (이전 21,565,556B, +1.3%).
 
 ## rhwp-studio (한글 편집기)
 

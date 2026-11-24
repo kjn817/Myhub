@@ -9,7 +9,11 @@ window.addEventListener('error', function (e) {
 });
 var host = window.MyHubFinderPdfCraft.createHost({
   parentEl: document.getElementById('host'),
-  url: window.MyHubFinderPdfCraft.APP_URL_HOSTED,
+  // 전체 레이아웃(APP_URL)으로 잰다 — 이 테스트는 모드바 행(탭 연결·
+  // 하단 구분선·우측 아이콘)을 측정하는데, 오피스 호스트 URL은
+  // 2026-11-22부터 모드바 행이 없다(nomodebar,noabsorb). 탭 틈 패치는
+  // 두 레이아웃에 공통이다.
+  url: window.MyHubFinderPdfCraft.APP_URL,
   onReady: function (version) {
     log('READY version=' + version);
     fetch('/templates/blank.pdf')

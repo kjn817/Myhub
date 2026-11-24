@@ -320,3 +320,136 @@ describe('PDF 창 — 접기 버튼 없음 (windows.js)', () => {
     expect(foldButton('excel').getAttribute('data-fold-state')).toBe('open')
   })
 })
+
+describe('PDF 창 — 제목 줄 정보·검색 빠른 실행 (windows.js, 2026-11-22)', () => {
+  function quickActions(id: string): string[] {
+    return Array.from(
+      winEl(id).querySelectorAll('.myhub-win-quick .myhub-oq-btn[data-oq-action]'),
+    ).map((b: any) => b.getAttribute('data-oq-action'))
+  }
+
+  test('PDF 창은 저장·인쇄·정보·검색 빠른 실행을 순서대로 그린다', () => {
+    const m = makeManager(new MemoryStorage())
+    m.openModule('pdf')
+    const frame = winEl('pdf').querySelector('iframe.dt-frame')
+    postToFrame(frame, {
+      type: 'myhub:office-quick',
+      quick: { save: true, print: true, info: true, palette: true },
+    })
+    expect(quickActions('pdf')).toEqual(['save', 'print', 'info', 'palette'])
+    const infoBtn = winEl('pdf').querySelector('.myhub-oq-btn[data-oq-action="info"]')
+    expect(infoBtn.getAttribute('aria-label')).toBe('문서 속성')
+    const paletteBtn = winEl('pdf').querySelector('.myhub-oq-btn[data-oq-action="palette"]')
+    expect(paletteBtn.getAttribute('aria-label')).toBe('도구 및 명령 찾기')
+  })
+
+  test('정보·검색 버튼 클릭은 동작을 모듈 프레임에 보낸다', () => {
+    const m = makeManager(new MemoryStorage())
+    m.openModule('pdf')
+    const frame = winEl('pdf').querySelector('iframe.dt-frame')
+    postToFrame(frame, {
+      type: 'myhub:office-quick',
+      quick: { info: true, palette: true },
+    })
+    const posts: any[] = []
+    const cw: any = frame.contentWindow
+    const orig = cw.postMessage
+    cw.postMessage = (msg: any) => {
+      posts.push(msg)
+    }
+    try {
+      winEl('pdf').querySelector('.myhub-oq-btn[data-oq-action="info"]').click()
+      winEl('pdf').querySelector('.myhub-oq-btn[data-oq-action="palette"]').click()
+    } finally {
+      cw.postMessage = orig
+    }
+    expect(posts).toContainEqual({ type: 'myhub:office-quick-action', action: 'info' })
+    expect(posts).toContainEqual({ type: 'myhub:office-quick-action', action: 'palette' })
+  })
+
+  test('빠른 실행이 꺼지면 정보·검색 버튼도 사라진다', () => {
+    const m = makeManager(new MemoryStorage())
+    m.openModule('pdf')
+    const frame = winEl('pdf').querySelector('iframe.dt-frame')
+    postToFrame(frame, {
+      type: 'myhub:office-quick',
+      quick: { info: true, palette: true },
+    })
+    expect(quickActions('pdf')).toEqual(['info', 'palette'])
+    postToFrame(frame, {
+      type: 'myhub:office-quick',
+      quick: null,
+    })
+    expect(quickActions('pdf')).toEqual([])
+  })
+})
+
+describe('PDF 창 — JN 상단바 모드 탭·메뉴 (windows.js, 2026-11-22)', () => {
+  function officeTabButtons(): any[] {
+    return Array.from(
+      getDoc().querySelectorAll('#dt-office-tabs .dt-office-tab'),
+    )
+  }
+
+  function postTabs(frame: any) {
+    postToFrame(frame, {
+      type: 'myhub:office-tabs',
+      app: 'pdf',
+      tabs: [
+        { id: 'menu:file', label: '파일', kind: 'menu' },
+        { id: 'sep:menus-modes', label: '', kind: 'separator' },
+        { id: 'all', label: '모든 도구', kind: 'tab' },
+        { id: 'edit', label: '편집', kind: 'tab' },
+        { id: 'convert', label: '변환', kind: 'tab' },
+        { id: 'sign', label: '전자 서명', kind: 'tab' },
+      ],
+      activeId: 'edit',
+      collapsed: false,
+      canCollapse: false,
+      menuShell: true,
+      menuLocal: true,
+    })
+  }
+
+  test('상단바에 메뉴·모드 탭이 그려지고 현재 모드가 활성화된다', () => {
+    const m = makeManager(new MemoryStorage())
+    m.openModule('pdf')
+    const frame = winEl('pdf').querySelector('iframe.dt-frame')
+    postTabs(frame)
+    const labels = officeTabButtons().map((b: any) =>
+      b.querySelector('.dt-office-tab-label')?.textContent ?? '',
+    )
+    expect(labels).toEqual(['파일', '', '모든 도구', '편집', '변환', '전자 서명'])
+    const active = officeTabButtons().filter((b: any) =>
+      b.classList.contains('is-active'),
+    )
+    expect(active.length).toBe(1)
+    expect(active[0].getAttribute('data-tab')).toBe('edit')
+  })
+
+  test('모드 탭 클릭은 select를 모듈에 보낸다', () => {
+    const m = makeManager(new MemoryStorage())
+    m.openModule('pdf')
+    const frame = winEl('pdf').querySelector('iframe.dt-frame')
+    postTabs(frame)
+    const posts: any[] = []
+    const cw: any = frame.contentWindow
+    const orig = cw.postMessage
+    cw.postMessage = (msg: any) => {
+      posts.push(msg)
+    }
+    try {
+      const btn = getDoc().querySelector(
+        '#dt-office-tabs .dt-office-tab[data-tab="convert"]',
+      )
+      btn.click()
+    } finally {
+      cw.postMessage = orig
+    }
+    expect(posts).toContainEqual({
+      type: 'myhub:office-tabs-select',
+      app: 'pdf',
+      id: 'convert',
+    })
+  })
+})

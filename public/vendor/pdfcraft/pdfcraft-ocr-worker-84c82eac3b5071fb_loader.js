@@ -1,0 +1,1 @@
+import init from './pdfcraft-ocr-worker-84c82eac3b5071fb.js';await init();

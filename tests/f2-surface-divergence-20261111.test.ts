@@ -265,28 +265,33 @@ describe('한글·PDF 호스트 메뉴 게시 유지', () => {
     // Excel 메뉴만 제거 대상이다. 한글 메뉴는 실브라우저로
     // 드롭다운 열림·항목 실행(줌 100%→110%·환경 설정 다이얼로그)까지
     // 확인했으므로 게시를 유지한다. 이 테스트는 "오피스 메뉴 전부
-    // 제거" 같은 과잉 정리를 막는 가드다. PDF는 2026-11-21 사용자
-    // 결정으로 공식 레이아웃(엔진 자체 메뉴 바)으로 바뀌어 게시를
-    // 폐기했으므로 아래 테스트가 그쪽을 핀한다.
+    // 제거" 같은 과잉 정리를 막는 가드다. PDF는 2026-11-22 사용자
+    // 결정으로 메뉴·모드 탭을 셸 상단바로 게시하므로 아래 테스트가
+    // 그쪽을 핀한다.
     const hwp = read('js/finder-format-hwp.js')
     expect(hwp).toContain("setState('hangul'")
     expect(hwp).toContain("kind: 'menu'")
   })
 
-  it('PDF는 메뉴·모드 탭을 게시하지 않는다 — 엔진이 직접 그린다 (2026-11-21 사용자 결정)', () => {
-    // 2026-11-12에는 모드 탭만 빼고 메뉴는 셸 상단바로 흡수했으나,
-    // 사용자가 공식 사이트 레이아웃(모드 탭·메뉴 바·모든 도구
-    // 사이드바)을 그대로 원해 2026-11-21에 흡수를 폐기했다. 엔진이
-    // 메뉴 바를 직접 그리므로 호스트가 셸에 게시하면 중복된다.
+  it('PDF는 메뉴·모드 탭을 셸 상단바로 게시한다 (2026-11-22 사용자 결정)', () => {
+    // 2026-11-21에는 공식 레이아웃 그대로(엔진 자체 메뉴 바)를 택해
+    // 흡수를 폐기했으나, 사용자가 2026-11-22에 "타이틀바 탭바만
+    // 남고 메뉴는 JN 상단바로" 통합을 확정해 흡수를 되살렸다.
+    // 엔진 모드바 행이 없으므로(nomodebar,noabsorb) 호스트가 게시하지
+    // 않으면 모드 전환·메뉴가 아예 사라진다.
     const pdf = read('js/finder-format-pdf.js')
-    expect(pdf).not.toContain("provideMenuItems('pdf'")
-    expect(pdf).not.toContain("setState('pdf'")
-    expect(pdf).not.toContain('publishModeTabs')
-    expect(pdf).not.toContain('tabs.concat(MODE_TABS)')
-    expect(pdf).not.toContain("tabs.push({ id: 'sep:menus-modes'")
+    expect(pdf).toContain("provideMenuItems('pdf'")
+    expect(pdf).toContain("setState('pdf'")
+    expect(pdf).toContain('publishModeTabs')
+    expect(pdf).toContain('tabs.concat(MODE_TABS)')
+    expect(pdf).toContain("tabs.push({ id: 'sep:menus-modes'")
+    expect(pdf).toContain('tabsToShell: true')
     // 설계 결정 문구가 파일에 남아야 한다.
-    expect(pdf).toContain('공식 레이아웃 그대로 (2026-11-21 사용자 결정)')
-    // 제목 줄 인쇄 빠른 실행은 그대로 둔다.
+    expect(pdf).toContain('메뉴 줄 정리 (2026-11-22 사용자 결정)')
+    // 제목 줄 빠른 실행은 인쇄·저장·정보·검색까지 확장됐다.
     expect(pdf).toContain("setQuick('pdf'")
+    expect(pdf).toContain("sendMenuCommand('file.properties')")
+    expect(pdf).toContain("sendMenuCommand('view.palette')")
+    expect(pdf).toContain("sendMenuCommand('file.save')")
   })
 })

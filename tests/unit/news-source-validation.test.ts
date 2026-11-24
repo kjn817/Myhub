@@ -102,7 +102,7 @@ describe('validateItemSources', () => {
       '2. 흑해 상선 공격 — [출처](https://www.hankookilbo.com/news/2)',
       '3. 원주 DB 3연승 — [출처](https://sports.news.com/3)',
     ].join('\n')
-    const out = validateItemSources(text, SOURCES)
+    const out = validateItemSources(text, SOURCES, { now: NOW })
     expect(out).not.toContain('invented.example.com')
     expect(out).toContain('1. 태풍 참피 — [출처](https://www.edaily.co.kr/news/1)')
     expect(out).toContain('2. 흑해 상선 공격 — [출처](https://www.hankookilbo.com/news/2)')
@@ -115,7 +115,7 @@ describe('validateItemSources', () => {
       '2. 흑해 상선 공격 — [출처](https://www.yna.co.kr/sitemap/articles/2025/08/20-2.htm)',
       '3. 원주 DB 3연승 — [출처](https://www.yna.co.kr/sitemap/articles/2025/08/20-2.htm)',
     ].join('\n')
-    const out = validateItemSources(text, SOURCES)
+    const out = validateItemSources(text, SOURCES, { now: NOW })
     // 2025-08-22 sitemap URL은 Exa 목록에 없으므로 전부 교체된다
     expect(out).not.toContain('yna.co.kr')
     const urls = [...out.matchAll(/\[출처\]\(([^)]+)\)/g)].map((m) => m[1])
@@ -134,7 +134,7 @@ describe('validateItemSources', () => {
       '2. 흑해 상선 공격 — [출처](https://www.edaily.co.kr/news/1)',
       '3. 원주 DB 3연승 — [출처](https://sports.news.com/3)',
     ].join('\n')
-    const out = validateItemSources(text, SOURCES)
+    const out = validateItemSources(text, SOURCES, { now: NOW })
     expect(out).toContain('1. 태풍 참피 — [출처](https://www.edaily.co.kr/news/1)')
     expect(out).toContain('2. 흑해 상선 공격 — [출처](https://www.hankookilbo.com/news/2)')
     expect(out.match(/edaily/g)?.length).toBe(1)
@@ -142,7 +142,7 @@ describe('validateItemSources', () => {
 
   it('URL이 없는 항목에는 순서대로 출처를 붙인다', () => {
     const text = ['1. 태풍 참피', '2. 흑해 상선 공격', '3. 원주 DB 3연승'].join('\n')
-    const out = validateItemSources(text, SOURCES)
+    const out = validateItemSources(text, SOURCES, { now: NOW })
     expect(out).toContain('1. 태풍 참피 — [출처](https://www.edaily.co.kr/news/1)')
     expect(out).toContain('2. 흑해 상선 공격 — [출처](https://www.hankookilbo.com/news/2)')
     expect(out).toContain('3. 원주 DB 3연승 — [출처](https://sports.news.com/3)')
@@ -154,7 +154,7 @@ describe('validateItemSources', () => {
       '2. 흑해 상선 공격 — [출처](https://www.hankookilbo.com/news/2)',
       '3. 원주 DB 3연승 — [출처](https://sports.news.com/3)',
     ].join('\n')
-    const out = validateItemSources(text, SOURCES)
+    const out = validateItemSources(text, SOURCES, { now: NOW })
     expect(out).not.toContain('fake.example.com')
     expect(out).toContain('1. 태풍 참피 — [출처](https://www.edaily.co.kr/news/1)')
   })
@@ -179,7 +179,7 @@ describe('validateItemSources', () => {
 
   it('항목 수와 출처 수가 다르면 오인 연결을 막기 위해 원문을 그대로 둔다', () => {
     const text = '1. 태풍 참피\n2. 흑해 상선 공격\n3. 원주 DB 3연승\n4. 추가 뉴스'
-    expect(validateItemSources(text, SOURCES)).toBe(text)
+    expect(validateItemSources(text, SOURCES, { now: NOW })).toBe(text)
   })
 
   it('번호 목록이 없거나 출처가 없으면 원문을 그대로 둔다', () => {
@@ -194,7 +194,7 @@ describe('validateItemSources', () => {
       '2. 흑해 상선 공격',
       '[MEMO_CREATE]{"title": "오늘 주요 뉴스", "text": "1. 태풍 참피\\n2. 흑해 상선 공격"}[/MEMO_CREATE]',
     ].join('\n')
-    const out = validateItemSources(text, SOURCES.slice(0, 2))
+    const out = validateItemSources(text, SOURCES.slice(0, 2), { now: NOW })
     expect(out).toContain('1. 태풍 참피 — [출처](https://www.edaily.co.kr/news/1)')
     expect(out).toContain('[MEMO_CREATE]{"title": "오늘 주요 뉴스", "text": "1. 태풍 참피\\n2. 흑해 상선 공격"}[/MEMO_CREATE]')
     expect(out).not.toContain('invented.example.com')

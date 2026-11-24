@@ -2,15 +2,20 @@
 /**
  * pdfcraft 로더 게이트 핸드오프 (2026-11-15).
  *
- * 배경: 23MB WASM 조각은 HTTP 캐시에 남지 않아(실측: 동일 문서
- * 재-fetch도 transferSize 전문) 부팅 게이트가 받아도 로더가 47MB를
- * 다시 받았다. 그래서 호스트가 게이트에서 모은 조각 바이트를 Blob
- * URL로 바꿔 iframe src 쿼리(wasmPart0/wasmPart1)로 넘기고, 로더는
- * 쿼리가 있으면 그 URL을 fetch한다.
+ * 배경: 큰 WASM 조각은 HTTP 캐시에 남지 않아(실측: 동일 문서
+ * 재-fetch도 transferSize 전문) 부팅 게이트가 받아도 로더가 WASM
+ * 전문을 다시 받았다. 그래서 호스트가 게이트에서 모은 조각 바이트를
+ * Blob URL로 바꿔 iframe src 쿼리(wasmPart0..wasmPartN)로 넘기고,
+ * 로더는 쿼리가 있으면 그 URL을 fetch한다.
+ *
+ * 파트 개수는 가변이다 (v0.22.0부터 3개 — WASM 54MB라 2분할로는
+ * 25MB 한도를 넘는다). 로더는 매니페스트를 안 읽으므로 파트 목록이
+ * 패키징 시점에 리터럴로 박힌다. 이 테스트는 매니페스트 wasmParts를
+ * 기준으로 삼아 개수와 무관하게 핸드오프를 검증한다.
  *
  * 검증 성질:
- * - 패키징 스크립트의 로더 템플릿이 wasmPart0/wasmPart1 쿼리를 읽어
- *   파트 URL로 쓴다 (다음 패키징 때 핸드오프가 유지돼야 한다).
+ * - 패키징 스크립트가 파트마다 wasmPart<i> 쿼리 줄을 생성한다
+ *   (다음 패키징 때 핸드오프가 유지돼야 한다).
  * - 벤더본 loader.js가 템플릿과 같은 핸드오프를 한다 — 둘이 어긋나면
  *   다음 리베이스·패키징 때 수정이 한쪽에서만 사라진다.
  * - 쿼리가 없으면 상대경로 파트 URL로 폴백한다 (직접 열기·구 호스트
@@ -24,8 +29,8 @@
  * top-level await + 글루 import라 jsdom에서 직접 실행할 수 없다.
  * 이 파일은 템플릿·벤더본 드리프트를 잡는 것이 목적이다.
  *
- * 카나리아: 템플릿에서 wasmPart0 폴백을 빼면 첫 테스트가, 벤더본에서
- * 빼면 두 번째 테스트가 실패한다.
+ * 카나리아: 템플릿에서 파트 줄 생성기를 빼면 첫 테스트가, 벤더본에서
+ * 파트 줄을 빼면 두 번째·세 번째 테스트가 실패한다.
  */
 import * as fs from 'fs';
 import * as path from 'path';
@@ -39,27 +44,46 @@ const LOADER = fs.readFileSync(
   path.join(ROOT, 'public/vendor/pdfcraft/loader.js'),
   'utf-8',
 );
+const MANIFEST = JSON.parse(
+  fs.readFileSync(
+    path.join(ROOT, 'public/vendor/pdfcraft/manifest.json'),
+    'utf-8',
+  ),
+) as { wasmParts: string[]; wasmPartBytes: number[] };
+const PART_NAMES = MANIFEST.wasmParts;
 
 describe('pdfcraft 로더 게이트 핸드오프', () => {
-  test('패키징 템플릿이 wasmPart 쿼리를 읽어 파트 URL로 쓴다', () => {
+  test('패키징 템플릿이 파트마다 wasmPart 쿼리 줄을 생성한다', () => {
     expect(TEMPLATE).toContain('new URLSearchParams(location.search)');
-    expect(TEMPLATE).toContain("PART_PARAMS.get('wasmPart0') || './${part0}'");
-    expect(TEMPLATE).toContain("PART_PARAMS.get('wasmPart1') || './${part1}'");
+    // 파트 줄은 parts 배열에서 생성된다 — 리터럴 2줄 고정이 아니다.
+    expect(TEMPLATE).toContain("PART_PARAMS.get('wasmPart${i}')");
+    expect(TEMPLATE).toContain('partLines');
+    // 파트당 상한이 있어 한도를 넘는 벤더가 조용히 안 만들어진다.
+    expect(TEMPLATE).toContain('MAX_PART_BYTES');
   });
 
-  test('벤더본 loader.js가 템플릿과 같은 핸드오프를 한다', () => {
+  test('벤더본 loader.js가 매니페스트의 모든 파트에 핸드오프를 한다', () => {
+    expect(PART_NAMES.length).toBeGreaterThanOrEqual(2);
     expect(LOADER).toContain('new URLSearchParams(location.search)');
-    expect(LOADER).toContain("PART_PARAMS.get('wasmPart0')");
-    expect(LOADER).toContain("PART_PARAMS.get('wasmPart1')");
+    for (let i = 0; i < PART_NAMES.length; i++) {
+      expect(LOADER).toContain(`PART_PARAMS.get('wasmPart${i}')`);
+    }
   });
 
   test('쿼리가 없으면 상대경로 파트 URL로 폴백한다', () => {
-    expect(LOADER).toMatch(
-      /get\('wasmPart0'\) \|\| '\.\/pdfcraft-web-.*_bg\.wasm\.part0'/,
-    );
-    expect(LOADER).toMatch(
-      /get\('wasmPart1'\) \|\| '\.\/pdfcraft-web-.*_bg\.wasm\.part1'/,
-    );
+    for (let i = 0; i < PART_NAMES.length; i++) {
+      const name = PART_NAMES[i].replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      expect(LOADER).toMatch(
+        new RegExp(`get\\('wasmPart${i}'\\) \\|\\| '\\./${name}'`),
+      );
+    }
+  });
+
+  test('매니페스트 파트 길이가 25MB 한도 아래다', () => {
+    expect(MANIFEST.wasmPartBytes.length).toBe(PART_NAMES.length);
+    for (const n of MANIFEST.wasmPartBytes) {
+      expect(n).toBeLessThan(25_000_000);
+    }
   });
 
   test('템플릿과 벤더본이 fetch/init 실패를 pdfcraft:failed로 보고한다', () => {

@@ -100,6 +100,11 @@
       canCollapse: !!state.canCollapse,
       menuShell: !!state.menuShell,
       menuLocal: !!state.menuLocal,
+      // tabsToShell (PDF 전용, 2026-11-22): 모드 탭(kind 'tab')까지
+      // 셸 상단바에 게시한다. 모드바 행이 없는 PDF는 모드 탭이 상단바에
+      // 있어야 하고, 다른 오피스 앱은 리본 탭을 창 안에 두므로
+      // 이 플래그를 켜지 않는다.
+      tabsToShell: !!state.tabsToShell,
     };
   }
 
@@ -204,9 +209,16 @@
     var win = mountCtx.win;
     if (!win.parent || win.parent === win) return;
     var state = states[mountCtx.appKey] || null;
+    // tabsToShell이면 모드 탭(kind 'tab')과 구분선도 함께 올린다 —
+    // 셸 상단바가 모드 탭·메뉴를 한 줄로 그리고, 클릭은 기존
+    // select(탭)·menu-request(메뉴) 경로를 탄다.
     var menuTabs = state
       ? state.tabs.filter(function (t) {
-          return t.kind === 'menu';
+          return (
+            t.kind === 'menu' ||
+            (state.tabsToShell &&
+              (t.kind === 'tab' || t.kind === 'separator'))
+          );
         })
       : [];
     try {
@@ -270,7 +282,12 @@
       // 셸이 채택했으면 메뉴는 셸 상단바가 그리는 탭 창 의 행 리본
       // 탭·파일 만 그린다. 구분선도 셸 메뉴의 경계 표시인 메뉴가
       // 세로 막대 옆에 탭 행에 나란히 없어 함께 건너뛴다.
+      // tabsToShell이면 모드 탭(kind 'tab')도 상단바가 그리므로
+      // 함께 건너뛴다 — 안 그러면 상단바와 탭 행에 이중으로 뜬다.
       if (shellAdopted && (tab.kind === 'menu' || tab.kind === 'separator')) {
+        return;
+      }
+      if (shellAdopted && state.tabsToShell && tab.kind === 'tab') {
         return;
       }
       if (tab.kind === 'separator') {
@@ -360,7 +377,11 @@
   // 전용 채널(myhub:office-fold, 위 절)이 맡는다 셸 버튼은 빠른 실행
   // 자리와 함께 표시만 상태(접힌 방향)를 가진 별도 계약이다
   // (2026-11-06 확정 교정 캡처 정보).
-  var QUICK_ACTIONS = ['save', 'undo', 'redo', 'print', 'search'];
+  // info·palette (PDF 전용, 2026-11-22): 엔진 모드바의 정보(문서 속성)
+  // 버튼과 검색(도구 및 명령 찾기) 상자가 제목 줄로 이사하면서 생긴
+  // 빠른 실행 동작이다. search(문서 내 검색 입력)와는 별개 — palette는
+  // 입력 없이 엔진 명령 팔레트를 여는 버튼이다.
+  var QUICK_ACTIONS = ['save', 'undo', 'redo', 'print', 'search', 'info', 'palette'];
   var quickStates = {}; // appKey -> { save: true, 등 }
   var quickHandlers = {}; // appKey -> [fn(action) -> bool]
 

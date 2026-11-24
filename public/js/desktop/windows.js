@@ -1646,6 +1646,10 @@
       { action: 'print', icon: 'printer', label: '인쇄' },
       { action: 'undo', icon: 'undo-2', label: '실행 취소' },
       { action: 'redo', icon: 'redo-2', label: '다시 실행' },
+      // info·palette (PDF 전용, 2026-11-22): 엔진 모드바의 정보(문서
+      // 속성) 버튼과 검색(도구 및 명령 찾기)이 제목 줄로 이사했다.
+      { action: 'info', icon: 'info', label: '문서 속성' },
+      { action: 'palette', icon: 'search', label: '도구 및 명령 찾기' },
     ];
     function normalizeOfficeQuickState(q) {
       if (!q || typeof q !== 'object') return null;
