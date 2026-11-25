@@ -277,7 +277,8 @@
         return false;
       }
     }
-    if (!loadTabs()) {
+    var restoredTabs = loadTabs();
+    if (!restoredTabs) {
       tabs = [makeTab(null)];
       activeTabId = tabs[0].id;
     }
@@ -1535,6 +1536,10 @@
       if (tab && tab.remoteTargetId && live.isActive()) {
         liveTabId = id;
         activateRemoteTab(tab.remoteTargetId);
+      } else if (tab && !live.isActive()) {
+        // 라이브가 꺼져 있으면 탭 클릭이 곧 시작이다 — 웰컴페이지만
+        // 남지 않게 해당 탭으로 라이브를 켠다 (2026-11-26).
+        enterLiveForTab(tab);
       }
       saveTabs();
       syncChrome();
@@ -1645,6 +1650,18 @@
         });
       }
       return live.enterLive(url, targetId);
+    }
+
+    /* 라이브가 꺼져 있을 때 탭으로 이동: 원격 타깃이 있으면 붙이고
+       (다시 로드하지 않는다), 없으면 저장된 URL로 이동한다. 빈 탭이면
+       아무것도 하지 않는다 (웰컴페이지 유지).
+       (2026-11-26: 앱을 열면 웰컴페이지만 뜨고 탭을 눌러도 안 넘어가던
+       결함 — 탭 클릭·앱 재시작 모두 라이브 시작이 없어서였다.) */
+    function enterLiveForTab(tab) {
+      if (!tab) return undefined;
+      if (tab.remoteTargetId) return enterLiveHere(null);
+      if (tab.url && tab.url.indexOf('http') === 0) return enterLiveHere(tab.url);
+      return undefined;
     }
 
     /* 주소로 이동: 영구 브라우저라 켜져 있으면 이동만 지시하고, 꺼져
@@ -2441,6 +2458,12 @@
     renderRecents();
     loadBookmarks();
     syncChrome();
+    // 앱 재시작 복원 (2026-11-26): 저장된 탭이 있으면 앱을 열 때
+    // 바로 라이브를 켜서 활성 탭을 보여준다 — 웰컴페이지만 뜨던 결함.
+    // 빈 탭만 있으면 웰컴페이지를 유지한다.
+    if (restoredTabs) {
+      enterLiveForTab(activeTab());
+    }
     return {
       go: go,
       live: live,
