@@ -2,6 +2,7 @@ import { Hono } from 'hono'
 import type { Env } from './types'
 import { modules } from './modules'
 import { authApp, verifySessionForEnv } from './modules/auth/routes'
+import { probeAuth } from './modules/auth/probe'
 import { readSessionToken, setSessionCookie } from './modules/auth/primitives'
 import { isCsrfSafeRequest } from './lib/csrf'
 import { handleScheduled, handleCronJobs, handleSleepConsolidation, handleGoogleSync, handleLogPrune, handleDecryptHealth } from './scheduled'
@@ -58,6 +59,13 @@ app.use(async (c, next) => {
       path === '/apple-touch-icon.png' || path.startsWith('/splash/') ||
       path === '/js/login.js' || path === '/js/login-visual.js' || path === '/css/login.css' ||
       path === '/vendor/lucide/lucide.min.js') { // 로그인 페이지용 에셋 (미인증 상태에서도 필요)
+    return next()
+  }
+  // 프로브 전용 토큰 (3기둥 합성 프로브, 2026-11-26): POST /api/ai/chat에만
+  // 허용되는 Bearer 자격 증명. 크론 프로브는 세션 쿠키를 못 보내므로.
+  // 유효하면 세션 검사 없이 통과한다. 없거나 틀리면 아래 세션 검사가
+  // 그대로 적용된다 (정상 로그인 경로 무변경 — modules/auth/probe.ts).
+  if (probeAuth(c.env, c.req.method, path, c.req.header('Authorization')) === 'ok') {
     return next()
   }
   // 정적 에셋 중 로그인 페이지용은 허용 (CSS/JS는 보호됨)

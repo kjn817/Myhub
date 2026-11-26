@@ -483,6 +483,21 @@ export function redactStringForLog(text: unknown, maxLen = 500): string {
   }
 }
 
+/** 제로폭 문자 집합 (프로브의 유출 판정과 동일: ZWSP·ZWNJ·ZWJ·BOM) */
+const ZERO_WIDTH_RE = /[\u200B\u200C\u200D\uFEFF]/g
+
+/**
+ * 보이지 않는 제로폭 문자를 제거한다 (2026-11-26).
+ * - 볼트에 저장하는 값에만 쓴다. 복원(desanitize)은 사용자 표시용 최종
+ *   텍스트에만 쓰이므로, 보이지 않는 문자를 되돌려줄 이유가 없다.
+ *   ZW가 섞인 원본을 그대로 저장하면 모델이 토큰만 봤는데도 응답에 ZW가
+ *   남아 프로브가 유출로 본다 (3기둥 프로브 ZW 케이스 실패 원인).
+ * - 검출(scan)은 원본 텍스트로 하므로 토큰화 자체는 그대로 동작한다.
+ */
+export function stripZeroWidth(value: string): string {
+  return value.replace(ZERO_WIDTH_RE, '')
+}
+
 export class TokenVault {
   tokenToValue = new Map<string, string>();
   valueToToken = new Map<string, string>();
@@ -506,14 +521,17 @@ export class TokenVault {
     ]);
     let out = text;
     for (const s of [...spans].sort((a, b) => b.start - a.start)) {
-      const key = `${s.type}:${s.value}`;
+      // 볼트 식별·복원 값은 제로폭을 뺀 깨끗한 값으로 한다 — "김​도현"과
+      // "김도현"은 같은 토큰으로, 복원은 항상 깨끗한 값으로 (위 참조).
+      const cleanValue = stripZeroWidth(s.value)
+      const key = `${s.type}:${cleanValue}`;
       let token = this.valueToToken.get(key);
       if (!token) {
         const n = (this.counters.get(s.type) ?? 0) + 1;
         this.counters.set(s.type, n);
         token = `[${s.type}_${n}]`;
         this.valueToToken.set(key, token);
-        this.tokenToValue.set(token, s.value);
+        this.tokenToValue.set(token, cleanValue);
       }
       out = out.slice(0, s.start) + token + out.slice(s.end);
     }

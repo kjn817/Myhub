@@ -41,6 +41,7 @@ export type Env = {
   // 대시보드에 등록, ORACLE_BROWSER_HOST는 deploy_full.py 평문 바인딩.
   ORACLE_BROWSER_HOST?: string // 오라클 브라우저 서버 호스트 (호스트명 필수 — IP 리터럴은 Workers fetch 1003)
   ORIGIN_SECRET?: string // 사이드카 오리진 시크릿 (view·cdp 공통 게이트)
+  PROBE_TOKEN?: string // 3기둥 합성 프로브 전용 토큰 (POST /api/ai/chat만 — modules/auth/probe.ts)
   CDP_SECRET?: string // CDP 프록시 추가 시크릿
   SELKIES_PASSWORD?: string // Selkies 기본 인증 비밀번호 (사용자 myhub)
   UNLOCK_SECRET?: string // LUKS 언록 서비스 인증 시크릿 (호스트 unlock.env와 동일 값)

@@ -252,6 +252,28 @@ describe('TokenVault — 토큰화와 복원', () => {
     const vault = new TokenVault()
     expect(vault.desanitize('[CARD_99] 그대로')).toBe('[CARD_99] 그대로')
   })
+
+  test('제로폭 문자가 섞인 값은 깨끗한 값으로 복원된다 (2026-11-26)', () => {
+    // 모델이 토큰만 봤는데도 복원이 원본 ZW를 되돌리면 응답에 보이지 않는
+    // 문자가 남아 프로브가 유출로 본다. 복원은 표시용이므로 깨끗한 값이 정본.
+    const vault = new TokenVault()
+    const zw = '김\u200b도현'
+    const { text: masked } = vault.sanitizeWith('연락처 메모: 김\u200b도현 님', [
+      { type: 'NAME', level: 2, start: 8, end: 8 + zw.length },
+    ])
+    expect(masked).toContain('[NAME_1]')
+    expect(masked).not.toContain('\u200b')
+    expect(vault.desanitize(masked)).toBe('연락처 메모: 김도현 님')
+    expect(vault.desanitize(masked)).not.toContain('\u200b')
+  })
+
+  test('제로폭 유무만 다른 값은 같은 토큰이다', () => {
+    const vault = new TokenVault()
+    const a = vault.sanitizeWith('김\u200b도현', [{ type: 'NAME', level: 2, start: 0, end: 4 }]).text
+    const b = vault.sanitizeWith('김도현', [{ type: 'NAME', level: 2, start: 0, end: 3 }]).text
+    expect(a).toBe(b)
+    expect(vault.size).toBe(1)
+  })
 })
 
 describe('redactStringForLog', () => {

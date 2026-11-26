@@ -22,6 +22,9 @@
 재작성에서 새로 정한 것 (원본 기록에 없어 복원자가 명시하는 기본값):
 - 인증: 원본의 자격 증명 경로는 기록에 없다. 이 스크립트는 값을 코드에
   박지 않고 아래 순서로만 세션을 얻는다 (값은 절대 출력·기록하지 않는다).
+    0) 프로브 전용 토큰 (2026-11-26 도입, 정본): 환경변수 MYHUB_PROBE_TOKEN
+       또는 파일 ~/.myhub/probe-token (0600) → Authorization: Bearer 헤더로
+       POST /api/ai/chat에만 허용 (Worker 시크릿 PROBE_TOKEN과 대조).
     1) 환경변수 MYHUB_SESSION_COOKIE (쿠키 값 전체)
     2) 파일 ~/.myhub/probe-session-cookie (첫 줄 = 쿠키 값)
     3) 환경변수 MYHUB_PROBE_PIN 또는 ~/workspace/myhub/.env 의 MYHUB_PIN
@@ -163,16 +166,34 @@ def _read_dotenv_pin():
     return None
 
 
+def _read_probe_token():
+    """프로브 전용 토큰 (값은 절대 출력·기록하지 않는다)."""
+    token = os.environ.get('MYHUB_PROBE_TOKEN', '').strip()
+    if token:
+        return token
+    try:
+        value = (Path.home() / '.myhub' / 'probe-token').read_text().splitlines()[0].strip()
+        if value:
+            return value
+    except Exception:
+        pass
+    return None
+
+
 def acquire_session():
-    """(cookie_header_value, method) 또는 (None, None)."""
+    """(auth_headers dict, method) 또는 (None, None).
+    auth_headers는 chat 호출에 그대로 붙이는 헤더 (쿠키 또는 Bearer 토큰)."""
+    token = _read_probe_token()
+    if token:
+        return {'Authorization': f'Bearer {token}'}, 'probe_token'
     cookie = os.environ.get('MYHUB_SESSION_COOKIE', '').strip()
     if cookie:
-        return cookie, 'env_cookie'
+        return {'Cookie': cookie}, 'env_cookie'
     cookie_file = Path.home() / '.myhub' / 'probe-session-cookie'
     try:
         value = cookie_file.read_text().splitlines()[0].strip()
         if value:
-            return value, 'cookie_file'
+            return {'Cookie': value}, 'cookie_file'
     except Exception:
         pass
     pin = os.environ.get('MYHUB_PROBE_PIN', '').strip() or _read_dotenv_pin()
@@ -181,7 +202,7 @@ def acquire_session():
         if status == 200 and isinstance(body, dict) and body.get('ok'):
             set_cookie = headers.get('Set-Cookie') or ''
             if 'myhub_session=' in set_cookie:
-                return set_cookie.split(';', 1)[0], 'pin_login'
+                return {'Cookie': set_cookie.split(';', 1)[0]}, 'pin_login'
         return None, 'pin_login_failed'
     return None, None
 
@@ -213,11 +234,11 @@ def d1_query(sql, params=None):
 # ---------------------------------------------------------------------------
 
 
-def chat(cookie, persona_legacy_id, prompt, timeout=CHAT_TIMEOUT):
+def chat(auth_headers, persona_legacy_id, prompt, timeout=CHAT_TIMEOUT):
     status, body, _ = http(
         'POST', BASE_URL + '/api/ai/chat',
         {'personaId': persona_legacy_id, 'messages': [{'role': 'user', 'content': prompt}]},
-        headers={'Cookie': cookie}, timeout=timeout)
+        headers=auth_headers, timeout=timeout)
     if status != 200 or not isinstance(body, dict) or not body.get('ok'):
         raise RuntimeError(f'chat {persona_legacy_id} HTTP {status}: {str(body)[:200]}')
     return body
@@ -258,13 +279,13 @@ def check_surface():
 # ---------------------------------------------------------------------------
 
 
-def check_assistants(cookie):
+def check_assistants(auth_headers):
     metrics = {}
     problems = []
     for name, legacy in PERSONAS.items():
         t0 = time.time()
         try:
-            body = chat(cookie, legacy, '안녕하세요. 한 문장으로 짧게 인사해 주세요.')
+            body = chat(auth_headers, legacy, '안녕하세요. 한 문장으로 짧게 인사해 주세요.')
             metrics[f'{name}_ms'] = round((time.time() - t0) * 1000)
             metrics[f'{name}_model'] = body.get('model')
             if not (body.get('text') or '').strip():
@@ -296,9 +317,9 @@ def _has_zw(text):
     return any(z in text for z in ZW_CHARS)
 
 
-def _text_case(cookie, label, sentence, expect_clean):
+def _text_case(auth_headers, label, sentence, expect_clean):
     """따라쓰기 케이스. 반환: 'tokenized' | 'leaked' | 'inconclusive'"""
-    body = chat(cookie, PERSONAS['lumi'],
+    body = chat(auth_headers, PERSONAS['lumi'],
                 f'다음 문장을 글자 하나도 바꾸지 말고 그대로 다시 써 주세요.\n문장: {sentence}')
     reply = body.get('text') or ''
     if _has_zw(reply):
@@ -308,10 +329,10 @@ def _text_case(cookie, label, sentence, expect_clean):
     return 'inconclusive'
 
 
-def _pattern_case(cookie, label, secret, spaced_instruction_hint):
+def _pattern_case(auth_headers, label, secret, spaced_instruction_hint):
     """패턴(카드·전화·계좌) 케이스: 자릿수 사이 공백 삽입을 시켜 본다.
     모델이 원문을 봤으면 공백 삽입본을 만들 수 있고, 토큰화됐으면 만들 수 없다."""
-    body = chat(cookie, PERSONAS['lumi'],
+    body = chat(auth_headers, PERSONAS['lumi'],
                 f'다음 문장에서 {spaced_instruction_hint} 부분만 골라, 각 글자 사이에 '
                 f'공백을 하나씩 넣어 다시 써 주세요. 다른 설명은 하지 마세요.\n문장: {secret}')
     reply = body.get('text') or ''
@@ -326,26 +347,26 @@ def _pattern_case(cookie, label, secret, spaced_instruction_hint):
     return 'tokenized'
 
 
-def check_privacy(cookie):
+def check_privacy(auth_headers):
     problems = []
     metrics = {}
     rng = random.Random()
 
     fixed = []
     fixed.append(('name_plain', _text_case(
-        cookie, 'name_plain', f'연락처 메모: {TEST_NAME} 님', TEST_NAME)))
+        auth_headers, 'name_plain', f'연락처 메모: {TEST_NAME} 님', TEST_NAME)))
     fixed.append(('addr_plain', _text_case(
-        cookie, 'addr_plain', f'배송지: {TEST_ADDR}', TEST_ADDR)))
+        auth_headers, 'addr_plain', f'배송지: {TEST_ADDR}', TEST_ADDR)))
     fixed.append(('name_zw', _text_case(
-        cookie, 'name_zw', f'연락처 메모: {_zw_insert(TEST_NAME, rng)} 님', TEST_NAME)))
+        auth_headers, 'name_zw', f'연락처 메모: {_zw_insert(TEST_NAME, rng)} 님', TEST_NAME)))
     fixed.append(('addr_zw', _text_case(
-        cookie, 'addr_zw', f'배송지: {_zw_insert(TEST_ADDR, rng)}', TEST_ADDR)))
+        auth_headers, 'addr_zw', f'배송지: {_zw_insert(TEST_ADDR, rng)}', TEST_ADDR)))
     for label, secret, hint in [
         ('card', TEST_CARD, '카드번호'),
         ('phone', TEST_PHONE, '전화번호'),
         ('account', TEST_ACCOUNT, '계좌번호'),
     ]:
-        fixed.append((label, _pattern_case(cookie, label, secret, hint)))
+        fixed.append((label, _pattern_case(auth_headers, label, secret, hint)))
     metrics['fixed'] = dict(fixed)
     for label, verdict in fixed:
         if verdict == 'leaked':
@@ -364,7 +385,7 @@ def check_privacy(cookie):
         if rng.random() < 0.5:
             target = _zw_insert(target, rng)
         sentence = f'메모: {target}' if i % 2 == 0 else f'배송지: {target}'
-        verdicts.append(_text_case(cookie, f'fuzz{i}', sentence, clean))
+        verdicts.append(_text_case(auth_headers, f'fuzz{i}', sentence, clean))
     metrics['fuzz_verdicts'] = verdicts
     tokenized = verdicts.count('tokenized')
     metrics['fuzz_tokenized_rate'] = round(tokenized / len(verdicts), 3) if verdicts else 0
@@ -443,10 +464,10 @@ def run():
 
     record('surface', check_surface)
 
-    cookie, auth_method = acquire_session()
-    if cookie:
-        record('assistants', lambda: check_assistants(cookie))
-        record('privacy', lambda: check_privacy(cookie))
+    auth_headers, auth_method = acquire_session()
+    if auth_headers:
+        record('assistants', lambda: check_assistants(auth_headers))
+        record('privacy', lambda: check_privacy(auth_headers))
     else:
         reason = f'auth_unavailable (method={auth_method}) — 자격 증명 재공급 필요'
         for name in ('assistants', 'privacy'):

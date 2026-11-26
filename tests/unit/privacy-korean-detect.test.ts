@@ -88,9 +88,47 @@ describe('detectKorean — 토큰화 판정', () => {
     expect(text.slice(addrs[0].start, addrs[0].end)).toContain('서울특별시')
   })
 
+  test('도로명 뒤 쉼표로 구분된 동/호도 ADDRESS 구간에 포함된다 (2026-11-26)', () => {
+    // "테스트로 215, 126동 145호"에서 쉼표가 동/호 확장을 막아
+    // 동/호가 토큰화에서 빠져 모델이 원문을 봤다 — 프로브 퍼징 유출 원인.
+    const text = '배송지: 부산광역시 영통구 테스트로 215, 126동 145호'
+    const addrs = detectKorean(text).filter((f) => f.type === 'ADDRESS')
+    expect(addrs.length).toBeGreaterThanOrEqual(1)
+    expect(text.slice(addrs[0].start, addrs[0].end)).toContain('126동 145호')
+  })
+
+  test('쉼표 뒤 동/호 안의 제로폭 문자도 ADDRESS 구간에 덮인다 (2026-11-26)', () => {
+    const text = '배송지: 부산광역시 영통구 테스트로 215, 12\u200b6동 145호'
+    const addrs = detectKorean(text).filter((f) => f.type === 'ADDRESS')
+    expect(addrs.length).toBeGreaterThanOrEqual(1)
+    expect(text.slice(addrs[0].start, addrs[0].end)).toContain('\u200b')
+  })
+
   test('동형어(김밥)는 이름으로 토큰화되지 않는다', () => {
     const findings = detectKorean('김밥을 먹었다')
     expect(findings.filter((f) => f.type === 'NAME')).toEqual([])
+  })
+
+  test('메모 라벨 뒤 문장 끝의 이름도 NAME으로 토큰화된다 (2026-11-26)', () => {
+    // '메모: 김하은'처럼 뒤에 붙는 단서가 없는 이름은 기본 점수 0.4로
+    // pass가 돼 모델이 원문을 그대로 봤다 — 프로브 퍼징 유출 원인.
+    // 메모는 개인 기록 라벨이므로 뒤의 이름형 토큰은 인명으로 본다.
+    // '하은'은 끝 음절이 조사 '은'과 같아 후보가 '김하'로 줄고 점수 0.7
+    // (gray)인데, 이름 프롬프트는 sensitivity personal이라 라이브 게이트웨이
+    // (sensitiveSource=true)에서 토큰화된다 — 그 경로로 검증한다.
+    const text = '메모: 김하은'
+    const names = detectKorean(text, { sensitiveSource: true }).filter((f) => f.type === 'NAME')
+    expect(names).toHaveLength(1)
+    expect(text.slice(names[0].start, names[0].end)).toBe('김하')
+  })
+
+  test('메모 라벨 뒤 제로폭 이름도 문장 끝에서 토큰화된다 (2026-11-26)', () => {
+    const zw = '김\u200d하은'
+    const text = `다음 문장을 글자 하나도 바꾸지 말고 그대로 다시 써 주세요.\n문장: 메모: ${zw}`
+    const names = detectKorean(text, { sensitiveSource: true }).filter((f) => f.type === 'NAME')
+    expect(names).toHaveLength(1)
+    // 토큰화 구간이 제로폭 문자를 덮어야 모델이 원문을 못 본다
+    expect(text.slice(names[0].start, names[0].end)).toContain('\u200d')
   })
 
   test('개인정보가 없는 문장은 빈 결과', () => {

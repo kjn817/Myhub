@@ -195,7 +195,7 @@ const COMMON_WORD_SPANS = new Set(["\uC6B0\uB9AC", "\uC800\uD76C", "\uB108\uD76C
 const TITLES = ["\uB300\uD45C\uC774\uC0AC", "\uB300\uD45C", "\uC6D0\uC7A5", "\uAD50\uC218", "\uD300\uC7A5", "\uACFC\uC7A5", "\uCC28\uC7A5", "\uBD80\uC7A5", "\uB300\uB9AC", "\uC8FC\uC784", "\uC0AC\uC6D0", "\uC120\uC0DD\uB2D8", "\uC120\uC0DD", "\uBC15\uC0AC", "\uC774\uC0AC", "\uC0C1\uBB34", "\uC804\uBB34", "\uC0AC\uC7A5", "\uC2E4\uC7A5", "\uC13C\uD130\uC7A5", "\uC18C\uC7A5", "\uAD6D\uC7A5", "\uCC98\uC7A5", "\uBCF8\uBD80\uC7A5", "\uC9C0\uC810\uC7A5", "\uB9E4\uB2C8\uC800", "PM", "\uC8FC\uBB34\uAD00"];
 const TITLES_BY_LENGTH = [...TITLES].sort((a, b) => b.length - a.length);
 const HONORIFICS = ["\uB2D8", "\uC528"];
-const NAME_LABELS = ["\uB2F4\uB2F9\uC790", "\uC218\uB839\uC778", "\uC131\uBA85", "\uC131\uD568", "\uC774\uB984", "\uC5F0\uB77D\uCC98", "\uC608\uC57D\uC790", "\uC2E0\uCCAD\uC778", "\uBCF4\uD638\uC790", "\uC218\uC2E0\uC778", "\uBC1C\uC2E0\uC778", "\uC791\uC131\uC790", "\uACB0\uC7AC\uC790", "\uC2B9\uC778\uC790", "\uD658\uC790", "\uACE0\uAC1D", "\uD68C\uC6D0", "\uD559\uC0DD", "\uAD50\uC0AC", "\uC800\uC790", "\uBC88\uC5ED\uC790"];
+const NAME_LABELS = ["\uB2F4\uB2F9\uC790", "\uC218\uB839\uC778", "\uC131\uBA85", "\uC131\uD568", "\uC774\uB984", "\uC5F0\uB77D\uCC98", "\uC608\uC57D\uC790", "\uC2E0\uCCAD\uC778", "\uBCF4\uD638\uC790", "\uC218\uC2E0\uC778", "\uBC1C\uC2E0\uC778", "\uC791\uC131\uC790", "\uACB0\uC7AC\uC790", "\uC2B9\uC778\uC790", "\uD658\uC790", "\uACE0\uAC1D", "\uD68C\uC6D0", "\uD559\uC0DD", "\uAD50\uC0AC", "\uC800\uC790", "\uBC88\uC5ED\uC790", "\uBA54\uBAA8"];
 const PARTICLES = ["\uC740", "\uB294", "\uC774", "\uAC00", "\uC744", "\uB97C", "\uC5D0\uAC8C", "\uD55C\uD14C", "\uAED8", "\uC758", "\uC640", "\uACFC", "\uB3C4", "\uB9CC", "\uBD80\uD130", "\uAE4C\uC9C0", "\uB791", "\uC774\uB791", "\uBCF4\uB2E4", "\uCC98\uB7FC", "\uAED8\uC11C", "\uC5D0\uC11C"];
 const RELATION_WORDS = ["\uC544\uB0B4", "\uB0A8\uD3B8", "\uBC30\uC6B0\uC790", "\uBD80\uC778", "\uC5B4\uBA38\uB2C8", "\uC544\uBC84\uC9C0", "\uBD80\uBAA8\uB2D8", "\uC790\uB140", "\uC544\uB4E4", "\uB538", "\uAC00\uC871", "\uC0C1\uC0AC", "\uB3D9\uB8CC", "\uC120\uBC30", "\uD6C4\uBC30", "\uD300\uC6D0"];
 const ADDRESS_LABELS = ["\uC8FC\uC18C", "\uBC30\uC1A1\uC9C0", "\uC790\uD0DD", "\uAC70\uC8FC\uC9C0", "\uD604\uC7A5 \uC8FC\uC18C", "\uADC0\uAC00 \uC8FC\uC18C", "\uC774\uC0AC \uAC08 \uC9D1", "\uBC30\uC1A1 \uC8FC\uC18C", "\uBC1B\uB294 \uC8FC\uC18C"];
@@ -293,8 +293,10 @@ function addressCandidates(text: string): KoreanCandidate[] {
       if (sg && sg.index !== void 0 && before.length - (sg.index + sg[0].length) <= 2) start = Math.max(0, start - 30) + sg.index;
     }
     const tail = text.slice(end, end + 16);
-    const detail = tail.match(/^\s*(?:[가-힣]{1,8}(?:아파트|타워|빌딩|오피스텔|센터|병원|학교))?\s*(?:\d{1,4}동)?\s*(?:\d{1,5}호)?/);
-    if (detail && detail[0].trim()) end += detail[0].length;
+    // 도로명 뒤 동/호는 쉼표로 구분되기도 한다 ("테스트로 215, 126동 145호").
+    // 선행 쉼표를 못 넘으면 동/호가 구간에서 빠져 모델이 원문을 본다 (2026-11-26).
+    const detail = tail.match(/^[\s,]*(?:[가-힣]{1,8}(?:아파트|타워|빌딩|오피스텔|센터|병원|학교))?\s*(?:\d{1,4}동)?\s*(?:\d{1,5}호)?/);
+    if (detail && /(?:\d|아파트|타워|빌딩|오피스텔|센터|병원|학교)/.test(detail[0])) end += detail[0].length;
     push(start, end, 'road+number');
   }
   JIBUN_RE.lastIndex = 0;

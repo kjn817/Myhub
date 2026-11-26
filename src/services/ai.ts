@@ -7,6 +7,8 @@ import {
   checkProviderAllowed,
   checkDataPolicy,
   resolvePolicySensitivity,
+  resolveRequestSensitivity,
+  getLegacyMarkerTools,
   PrivacyBlockedError,
   type SensitivityLevel,
 } from '../ai/legacy-privacy-guard'
@@ -196,6 +198,37 @@ export async function aiChat(
     console.info('privacy_gateway_tokenized', { origin: 'aiChat', level: egress.level, reasons: egress.reasons.join(',') })
     safeMessages = egress.messages as typeof safeMessages
   }
+  // 토큰화 후 민감도 재산정 (2026-11-26, 3기둥 프로브가 잡은 결함):
+  // callSingleAssistant는 원본 텍스트로 policy.sensitivity를 매긴다 — 카드번호
+  // 포함 요청은 'restricted'가 된다. 그런데 게이트웨이가 이미 카드번호를
+  // [CARD_1] 토큰으로 바꿨다면 모델이 받는 텍스트에는 원본이 없다. 재산정
+  // 없이 'restricted' 그대로 모델 선택에 쓰면 허용 Provider가 없어 403이
+  // 나고, 토큰화가 끝난 요청이 차단된다 (프로브 privacy 검사 실패 원인).
+  // 토큰화된 텍스트로 다시 매긴 민감도를 라우팅 정책으로 쓴다. 토큰은 PII
+  // 패턴을 지우지 만들지 않으므로 재산정 결과는 원본보다 높아질 수 없고,
+  // 토큰화가 놓친 패턴이 있으면 재산정도 그 패턴을 그대로 보고 차단한다.
+  // 호출자가 넘긴 policy 객체는 건드리지 않는다 (후속 aiChat 호출과 공유됨)
+  // — 라우팅 결정(selectModel·호출 직전 검사·플러그인 sensitivity)만 이
+  // 복사본을 쓴다.
+  let routingPolicy = policy
+  if (egress.action === 'tokenized') {
+    const tokenizedLastUser = [...safeMessages].reverse().find((m) => m.role === 'user')?.content ?? ''
+    const reResolved = resolveRequestSensitivity(
+      policy.personaId ?? 'concierge',
+      tokenizedLastUser,
+      getLegacyMarkerTools(policy.personaId ?? 'concierge'),
+    )
+    if (reResolved.sensitivity !== policy.sensitivity) {
+      console.info('privacy_sensitivity_reresolved', {
+        origin: 'aiChat',
+        persona: policy.personaId,
+        from: policy.sensitivity,
+        to: reResolved.sensitivity,
+        reason: reResolved.reason,
+      })
+      routingPolicy = { ...policy, sensitivity: reResolved.sensitivity, sensitivityReason: reResolved.reason }
+    }
+  }
   const privacyVault = egress.vault
   const privacyLevel = egress.level
 
@@ -224,7 +257,7 @@ export async function aiChat(
     }),
     messages,
   )
-  const { policy: effectivePolicy, rerouted: nvidiaRerouted } = resolveEffectivePolicy(policy, memoClassification)
+  const { policy: effectivePolicy, rerouted: nvidiaRerouted } = resolveEffectivePolicy(routingPolicy, memoClassification)
   if (nvidiaRerouted) {
     // 관측: 사유만 남긴다 (메모 내용·프롬프트는 절대 기록하지 않음).
     // 실제 호출된 프로바이더는 ai_usage 원장에 workers-ai로 기록된다.
@@ -272,8 +305,10 @@ export async function aiChat(
     if (!plugin) throw new Error(`provider plugin not registered: ${model.provider}`)
 
     // Phase 3D-P S0.1/S0.2: 실제 호출 직전 민감도 재검사
+    // (토큰화 후 재산정한 routingPolicy 기준 — 원본 'restricted' 그대로면
+    // 토큰화된 요청까지 403으로 막힌다)
     const isPrivateCall = policy.privacy === 'private'
-    const callSensitivity = resolvePolicySensitivity(policy)
+    const callSensitivity = resolvePolicySensitivity(routingPolicy)
     if (callSensitivity) {
       const callCheck = isPrivateCall
         ? checkDataPolicy(model.provider, callSensitivity)
@@ -327,7 +362,7 @@ export async function aiChat(
         ks = pickKeyForModel(pool, model.id)
         if (!ks) throw Object.assign(new Error('no gemini key available'), { code: 429 })
         try {
-          out = await plugin.call({ env, key: ks.key, model: model.id, messages: safeMessages, useSearch: policy.useSearch ?? false, sensitivity: resolvePolicySensitivity(policy), signal: context?.signal, privacyLevel })
+          out = await plugin.call({ env, key: ks.key, model: model.id, messages: safeMessages, useSearch: policy.useSearch ?? false, sensitivity: resolvePolicySensitivity(routingPolicy), signal: context?.signal, privacyLevel })
           ks.failures = 0
         } catch (e: any) {
           // 429만 쿨다운. 503 ResourceExhausted(Worker local)는 일시적 과부하로 키는 정상

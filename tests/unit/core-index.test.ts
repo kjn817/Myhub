@@ -112,6 +112,12 @@ function makeEnv(over: any = {}): any {
 const fetchDef = (req: Request, env: any) => (def as any).fetch(req, env, {} as any)
 const get = (path: string, env: any, headers: any = {}) =>
   fetchDef(new Request(`https://test${path}`, { headers }), env)
+const post = (path: string, env: any, headers: any = {}, body: any = {}) =>
+  fetchDef(new Request(`https://test${path}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...headers },
+    body: JSON.stringify(body),
+  }), env)
 
 beforeEach(() => {
   jest.clearAllMocks()
@@ -206,6 +212,48 @@ describe('인증 미들웨어', () => {
     mockVerifySession.mockResolvedValue(null)
     const res = await get('/index.html', makeEnv(), { Cookie: 'myhub_session=bad' })
     expect(res.status).toBe(302)
+  })
+
+  // 프로브 전용 토큰 (2026-11-26): POST /api/ai/chat에만 허용.
+  // 유효한 토큰은 미들웨어를 통과해 하류 핸들러까지 간다 — 하류는 MockDb라
+  // 500(CONVERSATION_CREATE_FAILED)이 나지만, 401이 아니고 세션 검증기가
+  // 호출되지 않았다는 것이 통과 증거다. 음성 케이스는 401로 막힌다.
+  test('유효한 프로브 토큰은 POST /api/ai/chat을 세션 없이 통과한다', async () => {
+    const env = makeEnv({ PROBE_TOKEN: 'probe-secret-123' })
+    const res = await post('/api/ai/chat', env, { Authorization: 'Bearer probe-secret-123' }, { personaId: 'concierge', messages: [] })
+    expect(res.status).not.toBe(401)
+    expect(mockVerifySession).not.toHaveBeenCalled()
+    expect(mockVerifySessionForEnv).not.toHaveBeenCalled()
+  })
+
+  test('틀린 프로브 토큰은 POST /api/ai/chat에서 401', async () => {
+    const env = makeEnv({ PROBE_TOKEN: 'probe-secret-123' })
+    const res = await post('/api/ai/chat', env, { Authorization: 'Bearer wrong' }, { personaId: 'concierge', messages: [] })
+    expect(res.status).toBe(401)
+  })
+
+  test('프로브 토큰은 GET /api/ai/chat에 무효 (401)', async () => {
+    const env = makeEnv({ PROBE_TOKEN: 'probe-secret-123' })
+    const res = await get('/api/ai/chat', env, { Authorization: 'Bearer probe-secret-123' })
+    expect(res.status).toBe(401)
+  })
+
+  test('프로브 토큰은 다른 API 경로에 무효 (401)', async () => {
+    const env = makeEnv({ PROBE_TOKEN: 'probe-secret-123' })
+    const res = await post('/api/ai/orchestrate', env, { Authorization: 'Bearer probe-secret-123' }, {})
+    expect(res.status).toBe(401)
+  })
+
+  test('PROBE_TOKEN 미설정 시 토큰 헤더만으로는 401', async () => {
+    const res = await post('/api/ai/chat', makeEnv(), { Authorization: 'Bearer probe-secret-123' }, { personaId: 'concierge', messages: [] })
+    expect(res.status).toBe(401)
+  })
+
+  test('유효한 세션 쿠키는 프로브 토큰이 틀려도 정상 통과한다', async () => {
+    mockVerifySession.mockResolvedValue('user@test.com')
+    const env = makeEnv({ PROBE_TOKEN: 'probe-secret-123' })
+    const res = await get('/api/modules', env, { Cookie: 'myhub_session=tok123', Authorization: 'Bearer wrong' })
+    expect(res.status).toBe(200)
   })
 })
 
