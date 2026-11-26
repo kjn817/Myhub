@@ -12,10 +12,12 @@
  * 뷰가 켜져 있을 때 주소창에 새 주소를 넣으면 이동만 지시한다
  * (iframe을 껐다 켜지 않는다).
  * 탭 (트랙 H 귀속, Safari식): 탭의 기록 단위는 주소·방문 기록이다.
- * 원격 뷰는 한 번에 한 탭에만 보이므로 정확히 하나의 탭이 소유하고
- * (liveTabId), 다른 탭에서는 라이브 화면 대신 "다른 탭에서 실행 중"
- * 안내를 보여준다 — 소유하지 않은 탭이 실행 중인 것처럼 보이지 않게
- * 한다. 뒤로/앞으로는 원격 기록을 먼저 쓴다: 원격이 켜져 있으면
+ * 원격 뷰는 한 번에 한 탭에만 보이지만 (liveTabId) 소유권은 사용자가
+ * 조작하는 탭을 따라간다 — 실제 브라우저의 탭 전환과 같다. 어떤
+ * 탭에서 시작·이동해도 뷰가 그 탭으로 옮겨지며, 타깃이 없는 탭은
+ * 새 원격 탭을 만들어 묶는다 (2026-11-26: "한 탭에서만" 안내 모달
+ * 폐기 — 새 탭에서 시작이 막히고 이동이 뉴스 탭을 덮던 결함).
+ * 뒤로/앞으로는 원격 기록을 먼저 쓴다: 원격이 켜져 있으면
  * CDP 상태 폴링이 본 실제 URL·뒤로/앞으로 가능 여부가 주소창·버튼의
  * 기준이 되고, 뒤로/앞으로 버튼은 원격 기록에 먼저 지시한다
  * (2026-11-15: 원격 내 링크 이동은 셸 로컬 기록에 없어 주소가
@@ -169,10 +171,6 @@
     var liveFrame = doc.getElementById('bwLiveFrame');
     var noticeEl = doc.getElementById('bwNoticeCard');
     var lockEl = doc.getElementById('bwLockCard');
-    var elsewhereEl = doc.getElementById('bwElsewhere');
-    var elsewhereMsg = doc.getElementById('bwElsewhereMsg');
-    var elsewhereGoBtn = doc.getElementById('bwElsewhereGo');
-    var elsewhereHereBtn = doc.getElementById('bwElsewhereHere');
 
     // ---------- 탭 모델 ----------
     var TABS_KEY = 'myhub.browser.tabs.v1';
@@ -423,6 +421,38 @@
     }
     function closeRemoteTab(targetId) {
       postTabAction('close', targetId);
+    }
+
+    /* 원격 페이지 탭 새로 만들기 (2026-11-26 실제 브라우저 탭 동작):
+       새 셸 탭은 원격 타깃이 없어 이동이 서버 활성 탭(뉴스 탭)의
+       페이지를 덮어버렸다. 만든 타깃 id를 탭에 묶어 돌려주고, 실패하면
+       null이다 (호출자는 이동하지 않고 멈춘다). */
+    function createRemoteTab(tab) {
+      var f =
+        (appWin && typeof appWin.fetch === 'function' && appWin.fetch) ||
+        (typeof fetch === 'function' && fetch);
+      if (!f) return Promise.resolve(null);
+      return f('/api/browse/tab/new', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({}),
+      })
+        .then(function (res) {
+          if (!res || !res.ok) return null;
+          return res.json();
+        })
+        .then(function (body) {
+          var id =
+            body && typeof body.targetId === 'string' && body.targetId ? body.targetId : null;
+          if (id) {
+            tab.remoteTargetId = id;
+            saveTabs();
+          }
+          return id;
+        })
+        .catch(function () {
+          return null;
+        });
     }
 
     /* 원격 탭 목록을 셸 탭과 맞춘다 (2026-11-19 새 창→새 탭, 상태 폴링
@@ -1488,20 +1518,6 @@
         liveFrame.classList.remove('bw-frame-parked');
       }
       if (home) home.hidden = mine && (on || state === 'locked');
-      if (elsewhereEl) {
-        var showElse = !mine && liveTabId !== null && on;
-        elsewhereEl.hidden = !showElse;
-        if (showElse && elsewhereMsg) {
-          var owner = null;
-          tabs.forEach(function (t) {
-            if (t.id === liveTabId) owner = t;
-          });
-          elsewhereMsg.textContent =
-            '브라우저 \'' +
-            tabTitle(owner) +
-            '\' 탭에서 실행 중이에요. 원격 브라우저는 한 번에 한 탭에서만 열려요.';
-        }
-      }
       if (urlInput) {
         // 입력 중이 아니면 활성 앱의 주소를 보여준다
         if (doc.activeElement !== urlInput) {
@@ -1633,23 +1649,47 @@
        다른 탭이 실행 중일 때의 시작 시도도 여기에 걸리도록
        소유권을 가로채지 않는다 (안내 버튼들의 시작을 방지). */
     function enterLiveHere(url) {
-      if (!live.isActive() || liveTabId === activeTabId) {
-        liveTabId = activeTabId;
-      }
-      // 원격 탭에서 다시 켤 때는 그 타깃을 먼저 앞으로 불러온 뒤 이동한다
-      // (안 그러면 이동이 지금 보이는 다른 탭에 가버린다).
+      // 라이브 뷰는 사용자가 조작 중인 탭을 따라간다 — 실제 브라우저의
+      // 탭 전환과 같다. 어떤 탭에서 시작·이동해도 소유권이 그 탭으로
+      // 옮겨진다 ("한 탭에서만" 안내 모달은 2026-11-26 폐기).
+      liveTabId = activeTabId;
       var tab = activeTab();
-      // 이동 대상은 조작 중인 활성 탭의 타깃으로 명시한다 — 서버가
-      // 활성 탭으로만 가면 뉴스 팝업이 떠 있을 때 엉뚱한 탭을
-      // 덮어버린다 (2026-11-21 사용자 보고: 뉴스 탭이 naver.com으로
-      // 재이동됨, CDP 내역으로 확정).
-      var targetId = tab && tab.remoteTargetId ? tab.remoteTargetId : null;
-      if (tab && tab.remoteTargetId && !live.isActive()) {
-        return activateRemoteTab(tab.remoteTargetId).then(function () {
-          return live.enterLive(url, targetId);
+      if (!tab) return live.enterLive(url, null);
+      var start;
+      if (tab.remoteTargetId) {
+        // 원격 탭에서 다시 켤 때는 그 타깃을 먼저 앞으로 불러온 뒤
+        // 이동한다 (안 그러면 이동이 지금 보이는 다른 탭에 가버린다).
+        // 이동 대상은 조작 중인 활성 탭의 타깃으로 명시한다 — 서버가
+        // 활성 탭으로만 가면 뉴스 팝업이 떠 있을 때 엉뚱한 탭을
+        // 덮어버린다 (2026-11-21 사용자 보고: 뉴스 탭이 naver.com으로
+        // 재이동됨, CDP 내역으로 확정).
+        start = activateRemoteTab(tab.remoteTargetId).then(function () {
+          return live.enterLive(url, tab.remoteTargetId);
         });
+      } else if (live.isActive()) {
+        // 라이브가 켜져 있는데 이 탭에 원격 타깃이 없으면 새 원격 탭을
+        // 만들어 묶는다 — 타깃 없이 이동하면 서버 활성 탭(뉴스 탭)의
+        // 페이지가 덮인다. 만들기에 실패하면 이동하지 않는다 (엉뚱한
+        // 탭 덮기보다 멈추는 쪽이 낫다).
+        start = createRemoteTab(tab).then(function (targetId) {
+          if (!targetId) return Promise.resolve(false);
+          return activateRemoteTab(targetId).then(function () {
+            return live.enterLive(url, targetId);
+          });
+        });
+      } else {
+        // 라이브가 꺼져 있을 때(시작·복원)는 서버 활성 탭을 쓴다 —
+        // 저장된 URL을 복원하는 경로라, 여기서 새 탭을 만들면 메인
+        // 탭이 빈 채로 남는다.
+        start = live.enterLive(url, null);
       }
-      return live.enterLive(url, targetId);
+      return Promise.resolve(start).then(function (started) {
+        // 소유권이 옮겨졌으면 화면을 즉시 맞춘다 — 켜져 있을 때의
+        // enterLive는 상태 변화를 안 부르므로, 이 호출이 없으면
+        // 프레임이 parked인 채로 다음 폴링(2초)까지 남는다.
+        syncChrome();
+        return started;
+      });
     }
 
     /* 라이브가 꺼져 있을 때 탭으로 이동: 원격 타깃이 있으면 붙이고
@@ -2131,26 +2171,6 @@
         var t = ev && ev.target;
         if (t && (tabsMenuEl.contains(t) || (tabsOverflowBtn && tabsOverflowBtn.contains(t)))) return;
         tabsMenuEl.hidden = true;
-      });
-    }
-    if (elsewhereGoBtn) {
-      elsewhereGoBtn.addEventListener('click', function () {
-        if (liveTabId) activateTab(liveTabId);
-      });
-    }
-    if (elsewhereHereBtn) {
-      elsewhereHereBtn.addEventListener('click', function () {
-        var tab = activeTab();
-        if (tab && tab.url) go(tab.url, true);
-        else if (live.isActive()) {
-          // 소유권만 이 탭으로 옮긴다 — 영구 브라우저라 iframe을
-          // 껐다 켤 필요가 없다.
-          liveTabId = activeTabId;
-          saveTabs();
-          syncChrome();
-        } else {
-          startAndRecord(null);
-        }
       });
     }
     if (favsEditBtn) {

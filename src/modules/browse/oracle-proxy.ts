@@ -29,7 +29,7 @@
 import { Hono } from 'hono'
 import type { Env } from '../../types'
 import { validatePublicUrlAsync } from './assistant-read'
-import { defaultCdpConnect, fetchSidecarBrowserState, getBrowserState, goBackSession, goForwardSession, navigateSession, reloadSession, toDirectCdpWsUrl, type ViewportSize } from './cdp'
+import { createTabSession, defaultCdpConnect, fetchSidecarBrowserState, getBrowserState, goBackSession, goForwardSession, navigateSession, reloadSession, toDirectCdpWsUrl, type ViewportSize } from './cdp'
 import { isBrowserLocked } from './unlock'
 
 export const ORACLE_VIEW_PORT = 8080
@@ -473,6 +473,24 @@ export function registerOracleProxyRoutes(app: Hono<{ Bindings: Env }>): void {
   }
   app.post('/tab/activate', tabAction('activate'))
   app.post('/tab/close', tabAction('close'))
+
+  // 새 원격 탭 만들기 (2026-11-26 실제 브라우저 탭 동작): 셸 탭마다
+  // 자기 원격 타깃을 갖게 한다. about:blank로 만들고 URL 이동은
+  // /navigate가 그 타깃으로 한다. 인증·게이트는 /navigate와 같다.
+  app.post('/tab/new', async (c) => {
+    const cfg = oracleConfigOf(c.env)
+    if (!cfg) return c.json({ ok: false, error: 'ORACLE_NOT_CONFIGURED' }, 503)
+    const ran = await runCdpWithVersionRetry(
+      c,
+      cfg,
+      (gate) => createTabSession(gate.directWs, defaultCdpConnect, { headers: gate.secretHeaders }),
+      (res) => !res.ok && res.stage === 'connect',
+    )
+    if (!ran.ok) return ran.response
+    const created = ran.result
+    if (!created.ok || !created.targetId) return c.json({ ok: false, error: 'TAB_CREATE_FAILED' }, 502)
+    return c.json({ ok: true, targetId: created.targetId })
+  })
 
   // 원격 뒤로/앞으로 가기 (2026-11-15): CDP getNavigationHistory로
   // 엔트리 id를 읽어 Page.navigateToHistoryEntry로 활성 탭을 이동시킨다

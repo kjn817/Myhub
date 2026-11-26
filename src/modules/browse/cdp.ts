@@ -507,7 +507,48 @@ export async function navigateSession(
   )
 }
 
+export type CreateTabStage = 'ok' | 'connect' | 'create'
+export interface CreateTabResult {
+  ok: boolean
+  stage: CreateTabStage
+  targetId?: string
+}
 
+/**
+ * 새 원격 페이지 탭을 만든다 (2026-11-26 실제 브라우저 탭 동작).
+ *
+ * 셸이 새 탭을 열 때 원격 타깃이 없어, 이동이 서버 활성 탭(뉴스 탭)의
+ * 페이지를 덮어버리던 결함의 정식 수정 — 탭마다 자기 원격 타깃을
+ * 갖는다. about:blank로 만들고, URL 이동은 /navigate가 그 타깃으로
+ * 한다 (만들자마자 이동하면 getTargets 재시도 없이도 타깃이 보인다).
+ */
+export async function createTabSession(
+  webSocketDebuggerUrl: string,
+  connect: CdpConnectFn = defaultCdpConnect,
+  opts: { headers?: Record<string, string>; timeoutMs?: number } = {}
+): Promise<CreateTabResult> {
+  return runCdpScript<CreateTabResult>(
+    webSocketDebuggerUrl,
+    connect,
+    opts,
+    async (call) => {
+      let reply: CdpReply
+      try {
+        reply = await call('Target.createTarget', { url: 'about:blank' })
+      } catch {
+        return { ok: false, stage: 'create' as const }
+      }
+      if (reply.error) return { ok: false, stage: 'create' as const }
+      const targetId = (reply.result as { targetId?: unknown } | undefined)?.targetId
+      if (typeof targetId !== 'string' || !targetId) return { ok: false, stage: 'create' as const }
+      return { ok: true, stage: 'ok' as const, targetId }
+    },
+    {
+      connect: { ok: false, stage: 'connect' as const },
+      timeout: () => ({ ok: false, stage: 'connect' as const }),
+    },
+  )
+}
 
 /** 원격 페이지 타깃 하나 (사이드카 /control/state의 tabs 항목). */
 export interface RemoteTab {

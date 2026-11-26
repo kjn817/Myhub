@@ -10,9 +10,9 @@
 // ④ closeTab도 activateTab을 거치지 않아 빈 탭으로 넘어가도 포커스
 // 요청이 없었다 — S5가 이 경로를 검증한다.
 //
-// 모달은 원인이 아니다: S2에서 단일 탭 모달이 떠 있는 상태에서도
-// 포커스·타이핑이 동작한다 (수정 전에도 대조군은 통과했다).
-// 각 시나리오는 포커스 여부 + 실제 키보드 타이핑이 주소창에
+// "한 탭에서만" 모달은 2026-11-26 실제 브라우저 탭 동작으로 폐기됐다:
+// S2는 이제 모달이 뜨지 않는 상태에서 포커스·타이핑이 동작하는지를
+// 본다. 각 시나리오는 포커스 여부 + 실제 키보드 타이핑이 주소창에
 // 들어가는지를 함께 단언한다 (QA 증상 그대로).
 'use strict';
 
@@ -79,8 +79,8 @@ runScenario('browser-newtab-focus', async (t) => {
   await waitTabs(2);
   await expectFocusAndTyping('S1 연속 빈 탭');
 
-  // S2: 대조군 + 모달 무죄 — URL 탭에서 셸 + 클릭. 모달이 떠 있어도
-  // 포커스·타이핑이 동작해야 한다.
+  // S2: URL 탭에서 새 탭 — "한 탭에서만" 모달은 폐기됐으므로 뜨지
+  // 않아야 하고, 그래도 포커스·타이핑이 동작해야 한다.
   await page.fill('.myhub-win-bnav .myhub-bnav-input', 'example.com');
   await page.press('.myhub-win-bnav .myhub-bnav-input', 'Enter');
   await page.waitForFunction(() => {
@@ -89,8 +89,8 @@ runScenario('browser-newtab-focus', async (t) => {
   }, { timeout: 10000 });
   await page.click('.myhub-win-bnav .myhub-bnav-new');
   await waitTabs(3);
-  assert(await modalShown(), 'S2: 단일 탭 모달이 떠 있어야 한다 (모달 무죄 대조 조건)');
-  await expectFocusAndTyping('S2 URL 탭에서 새 탭 (모달 표시 중)');
+  assert(!(await modalShown()), 'S2: 한 탭에서만 모달이 떠 있으면 안 된다 (2026-11-26 폐기)');
+  await expectFocusAndTyping('S2 URL 탭에서 새 탭 (모달 없음)');
 
   // S3: 메뉴 경로 — MyHubMenus 탭 → 새 탭 run() (셸이 메뉴 클릭 때
   // 호출하는 것과 같은 함수, 셸 플래그 없음).

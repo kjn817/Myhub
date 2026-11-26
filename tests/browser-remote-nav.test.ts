@@ -141,6 +141,19 @@ function makeApp(): Harness {
     },
     location: { origin: 'https://myhub.test' },
     addEventListener: () => {},
+    // 2026-11-26 실제 브라우저 탭 동작: 라이브가 켜져 있을 때 타깃이
+    // 없는 탭으로 이동하면 셸이 POST /api/browse/tab/new로 새 원격
+    // 탭을 먼저 만든다. 없으면 이동이 안 나가 테스트가 거짓 실패한다.
+    fetch: (url: string) =>
+      Promise.resolve({
+        ok: true,
+        json: () =>
+          Promise.resolve(
+            String(url).includes('/api/browse/tab/new')
+              ? { ok: true, targetId: 'page-nav-1' }
+              : { ok: true },
+          ),
+      }),
   }
   const h: Harness = {
     app: null as any,

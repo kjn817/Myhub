@@ -8,7 +8,8 @@
  * 검증하는 성질 (깨지면 실패해야 한다):
  * - 깨진 한국어 문구가 소스에 남아 있지 않고 새 문구가 그 자리에 있다
  *   (S1-1 백업 3건, S1-4 후보 선택 2곳, S1-5 구형 HWP 2곳,
- *   S1-6 브라우저 elsewhere, S1-7 서브챗).
+ *   S1-7 서브챗). S1-6 브라우저 elsewhere 안내는 2026-11-26 실제
+ *   브라우저 탭 동작으로 폐기돼 문구·요소·CSS가 전부 없다.
  * - backup.html이 step-up.css를 link로 선언한다 — CSP enforce 아래에서는
  *   step-up.js의 인라인 <style> 주입이 차단되므로 link가 없으면 PIN 모달이
  *   무스타일로 뜬다 (S1-2). step-up.js는 같은 id의 요소가 있으면 주입을
@@ -42,6 +43,8 @@ const SUBCHAT_JS = read('public/js/desktop/subchat.js')
 const HWP_JS = read('public/js/finder-format-hwp.js')
 const VIEWER_JS = read('public/js/finder-viewer.js')
 const BROWSER_JS = read('public/js/browser.js')
+const BROWSER_HTML = read('public/browser.html')
+const BROWSER_CSS = read('public/css/browser.css')
 const FINDER_HTML = read('public/finder.html')
 const KEY_ROTATION_JS = read('public/js/key-rotation.js')
 const MEMORY_HTML = read('public/memory.html')
@@ -102,10 +105,16 @@ describe('S1-4·S1-5 — 깨진 문구 2곳씩 동시 재작성', () => {
 })
 
 describe('S1-6·S1-7 — 브라우저·서브챗 문구 교정', () => {
-  test('elsewhere 안내는 탭에서 실행 중이에요', () => {
-    expect(BROWSER_JS).not.toContain('중이예요')
-    expect(BROWSER_JS).not.toContain('앱에서 실행 중')
-    expect(BROWSER_JS).toContain('탭에서 실행 중이에요')
+  // 2026-11-26 실제 브라우저 탭 동작: "한 탭에서만" 안내 모달은
+  // 폐기됐다 — 새 탭에서 시작이 막히고 이동이 뉴스 탭을 덮던 결함의
+  // 원인이라 요소·문구·CSS까지 전부 제거됐다. 구 문구가 돌아오면
+  // 이 단언이 실패한다.
+  test('한 탭에서만 안내가 소스 어디에도 남아 있지 않다', () => {
+    expect(BROWSER_JS).not.toContain('한 번에 한 탭에서만')
+    expect(BROWSER_JS).not.toContain('탭에서 실행 중이에요')
+    expect(BROWSER_JS).not.toContain('elsewhere')
+    expect(BROWSER_HTML).not.toContain('bwElsewhere')
+    expect(BROWSER_CSS).not.toContain('bw-elsewhere')
   })
 
   test('서브챗 동작 안내는 주어가 바로 잡혔다', () => {
