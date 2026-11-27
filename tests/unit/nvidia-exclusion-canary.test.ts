@@ -165,18 +165,26 @@ describe('selectModel 열거', () => {
     expect(m.id).not.toContain('nvidia');
   });
 
-  test('에코 메모 턴 1차 모델: model.summarize=qwen 오버라이드가 그대로 선택된다 (배포 시 적용될 값)', async () => {
+  test('에코 메모 턴 1차 모델: model.summarize=mistral-small 오버라이드가 그대로 선택된다 (배포 시 적용될 값)', async () => {
+    const db = makeDb({ 'model.summarize': '@cf/mistralai/mistral-small-3.1-24b-instruct' });
+    const policy: TaskPolicy = { ...personaPolicy('keeper', 'summarize'), providerPin: 'workers-ai' };
+    const m = await __test.selectModel(db as any, policy);
+    expect(m.id).toBe('@cf/mistralai/mistral-small-3.1-24b-instruct');
+    expect(m.provider).toBe('workers-ai');
+  });
+
+  test('deprecated된 qwen3-30b 오버라이드는 무시되고 mistral-small이 1차로 선택된다 (2026-11-20 Cloudflare deprecated·5028)', async () => {
     const db = makeDb({ 'model.summarize': '@cf/qwen/qwen3-30b-a3b-fp8' });
     const policy: TaskPolicy = { ...personaPolicy('keeper', 'summarize'), providerPin: 'workers-ai' };
     const m = await __test.selectModel(db as any, policy);
-    expect(m.id).toBe('@cf/qwen/qwen3-30b-a3b-fp8');
+    expect(m.id).toBe('@cf/mistralai/mistral-small-3.1-24b-instruct');
     expect(m.provider).toBe('workers-ai');
   });
 
   test('Workers AI 내부 폴백 후보는 전부 workers-ai다 (핀 내 전수)', async () => {
     // 시도한 모델을 exclude로 누적하며 반복 선택 — 폴백 체인 전체 열거
     const tried = new Set<string>();
-    const db = makeDb({ 'model.summarize': '@cf/qwen/qwen3-30b-a3b-fp8' });
+    const db = makeDb({ 'model.summarize': '@cf/mistralai/mistral-small-3.1-24b-instruct' });
     const policy: TaskPolicy = { ...personaPolicy('keeper', 'summarize'), providerPin: 'workers-ai' };
     for (let i = 0; i < 4; i++) {
       const m = await __test.selectModel(db as any, policy, tried);

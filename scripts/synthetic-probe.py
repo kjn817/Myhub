@@ -318,15 +318,17 @@ def _has_zw(text):
 
 
 def _text_case(auth_headers, label, sentence, expect_clean):
-    """따라쓰기 케이스. 반환: 'tokenized' | 'leaked' | 'inconclusive'"""
+    """따라쓰기 케이스. 반환: (verdict, reply).
+    verdict: 'tokenized' | 'leaked' | 'inconclusive'.
+    reply는 유출 시 원인 판별용으로만 기록한다 (합성 테스트 데이터)."""
     body = chat(auth_headers, PERSONAS['lumi'],
                 f'다음 문장을 글자 하나도 바꾸지 말고 그대로 다시 써 주세요.\n문장: {sentence}')
     reply = body.get('text') or ''
     if _has_zw(reply):
-        return 'leaked'
+        return 'leaked', reply
     if expect_clean in reply:
-        return 'tokenized'
-    return 'inconclusive'
+        return 'tokenized', reply
+    return 'inconclusive', reply
 
 
 def _pattern_case(auth_headers, label, secret, spaced_instruction_hint):
@@ -354,13 +356,13 @@ def check_privacy(auth_headers):
 
     fixed = []
     fixed.append(('name_plain', _text_case(
-        auth_headers, 'name_plain', f'연락처 메모: {TEST_NAME} 님', TEST_NAME)))
+        auth_headers, 'name_plain', f'연락처 메모: {TEST_NAME} 님', TEST_NAME)[0]))
     fixed.append(('addr_plain', _text_case(
-        auth_headers, 'addr_plain', f'배송지: {TEST_ADDR}', TEST_ADDR)))
+        auth_headers, 'addr_plain', f'배송지: {TEST_ADDR}', TEST_ADDR)[0]))
     fixed.append(('name_zw', _text_case(
-        auth_headers, 'name_zw', f'연락처 메모: {_zw_insert(TEST_NAME, rng)} 님', TEST_NAME)))
+        auth_headers, 'name_zw', f'연락처 메모: {_zw_insert(TEST_NAME, rng)} 님', TEST_NAME)[0]))
     fixed.append(('addr_zw', _text_case(
-        auth_headers, 'addr_zw', f'배송지: {_zw_insert(TEST_ADDR, rng)}', TEST_ADDR)))
+        auth_headers, 'addr_zw', f'배송지: {_zw_insert(TEST_ADDR, rng)}', TEST_ADDR)[0]))
     for label, secret, hint in [
         ('card', TEST_CARD, '카드번호'),
         ('phone', TEST_PHONE, '전화번호'),
@@ -376,6 +378,7 @@ def check_privacy(auth_headers):
     surnames = ['김', '이', '박', '최', '정', '강', '조', '윤']
     given = ['도현', '서연', '민준', '지우', '하은', '준서', '수아', '예준']
     verdicts = []
+    leaked_cases = []
     for i in range(FUZZ_CASES):
         name = rng.choice(surnames) + rng.choice(given)
         addr = (f"{rng.choice(['서울특별시', '부산광역시', '경기도 수원시', '인천광역시'])} "
@@ -385,8 +388,15 @@ def check_privacy(auth_headers):
         if rng.random() < 0.5:
             target = _zw_insert(target, rng)
         sentence = f'메모: {target}' if i % 2 == 0 else f'배송지: {target}'
-        verdicts.append(_text_case(auth_headers, f'fuzz{i}', sentence, clean))
+        verdict, reply = _text_case(auth_headers, f'fuzz{i}', sentence, clean)
+        verdicts.append(verdict)
+        if verdict == 'leaked':
+            # 합성 테스트 데이터만 기록 — 재발 시 누출 입력 특정용 (2026-11-27).
+            # reply의 ZW 위치와 입력의 ZW 위치를 대조하면
+            # '입력 에코(진짜 탐지 실패)'와 '모델 자체 생성 ZW(노이즈)'를 가릴 수 있다.
+            leaked_cases.append({'i': i, 'sentence': sentence, 'reply': reply})
     metrics['fuzz_verdicts'] = verdicts
+    metrics['fuzz_leaked_cases'] = leaked_cases
     tokenized = verdicts.count('tokenized')
     metrics['fuzz_tokenized_rate'] = round(tokenized / len(verdicts), 3) if verdicts else 0
     if any(v == 'leaked' for v in verdicts):

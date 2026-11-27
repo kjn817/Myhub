@@ -93,7 +93,7 @@ function settingsWrites(db: MockDb) {
 // 전제 고정: 테스트 데이터가 실제 레지스트리와 어긋나면 여기서 먼저 실패한다.
 describe('전제: 실제 MODELS 레지스트리 상태', () => {
   test('거부 케이스에 쓰는 모델은 실제로 deprecated다', () => {
-    for (const id of ['gemini-3.5-flash', 'gemini-3.8-flash', 'llama-3.3-70b-versatile']) {
+    for (const id of ['gemini-3.5-flash', 'gemini-3.8-flash', 'llama-3.3-70b-versatile', '@cf/qwen/qwen3-30b-a3b-fp8']) {
       const entries = MODELS.filter((m) => m.id === id)
       expect(entries.length).toBeGreaterThan(0)
       expect(entries.every((m) => m.status === 'deprecated')).toBe(true)
@@ -102,7 +102,7 @@ describe('전제: 실제 MODELS 레지스트리 상태', () => {
 
   test('정상 케이스에 쓰는 모델은 실제로 active다', () => {
     expect(MODELS.find((m) => m.id === 'gemini-3.5-flash-lite')?.status).toBe('active')
-    expect(MODELS.find((m) => m.id === '@cf/qwen/qwen3-30b-a3b-fp8')?.status).toBe('active')
+    expect(MODELS.find((m) => m.id === '@cf/mistralai/mistral-small-3.1-24b-instruct')?.status).toBe('active')
   })
 
   test('NVIDIA 모델은 전부 active가 아니다 (2026-11-05 판정: nemotron은 evaluation으로 부활, deprecated 아님)', () => {
@@ -151,14 +151,25 @@ describe('POST /settings: 기존 동작 유지', () => {
     expect(writes[0].params[1]).toBe('gemini-3.5-flash-lite')
   })
 
-  test('model.summarize + active workers-ai 모델(qwen3-30b) → 200', async () => {
+  test('model.summarize + active workers-ai 모델(mistral-small) → 200', async () => {
     const { json } = makeApp()
+    const res = await json('/settings', 'POST', {
+      key: 'model.summarize',
+      value: '@cf/mistralai/mistral-small-3.1-24b-instruct',
+    })
+    expect(res.status).toBe(200)
+    expect(await body(res)).toEqual({ ok: true })
+  })
+
+  test('model.summarize + deprecated qwen3-30b → 400, DB에 쓰지 않음 (2026-11-20 Cloudflare deprecated·5028)', async () => {
+    const { json, db } = makeApp()
     const res = await json('/settings', 'POST', {
       key: 'model.summarize',
       value: '@cf/qwen/qwen3-30b-a3b-fp8',
     })
-    expect(res.status).toBe(200)
-    expect(await body(res)).toEqual({ ok: true })
+    expect(res.status).toBe(400)
+    expect((await body(res)).error).toContain('not active')
+    expect(settingsWrites(db)).toHaveLength(0)
   })
 
   test('model.summarize + nvidia 모델 → 400, DB에 쓰지 않음 (2026-10-30: NVIDIA 저장 차단)', async () => {

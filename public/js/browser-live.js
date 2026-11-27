@@ -135,6 +135,31 @@
       });
   }
 
+  /* 인코더 뮤텍스 전환 (2026-11-26 Waydroid Phase 3 후속, C안):
+     Promise<{ status, body }> (setQuality와 같은 모양). { paused: true }는
+     브라우저 인코더 정지(Android 표시 중), { paused: false }는 재개다. */
+  function defaultSetEncoderMutex(payload) {
+    if (typeof fetch !== 'function') return Promise.resolve({ status: 0, body: null });
+    return fetch('/api/browse/encoder-mutex', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+      .then(function (r) {
+        return r
+          .json()
+          .catch(function () {
+            return null;
+          })
+          .then(function (body) {
+            return { status: r.status, body: body };
+          });
+      })
+      .catch(function () {
+        return { status: 0, body: null };
+      });
+  }
+
   /* 언록 상태 조회: Promise<{ status, body }> (navigate와 같은 모양) */
   function defaultCheckUnlock() {
     if (typeof fetch !== 'function') return Promise.resolve({ status: 0, body: null });
@@ -352,7 +377,7 @@
   }
 
   /**
-   * deps = { doc, navigate, applyViewport, onChange, checkUnlock, submitUnlock, setQuality, pollDelayMs, fetchState, history, reload, onState, statePollMs, reportMouseOffset, mouseOffsetPollMs }
+   * deps = { doc, navigate, applyViewport, onChange, checkUnlock, submitUnlock, setQuality, setEncoderMutex, pollDelayMs, fetchState, history, reload, onState, statePollMs, reportMouseOffset, mouseOffsetPollMs }
    * doc에서 #bwLiveFrame/#bwNoticeCard/#bwNoticeMsg/#bwNoticeClose와
    * #bwLockCard/#bwLockForm/#bwLockPassword/#bwLockConfirm/#bwLockMsg/
    * #bwLockSubmit/#bwLockClose/#bwLockTitle/#bwLockDesc를 찾는다 (없으면
@@ -391,6 +416,8 @@
       typeof deps.submitUnlock === 'function' ? deps.submitUnlock : defaultSubmitUnlock;
     var setQualityFetch =
       typeof deps.setQuality === 'function' ? deps.setQuality : defaultSetQuality;
+    var setEncoderMutexFetch =
+      typeof deps.setEncoderMutex === 'function' ? deps.setEncoderMutex : defaultSetEncoderMutex;
     var fetchState =
       typeof deps.fetchState === 'function' ? deps.fetchState : defaultFetchState;
     var historyFetch =
@@ -471,6 +498,16 @@
     var qualityAttempts = 0;
     var qualityApplying = false;
     var QUALITY_REAPPLY_MAX_ATTEMPTS = 10;
+    /* 인코더 뮤텍스 재확언 (2026-11-26 Waydroid Phase 3 후속, C안): Android
+       가시성(true면 브라우저 인코더 정지)을 사이드카에 알린다. 라이브
+       (재)연결 때마다 현재 가시성을 다시 보내 사이드카 재시작·Selkies
+       재생성으로 소실된 pause를 복원한다. connections: 0이어도 상태는
+       저장되므로 성공으로 보고 다음 뷰어 연결 시 훅이 적용한다. */
+    var androidVisible = false;
+    var mutexPending = false;
+    var mutexAttempts = 0;
+    var mutexApplying = false;
+    var MUTEX_REAPPLY_MAX_ATTEMPTS = 10;
     function sameViewport(a, b) {
       if (!a || !b) return false;
       return (
@@ -710,11 +747,16 @@
             if (statePollFailed) {
               statePollFailed = false;
               lastReportedMouseOffset = null;
+              // 폴링 실패 뒤 복구됐다면 사이드카가 재시작됐을 수 있다 —
+              // 뮤텍스 상태도 소실됐을 수 있으므로 현재 가시성을 다시 보낸다.
+              mutexPending = true;
             }
             onState(body);
             // 저장된 수동 화질이 아직 적용 전이면 여기서 다시 시도한다
             // (첫 폴링 때는 화면 WS가 안 붙어 connections: 0일 수 있다).
             if (qualityPending !== null) applyStoredQuality();
+            // 뮤텍스 재확언이 보류 중이면 여기서 다시 시도한다.
+            if (mutexPending) applyEncoderMutex();
             return true;
           }
           statePollFailed = true;
@@ -1123,6 +1165,91 @@
       });
     }
 
+    /* 인코더 뮤텍스 POST를 직렬화한다 (2026-11-26, C안): 폴링 재확언과
+       명시 전환이 동시에 날아가면 도착 순서가 안 맞아 마지막 상태가
+       뒤집힐 수 있다. 진행 중 POST가 있으면 그 뒤에 이어 붙여
+       마지막에 보낸 값이 이기게 한다. */
+    var mutexInFlight = null; // 진행 중 POST의 Promise<boolean> (없으면 null)
+    function postEncoderMutex(paused) {
+      var prev = mutexInFlight || Promise.resolve(true);
+      var next = prev.then(function () {
+        mutexApplying = true;
+        return setEncoderMutexFetch({ paused: paused }).then(
+          function (res) {
+            mutexApplying = false;
+            var body = res && res.body;
+            return !!(res && res.status === 200 && body && body.ok);
+          },
+          function () {
+            mutexApplying = false;
+            return false;
+          },
+        );
+      });
+      mutexInFlight = next;
+      next.then(function () {
+        if (mutexInFlight === next) mutexInFlight = null;
+      });
+      return next;
+    }
+
+    /* 현재 Android 가시성을 사이드카에 다시 알린다 (2026-11-26, C안):
+       applyStoredQuality와 같은 모양. 성공은 200 + ok (connections: 0
+       이어도 상태는 저장되므로 성공 — 다음 뷰어 연결 시 훅이 적용한다).
+       실패하면 다음 폴링 때 다시 시도한다 (최대 10회). */
+    function applyEncoderMutex() {
+      if (!mutexPending || mutexApplying) return;
+      postEncoderMutex(androidVisible).then(function (ok) {
+        if (ok) {
+          mutexPending = false;
+          mutexAttempts = 0;
+          return;
+        }
+        mutexAttempts += 1;
+        if (mutexAttempts >= MUTEX_REAPPLY_MAX_ATTEMPTS) {
+          mutexPending = false;
+          if (typeof console !== 'undefined' && console.warn) {
+            console.warn('[browser-live] 인코더 뮤텍스 재확언 실패 (10회 시도) — Android를 다시 열면 다시 시도합니다.');
+          }
+        }
+      });
+    }
+
+    /* Android 가시성 전환 (2026-11-26, C안 — Phase 4 셸 연동 진입점):
+       true면 브라우저 인코더를 멈추고(Android 표시 순서: pause 먼저),
+       false면 되돌린다(Android 숨김 순서: Android 정지 먼저, 그 다음
+       resume — 호출자가 순서를 지킨다). POST 결과를 기다려 성공하면
+       true를, 실패·무효 입력이면 false를 돌려준다 — 호출자는 true를
+       확인한 뒤에야 Android 인코더를 기동해야 순서가 맞는다. 같은
+       값이면 요청을 보내지 않고 true다. */
+    function setAndroidVisible(visible) {
+      if (typeof visible !== 'boolean') return Promise.resolve(false);
+      if (visible === androidVisible && !mutexPending) return Promise.resolve(true);
+      androidVisible = visible;
+      mutexPending = true;
+      mutexAttempts = 0;
+      return postEncoderMutex(visible).then(function (ok) {
+        if (ok) {
+          mutexPending = false;
+          mutexAttempts = 0;
+          return true;
+        }
+        mutexAttempts += 1;
+        if (mutexAttempts >= MUTEX_REAPPLY_MAX_ATTEMPTS) {
+          mutexPending = false;
+          if (typeof console !== 'undefined' && console.warn) {
+            console.warn('[browser-live] 인코더 뮤텍스 전환 실패 (10회 시도) — Android를 다시 열면 다시 시도합니다.');
+          }
+        }
+        return false;
+      });
+    }
+
+    /* 현재 Android 가시성 (뮤텍스 상태 확인용). */
+    function isAndroidVisible() {
+      return androidVisible;
+    }
+
     /* 핀치 줌 차단 핸들러: Ctrl+휠만 막는다. 캡처 단계라 Selkies
        클라이언트의 버블 리스너보다 먼저 돌고, stopPropagation으로
        클라이언트에 닿지 않게 한다. 일반 휠(ctrlKey 없음)은 손대지
@@ -1216,6 +1343,11 @@
       var storedPref = readQualityPreference();
       qualityPending = storedPref.mode === 'manual' ? storedPref.bitrate : null;
       qualityAttempts = 0;
+      // 라이브 (재)연결 시 현재 Android 가시성을 다시 보낸다 — 사이드카
+      // 재시작·Selkies 재생성으로 소실된 pause를 복원한다 (숨김이면
+      // resume이 가서 낡은 pause를 푼다).
+      mutexPending = true;
+      mutexAttempts = 0;
       if (liveFrame) liveFrame.src = viewUrlForQuality();
       onChange();
       startStageObserver();
@@ -1288,6 +1420,8 @@
       stopMouseOffsetPolling();
       qualityPending = null;
       qualityApplying = false;
+      mutexPending = false;
+      mutexApplying = false;
       if (transientNoticeTimer) {
         clearTimeout(transientNoticeTimer);
         transientNoticeTimer = null;
@@ -1358,6 +1492,8 @@
       dismissLock: dismissLock,
       setQuality: setQuality,
       getQuality: getQuality,
+      setAndroidVisible: setAndroidVisible,
+      isAndroidVisible: isAndroidVisible,
       showNotice: showNotice,
       syncChrome: syncChrome,
       goBack: function () {

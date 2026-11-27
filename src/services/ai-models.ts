@@ -42,7 +42,7 @@ export const MODELS: ModelDef[] = [
   { id: '@cf/meta/llama-3.2-1b-instruct', provider: 'workers-ai', quality: 'fast', status: 'active' },
   { id: '@cf/mistralai/mistral-small-3.1-24b-instruct', provider: 'workers-ai', quality: 'balanced', status: 'active' },
   { id: '@cf/meta/llama-3.3-70b-instruct-fp8-fast', provider: 'workers-ai', quality: 'high', status: 'active' },
-  { id: '@cf/qwen/qwen3-30b-a3b-fp8', provider: 'workers-ai', quality: 'balanced', status: 'active' },
+  { id: '@cf/qwen/qwen3-30b-a3b-fp8', provider: 'workers-ai', quality: 'balanced', status: 'deprecated' }, // 2026-11-20 Cloudflare deprecated (5028) — 에코 메모 1차는 mistral-small로 교체
   { id: '@cf/ibm-granite/granite-4.0-h-micro', provider: 'workers-ai', quality: 'fast', status: 'active' },
   // 2026-10-15: Clef 결정 모델 추가 — 라우터용 (사용자 아이디어)
   // Clef-flash: 9B, 39ms, F1 90.93 — 의도 분류용으로 선택

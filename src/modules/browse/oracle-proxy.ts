@@ -607,6 +607,43 @@ export function registerOracleProxyRoutes(app: Hono<{ Bindings: Env }>): void {
     }
   })
 
+  // 인코더 뮤텍스 (2026-11-26 Waydroid Phase 3 후속, C안: 활성 인코더
+  // 최대 1개): 사이드카 /control/video-streaming으로 중계한다.
+  // { paused: true }는 브라우저 인코더 정지(Android 표시 중),
+  // { paused: false }는 재개이다. 세션 게이트 뒤에 있다 (전역 /api/*
+  // 미들웨어). 사이드카 응답(상태·본문)을 그대로 돌려준다
+  // (/quality와 같은 모양).
+  app.post('/encoder-mutex', async (c) => {
+    const cfg = oracleConfigOf(c.env)
+    if (!cfg) return c.json({ ok: false, error: 'ORACLE_NOT_CONFIGURED' }, 503)
+    let body: { paused?: unknown } = {}
+    try {
+      body = (await c.req.json()) as { paused?: unknown }
+    } catch {
+      return c.json({ ok: false, error: 'INVALID_MUTEX' }, 400)
+    }
+    if (typeof body.paused !== 'boolean') {
+      return c.json({ ok: false, error: 'INVALID_MUTEX' }, 400)
+    }
+    try {
+      const res = await fetch(`https://${cfg.host}:${ORACLE_VIEW_PORT}/control/video-streaming`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'x-origin-secret': cfg.originSecret,
+        },
+        body: JSON.stringify({ enabled: !body.paused }),
+      })
+      const text = await res.text()
+      return new Response(text, {
+        status: res.status,
+        headers: { 'content-type': 'application/json' },
+      })
+    } catch {
+      return c.json({ ok: false, error: 'ORACLE_UPSTREAM' }, 502)
+    }
+  })
+
   // 페이지 내 찾기 (2026-11-20 브라우저 5단계): 사이드카 /control/find로
   // 중계한다. 사이드카가 활성 화면 WS 연결에 Selkies 키 메시지
   // kd,65507 → kd,102 → ku,102 → ku,65507 (Ctrl+F)를 주입해 원격
