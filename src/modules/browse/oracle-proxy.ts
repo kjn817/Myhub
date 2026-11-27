@@ -279,25 +279,22 @@ export function registerOracleProxyRoutes(app: Hono<{ Bindings: Env }>): void {
   })
   // Android 뷰 (2026-11-27): /api/browse/android-view/* → 사이드카 8080의
   // /api/browse/android-view/* (호스트 Android Selkies, SUBFOLDER 동일
-  // 접두사). /view/*와 같은 중계 — 오리진 시크릿 + Basic 주입, WS 포함.
-  // 전역 /api/* 세션 게이트 뒤에 있다. Android Selkies 자체 인증은
-  // 꺼져 있으나 사이드카 오리진 게이트가 앞에 있어 무인증 노출은 없다.
+  // 접두사). /view/*와 같은 중계이나 Basic은 주입하지 않는다 (D3, 2026-11-27:
+  // Android Selkies는 인증 off라 무시되고, 브라우저 자격증명을 다른
+  // 서비스에 불필요하게 보내면 나중에 인증이 켜졌을 때 깨진다).
+  // 전역 /api/* 세션 게이트 뒤에 있다. 오리진 시크릿 게이트만 유지한다.
   app.all('/android-view', (c) => {
     const cfg = oracleConfigOf(c.env)
     if (!cfg) return c.json({ ok: false, error: 'ORACLE_NOT_CONFIGURED' }, 503)
-    const basic = `Basic ${btoa(`myhub:${cfg.selkiesPassword}`)}`
     return proxyToSidecar(c, cfg, ORACLE_VIEW_PORT, `${ORACLE_PROXY_MOUNT}/android-view`, {
       'x-origin-secret': cfg.originSecret,
-      authorization: basic,
     }, true)
   })
   app.all('/android-view/*', (c) => {
     const cfg = oracleConfigOf(c.env)
     if (!cfg) return c.json({ ok: false, error: 'ORACLE_NOT_CONFIGURED' }, 503)
-    const basic = `Basic ${btoa(`myhub:${cfg.selkiesPassword}`)}`
     return proxyToSidecar(c, cfg, ORACLE_VIEW_PORT, `${ORACLE_PROXY_MOUNT}/android-view`, {
       'x-origin-secret': cfg.originSecret,
-      authorization: basic,
     }, true)
   })
   app.all('/cdp', (c) => {

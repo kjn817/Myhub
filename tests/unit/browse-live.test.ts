@@ -7,7 +7,9 @@
  * - toDirectCdpWsUrl: 공개 베이스로 재작성된 CDP WS URL을 사이드카
  *   직접 URL로 되돌리고, /devtools/ 밖 경로나 비WS 스킴은 거부한다.
  * - 프록시(/view/*, /android-view/*, /cdp/*): 시크릿이 하나라도 없으면 503이고 fetch를
- *   부르지 않는다. view·android-view는 x-origin-secret + Selkies Basic 인증을,
+ *   부르지 않는다. view는 x-origin-secret + Selkies Basic 인증을,
+ *   android-view는 x-origin-secret만 주입한다 (D3, 2026-11-27: Android
+ *   Selkies는 인증 off — 브라우저 Basic을 붙이지 않는다),
  *   cdp는 x-origin-secret + x-cdp-secret을 주입한다. 클라이언트가
  *   보낸 쿠키·Authorization·시크릿 헤더는 전달하지 않는다. 쿼리와
  *   하위 경로는 그대로 사이드카로 간다. 업스트림 예외는 502.
@@ -206,9 +208,11 @@ describe('GET /android-view/* — Android 화면 프록시 (2026-11-27)', () => 
     expect(fetchCalls).toHaveLength(0)
   })
 
-  test('하위 경로·쿼리를 접두사째 8080으로 중계하고 시크릿+Basic을 주입한다', async () => {
+  test('하위 경로·쿼리를 접두사째 8080으로 중계하고 시크릿만 주입한다 (Basic 없음, D3)', async () => {
     // android-view도 접두사를 떼지 않는다 — Android Selkies가
     // SUBFOLDER=/api/browse/android-view/로 같은 접두사를 안다 (/view 패턴과 동일).
+    // Basic은 주입하지 않는다 — Android Selkies는 인증 off라 무시되고,
+    // 브라우저 자격증명을 다른 서비스에 보내면 안 된다 (D3 카나리아).
     stubFetch(upstreamOk({}))
     const res = await app.request(
       '/api/browse/android-view/api/websockets?foo=bar',
@@ -220,9 +224,7 @@ describe('GET /android-view/* — Android 화면 프록시 (2026-11-27)', () => 
     const call = fetchCalls[0]
     expect(call.url).toBe(`https://${HOST}:8080/api/browse/android-view/api/websockets?foo=bar`)
     expect(call.headers['x-origin-secret']).toBe('origin-secret')
-    expect(call.headers['authorization']).toBe(
-      `Basic ${Buffer.from('myhub:selkies-pw').toString('base64')}`,
-    )
+    expect(call.headers['authorization']).toBeUndefined()
     expect(call.headers['x-custom']).toBe('keep-me')
     expect(call.headers['x-cdp-secret']).toBeUndefined()
   })
