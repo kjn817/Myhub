@@ -6,8 +6,8 @@
  * 고정하는 성질:
  * - toDirectCdpWsUrl: 공개 베이스로 재작성된 CDP WS URL을 사이드카
  *   직접 URL로 되돌리고, /devtools/ 밖 경로나 비WS 스킴은 거부한다.
- * - 프록시(/view/*, /cdp/*): 시크릿이 하나라도 없으면 503이고 fetch를
- *   부르지 않는다. view는 x-origin-secret + Selkies Basic 인증을,
+ * - 프록시(/view/*, /android-view/*, /cdp/*): 시크릿이 하나라도 없으면 503이고 fetch를
+ *   부르지 않는다. view·android-view는 x-origin-secret + Selkies Basic 인증을,
  *   cdp는 x-origin-secret + x-cdp-secret을 주입한다. 클라이언트가
  *   보낸 쿠키·Authorization·시크릿 헤더는 전달하지 않는다. 쿼리와
  *   하위 경로는 그대로 사이드카로 간다. 업스트림 예외는 502.
@@ -185,6 +185,67 @@ describe('GET /view/* — 화면 프록시', () => {
       ok: false,
       error: 'ORACLE_UPSTREAM',
     })
+  })
+})
+
+describe('GET /android-view/* — Android 화면 프록시 (2026-11-27)', () => {
+  test('시크릿이 하나라도 없으면 503 ORACLE_NOT_CONFIGURED이고 fetch를 부르지 않는다', async () => {
+    stubFetch(async () => {
+      throw new Error('must not be called')
+    })
+    for (const missing of ['ORACLE_BROWSER_HOST', 'ORIGIN_SECRET', 'CDP_SECRET', 'SELKIES_PASSWORD'] as const) {
+      const env = { ...ENV }
+      delete (env as Record<string, unknown>)[missing]
+      const res = await app.request('/api/browse/android-view/', {}, env as never)
+      expect(res.status).toBe(503)
+      expect((await res.json()) as { error: string }).toEqual({
+        ok: false,
+        error: 'ORACLE_NOT_CONFIGURED',
+      })
+    }
+    expect(fetchCalls).toHaveLength(0)
+  })
+
+  test('하위 경로·쿼리를 접두사째 8080으로 중계하고 시크릿+Basic을 주입한다', async () => {
+    // android-view도 접두사를 떼지 않는다 — Android Selkies가
+    // SUBFOLDER=/api/browse/android-view/로 같은 접두사를 안다 (/view 패턴과 동일).
+    stubFetch(upstreamOk({}))
+    const res = await app.request(
+      '/api/browse/android-view/api/websockets?foo=bar',
+      { headers: { 'x-custom': 'keep-me' } },
+      ENV_AS_NEVER,
+    )
+    expect(res.status).toBe(200)
+    expect(fetchCalls).toHaveLength(1)
+    const call = fetchCalls[0]
+    expect(call.url).toBe(`https://${HOST}:8080/api/browse/android-view/api/websockets?foo=bar`)
+    expect(call.headers['x-origin-secret']).toBe('origin-secret')
+    expect(call.headers['authorization']).toBe(
+      `Basic ${Buffer.from('myhub:selkies-pw').toString('base64')}`,
+    )
+    expect(call.headers['x-custom']).toBe('keep-me')
+    expect(call.headers['x-cdp-secret']).toBeUndefined()
+  })
+
+  test('/android-view 루트도 접두사째 보내고, 클라이언트 자격증명은 전달하지 않는다', async () => {
+    stubFetch(upstreamOk({}))
+    await app.request(
+      '/api/browse/android-view',
+      {
+        headers: {
+          cookie: 'myhub_session=abc',
+          authorization: 'Bearer stolen',
+          'x-origin-secret': 'forged',
+        },
+      },
+      ENV_AS_NEVER,
+    )
+    expect(fetchCalls).toHaveLength(1)
+    const call = fetchCalls[0]
+    expect(call.url).toBe(`https://${HOST}:8080/api/browse/android-view`)
+    expect(call.headers['cookie']).toBeUndefined()
+    expect(call.headers['x-origin-secret']).toBe('origin-secret')
+    expect(call.headers['authorization']).not.toBe('Bearer stolen')
   })
 })
 

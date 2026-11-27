@@ -8,6 +8,9 @@
  *   SUBFOLDER=/api/browse/view/로 같은 접두사를 알기 때문이다. 접두사를
  *   떼면 kclient가 화면 WS를 루트 /websockify로 보내 Worker에 닿지 않아
  *   화면이 검은 채 "WebSocket disconnected"가 된다 (2026-11-14 라이브 실증).
+ * - GET /android-view/* → https://<호스트>:8080/api/browse/android-view/*
+ *   (Android Selkies 화면, WS 포함) — /view/*와 같은 패턴
+ *   (SUBFOLDER=/api/browse/android-view/, 2026-11-27 Android HTTPS 경로).
  * - GET /cdp/*  → https://<호스트>:8081/* (CDP HTTP/WS, WS 포함)
  *   — CDP는 접두사 개념이 없어 사이드카가 바라는 맨 경로로 떼서 보낸다.
  * - POST /navigate → 사이드카 CDP로 영구 탭을 이동시킨다
@@ -270,6 +273,29 @@ export function registerOracleProxyRoutes(app: Hono<{ Bindings: Env }>): void {
     if (!cfg) return c.json({ ok: false, error: 'ORACLE_NOT_CONFIGURED' }, 503)
     const basic = `Basic ${btoa(`myhub:${cfg.selkiesPassword}`)}`
     return proxyToSidecar(c, cfg, ORACLE_VIEW_PORT, `${ORACLE_PROXY_MOUNT}/view`, {
+      'x-origin-secret': cfg.originSecret,
+      authorization: basic,
+    }, true)
+  })
+  // Android 뷰 (2026-11-27): /api/browse/android-view/* → 사이드카 8080의
+  // /api/browse/android-view/* (호스트 Android Selkies, SUBFOLDER 동일
+  // 접두사). /view/*와 같은 중계 — 오리진 시크릿 + Basic 주입, WS 포함.
+  // 전역 /api/* 세션 게이트 뒤에 있다. Android Selkies 자체 인증은
+  // 꺼져 있으나 사이드카 오리진 게이트가 앞에 있어 무인증 노출은 없다.
+  app.all('/android-view', (c) => {
+    const cfg = oracleConfigOf(c.env)
+    if (!cfg) return c.json({ ok: false, error: 'ORACLE_NOT_CONFIGURED' }, 503)
+    const basic = `Basic ${btoa(`myhub:${cfg.selkiesPassword}`)}`
+    return proxyToSidecar(c, cfg, ORACLE_VIEW_PORT, `${ORACLE_PROXY_MOUNT}/android-view`, {
+      'x-origin-secret': cfg.originSecret,
+      authorization: basic,
+    }, true)
+  })
+  app.all('/android-view/*', (c) => {
+    const cfg = oracleConfigOf(c.env)
+    if (!cfg) return c.json({ ok: false, error: 'ORACLE_NOT_CONFIGURED' }, 503)
+    const basic = `Basic ${btoa(`myhub:${cfg.selkiesPassword}`)}`
+    return proxyToSidecar(c, cfg, ORACLE_VIEW_PORT, `${ORACLE_PROXY_MOUNT}/android-view`, {
       'x-origin-secret': cfg.originSecret,
       authorization: basic,
     }, true)
